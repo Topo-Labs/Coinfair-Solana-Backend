@@ -1,0 +1,10 @@
+[package]
+name = "telegram"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+server = { path = "../server" }
+teloxide = { git = "https://github.com/stevekeol/teloxide.git", features = ["macros", "webhooks", "webhooks-axum"] }
+tracing = { version = "0.1.40" }
+tokio = { version = "1", features = ["full"] }

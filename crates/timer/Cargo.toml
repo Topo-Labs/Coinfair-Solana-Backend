@@ -1,0 +1,12 @@
+[package]
+name = "timer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+chrono = "0.4.39"
+cron = "0.15.0"
+
+server = { path = "../server" }
+telegram = { path = "../telegram" }

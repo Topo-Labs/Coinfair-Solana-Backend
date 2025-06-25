@@ -1,0 +1,36 @@
+[package]
+name = "hope"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "hope" # placeholder
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+axum-extra = { version = "0.9.1", features = ["cookie"] }
+clap = { workspace = true }
+dotenvy = { workspace = true }
+lazy_static = { workspace = true }
+mongodb = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+pbkdf2 = { workspace = true }
+time = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+utils = { path = "../utils" }
+validator = { workspace = true }
+
+database = { path = "../database/" }
+monitor = { path = "../monitor/" }
+server = { path = "../server/" }
+timer = { path = "../timer/" }
+telegram = { path = "../telegram/" }
