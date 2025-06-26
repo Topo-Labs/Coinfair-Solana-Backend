@@ -2,6 +2,7 @@ use crate::{router::AppRouter, services::Services};
 use anyhow::Context;
 use axum::serve;
 use database::Database;
+use dotenvy;
 use std::sync::Arc;
 use tokio::signal;
 use tracing::info;
@@ -11,6 +12,13 @@ pub struct ApplicationServer;
 
 impl ApplicationServer {
     pub async fn serve(config: Arc<AppConfig>) -> anyhow::Result<()> {
+        // 加载环境变量文件
+        if let Err(e) = dotenvy::dotenv() {
+            tracing::warn!("Failed to load .env file: {}", e);
+        } else {
+            tracing::info!("✅ Loaded environment variables from .env file");
+        }
+        
         let _guard = Logger::new(config.cargo_env);
 
         let app_port = match &config.cargo_env {

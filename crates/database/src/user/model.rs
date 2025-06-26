@@ -1,11 +1,17 @@
 use chrono::prelude::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+/// 用户模型
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct User {
+    /// 用户钱包地址
     pub address: String, // Address
-    pub amount: String,  // 购买的Hope数量（取整后，存字符串）
-    pub price: String,   // 购买时刻Hope对U的价格（保留20位小数，存字符串）
-    pub timestamp: u64,  // 落库时刻：17112341234
+    /// 购买金额
+    pub amount: String,  // Amount
+    /// 购买时的代币价格
+    pub price: String,   // Price
+    /// 购买时间戳
+    pub timestamp: u64,  // 1734187238
 }

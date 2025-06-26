@@ -1,6 +1,6 @@
-mod refer_controller;
-mod reward_controller;
-mod user_controller;
+pub mod refer_controller;
+pub mod reward_controller;
+pub mod user_controller;
 
 use axum::routing::{get, Router};
 

@@ -1,17 +1,17 @@
-use super::util::{current_date_and_time, magic_number, keccak256};
+use super::util::{current_date_and_time, magic_number, keccak256_hash};
 use tracing::{info, error};
 use colored::*;
 use database::reward::model::RewardItem;
-use ethers::{
-    abi::ParamType,
-    middleware::SignerMiddleware,
-    prelude::*,
-    providers::Provider,
-    signers::{LocalWallet, Signer},
-    types::Address,
-    utils::to_checksum,
+use alloy::{
+    dyn_abi::DynSolType,
+    primitives::{Address, U256, B256},
+    providers::{Provider, ProviderBuilder, WsConnect},
+    pubsub::PubSubFrontend,
+    rpc::types::{Filter, Log},
+    transports::http::Http,
 };
 use futures::future::join_all;
+use futures::StreamExt;
 use serde::Deserialize;
 use server::services::Services;
 use std::{
@@ -26,8 +26,8 @@ use tokio::{
 
 #[derive(Clone)]
 pub struct Monitor {
-    pub http_provider: Arc<Provider<Http>>,
-    pub ws_provider: Arc<Provider<Ws>>,
+    pub http_provider: Arc<dyn Provider<Http<reqwest::Client>>>,
+    pub ws_provider: Arc<dyn Provider<PubSubFrontend>>,
     pub pair: Address,
     pub hope: Address,
     pub nft: Address,
@@ -85,7 +85,7 @@ impl Monitor {
 
         let filter = Filter::new()
             .address(vec![self.nft, self.pair, self.batch])
-            .events(vec![event_claim, event_swap, event_batch_reward]);
+            .event_signature(vec![magic_number(event_claim), magic_number(event_swap), magic_number(event_batch_reward)]);
 
         let mut stream = self.ws_provider.subscribe_logs(&filter).await?;
         while let Some(log) = stream.next().await {
@@ -93,25 +93,25 @@ impl Monitor {
                 match *topics {
                     // NFT Claim
                     x if x == magic_number(event_claim) => {
-                        let from: Address = H256::into(log.topics[1].into());
-                        let to: Address = H256::into(log.topics[2].into());
+                        let from = Address::from_slice(&log.topics[1][12..]);
+                        let to = Address::from_slice(&log.topics[2][12..]);
 
-                        let from: String = to_checksum(&from, None);
-                        let to: String = to_checksum(&to, None);
+                        let from_str = from.to_checksum(None);
+                        let to_str = to.to_checksum(None);
 
                         info!(
                             "{:?} Claim Event: {} -> {}",
                             current_date_and_time(),
-                            from,
-                            to
+                            from_str,
+                            to_str
                         );
 
-                        match self.handle_claim(from.clone(), to.clone()).await {
+                        match self.handle_claim(from_str.clone(), to_str.clone()).await {
                             Ok(()) => {
-                                info!("Claim handled successfully for {} -> {}", from, to);
+                                info!("Claim handled successfully for {} -> {}", from_str, to_str);
                             }
                             Err(e) => {
-                                error!("Failed to handle claim for {} -> {}: {:?}", from, to, e);
+                                error!("Failed to handle claim for {} -> {}: {:?}", from_str, to_str, e);
                                 // 这里可以添加其他恢复逻辑，或者什么都不做，继续循环
                             }                            
                         }
@@ -119,45 +119,45 @@ impl Monitor {
 
                     // HOPE Swap:Buy
                     x if x == magic_number(event_swap) => {
-                        let decoded = ethers::abi::decode(
-                            &[
-                                ParamType::Uint(256), // amount0In
-                                ParamType::Uint(256), // amount1In
-                                ParamType::Uint(256), // amount0Out
-                                ParamType::Uint(256), // amount1Out
-                            ],
-                            &log.data,
-                        )
-                        .unwrap();
+                        // 使用Alloy的ABI解码
+                        let types = vec![
+                            DynSolType::Uint(256), // amount0In
+                            DynSolType::Uint(256), // amount1In
+                            DynSolType::Uint(256), // amount0Out
+                            DynSolType::Uint(256), // amount1Out
+                        ];
+                        
+                        let decoded = alloy::dyn_abi::DynAbiDecoder::decode(&types, &log.data, false)
+                            .map_err(|e| eyre::eyre!("Failed to decode log data: {}", e))
+                            .unwrap();
 
-                        let sender: Address = H256::into(log.topics[1].into());
-                        let to: Address = H256::into(log.topics[2].into());
+                        let sender = Address::from_slice(&log.topics[1][12..]);
+                        let to = Address::from_slice(&log.topics[2][12..]);
 
-                        let sender = to_checksum(&sender, None);
-                        let to = to_checksum(&to, None);
+                        let sender_str = sender.to_checksum(None);
+                        let to_str = to.to_checksum(None);
 
-
-                        let amount0_in: U256 = decoded[0].clone().into_uint().unwrap();
-                        let amount1_in: U256 = decoded[1].clone().into_uint().unwrap();
-                        let amount0_out: U256 = decoded[2].clone().into_uint().unwrap();
-                        let amount1_out: U256 = decoded[3].clone().into_uint().unwrap();
+                        let amount0_in = decoded[0].as_uint().unwrap().0;
+                        let amount1_in = decoded[1].as_uint().unwrap().0;
+                        let amount0_out = decoded[2].as_uint().unwrap().0;
+                        let amount1_out = decoded[3].as_uint().unwrap().0;
 
                         if self.is_buy(amount0_in, amount1_in, amount0_out, amount1_out) {
                             info!(
                                 "{:?} Buy Event: {} -> {}",
                                 current_date_and_time(),
-                                sender,
-                                to.clone()
+                                sender_str,
+                                to_str.clone()
                             );
 
                             // amount1_in: （兑换所需的）BNB数量
                             // amount0_out: （兑换出来的）HOPE数量
-                            match self.handler_buy(to.clone(), amount1_in, amount0_out).await {
+                            match self.handler_buy(to_str.clone(), amount1_in, amount0_out).await {
                                 Ok(()) => {
-                                    info!("Buy handled successfully for {}", to);
+                                    info!("Buy handled successfully for {}", to_str);
                                 }
                                 Err(e) => {
-                                    error!("Failed to handle buy for {}: {:?}", to.clone(), e);
+                                    error!("Failed to handle buy for {}: {:?}", to_str.clone(), e);
                                     // 这里可以添加其他恢复逻辑，或者什么都不做，继续循环
                                 }                                
                             }
@@ -250,14 +250,19 @@ impl Monitor {
 }
 
 impl Monitor {
-    async fn get_http_provider(rpc_url: &str) -> Provider<Http> {
-        Provider::<Http>::try_from(rpc_url).expect("Cannot establish http connection")
+    async fn get_http_provider(rpc_url: &str) -> Box<dyn Provider<Http<reqwest::Client>>> {
+        let provider = ProviderBuilder::new()
+            .on_http(rpc_url.parse().expect("Invalid HTTP URL"));
+        Box::new(provider)
     }
 
-    async fn get_ws_provider(rpc_url: &str) -> Provider<Ws> {
-        Provider::<Ws>::connect(rpc_url)
+    async fn get_ws_provider(rpc_url: &str) -> Box<dyn Provider<PubSubFrontend>> {
+        let ws = WsConnect::new(rpc_url);
+        let provider = ProviderBuilder::new()
+            .on_ws(ws)
             .await
-            .expect("Cannot establish ws connection")
+            .expect("Cannot establish ws connection");
+        Box::new(provider)
     }
 
     // 有效新用户：
@@ -323,8 +328,8 @@ impl Monitor {
         amount0_out: U256,
         amount1_out: U256,
     ) -> bool {
-        amount1_in > U256::zero()
-            && amount0_out > U256::zero()
+        amount1_in > U256::ZERO
+            && amount0_out > U256::ZERO
             && amount0_in.is_zero()
             && amount1_out.is_zero()
     }

@@ -30,7 +30,22 @@ tower-http = { workspace = true }
 utils = { path = "../utils" }
 validator = { workspace = true }
 chrono = { version = "0.4.38", features = ["serde"] }
-ethers = { version = "2.0.14", features = ["ws"] }
+alloy = { version = "0.8", features = ["full"] }
+utoipa = { version = "4.2", features = ["axum_extras", "chrono"] }
+utoipa-swagger-ui = { version = "5.0", features = ["axum"] }
+# Solana dependencies for swap functionality
+solana-sdk = "1.16"
+solana-client = "1.16"
+anchor-client = "0.28"
+anchor-lang = "0.28"
+spl-token = "3.5"
+spl-token-2022 = "0.9"
+spl-associated-token-account = "1.1"
+arrayref = "0.3"
+bincode = "1.3"
+bs58 = "0.5"
+configparser = "3.0"
+mpl-token-metadata = "1.13"
 # monitor = { path = "../monitor/" }
 
 # For dev-dependencies, there is no need to config agiain.

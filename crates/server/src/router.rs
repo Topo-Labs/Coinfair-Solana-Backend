@@ -1,5 +1,5 @@
 use super::services::Services;
-use crate::api;
+use crate::{api, docs};
 use axum::{
     error_handling::HandleErrorLayer,
     http::{
@@ -7,6 +7,7 @@ use axum::{
         Method, StatusCode,
     },
     response::IntoResponse,
+    routing::get,
     BoxError, Extension, Json, Router,
 };
 use lazy_static::lazy_static;
@@ -17,6 +18,8 @@ use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 lazy_static! {
     static ref HTTP_TIMEOUT: u64 = 30;
@@ -37,11 +40,11 @@ impl AppRouter {
             ])
             .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
-        // let index = ServeDir::new("dist").not_found_service(ServeFile::new("dist/index.html"));
-
         let router = Router::new()
-            // .nest_service("/", index)
+            // API 路由
             .nest("/api/v1", api::app())
+            // API 文档说明页面
+            .route("/api-docs", get(api_docs_info))
             .layer(cors)
             .layer(
                 ServiceBuilder::new()
@@ -51,6 +54,11 @@ impl AppRouter {
                     .timeout(Duration::from_secs(*HTTP_TIMEOUT))
                     .layer(BufferLayer::new(1024))
                     .layer(RateLimitLayer::new(5, Duration::from_secs(1))),
+            )
+            // Swagger UI 路由 - 包含 OpenAPI JSON 端点
+            .merge(
+                SwaggerUi::new("/swagger-ui")
+                    .url("/api-docs/openapi.json", docs::ApiDoc::openapi())
             )
             .fallback(Self::handle_404);
 
@@ -88,4 +96,15 @@ impl AppRouter {
             )
         }
     }
+}
+
+/// API 文档说明页面
+async fn api_docs_info() -> impl IntoResponse {
+    Json(json!({
+        "message": "Coinfair Solana Backend API Documentation",
+        "version": "1.0.0",
+        "openapi_spec": "/api-docs/openapi.json",
+        "swagger_ui": "/swagger-ui",
+        "description": "访问 /swagger-ui 查看交互式 API 文档"
+    }))
 }
