@@ -29,6 +29,7 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 utils = { path = "../utils" }
 validator = { workspace = true }
+solana = { path = "../solana" }
 chrono = { version = "0.4.38", features = ["serde"] }
 ethers = { version = "2.0.14", features = ["ws"] }
 # monitor = { path = "../monitor/" }

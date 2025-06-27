@@ -1,6 +1,7 @@
 pub mod refer_controller;
 pub mod reward_controller;
 pub mod user_controller;
+pub mod solana_controller;
 
 use axum::routing::{get, Router};
 
@@ -14,4 +15,5 @@ pub fn app() -> Router {
         .nest("/user", user_controller::UserController::app())
         .nest("/refer", refer_controller::ReferController::app())
         .nest("/reward", reward_controller::RewardController::app())
+        .nest("/solana", solana_controller::SolanaController::app())
 }

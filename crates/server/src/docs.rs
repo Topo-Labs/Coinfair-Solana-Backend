@@ -32,6 +32,12 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
         // User endpoints
         crate::api::user_controller::user,
         crate::api::user_controller::mock_users,
+        // Solana endpoints
+        crate::api::solana_controller::swap_tokens,
+        crate::api::solana_controller::get_balance,
+        crate::api::solana_controller::get_price_quote,
+        crate::api::solana_controller::get_wallet_info,
+        crate::api::solana_controller::health_check,
     ),
     components(
         schemas(
@@ -46,7 +52,22 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
             crate::dtos::reward_dto::SetRewardDto,
             crate::dtos::reward_dto::SetRewardsDto,
             crate::dtos::reward_dto::MockRewardsDto,
-            crate::dtos::user_dto::SetUsersDto
+            crate::dtos::user_dto::SetUsersDto,
+            // Solana DTOs
+            crate::dtos::solana_dto::SwapRequest,
+            crate::dtos::solana_dto::SwapResponse,
+            crate::dtos::solana_dto::BalanceResponse,
+            crate::dtos::solana_dto::PriceQuoteRequest,
+            crate::dtos::solana_dto::PriceQuoteResponse,
+            crate::dtos::solana_dto::WalletInfo,
+            crate::dtos::solana_dto::ErrorResponse,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::SwapResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::BalanceResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::PriceQuoteResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::WalletInfo>,
+            crate::dtos::solana_dto::ApiResponse<String>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::ErrorResponse>,
+            crate::dtos::solana_dto::TransactionStatus
         )
     ),
     tags(

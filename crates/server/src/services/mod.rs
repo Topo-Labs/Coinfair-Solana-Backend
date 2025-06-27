@@ -10,11 +10,13 @@
 pub mod refer_service;
 pub mod reward_service;
 pub mod user_service;
+pub mod solana_service;
 
 use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
     user_service::{DynUserService, UserService},
+    solana_service::{DynSolanaService, SolanaService},
 };
 use database::Database;
 use std::sync::Arc;
@@ -25,6 +27,7 @@ pub struct Services {
     pub user: DynUserService,
     pub refer: DynReferService,
     pub reward: DynRewardService,
+    pub solana: DynSolanaService,
 }
 
 impl Services {
@@ -42,6 +45,7 @@ impl Services {
                 let user = Arc::new(UserService::new(repository.clone())) as DynUserService;
                 let refer = Arc::new(ReferService::new(repository.clone())) as DynReferService;
                 let reward = Arc::new(RewardService::new(repository.clone())) as DynRewardService;
+                let solana = Arc::new(SolanaService::default()) as DynSolanaService;
 
                 info!("🧠 Services initialized with default configuration");
 
@@ -49,6 +53,7 @@ impl Services {
                     user,
                     refer,
                     reward,
+                    solana,
                 }
             }
         }
@@ -61,6 +66,7 @@ impl Services {
         let user = Arc::new(UserService::new(repository.clone())) as DynUserService;
         let refer = Arc::new(ReferService::new(repository.clone())) as DynReferService;
         let reward = Arc::new(RewardService::new(repository.clone())) as DynRewardService;
+        let solana = Arc::new(SolanaService::default()) as DynSolanaService;
         
 
         info!("🧠 initializing services from environment...");
@@ -69,6 +75,7 @@ impl Services {
             user,
             refer,
             reward,
+            solana,
         })
     }
 

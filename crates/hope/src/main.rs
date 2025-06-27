@@ -3,11 +3,12 @@ use axum::{routing::Router, serve};
 use clap::Parser;
 use database::Database;
 use dotenvy::dotenv;
-use monitor::monitor::Monitor;
+// use monitor::monitor::Monitor;  // 注释掉monitor的导入
 use server::{app::ApplicationServer, services::Services};
+use solana::{SolanaSwap, SwapConfig};
 use std::sync::Arc;
-use telegram::HopeBot;
-use timer::Timer;
+// use telegram::HopeBot;  // 注释掉telegram的导入
+// use timer::Timer;  // 注释掉timer的导入
 use tokio::{signal, sync::Notify, task::JoinSet};
 use tracing::info;
 use utils::{logger::Logger, AppConfig};
@@ -19,16 +20,17 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let config = Arc::new(AppConfig::parse());
 
-    let hope = Hope::new().await;
-    hope.run().await.expect("Hope Refer Reward System error");
-
-    //ApplicationServer::serve(config)
-    //  .await
-    //  .context("🔴 Failed to start server")?;
+    // 直接启动ApplicationServer，不使用Hope结构体
+    info!("🚀 启动Solana Controller服务...");
+    ApplicationServer::serve(config)
+        .await
+        .context("🔴 Failed to start server")?;
 
     Ok(())
 }
 
+// 注释掉整个Hope结构体相关的代码，因为我们只需要ApplicationServer
+/*
 pub struct Hope {
     services: Services,
     monitor: Monitor,
@@ -74,21 +76,21 @@ impl Hope {
           //  self.monitor.run().await.expect("🔴 Failed to start monitor");
        // });
 
-        set.spawn(async move {
-            loop {
-                info!("Starting monitor...");
-                match self.monitor.run().await {
-                    Ok(_) => {
-                        info!("Monitor exited normally, restarting...");
-                    }
-                    Err(e) => {
-                        info!("🔴 Monitor crashed: {:?}. Restarting in 2 seconds...", e);
-                    }
-                }
-                sleep(Duration::from_secs(2)).await; // 等待2秒后重试
-            }
-        });
-
+        // 注释掉monitor服务的启动
+        // set.spawn(async move {
+        //     loop {
+        //         info!("Starting monitor...");
+        //         match self.monitor.run().await {
+        //             Ok(_) => {
+        //                 info!("Monitor exited normally, restarting...");
+        //             }
+        //             Err(e) => {
+        //                 info!("🔴 Monitor crashed: {:?}. Restarting in 2 seconds...", e);
+        //             }
+        //         }
+        //         sleep(Duration::from_secs(2)).await; // 等待2秒后重试
+        //     }
+        // });
 
         set.spawn(async move {
             ApplicationServer::serve(self.config.clone())
@@ -144,6 +146,7 @@ impl Hope {
         timer
     }
 }
+*/
 
 async fn shutdown_signal() {
     let ctrl_c = async {
