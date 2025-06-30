@@ -319,7 +319,7 @@ pub struct PreciseSwapResult {
     pub zero_for_one: bool,
 }
 
-/// 辅助函数：创建Account结构（用于反序列化）
+// 辅助函数：创建Account结构（用于反序列化）
 /*
 fn create_account_from_data(data: &[u8]) -> solana_sdk::account::Account {
     solana_sdk::account::Account {

@@ -117,6 +117,33 @@ impl SolanaService {
         
         self.ensure_raydium_available().await?;
         
+        // 使用新的直接方法获取池子信息并计算输出
+        let estimated_output = {
+            let raydium_guard = self.raydium_swap.lock().await;
+            let raydium = raydium_guard.as_ref().unwrap();
+            
+            match raydium.get_pool_price_and_estimate_direct(pool_address, from_token, to_token, amount).await {
+                Ok(output) => {
+                    info!("  ✅ 直接从池子状态计算成功，估算输出: {}", output);
+                    output
+                }
+                Err(e) => {
+                    warn!("  ⚠️ 直接计算失败: {:?}，使用备用计算", e);
+                    
+                    // 备用价格计算（简化版本）
+                    self.fallback_price_calculation(from_token, to_token, amount).await?
+                }
+            }
+        };
+
+        info!("  📊 最终估算输出: {}", estimated_output);
+        Ok(estimated_output)
+    }
+    
+    /// 备用价格计算方法
+    async fn fallback_price_calculation(&self, from_token: &str, to_token: &str, amount: u64) -> Result<u64> {
+        info!("🔄 使用备用价格计算");
+        
         // 定义mint地址常量
         const SOL_MINT: &str = "So11111111111111111111111111111111111111112";
         const USDC_MINT_STANDARD: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -128,42 +155,25 @@ impl SolanaService {
         let is_from_usdc = matches!(from_token, USDC_MINT_STANDARD | USDC_MINT_CONFIG | "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM");
         let is_to_usdc = matches!(to_token, USDC_MINT_STANDARD | USDC_MINT_CONFIG | "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM");
         
-        // 从实际池子获取价格信息
-        let estimated_output = {
-            let raydium_guard = self.raydium_swap.lock().await;
-            let raydium = raydium_guard.as_ref().unwrap();
-            
-            match raydium.get_pool_price_and_estimate(pool_address, from_token, to_token, amount).await {
-                Ok(output) => {
-                    info!("  ✅ 从池子获取价格成功，估算输出: {}", output);
-                    output
-                }
-                Err(e) => {
-                    warn!("  ⚠️ 从池子获取价格失败: {:?}，使用备用计算", e);
-                    
-                    // 备用价格计算（简化版本）
-                    let sol_price_usdc = 100.0; // 假设1 SOL = 100 USDC
-                    
-                    match (is_from_sol, is_from_usdc, is_to_sol, is_to_usdc) {
-                        (true, false, false, true) => {
-                            // SOL -> USDC
-                            let sol_amount = amount as f64 / 1_000_000_000.0; // lamports to SOL
-                            let usdc_amount = sol_amount * sol_price_usdc;
-                            (usdc_amount * 1_000_000.0) as u64 // USDC to micro-USDC
-                        }
-                        (false, true, true, false) => {
-                            // USDC -> SOL
-                            let usdc_amount = amount as f64 / 1_000_000.0; // micro-USDC to USDC
-                            let sol_amount = usdc_amount / sol_price_usdc;
-                            (sol_amount * 1_000_000_000.0) as u64 // SOL to lamports
-                        }
-                        _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", from_token, to_token)),
-                    }
-                }
+        let sol_price_usdc = 100.0; // 假设1 SOL = 100 USDC
+        
+        let estimated_output = match (is_from_sol, is_from_usdc, is_to_sol, is_to_usdc) {
+            (true, false, false, true) => {
+                // SOL -> USDC
+                let sol_amount = amount as f64 / 1_000_000_000.0; // lamports to SOL
+                let usdc_amount = sol_amount * sol_price_usdc;
+                (usdc_amount * 1_000_000.0) as u64 // USDC to micro-USDC
             }
+            (false, true, true, false) => {
+                // USDC -> SOL
+                let usdc_amount = amount as f64 / 1_000_000.0; // micro-USDC to USDC
+                let sol_amount = usdc_amount / sol_price_usdc;
+                (sol_amount * 1_000_000_000.0) as u64 // SOL to lamports
+            }
+            _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", from_token, to_token)),
         };
-
-        info!("  📊 最终估算输出: {}", estimated_output);
+        
+        info!("  💰 备用计算结果: {}", estimated_output);
         Ok(estimated_output)
     }
 
