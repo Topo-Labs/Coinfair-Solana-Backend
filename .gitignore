@@ -1,0 +1,67 @@
+# Rust 编译产物
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 环境变量和配置
+.env
+.env.local
+.env.*.local
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+
+# 备份文件
+*.bak
+*.backup
+
+# 缓存目录
+cache/
+.cache/
+
+# 测试覆盖率
+tarpaulin-report.html
+coverage/
+
+# 性能分析文件
+*.prof
+perf.data*
+
+# 文档生成
+/docs/book/
+
+# WebAssembly
+*.wasm
+
+# 其他
+.fleet/
+.direnv 
