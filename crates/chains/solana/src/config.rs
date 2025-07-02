@@ -18,6 +18,12 @@ pub struct Config {
     
     /// 用户私钥
     pub user_private_key: String,
+    
+    /// 推荐程序ID
+    pub referral_program_id: String,
+    
+    /// NFT Mint地址
+    pub nft_mint_address: String,
 }
 
 impl Config {
@@ -35,6 +41,12 @@ impl Config {
             
             user_private_key: env::var("USER_PRIVATE_KEY")
                 .unwrap_or_else(|_| "".to_string()),
+            
+            referral_program_id: env::var("REFERRAL_PROGRAM_ID")
+                .unwrap_or_else(|_| "REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL".to_string()),
+            
+            nft_mint_address: env::var("NFT_MINT_ADDRESS")
+                .unwrap_or_else(|_| "11111111111111111111111111111111".to_string()),
         };
         
         Ok(config)
@@ -76,9 +88,25 @@ impl Config {
             return Err(anyhow::anyhow!("USER_PRIVATE_KEY not set"));
         }
         
+        if self.referral_program_id.is_empty() {
+            return Err(anyhow::anyhow!("REFERRAL_PROGRAM_ID not set"));
+        }
+        
+        if self.nft_mint_address.is_empty() {
+            return Err(anyhow::anyhow!("NFT_MINT_ADDRESS not set"));
+        }
+        
         // 验证钱包地址格式
         Pubkey::from_str(&self.user_wallet_address)
             .map_err(|e| anyhow::anyhow!("Invalid wallet address: {}", e))?;
+        
+        // 验证程序ID格式
+        Pubkey::from_str(&self.referral_program_id)
+            .map_err(|e| anyhow::anyhow!("Invalid referral program ID: {}", e))?;
+        
+        // 验证NFT mint地址格式
+        Pubkey::from_str(&self.nft_mint_address)
+            .map_err(|e| anyhow::anyhow!("Invalid NFT mint address: {}", e))?;
         
         Ok(())
     }
@@ -88,6 +116,8 @@ impl Config {
         println!("📋 配置信息:");
         println!("  RPC URL: {}", self.rpc_url);
         println!("  User Wallet: {}", self.user_wallet_address);
+        println!("  Referral Program ID: {}", self.referral_program_id);
+        println!("  NFT Mint Address: {}", self.nft_mint_address);
         println!("  Private Key: [隐藏]");
     }
 } 

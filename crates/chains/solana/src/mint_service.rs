@@ -29,8 +29,8 @@ impl MintService {
             CommitmentConfig::confirmed(),
         );
         
-        // 使用硬编码的程序ID
-        let referral_program_id = Pubkey::from_str("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL")?;
+        // 从配置中读取程序ID
+        let referral_program_id = Pubkey::from_str(&config.referral_program_id)?;
         
         Ok(Self {
             rpc_client,
@@ -121,8 +121,8 @@ impl MintService {
             &self.referral_program_id,
         );
         
-        // 临时使用系统程序地址作为NFT mint（实际使用时需要从配置账户读取）
-        let nft_mint = Pubkey::from_str("11111111111111111111111111111111")?;
+        // 从配置中读取NFT mint地址
+        let nft_mint = Pubkey::from_str(&self.config.nft_mint_address)?;
         
         // 获取ATA地址
         let _user_ata = spl_associated_token_account::get_associated_token_address(&user_pubkey, &nft_mint);
@@ -196,6 +196,7 @@ impl MintService {
         println!("RPC URL: {}", self.config.rpc_url);
         println!("User Wallet: {}", self.config.user_wallet_address);
         println!("Program ID: {}", self.referral_program_id);
+        println!("NFT Mint Address: {}", self.config.nft_mint_address);
         println!("================================");
     }
 } 
