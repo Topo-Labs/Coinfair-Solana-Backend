@@ -29,10 +29,10 @@ impl SolanaController {
             .route("/wallet", get(get_wallet_info))
             .route("/health", get(health_check))
             // ============ Raydium API兼容路由 ============
-            .route("/compute/swap-base-in", get(compute_swap_base_in))
-            .route("/compute/swap-base-out", get(compute_swap_base_out))
-            .route("/transaction/swap-base-in", post(transaction_swap_base_in))
-            .route("/transaction/swap-base-out", post(transaction_swap_base_out))
+            // .route("/compute/swap-base-in", get(compute_swap_base_in))
+            // .route("/compute/swap-base-out", get(compute_swap_base_out))
+            // .route("/transaction/swap-base-in", post(transaction_swap_base_in))
+            // .route("/transaction/swap-base-out", post(transaction_swap_base_out))
             // ============ SwapV2 API兼容路由（支持转账费） ============
             .route("/compute/swap-v2-base-in", get(compute_swap_v2_base_in))
             .route("/compute/swap-v2-base-out", get(compute_swap_v2_base_out))

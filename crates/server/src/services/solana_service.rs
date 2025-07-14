@@ -725,8 +725,8 @@ impl SolanaService {
 
         // 2. 批量加载账户（与CLI第1777-1789行完全一致）
         let load_accounts = vec![
-            input_mint_pubkey,        // user_input_account (for token account, not mint)
-            output_mint_pubkey,       // user_output_account (for token account, not mint)
+            input_mint_pubkey,  // user_input_account (for token account, not mint)
+            output_mint_pubkey, // user_output_account (for token account, not mint)
             amm_config_key,
             pool_pubkey,
             tickarray_bitmap_extension_pda,
@@ -822,7 +822,8 @@ impl SolanaService {
         }
 
         // 9. 获取正确的pool price（从实际池子状态）
-        let last_pool_price_x64 = pool_state.sqrt_price_x64.to_string();
+        let v = pool_state.sqrt_price_x64;
+        let last_pool_price_x64 = v.to_string();
 
         info!("✅ CLI完全相同逻辑计算完成");
         info!("  Remaining accounts数量: {}", remaining_accounts.len());
@@ -1325,7 +1326,7 @@ impl SolanaService {
         tick_arrays: &mut std::collections::VecDeque<raydium_amm_v3::states::TickArrayState>,
     ) -> Result<(u64, std::collections::VecDeque<i32>)> {
         info!("🔧 执行CLI精确相同的get_out_put_amount_and_remaining_accounts逻辑");
-        
+
         // 获取第一个初始化的tick array（与CLI第322-324行完全一致）
         let (is_pool_current_tick_array, current_vaild_tick_array_start_index) = pool_state
             .get_first_initialized_tick_array(&Some(*tickarray_bitmap_extension), zero_for_one)
@@ -1387,17 +1388,25 @@ impl SolanaService {
         // 价格限制验证（与CLI第367-381行完全一致）
         if zero_for_one {
             if sqrt_price_limit_x64 < tick_math::MIN_SQRT_PRICE_X64 {
-                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must greater than MIN_SQRT_PRICE_X64"));
+                return Err(anyhow::anyhow!(
+                    "sqrt_price_limit_x64 must greater than MIN_SQRT_PRICE_X64"
+                ));
             }
             if sqrt_price_limit_x64 >= pool_state.sqrt_price_x64 {
-                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must smaller than current"));
+                return Err(anyhow::anyhow!(
+                    "sqrt_price_limit_x64 must smaller than current"
+                ));
             }
         } else {
             if sqrt_price_limit_x64 > tick_math::MAX_SQRT_PRICE_X64 {
-                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must smaller than MAX_SQRT_PRICE_X64"));
+                return Err(anyhow::anyhow!(
+                    "sqrt_price_limit_x64 must smaller than MAX_SQRT_PRICE_X64"
+                ));
             }
             if sqrt_price_limit_x64 <= pool_state.sqrt_price_x64 {
-                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must greater than current"));
+                return Err(anyhow::anyhow!(
+                    "sqrt_price_limit_x64 must greater than current"
+                ));
             }
         }
 
@@ -1412,10 +1421,13 @@ impl SolanaService {
         };
 
         // 获取当前tick array（与CLI第392-398行完全一致）
-        let mut tick_array_current = tick_arrays.pop_front()
+        let mut tick_array_current = tick_arrays
+            .pop_front()
             .ok_or_else(|| anyhow::anyhow!("没有可用的tick array"))?;
         if tick_array_current.start_tick_index != current_vaild_tick_array_start_index {
-            return Err(anyhow::anyhow!("tick array start tick index does not match"));
+            return Err(anyhow::anyhow!(
+                "tick array start tick index does not match"
+            ));
         }
         let mut tick_array_start_index_vec = std::collections::VecDeque::new();
         tick_array_start_index_vec.push_back(tick_array_current.start_tick_index);
@@ -1447,7 +1459,9 @@ impl SolanaService {
                     Box::new(
                         *tick_array_current
                             .first_initialized_tick(zero_for_one)
-                            .map_err(|e| anyhow::anyhow!("first_initialized_tick failed: {:?}", e))?,
+                            .map_err(|e| {
+                                anyhow::anyhow!("first_initialized_tick failed: {:?}", e)
+                            })?,
                     )
                 } else {
                     Box::new(raydium_amm_v3::states::TickState::default())
@@ -1462,17 +1476,24 @@ impl SolanaService {
                         current_vaild_tick_array_start_index,
                         zero_for_one,
                     )
-                    .map_err(|e| anyhow::anyhow!("next_initialized_tick_array_start_index failed: {:?}", e))?;
+                    .map_err(|e| {
+                        anyhow::anyhow!("next_initialized_tick_array_start_index failed: {:?}", e)
+                    })?;
 
                 if current_vaild_tick_array_start_index.is_none() {
-                    return Err(anyhow::anyhow!("tick array start tick index out of range limit"));
+                    return Err(anyhow::anyhow!(
+                        "tick array start tick index out of range limit"
+                    ));
                 }
 
-                tick_array_current = tick_arrays.pop_front()
+                tick_array_current = tick_arrays
+                    .pop_front()
                     .ok_or_else(|| anyhow::anyhow!("没有更多tick arrays"))?;
                 let expected_index = current_vaild_tick_array_start_index.unwrap();
                 if tick_array_current.start_tick_index != expected_index {
-                    return Err(anyhow::anyhow!("tick array start tick index does not match"));
+                    return Err(anyhow::anyhow!(
+                        "tick array start tick index does not match"
+                    ));
                 }
                 tick_array_start_index_vec.push_back(tick_array_current.start_tick_index);
 
@@ -2031,7 +2052,7 @@ impl SolanaServiceTrait for SolanaService {
 
         // 2. 计算精确的转账费用
         let transfer_fee_info = if params.enable_transfer_fee.unwrap_or(true) {
-            info!("🔄 计算transfer fee");
+            info!("🔄 计算transfer fee (base-in模式)");
 
             // 计算输入代币的transfer fee
             let input_transfer_fee = self
@@ -2124,22 +2145,17 @@ impl SolanaServiceTrait for SolanaService {
 
         // 1. 解析期望输出金额
         let output_amount = self.parse_amount(&params.amount)?;
-        let input_mint_pubkey = Pubkey::from_str(&params.input_mint)?;
-        let output_mint_pubkey = Pubkey::from_str(&params.output_mint)?;
+        let input_mint_pubkey = Pubkey::from_str(&params.output_mint)?;
+        let output_mint_pubkey = Pubkey::from_str(&params.input_mint)?;
 
-        // 2. 基于期望输出计算所需输入金额
-        let (input_amount, pool_address_str) = self
-            .calculate_input_for_output(&params.input_mint, &params.output_mint, output_amount)
-            .await?;
-
-        // 3. 计算精确的转账费用
+        // 2. 计算精确的转账费用
         let transfer_fee_info = if params.enable_transfer_fee.unwrap_or(true) {
             info!("🔄 计算transfer fee (base-out模式)");
 
             // 对于base-out，需要计算输入代币的inverse transfer fee
             let input_transfer_fee = self
                 .swap_v2_service
-                .get_transfer_inverse_fee(&input_mint_pubkey, input_amount)?;
+                .get_transfer_inverse_fee(&input_mint_pubkey, output_amount)?;
 
             // 计算输出代币的transfer fee（通常为0，但有些代币可能有）
             let output_transfer_fee = self
@@ -2160,29 +2176,37 @@ impl SolanaServiceTrait for SolanaService {
             None
         };
 
-        // 4. 对于base-out，other_amount_threshold是最大输入金额（含滑点和转账费）
-        let slippage_factor = 1.0 + (params.slippage_bps as f64 / 10000.0);
-        let mut other_amount_threshold = (input_amount as f64 * slippage_factor) as u64;
+        // 3. 计算扣除转账费后的实际交换金额
+        let amount_specified = if let Some(ref fee_info) = transfer_fee_info {
+            output_amount
+                .checked_sub(fee_info.input_transfer_fee)
+                .unwrap_or(output_amount)
+        } else {
+            output_amount
+        };
 
-        // 添加输入代币的转账费
-        if let Some(ref fee_info) = transfer_fee_info {
-            other_amount_threshold += fee_info.input_transfer_fee;
-        }
+        // 4. 使用现有的交换计算逻辑
+        let (input_amount, pool_address_str) = self
+            .calculate_output_for_input(&params.input_mint, &params.output_mint, amount_specified)
+            .await?;
 
-        // 5. 构建路由计划
-        let fee_amount = input_amount / 400; // 0.25% 手续费
+        // 5. 应用滑点保护
+        let other_amount_threshold =
+            self.calculate_other_amount_threshold(output_amount, params.slippage_bps);
+        // 6. 构建路由计划
+        let fee_amount = output_amount / 400; // 0.25% 手续费
         let route_plan = vec![
             self.create_route_plan(
                 pool_address_str,
                 params.input_mint.clone(),
                 params.output_mint.clone(),
                 fee_amount,
-                input_amount,
+                amount_specified,
             )
             .await?,
         ];
 
-        // 6. 获取当前epoch
+        // 7. 获取当前epoch
         let epoch = self.swap_v2_service.get_current_epoch()?;
 
         info!("✅ SwapV2Base-Out计算完成");
