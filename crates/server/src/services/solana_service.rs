@@ -4,6 +4,40 @@ use crate::dtos::solana_dto::{
     TransactionData, TransactionStatus, TransactionSwapRequest, TransactionSwapV2Request,
     TransferFeeInfo, WalletInfo,
 };
+
+/// 交换状态结构体（与CLI utils.rs中的SwapState完全一致）
+#[derive(Debug)]
+struct SwapState {
+    /// 剩余需要交换的输入/输出资产数量
+    amount_specified_remaining: u64,
+    /// 已经交换出的输出/输入资产数量
+    amount_calculated: u64,
+    /// 当前价格的平方根
+    sqrt_price_x64: u128,
+    /// 与当前价格相关的tick
+    tick: i32,
+    /// 当前范围内的流动性
+    liquidity: u128,
+}
+
+/// 步骤计算结构体（与CLI utils.rs中的StepComputations完全一致）
+#[derive(Default)]
+struct StepComputations {
+    /// 步骤开始时的价格
+    sqrt_price_start_x64: u128,
+    /// 从当前tick开始，按交换方向的下一个要交换到的tick
+    tick_next: i32,
+    /// tick_next是否已初始化
+    initialized: bool,
+    /// 下一个tick的价格平方根
+    sqrt_price_next_x64: u128,
+    /// 在此步骤中被交换进来的数量
+    amount_in: u64,
+    /// 被交换出去的数量
+    amount_out: u64,
+    /// 支付的手续费数量
+    fee_amount: u64,
+}
 use anyhow::Result;
 use async_trait::async_trait;
 use solana::raydium_api::{calculate_swap_output_with_api, RaydiumApiClient};
@@ -635,7 +669,7 @@ impl SolanaService {
         })
     }
 
-    /// 获取remaining accounts和pool price（使用CLI相同的精确计算）
+    /// 获取remaining accounts和pool price（使用CLI完全相同的精确计算）
     async fn get_remaining_accounts_and_pool_price(
         &self,
         pool_id: &str,
@@ -643,7 +677,7 @@ impl SolanaService {
         output_mint: &str,
         amount: u64,
     ) -> Result<(Vec<String>, String)> {
-        info!("🔍 使用CLI相同逻辑获取remainingAccounts和lastPoolPriceX64");
+        info!("🔍 使用CLI完全相同逻辑获取remainingAccounts和lastPoolPriceX64");
         info!("  池子ID: {}", pool_id);
         info!("  输入代币: {}", input_mint);
         info!("  输出代币: {}", output_mint);
@@ -655,7 +689,7 @@ impl SolanaService {
         let input_mint_pubkey = Pubkey::from_str(input_mint)?;
         let output_mint_pubkey = Pubkey::from_str(output_mint)?;
 
-        // 1. 批量加载账户（与CLI保持一致）
+        // 1. 批量加载账户（与CLI第1777-1789行完全一致）
         let raydium_program_id = Pubkey::from_str(
             &std::env::var("RAYDIUM_PROGRAM_ID")
                 .unwrap_or_else(|_| "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".to_string()),
@@ -689,8 +723,10 @@ impl SolanaService {
         }
         let zero_for_one = input_mint_pubkey == mint0;
 
-        // 2. 批量加载账户
+        // 2. 批量加载账户（与CLI第1777-1789行完全一致）
         let load_accounts = vec![
+            input_mint_pubkey,        // user_input_account (for token account, not mint)
+            output_mint_pubkey,       // user_output_account (for token account, not mint)
             amm_config_key,
             pool_pubkey,
             tickarray_bitmap_extension_pda,
@@ -700,31 +736,32 @@ impl SolanaService {
 
         let accounts = self.rpc_client.get_multiple_accounts(&load_accounts)?;
 
-        let amm_config_account = accounts[0]
+        // 注意：前两个是代币账户，但我们这里只需要mint信息，所以跳过
+        let amm_config_account = accounts[2]
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载AMM配置账户"))?;
-        let pool_account = accounts[1]
+        let pool_account = accounts[3]
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载池子账户"))?;
-        let tickarray_bitmap_extension_account = accounts[2]
+        let tickarray_bitmap_extension_account = accounts[4]
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载bitmap扩展账户"))?;
-        let mint0_account = accounts[3]
+        let mint0_account = accounts[5]
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载mint0账户"))?;
-        let mint1_account = accounts[4]
+        let mint1_account = accounts[6]
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载mint1账户"))?;
 
-        // 3. 反序列化关键状态（完全按照CLI逻辑）
-        let _amm_config_state: raydium_amm_v3::states::AmmConfig =
+        // 3. 反序列化关键状态（与CLI第1800-1811行完全一致）
+        let amm_config_state: raydium_amm_v3::states::AmmConfig =
             self.deserialize_anchor_account(amm_config_account)?;
         let pool_state: raydium_amm_v3::states::PoolState =
             self.deserialize_anchor_account(pool_account)?;
         let tickarray_bitmap_extension: raydium_amm_v3::states::TickArrayBitmapExtension =
             self.deserialize_anchor_account(tickarray_bitmap_extension_account)?;
 
-        // 4. 解析mint状态（用于transfer fee计算）
+        // 4. 解析mint状态（与CLI第1796-1799行完全一致）
         let mint0_state = spl_token_2022::extension::StateWithExtensions::<
             spl_token_2022::state::Mint,
         >::unpack(&mint0_account.data)?;
@@ -732,7 +769,7 @@ impl SolanaService {
             spl_token_2022::state::Mint,
         >::unpack(&mint1_account.data)?;
 
-        // 5. 计算transfer fee（与CLI完全一致）
+        // 5. 计算transfer fee（与CLI第1813-1822行完全一致）
         let epoch = self.rpc_client.get_epoch_info()?.epoch;
         let transfer_fee = if zero_for_one {
             self.get_transfer_fee_from_mint_state(&mint0_state, epoch, amount)?
@@ -741,31 +778,34 @@ impl SolanaService {
         };
         let amount_specified = amount.checked_sub(transfer_fee).unwrap_or(amount);
 
-        // 6. 加载当前和接下来的5个tick arrays（与CLI完全一致）
-        let _tick_arrays = self
+        // 6. 加载当前和接下来的5个tick arrays（与CLI第1824-1830行完全一致）
+        let mut tick_arrays = self
             .load_cur_and_next_five_tick_array_like_cli(
                 &pool_state,
                 &tickarray_bitmap_extension,
                 zero_for_one,
                 &raydium_program_id,
-                &pool_pubkey, // 传递池子地址
+                &pool_pubkey,
             )
             .await?;
 
-        // 7. 调用CLI相同的计算逻辑（获取核心tick arrays）
-        let tick_array_indexs = self
-            .calculate_tick_array_indexes_from_pool_state(
+        // 7. 【关键修复】使用CLI完全相同的get_out_put_amount_and_remaining_accounts逻辑
+        // 这里调用与CLI第1842-1853行完全相同的计算
+        let (_other_amount_threshold, tick_array_indexs) = self
+            .get_output_amount_and_remaining_accounts_cli_exact(
+                amount_specified,
+                None, // sqrt_price_limit_x64
+                zero_for_one,
+                true, // base_in (SwapV2 base_in mode)
+                &amm_config_state,
                 &pool_state,
                 &tickarray_bitmap_extension,
-                zero_for_one,
-                amount_specified,
-            )
-            .await?;
+                &mut tick_arrays,
+            )?;
 
-        // 8. 构建remaining accounts（与CLI完全一致）
+        // 8. 构建remaining accounts（与CLI第1875-1897行完全一致）
         let mut remaining_accounts = Vec::new();
-        info!("  tickarray_bitmap_extension_pda: {}", tickarray_bitmap_extension_pda.to_string());
-        // 添加bitmap extension（使用地址）
+        // 添加bitmap extension
         remaining_accounts.push(tickarray_bitmap_extension_pda.to_string());
 
         // 添加tick arrays（与CLI第1880-1897行逻辑完全一致）
@@ -781,11 +821,10 @@ impl SolanaService {
             remaining_accounts.push(tick_array_key.to_string());
         }
 
-        // 9. 获取正确的pool price（从实际池子状态，与CLI第781行完全一致）
-        let sqrt_price_x64 = pool_state.sqrt_price_x64; // 先复制到本地变量
-        let last_pool_price_x64 = sqrt_price_x64.to_string();
+        // 9. 获取正确的pool price（从实际池子状态）
+        let last_pool_price_x64 = pool_state.sqrt_price_x64.to_string();
 
-        info!("✅ CLI相同逻辑计算完成");
+        info!("✅ CLI完全相同逻辑计算完成");
         info!("  Remaining accounts数量: {}", remaining_accounts.len());
         info!("  Pool price X64: {}", last_pool_price_x64);
         info!("  Transfer fee: {}", transfer_fee);
@@ -1270,6 +1309,264 @@ impl SolanaService {
             0
         };
         Ok(fee)
+    }
+
+    /// 【关键修复方法】精确移植CLI的get_out_put_amount_and_remaining_accounts函数逻辑
+    /// 这是修复remainingAccounts和lastPoolPriceX64问题的核心方法
+    fn get_output_amount_and_remaining_accounts_cli_exact(
+        &self,
+        input_amount: u64,
+        sqrt_price_limit_x64: Option<u128>,
+        zero_for_one: bool,
+        is_base_input: bool,
+        pool_config: &raydium_amm_v3::states::AmmConfig,
+        pool_state: &raydium_amm_v3::states::PoolState,
+        tickarray_bitmap_extension: &raydium_amm_v3::states::TickArrayBitmapExtension,
+        tick_arrays: &mut std::collections::VecDeque<raydium_amm_v3::states::TickArrayState>,
+    ) -> Result<(u64, std::collections::VecDeque<i32>)> {
+        info!("🔧 执行CLI精确相同的get_out_put_amount_and_remaining_accounts逻辑");
+        
+        // 获取第一个初始化的tick array（与CLI第322-324行完全一致）
+        let (is_pool_current_tick_array, current_vaild_tick_array_start_index) = pool_state
+            .get_first_initialized_tick_array(&Some(*tickarray_bitmap_extension), zero_for_one)
+            .map_err(|e| anyhow::anyhow!("获取第一个初始化tick array失败: {:?}", e))?;
+
+        // 执行交换计算（与CLI第326-337行完全一致）
+        let (amount_calculated, tick_array_start_index_vec) = self.swap_compute_cli_exact(
+            zero_for_one,
+            is_base_input,
+            is_pool_current_tick_array,
+            pool_config.trade_fee_rate,
+            input_amount,
+            current_vaild_tick_array_start_index,
+            sqrt_price_limit_x64.unwrap_or(0),
+            pool_state,
+            tickarray_bitmap_extension,
+            tick_arrays,
+        )?;
+
+        info!("  计算出的tick_array索引: {:?}", tick_array_start_index_vec);
+        info!("  计算出的金额: {}", amount_calculated);
+
+        Ok((amount_calculated, tick_array_start_index_vec))
+    }
+
+    /// 【关键修复方法】精确移植CLI的swap_compute函数逻辑
+    /// 完全按照CLI utils.rs中的swap_compute函数实现
+    fn swap_compute_cli_exact(
+        &self,
+        zero_for_one: bool,
+        is_base_input: bool,
+        is_pool_current_tick_array: bool,
+        fee: u32,
+        amount_specified: u64,
+        current_vaild_tick_array_start_index: i32,
+        sqrt_price_limit_x64: u128,
+        pool_state: &raydium_amm_v3::states::PoolState,
+        tickarray_bitmap_extension: &raydium_amm_v3::states::TickArrayBitmapExtension,
+        tick_arrays: &mut std::collections::VecDeque<raydium_amm_v3::states::TickArrayState>,
+    ) -> Result<(u64, std::collections::VecDeque<i32>)> {
+        use raydium_amm_v3::libraries::{liquidity_math, swap_math, tick_math};
+        use std::ops::Neg;
+
+        if amount_specified == 0 {
+            return Err(anyhow::anyhow!("amountSpecified must not be 0"));
+        }
+
+        // 价格限制处理（与CLI第358-366行完全一致）
+        let sqrt_price_limit_x64 = if sqrt_price_limit_x64 == 0 {
+            if zero_for_one {
+                tick_math::MIN_SQRT_PRICE_X64 + 1
+            } else {
+                tick_math::MAX_SQRT_PRICE_X64 - 1
+            }
+        } else {
+            sqrt_price_limit_x64
+        };
+
+        // 价格限制验证（与CLI第367-381行完全一致）
+        if zero_for_one {
+            if sqrt_price_limit_x64 < tick_math::MIN_SQRT_PRICE_X64 {
+                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must greater than MIN_SQRT_PRICE_X64"));
+            }
+            if sqrt_price_limit_x64 >= pool_state.sqrt_price_x64 {
+                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must smaller than current"));
+            }
+        } else {
+            if sqrt_price_limit_x64 > tick_math::MAX_SQRT_PRICE_X64 {
+                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must smaller than MAX_SQRT_PRICE_X64"));
+            }
+            if sqrt_price_limit_x64 <= pool_state.sqrt_price_x64 {
+                return Err(anyhow::anyhow!("sqrt_price_limit_x64 must greater than current"));
+            }
+        }
+
+        // 初始化交换状态（与CLI第384-390行完全一致）
+        let mut tick_match_current_tick_array = is_pool_current_tick_array;
+        let mut state = SwapState {
+            amount_specified_remaining: amount_specified,
+            amount_calculated: 0,
+            sqrt_price_x64: pool_state.sqrt_price_x64,
+            tick: pool_state.tick_current,
+            liquidity: pool_state.liquidity,
+        };
+
+        // 获取当前tick array（与CLI第392-398行完全一致）
+        let mut tick_array_current = tick_arrays.pop_front()
+            .ok_or_else(|| anyhow::anyhow!("没有可用的tick array"))?;
+        if tick_array_current.start_tick_index != current_vaild_tick_array_start_index {
+            return Err(anyhow::anyhow!("tick array start tick index does not match"));
+        }
+        let mut tick_array_start_index_vec = std::collections::VecDeque::new();
+        tick_array_start_index_vec.push_back(tick_array_current.start_tick_index);
+
+        let mut loop_count = 0;
+
+        // 主交换循环（与CLI第400-525行完全一致）
+        while state.amount_specified_remaining != 0
+            && state.sqrt_price_x64 != sqrt_price_limit_x64
+            && state.tick < tick_math::MAX_TICK
+            && state.tick > tick_math::MIN_TICK
+        {
+            if loop_count > 10 {
+                return Err(anyhow::anyhow!("loop_count limit"));
+            }
+
+            let mut step = StepComputations::default();
+            step.sqrt_price_start_x64 = state.sqrt_price_x64;
+
+            // 查找下一个初始化tick（与CLI第411-427行完全一致）
+            let mut next_initialized_tick = if let Some(tick_state) = tick_array_current
+                .next_initialized_tick(state.tick, pool_state.tick_spacing, zero_for_one)
+                .map_err(|e| anyhow::anyhow!("next_initialized_tick failed: {:?}", e))?
+            {
+                Box::new(*tick_state)
+            } else {
+                if !tick_match_current_tick_array {
+                    tick_match_current_tick_array = true;
+                    Box::new(
+                        *tick_array_current
+                            .first_initialized_tick(zero_for_one)
+                            .map_err(|e| anyhow::anyhow!("first_initialized_tick failed: {:?}", e))?,
+                    )
+                } else {
+                    Box::new(raydium_amm_v3::states::TickState::default())
+                }
+            };
+
+            // 如果当前tick array没有更多初始化tick，切换到下一个（与CLI第428-450行完全一致）
+            if !next_initialized_tick.is_initialized() {
+                let current_vaild_tick_array_start_index = pool_state
+                    .next_initialized_tick_array_start_index(
+                        &Some(*tickarray_bitmap_extension),
+                        current_vaild_tick_array_start_index,
+                        zero_for_one,
+                    )
+                    .map_err(|e| anyhow::anyhow!("next_initialized_tick_array_start_index failed: {:?}", e))?;
+
+                if current_vaild_tick_array_start_index.is_none() {
+                    return Err(anyhow::anyhow!("tick array start tick index out of range limit"));
+                }
+
+                tick_array_current = tick_arrays.pop_front()
+                    .ok_or_else(|| anyhow::anyhow!("没有更多tick arrays"))?;
+                let expected_index = current_vaild_tick_array_start_index.unwrap();
+                if tick_array_current.start_tick_index != expected_index {
+                    return Err(anyhow::anyhow!("tick array start tick index does not match"));
+                }
+                tick_array_start_index_vec.push_back(tick_array_current.start_tick_index);
+
+                let first_initialized_tick = tick_array_current
+                    .first_initialized_tick(zero_for_one)
+                    .map_err(|e| anyhow::anyhow!("first_initialized_tick failed: {:?}", e))?;
+
+                next_initialized_tick = Box::new(*first_initialized_tick);
+            }
+
+            // 设置下一个tick和价格（与CLI第451-467行完全一致）
+            step.tick_next = next_initialized_tick.tick;
+            step.initialized = next_initialized_tick.is_initialized();
+            if step.tick_next < tick_math::MIN_TICK {
+                step.tick_next = tick_math::MIN_TICK;
+            } else if step.tick_next > tick_math::MAX_TICK {
+                step.tick_next = tick_math::MAX_TICK;
+            }
+
+            step.sqrt_price_next_x64 = tick_math::get_sqrt_price_at_tick(step.tick_next)
+                .map_err(|e| anyhow::anyhow!("get_sqrt_price_at_tick failed: {:?}", e))?;
+
+            let target_price = if (zero_for_one && step.sqrt_price_next_x64 < sqrt_price_limit_x64)
+                || (!zero_for_one && step.sqrt_price_next_x64 > sqrt_price_limit_x64)
+            {
+                sqrt_price_limit_x64
+            } else {
+                step.sqrt_price_next_x64
+            };
+
+            // 计算交换步骤（与CLI第468-482行完全一致）
+            let swap_step = swap_math::compute_swap_step(
+                state.sqrt_price_x64,
+                target_price,
+                state.liquidity,
+                state.amount_specified_remaining,
+                fee,
+                is_base_input,
+                zero_for_one,
+                1,
+            )
+            .map_err(|e| anyhow::anyhow!("compute_swap_step failed: {:?}", e))?;
+
+            state.sqrt_price_x64 = swap_step.sqrt_price_next_x64;
+            step.amount_in = swap_step.amount_in;
+            step.amount_out = swap_step.amount_out;
+            step.fee_amount = swap_step.fee_amount;
+
+            // 更新状态（与CLI第484-502行完全一致）
+            if is_base_input {
+                state.amount_specified_remaining = state
+                    .amount_specified_remaining
+                    .checked_sub(step.amount_in + step.fee_amount)
+                    .unwrap();
+                state.amount_calculated = state
+                    .amount_calculated
+                    .checked_add(step.amount_out)
+                    .unwrap();
+            } else {
+                state.amount_specified_remaining = state
+                    .amount_specified_remaining
+                    .checked_sub(step.amount_out)
+                    .unwrap();
+                state.amount_calculated = state
+                    .amount_calculated
+                    .checked_add(step.amount_in + step.fee_amount)
+                    .unwrap();
+            }
+
+            // 处理tick转换（与CLI第504-523行完全一致）
+            if state.sqrt_price_x64 == step.sqrt_price_next_x64 {
+                if step.initialized {
+                    let mut liquidity_net = next_initialized_tick.liquidity_net;
+                    if zero_for_one {
+                        liquidity_net = liquidity_net.neg();
+                    }
+                    state.liquidity = liquidity_math::add_delta(state.liquidity, liquidity_net)
+                        .map_err(|e| anyhow::anyhow!("add_delta failed: {:?}", e))?;
+                }
+
+                state.tick = if zero_for_one {
+                    step.tick_next - 1
+                } else {
+                    step.tick_next
+                };
+            } else if state.sqrt_price_x64 != step.sqrt_price_start_x64 {
+                state.tick = tick_math::get_tick_at_sqrt_price(state.sqrt_price_x64)
+                    .map_err(|e| anyhow::anyhow!("get_tick_at_sqrt_price failed: {:?}", e))?;
+            }
+
+            loop_count += 1;
+        }
+
+        Ok((state.amount_calculated, tick_array_start_index_vec))
     }
 
     // ============ SwapV2 相关方法 ============
