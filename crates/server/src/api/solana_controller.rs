@@ -1,22 +1,19 @@
 use crate::{
     dtos::solana_dto::{
-        SwapRequest, SwapResponse, BalanceResponse, PriceQuoteRequest, PriceQuoteResponse,
-        WalletInfo, ErrorResponse, ApiResponse,
-        ComputeSwapRequest, RaydiumResponse, SwapComputeData, TransactionSwapRequest, TransactionData, RaydiumErrorResponse,
-        ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request
+        ApiResponse, BalanceResponse, ComputeSwapRequest, ComputeSwapV2Request, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeData, SwapComputeV2Data, SwapRequest, SwapResponse,
+        TransactionData, TransactionSwapRequest, TransactionSwapV2Request, WalletInfo,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
 };
 use axum::{
-    Extension,
     extract::Query,
     http::StatusCode,
     response::Json,
     routing::{get, post},
-    Router,
+    Extension, Router,
 };
-use tracing::{info, error};
+use tracing::{error, info};
 
 pub struct SolanaController;
 
@@ -50,15 +47,15 @@ impl SolanaController {
 /// ```json
 /// {
 ///   "from_token": "SOL",
-///   "to_token": "USDC", 
+///   "to_token": "USDC",
 ///   "amount": 1000000000,
 ///   "minimum_amount_out": 95000000,
 ///   "max_slippage_percent": 5.0
 /// }
 /// ```
-/// 
+///
 /// # 响应
-/// 
+///
 /// ```json
 /// {
 ///   "success": true,
@@ -85,10 +82,7 @@ impl SolanaController {
     ),
     tag = "Solana交换"
 )]
-pub async fn swap_tokens(
-    Extension(services): Extension<Services>,
-    ValidationExtractor(request): ValidationExtractor<SwapRequest>,
-) -> Result<Json<ApiResponse<SwapResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn swap_tokens(Extension(services): Extension<Services>, ValidationExtractor(request): ValidationExtractor<SwapRequest>) -> Result<Json<ApiResponse<SwapResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔄 收到交换请求: {} {} -> {}", request.amount, request.from_token, request.to_token);
 
     match services.solana.swap_tokens(request).await {
@@ -105,11 +99,11 @@ pub async fn swap_tokens(
 }
 
 /// 获取账户余额
-/// 
+///
 /// 返回当前钱包的SOL和USDC余额信息
-/// 
+///
 /// # 响应
-/// 
+///
 /// ```json
 /// {
 ///   "success": true,
@@ -132,9 +126,7 @@ pub async fn swap_tokens(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_balance(
-    Extension(services): Extension<Services>,
-) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_balance(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 查询账户余额");
 
     match services.solana.get_balance().await {
@@ -151,11 +143,11 @@ pub async fn get_balance(
 }
 
 /// 获取价格报价
-/// 
+///
 /// 获取指定金额的代币交换价格估算，不执行实际交换
-/// 
+///
 /// # 请求体
-/// 
+///
 /// ```json
 /// {
 ///   "from_token": "SOL",
@@ -163,9 +155,9 @@ pub async fn get_balance(
 ///   "amount": 1000000000
 /// }
 /// ```
-/// 
+///
 /// # 响应
-/// 
+///
 /// ```json
 /// {
 ///   "success": true,
@@ -192,10 +184,7 @@ pub async fn get_balance(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_price_quote(
-    Extension(services): Extension<Services>,
-    ValidationExtractor(request): ValidationExtractor<PriceQuoteRequest>,
-) -> Result<Json<ApiResponse<PriceQuoteResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_price_quote(Extension(services): Extension<Services>, ValidationExtractor(request): ValidationExtractor<PriceQuoteRequest>) -> Result<Json<ApiResponse<PriceQuoteResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("💰 获取价格报价: {} {} -> {}", request.amount, request.from_token, request.to_token);
 
     match services.solana.get_price_quote(request).await {
@@ -212,11 +201,11 @@ pub async fn get_price_quote(
 }
 
 /// 获取钱包信息
-/// 
+///
 /// 返回当前配置的钱包基本信息
-/// 
+///
 /// # 响应
-/// 
+///
 /// ```json
 /// {
 ///   "success": true,
@@ -236,15 +225,12 @@ pub async fn get_price_quote(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_wallet_info(
-    Extension(services): Extension<Services>,
-) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_wallet_info(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔍 查询钱包信息");
 
     match services.solana.get_wallet_info().await {
         Ok(wallet_info) => {
-            info!("✅ 钱包信息查询成功: {} ({})", wallet_info.address, 
-                  if wallet_info.connected { "已连接" } else { "未连接" });
+            info!("✅ 钱包信息查询成功: {} ({})", wallet_info.address, if wallet_info.connected { "已连接" } else { "未连接" });
             Ok(Json(ApiResponse::success(wallet_info)))
         }
         Err(e) => {
@@ -256,11 +242,11 @@ pub async fn get_wallet_info(
 }
 
 /// 健康检查
-/// 
+///
 /// 检查Solana服务的运行状态
-/// 
+///
 /// # 响应
-/// 
+///
 /// ```json
 /// {
 ///   "success": true,
@@ -276,9 +262,7 @@ pub async fn get_wallet_info(
     ),
     tag = "Solana交换"
 )]
-pub async fn health_check(
-    Extension(services): Extension<Services>,
-) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn health_check(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     match services.solana.health_check().await {
         Ok(status) => {
             info!("✅ Solana服务健康检查: {}", status);
@@ -295,19 +279,19 @@ pub async fn health_check(
 // ============ Raydium API兼容接口 ============
 
 /// 计算swap-base-in交换数据
-/// 
+///
 /// 基于固定输入金额计算输出金额和交换详情（Raydium API兼容）
-/// 
+///
 /// # 查询参数
-/// 
+///
 /// - inputMint: 输入代币mint地址
 /// - outputMint: 输出代币mint地址  
 /// - amount: 输入金额（字符串形式的最小单位）
 /// - slippageBps: 滑点容忍度（基点）
 /// - txVersion: 交易版本（V0或V1）
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -344,10 +328,7 @@ pub async fn health_check(
     ),
     tag = "Raydium兼容接口"
 )]
-pub async fn compute_swap_base_in(
-    Extension(services): Extension<Services>,
-    Query(params): Query<ComputeSwapRequest>,
-) -> Result<Json<RaydiumResponse<SwapComputeData>>, (StatusCode, Json<RaydiumErrorResponse>)> {
+pub async fn compute_swap_base_in(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapRequest>) -> Result<Json<RaydiumResponse<SwapComputeData>>, (StatusCode, Json<RaydiumErrorResponse>)> {
     info!("📊 计算swap-base-in: {} {} -> {}", params.amount, params.input_mint, params.output_mint);
 
     match services.solana.compute_swap_base_in(params).await {
@@ -364,19 +345,19 @@ pub async fn compute_swap_base_in(
 }
 
 /// 计算swap-base-out交换数据
-/// 
+///
 /// 基于固定输出金额计算所需输入金额和交换详情（Raydium API兼容）
-/// 
+///
 /// # 查询参数
-/// 
+///
 /// - inputMint: 输入代币mint地址
 /// - outputMint: 输出代币mint地址  
 /// - amount: 期望输出金额（字符串形式的最小单位）
 /// - slippageBps: 滑点容忍度（基点）
 /// - txVersion: 交易版本（V0或V1）
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -413,10 +394,7 @@ pub async fn compute_swap_base_in(
     ),
     tag = "Raydium兼容接口"
 )]
-pub async fn compute_swap_base_out(
-    Extension(services): Extension<Services>,
-    Query(params): Query<ComputeSwapRequest>,
-) -> Result<Json<RaydiumResponse<SwapComputeData>>, (StatusCode, Json<RaydiumErrorResponse>)> {
+pub async fn compute_swap_base_out(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapRequest>) -> Result<Json<RaydiumResponse<SwapComputeData>>, (StatusCode, Json<RaydiumErrorResponse>)> {
     info!("📊 计算swap-base-out: {} {} -> {}", params.amount, params.input_mint, params.output_mint);
 
     match services.solana.compute_swap_base_out(params).await {
@@ -433,11 +411,11 @@ pub async fn compute_swap_base_out(
 }
 
 /// 构建swap-base-in交易
-/// 
+///
 /// 使用compute接口的结果构建可执行的交易数据（Raydium API兼容）
-/// 
+///
 /// # 请求体
-/// 
+///
 /// ```json
 /// {
 ///   "wallet": "用户钱包地址",
@@ -450,9 +428,9 @@ pub async fn compute_swap_base_out(
 ///   "outputAccount": "输出代币账户地址（可选）"
 /// }
 /// ```
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -496,11 +474,11 @@ pub async fn transaction_swap_base_in(
 }
 
 /// 构建swap-base-out交易
-/// 
+///
 /// 使用compute接口的结果构建可执行的交易数据（Raydium API兼容）
-/// 
+///
 /// # 请求体
-/// 
+///
 /// ```json
 /// {
 ///   "wallet": "用户钱包地址",
@@ -513,9 +491,9 @@ pub async fn transaction_swap_base_in(
 ///   "outputAccount": "输出代币账户地址（可选）"
 /// }
 /// ```
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -561,11 +539,11 @@ pub async fn transaction_swap_base_out(
 // ============ SwapV2 API兼容接口（支持转账费） ============
 
 /// 计算swap-v2-base-in交换数据
-/// 
+///
 /// 基于固定输入金额计算输出金额和交换详情，支持转账费计算（SwapV2 API兼容）
-/// 
+///
 /// # 查询参数
-/// 
+///
 /// - inputMint: 输入代币mint地址
 /// - outputMint: 输出代币mint地址  
 /// - amount: 输入金额（字符串形式的最小单位）
@@ -573,9 +551,9 @@ pub async fn transaction_swap_base_out(
 /// - limitPrice: 限价（可选）
 /// - enableTransferFee: 是否启用转账费计算（默认为true）
 /// - txVersion: 交易版本（V0或V1）
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -622,12 +600,8 @@ pub async fn transaction_swap_base_out(
     ),
     tag = "SwapV2兼容接口"
 )]
-pub async fn compute_swap_v2_base_in(
-    Extension(services): Extension<Services>,
-    Query(params): Query<ComputeSwapV2Request>,
-) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
-    info!("📊 计算swap-v2-base-in: {} {} -> {} (转账费: {:?})", 
-          params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee);
+pub async fn compute_swap_v2_base_in(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapV2Request>) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
+    info!("📊 计算swap-v2-base-in: {} {} -> {} (转账费: {:?})", params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee);
 
     match services.solana.compute_swap_v2_base_in(params).await {
         Ok(compute_data) => {
@@ -643,11 +617,11 @@ pub async fn compute_swap_v2_base_in(
 }
 
 /// 计算swap-v2-base-out交换数据
-/// 
+///
 /// 基于固定输出金额计算所需输入金额和交换详情，支持转账费计算（SwapV2 API兼容）
-/// 
+///
 /// # 查询参数
-/// 
+///
 /// - inputMint: 输入代币mint地址
 /// - outputMint: 输出代币mint地址  
 /// - amount: 期望输出金额（字符串形式的最小单位）
@@ -655,9 +629,9 @@ pub async fn compute_swap_v2_base_in(
 /// - limitPrice: 限价（可选）
 /// - enableTransferFee: 是否启用转账费计算（默认为true）
 /// - txVersion: 交易版本（V0或V1）
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -704,12 +678,8 @@ pub async fn compute_swap_v2_base_in(
     ),
     tag = "SwapV2兼容接口"
 )]
-pub async fn compute_swap_v2_base_out(
-    Extension(services): Extension<Services>,
-    Query(params): Query<ComputeSwapV2Request>,
-) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
-    info!("📊 计算swap-v2-base-out: {} {} -> {} (转账费: {:?})", 
-          params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee);
+pub async fn compute_swap_v2_base_out(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapV2Request>) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
+    info!("📊 计算swap-v2-base-out: {} {} -> {} (转账费: {:?})", params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee);
 
     match services.solana.compute_swap_v2_base_out(params).await {
         Ok(compute_data) => {
@@ -725,11 +695,11 @@ pub async fn compute_swap_v2_base_out(
 }
 
 /// 构建swap-v2-base-in交易
-/// 
+///
 /// 使用compute-v2接口的结果构建可执行的交易数据，支持转账费（SwapV2 API兼容）
-/// 
+///
 /// # 请求体
-/// 
+///
 /// ```json
 /// {
 ///   "wallet": "用户钱包地址",
@@ -742,9 +712,9 @@ pub async fn compute_swap_v2_base_out(
 ///   "outputAccount": "输出代币账户地址（可选）"
 /// }
 /// ```
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -788,11 +758,11 @@ pub async fn transaction_swap_v2_base_in(
 }
 
 /// 构建swap-v2-base-out交易
-/// 
+///
 /// 使用compute-v2接口的结果构建可执行的交易数据，支持转账费（SwapV2 API兼容）
-/// 
+///
 /// # 请求体
-/// 
+///
 /// ```json
 /// {
 ///   "wallet": "用户钱包地址",
@@ -805,9 +775,9 @@ pub async fn transaction_swap_v2_base_in(
 ///   "outputAccount": "输出代币账户地址（可选）"
 /// }
 /// ```
-/// 
+///
 /// # 响应示例
-/// 
+///
 /// ```json
 /// {
 ///   "id": "uuid-here",
@@ -848,4 +818,4 @@ pub async fn transaction_swap_v2_base_out(
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
-} 
+}

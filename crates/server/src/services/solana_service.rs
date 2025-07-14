@@ -683,6 +683,34 @@ impl SolanaService {
         info!("  输出代币: {}", output_mint);
         info!("  金额: {}", amount);
 
+        // 尝试使用本地计算
+        match self
+            .get_remaining_accounts_and_pool_price_local(pool_id, input_mint, output_mint, amount)
+            .await
+        {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                warn!("⚠️ 本地计算失败: {:?}，尝试使用官方API", e);
+                // 备用方案：调用官方API获取正确的值
+                self.get_remaining_accounts_from_official_api(
+                    pool_id,
+                    input_mint,
+                    output_mint,
+                    amount,
+                )
+                .await
+            }
+        }
+    }
+
+    /// 本地计算remaining accounts和pool price
+    async fn get_remaining_accounts_and_pool_price_local(
+        &self,
+        pool_id: &str,
+        input_mint: &str,
+        output_mint: &str,
+        amount: u64,
+    ) -> Result<(Vec<String>, String)> {
         use std::str::FromStr;
 
         let pool_pubkey = Pubkey::from_str(pool_id)?;
@@ -722,6 +750,17 @@ impl SolanaService {
             mint1 = temp;
         }
         let zero_for_one = input_mint_pubkey == mint0;
+
+        info!("📋 调试信息:");
+        info!("  mint0: {}", mint0);
+        info!("  mint1: {}", mint1);
+        info!("  zero_for_one: {}", zero_for_one);
+        info!("  pool_pubkey: {}", pool_pubkey);
+        info!("  amm_config_key: {}", amm_config_key);
+        info!(
+            "  tickarray_bitmap_extension_pda: {}",
+            tickarray_bitmap_extension_pda
+        );
 
         // 2. 批量加载账户（与CLI第1777-1789行完全一致）
         let load_accounts = vec![
@@ -818,6 +857,10 @@ impl SolanaService {
                 ],
                 &raydium_program_id,
             );
+            info!(
+                "  添加tick array: index={}, key={}",
+                tick_index, tick_array_key
+            );
             remaining_accounts.push(tick_array_key.to_string());
         }
 
@@ -834,6 +877,62 @@ impl SolanaService {
         info!("  Remaining accounts: {:?}", remaining_accounts);
 
         Ok((remaining_accounts, last_pool_price_x64))
+    }
+
+    /// 从官方API获取remaining accounts（备用方案）
+    async fn get_remaining_accounts_from_official_api(
+        &self,
+        pool_id: &str,
+        input_mint: &str,
+        output_mint: &str,
+        amount: u64,
+    ) -> Result<(Vec<String>, String)> {
+        warn!("🌐 使用官方API获取remaining accounts（备用方案）");
+
+        // 调用Raydium官方API
+        let url = format!(
+            "https://transaction-v1.raydium.io/compute/swap-base-in?inputMint={}&outputMint={}&amount={}&slippageBps=50&txVersion=V0",
+            input_mint, output_mint, amount
+        );
+
+        let response = reqwest::get(&url).await?;
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!("官方API请求失败: {}", response.status()));
+        }
+
+        let data: serde_json::Value = response.json().await?;
+
+        // 提取remaining accounts和lastPoolPriceX64
+        if let Some(route_plan) = data
+            .get("data")
+            .and_then(|d| d.get("routePlan"))
+            .and_then(|r| r.as_array())
+            .and_then(|arr| arr.first())
+        {
+            let remaining_accounts = route_plan
+                .get("remainingAccounts")
+                .and_then(|r| r.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
+
+            let last_pool_price_x64 = route_plan
+                .get("lastPoolPriceX64")
+                .and_then(|p| p.as_str())
+                .unwrap_or("0")
+                .to_string();
+
+            info!("✅ 从官方API获取成功");
+            info!("  Remaining accounts: {:?}", remaining_accounts);
+            info!("  Pool price X64: {}", last_pool_price_x64);
+
+            Ok((remaining_accounts, last_pool_price_x64))
+        } else {
+            Err(anyhow::anyhow!("无法从官方API响应中提取数据"))
+        }
     }
 
     /// 简化版remaining accounts计算
@@ -2091,15 +2190,15 @@ impl SolanaServiceTrait for SolanaService {
         let other_amount_threshold =
             self.calculate_other_amount_threshold(output_amount, params.slippage_bps);
 
-        // 6. 构建路由计划
-        let fee_amount = amount_specified / 400; // 0.25% 手续费
+        // 6. 构建路由计划 - 【关键修复】使用原始输入金额而不是扣除转账费后的金额
+        let fee_amount = input_amount / 400; // 0.25% 手续费，基于原始输入金额
         let route_plan = vec![
             self.create_route_plan(
                 pool_address_str,
                 params.input_mint.clone(),
                 params.output_mint.clone(),
                 fee_amount,
-                amount_specified,
+                input_amount, // ❌修复：使用原始输入金额，这样才能与CLI计算保持一致
             )
             .await?,
         ];
@@ -2193,7 +2292,7 @@ impl SolanaServiceTrait for SolanaService {
         // 5. 应用滑点保护
         let other_amount_threshold =
             self.calculate_other_amount_threshold(output_amount, params.slippage_bps);
-        // 6. 构建路由计划
+        // 6. 构建路由计划 - 【关键修复】使用原始金额计算
         let fee_amount = output_amount / 400; // 0.25% 手续费
         let route_plan = vec![
             self.create_route_plan(
@@ -2201,7 +2300,7 @@ impl SolanaServiceTrait for SolanaService {
                 params.input_mint.clone(),
                 params.output_mint.clone(),
                 fee_amount,
-                amount_specified,
+                output_amount, // ❌修复：使用原始输出金额，保持与CLI逻辑一致
             )
             .await?,
         ];
