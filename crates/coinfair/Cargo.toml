@@ -1,10 +1,10 @@
 [package]
-name = "hope"
+name = "coinfair"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "hope" # placeholder
+name = "coinfair" # placeholder
 path = "src/main.rs"
 
 [dependencies]
@@ -30,8 +30,7 @@ utils = { path = "../utils" }
 validator = { workspace = true }
 
 database = { path = "../database/" }
+monitor = { path = "../monitor/" }
 server = { path = "../server/" }
-solana = { path = "../solana/" }
-monitor = { path = "../monitor/" }  # 恢复monitor依赖，测试patch是否解决冲突
-# timer = { path = "../timer/" }  # 已移除，因为不使用timer服务
-# telegram = { path = "../telegram/" }  # 已移除，因为不使用telegram服务
+timer = { path = "../timer/" }
+telegram = { path = "../telegram/" }

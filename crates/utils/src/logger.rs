@@ -29,7 +29,13 @@ impl Logger {
 
         tracing_subscriber::registry()
             .with(env_filter)
-            .with(tracing_subscriber::fmt::layer().with_writer(non_blocking))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_file(true)        // 显示文件名
+                    .with_line_number(true) // 显示行号
+                    .with_target(false)     // 隐藏target减少冗余
+            )
             .init();
 
         guard

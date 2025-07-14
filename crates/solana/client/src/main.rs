@@ -1765,7 +1765,7 @@ fn main() -> Result<()> {
                 println!("{}", signature);
             }
         }
-        CommandsName::SwapV2 {
+    CommandsName::SwapV2 {
             input_token,
             output_token,
             base_in,

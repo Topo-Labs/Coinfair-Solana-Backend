@@ -1,0 +1,72 @@
+# raydium官方接口的返回
+{
+  "id": "da28e5e1-7b5c-4cda-88ed-c0e4f70e07bc",
+  "success": true,
+  "version": "V1",
+  "data": {
+    "swapType": "BaseIn",
+    "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "inputAmount": "1000000",
+    "outputMint": "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz",
+    "outputAmount": "88573346845",
+    "otherAmountThreshold": "88130480110",
+    "slippageBps": 50,
+    "priceImpactPct": 2.7,
+    "referrerAmount": "0",
+    "routePlan": [
+      {
+        "poolId": "EWsjgXuVrcAESbAyBo6Q2JCuuAdotBhp8g7Qhvf8GNek",
+        "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "outputMint": "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz",
+        "feeMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "feeRate": 25,
+        "feeAmount": "2500",
+        "remainingAccounts": [
+          "CrMyj15Y2pxJQaKk5K8KdJe99NnmHyB1JfwYLZyfM9WB",
+          "FsePzTUsjqDmRTQfN2JmzGXTcqiDJrEf9PGcZiH5AxRv"
+        ],
+        "lastPoolPriceX64": "62330475429320437"
+      }
+    ]
+  }
+}
+# 我们的webApi返回
+  {
+  "id": "0378cd27-47d9-4999-b106-ce3203dd7c5b",
+  "success": true,
+  "version": "V1",
+  "data": {
+    "swapType": "BaseInV2",
+    "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "inputAmount": "1000000",
+    "outputMint": "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz",
+    "outputAmount": "94630539416",
+    "otherAmountThreshold": "94157386718",
+    "slippageBps": 50,
+    "priceImpactPct": 0.1,
+    "referrerAmount": "0",
+    "routePlan": [
+      {
+        "poolId": "EWsjgXuVrcAESbAyBo6Q2JCuuAdotBhp8g7Qhvf8GNek",
+        "inputMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "outputMint": "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz",
+        "feeMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+        "feeRate": 25,
+        "feeAmount": "2500",
+        "remainingAccounts": [
+          "3HJ1hfiLFjM1Lvt2eD3P4whttuxV2ihKnVADqVPDuX5g",
+          "FsePzTUsjqDmRTQfN2JmzGXTcqiDJrEf9PGcZiH5AxRv"
+        ],
+        "lastPoolPriceX64": "61482122872729304"
+      }
+    ],
+    "transferFeeInfo": {
+      "inputTransferFee": 0,
+      "outputTransferFee": 0,
+      "inputMintDecimals": 6,
+      "outputMintDecimals": 9
+    },
+    "amountSpecified": "1000000",
+    "epoch": 817
+  }
+}

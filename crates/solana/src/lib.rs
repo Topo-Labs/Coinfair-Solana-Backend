@@ -5,6 +5,8 @@ pub mod raydium_api;
 pub mod swap;
 pub mod examples;
 pub mod precise_swap;
+pub mod swap_v2_service;
+pub mod swap_v2_builder;
 
 pub use client::SolanaClient;
 pub use config::SwapConfig;
@@ -12,6 +14,8 @@ pub use raydium::{RaydiumSwap, RaydiumPoolInfo, SwapEstimateResult};
 pub use raydium_api::{RaydiumApiClient, calculate_swap_output_with_api};
 pub use swap::SolanaSwap;
 pub use precise_swap::PreciseSwapService;
+pub use swap_v2_service::{SwapV2Service, TokenAccountInfo, TransferFeeResult, SwapV2AccountsInfo, UserTokenAccountInfo};
+pub use swap_v2_builder::{SwapV2InstructionBuilder, SwapV2BuildParams, SwapV2InstructionResult};
 
 #[cfg(test)]
 mod tests {

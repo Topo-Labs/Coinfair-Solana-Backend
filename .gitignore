@@ -65,3 +65,12 @@ perf.data*
 # 其他
 .fleet/
 .direnv 
+enhanced_swap_analysis.js
+mcp_swap_analysis.js
+swap_analysis.js
+swap_analysis_guide.md
+获取交易数据+发起交易.md
+CLAUDE.md
+screenshots/
+Solana配置说明.md
+/data/

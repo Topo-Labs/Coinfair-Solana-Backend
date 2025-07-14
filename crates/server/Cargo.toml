@@ -1,5 +1,5 @@
 [package]
-name = "server" # placeholder
+name = "server"           # placeholder
 version = "0.1.0"
 edition = "2021"
 metadata.workspace = true
@@ -32,6 +32,18 @@ validator = { workspace = true }
 solana = { path = "../solana" }
 chrono = { version = "0.4.38", features = ["serde"] }
 ethers = { version = "2.0.14", features = ["ws"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+base64 = "0.21"
+solana-client = "2.1"
+solana-sdk = "2.1"
+reqwest = { version = "0.11", features = ["json"] }
+
+# 添加缺失的依赖项用于SwapV2实现
+anchor-lang = "0.31.0"
+raydium-amm-v3 = { git = "https://github.com/raydium-io/raydium-clmm", features = ["no-entrypoint", "client"] }
+spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "6.0.0", features = ["no-entrypoint"] }
+
 # monitor = { path = "../monitor/" }
 
 # For dev-dependencies, there is no need to config agiain.
@@ -40,3 +52,4 @@ ethers = { version = "2.0.14", features = ["ws"] }
 # axum-test = "14.8.0"
 utoipa = { version = "4.2", features = ["axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "5.0", features = ["axum"] }
+num-traits = { workspace = true }

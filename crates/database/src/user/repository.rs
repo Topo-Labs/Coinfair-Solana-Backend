@@ -50,6 +50,7 @@ impl UserRepositoryTrait for Database {
         }
 
         let new_doc = User {
+            id: None,
             address: address.to_string().to_lowercase(),
             amount: amount.floor().to_string(),
             price: format!("{:.20}", price),

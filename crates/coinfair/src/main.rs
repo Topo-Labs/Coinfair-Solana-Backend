@@ -3,12 +3,11 @@ use axum::{routing::Router, serve};
 use clap::Parser;
 use database::Database;
 use dotenvy::dotenv;
-// use monitor::monitor::Monitor;  // 注释掉monitor的导入
+use monitor::monitor::Monitor;
 use server::{app::ApplicationServer, services::Services};
-use solana::{SolanaSwap, SwapConfig};
 use std::sync::Arc;
-// use telegram::HopeBot;  // 注释掉telegram的导入
-// use timer::Timer;  // 注释掉timer的导入
+use telegram::HopeBot;
+use timer::Timer;
 use tokio::{signal, sync::Notify, task::JoinSet};
 use tracing::info;
 use utils::{logger::Logger, AppConfig};
@@ -20,18 +19,17 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let config = Arc::new(AppConfig::parse());
 
-    // 直接启动ApplicationServer，不使用Hope结构体
-    info!("🚀 启动Solana Controller服务...");
-    ApplicationServer::serve(config)
-        .await
-        .context("🔴 Failed to start server")?;
+    let coinfair = Coinfair::new().await;
+    coinfair.run().await.expect("Coinfair backend error");
+
+    //ApplicationServer::serve(config)
+    //  .await
+    //  .context("🔴 Failed to start server")?;
 
     Ok(())
 }
 
-// 注释掉整个Hope结构体相关的代码，因为我们只需要ApplicationServer
-/*
-pub struct Hope {
+pub struct Coinfair {
     services: Services,
     monitor: Monitor,
     timer: Timer,
@@ -39,13 +37,13 @@ pub struct Hope {
     config: Arc<AppConfig>,
 }
 
-impl Hope {
+impl Coinfair {
     pub async fn new() -> Self {
-        let config = Hope::with_config();
-        let services = Hope::with_service(config.clone()).await;
-        let monitor = Hope::with_monitor(services.clone()).await;
-        let telegram = Hope::with_telegram(services.clone());
-        let timer = Hope::with_timer(services.clone(), telegram.clone());
+        let config = Coinfair::with_config();
+        let services = Coinfair::with_service(config.clone()).await;
+        let monitor = Coinfair::with_monitor(services.clone()).await;
+        let telegram = Coinfair::with_telegram(services.clone());
+        let timer = Coinfair::with_timer(services.clone(), telegram.clone());
 
         Self {
             services,
@@ -76,21 +74,21 @@ impl Hope {
           //  self.monitor.run().await.expect("🔴 Failed to start monitor");
        // });
 
-        // 注释掉monitor服务的启动
-        // set.spawn(async move {
-        //     loop {
-        //         info!("Starting monitor...");
-        //         match self.monitor.run().await {
-        //             Ok(_) => {
-        //                 info!("Monitor exited normally, restarting...");
-        //             }
-        //             Err(e) => {
-        //                 info!("🔴 Monitor crashed: {:?}. Restarting in 2 seconds...", e);
-        //             }
-        //         }
-        //         sleep(Duration::from_secs(2)).await; // 等待2秒后重试
-        //     }
-        // });
+        set.spawn(async move {
+            loop {
+                info!("Starting monitor...");
+                match self.monitor.run().await {
+                    Ok(_) => {
+                        info!("Monitor exited normally, restarting...");
+                    }
+                    Err(e) => {
+                        info!("🔴 Monitor crashed: {:?}. Restarting in 2 seconds...", e);
+                    }
+                }
+                sleep(Duration::from_secs(2)).await; // 等待2秒后重试
+            }
+        });
+
 
         set.spawn(async move {
             ApplicationServer::serve(self.config.clone())
@@ -114,7 +112,7 @@ impl Hope {
     }
 }
 
-impl Hope {
+impl Coinfair {
     fn with_config() -> Arc<AppConfig> {
         dotenv().ok();
         let config = Arc::new(AppConfig::parse());
@@ -125,7 +123,7 @@ impl Hope {
     async fn with_service(config: Arc<AppConfig>) -> Services {
         let mongodb = Database::new(config.clone())
             .await
-            .expect("mongodb wrong in hope/src/main.rs");
+            .expect("mongodb wrong in coinfair/src/main.rs");
 
         let services = Services::new(mongodb);
         services
@@ -146,7 +144,6 @@ impl Hope {
         timer
     }
 }
-*/
 
 async fn shutdown_signal() {
     let ctrl_c = async {

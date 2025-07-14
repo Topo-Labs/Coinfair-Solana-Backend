@@ -6,7 +6,6 @@ use crate::dtos::solana_dto::{
 };
 use anyhow::Result;
 use async_trait::async_trait;
-use num_traits::ops::bytes::ToBytes;
 use solana::raydium_api::{calculate_swap_output_with_api, RaydiumApiClient};
 use solana::{
     RaydiumSwap, SolanaClient, SwapConfig, SwapV2BuildParams, SwapV2InstructionBuilder,
@@ -526,7 +525,6 @@ impl SolanaService {
         // 使用PDA方法计算池子地址
         let pool_address = self.calculate_pool_address_pda(input_mint, output_mint)?;
         info!("✅ pool_address: {}", pool_address);
-        // 使用只读API计算，不需要私钥
         match calculate_swap_output_with_api(
             &pool_address,
             input_amount,
@@ -537,15 +535,12 @@ impl SolanaService {
         .await
         {
             Ok(output_amount) => {
-                info!(
-                    "  ✅ 使用只读API计算成功: {} -> {}",
-                    input_amount, output_amount
-                );
+                info!("  ✅ 计算成功: {} -> {}", input_amount, output_amount);
                 Ok((output_amount, pool_address))
             }
             Err(e) => {
-                warn!("  ⚠️ 只读API计算失败: {:?}，使用备用计算", e);
-                // 如果API失败，使用备用简化计算
+                warn!("  ⚠️ 计算失败: {:?}，使用备用计算", e);
+                // 如果计算失败，使用备用简化计算
                 let output_amount = self
                     .fallback_price_calculation(input_mint, output_mint, input_amount)
                     .await?;
@@ -655,40 +650,35 @@ impl SolanaService {
         info!("  金额: {}", amount);
 
         use std::str::FromStr;
-        use std::collections::VecDeque;
-        use anchor_lang::AccountDeserialize;
-        
+
         let pool_pubkey = Pubkey::from_str(pool_id)?;
         let input_mint_pubkey = Pubkey::from_str(input_mint)?;
         let output_mint_pubkey = Pubkey::from_str(output_mint)?;
-        
+
         // 1. 批量加载账户（与CLI保持一致）
         let raydium_program_id = Pubkey::from_str(
             &std::env::var("RAYDIUM_PROGRAM_ID")
                 .unwrap_or_else(|_| "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".to_string()),
         )?;
-        
+
         let amm_config_index: u16 = std::env::var("AMM_CONFIG_INDEX")
             .unwrap_or_else(|_| "1".to_string())
             .parse()
             .unwrap_or(1);
-            
+
         let (amm_config_key, _) = Pubkey::find_program_address(
-            &[
-                "amm_config".as_bytes(),
-                &amm_config_index.to_be_bytes(),
-            ],
+            &["amm_config".as_bytes(), &amm_config_index.to_be_bytes()],
             &raydium_program_id,
         );
-        
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+
+        let (tickarray_bitmap_extension_pda, _) = Pubkey::find_program_address(
             &[
                 "pool_tick_array_bitmap_extension".as_bytes(),
                 pool_pubkey.as_ref(),
             ],
             &raydium_program_id,
         );
-        
+
         // 标准化mint顺序（确保mint0 < mint1）
         let mut mint0 = input_mint_pubkey;
         let mut mint1 = output_mint_pubkey;
@@ -698,41 +688,50 @@ impl SolanaService {
             mint1 = temp;
         }
         let zero_for_one = input_mint_pubkey == mint0;
-        
+
         // 2. 批量加载账户
         let load_accounts = vec![
             amm_config_key,
             pool_pubkey,
-            tickarray_bitmap_extension,
+            tickarray_bitmap_extension_pda,
             mint0,
             mint1,
         ];
-        
+
         let accounts = self.rpc_client.get_multiple_accounts(&load_accounts)?;
-        
-        let amm_config_account = accounts[0].as_ref()
+
+        let amm_config_account = accounts[0]
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载AMM配置账户"))?;
-        let pool_account = accounts[1].as_ref()
+        let pool_account = accounts[1]
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载池子账户"))?;
-        let tickarray_bitmap_extension_account = accounts[2].as_ref()
+        let tickarray_bitmap_extension_account = accounts[2]
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载bitmap扩展账户"))?;
-        let mint0_account = accounts[3].as_ref()
+        let mint0_account = accounts[3]
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载mint0账户"))?;
-        let mint1_account = accounts[4].as_ref()
+        let mint1_account = accounts[4]
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("无法加载mint1账户"))?;
-        
+
         // 3. 反序列化关键状态（完全按照CLI逻辑）
-        let amm_config_state: raydium_amm_v3::states::AmmConfig = 
+        let _amm_config_state: raydium_amm_v3::states::AmmConfig =
             self.deserialize_anchor_account(amm_config_account)?;
-        let pool_state: raydium_amm_v3::states::PoolState = 
+        let pool_state: raydium_amm_v3::states::PoolState =
             self.deserialize_anchor_account(pool_account)?;
-        let tickarray_bitmap_extension: raydium_amm_v3::states::TickArrayBitmapExtension = 
+        let tickarray_bitmap_extension: raydium_amm_v3::states::TickArrayBitmapExtension =
             self.deserialize_anchor_account(tickarray_bitmap_extension_account)?;
-        
+
         // 4. 解析mint状态（用于transfer fee计算）
-        let mint0_state = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint0_account.data)?;
-        let mint1_state = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint1_account.data)?;
-        
+        let mint0_state = spl_token_2022::extension::StateWithExtensions::<
+            spl_token_2022::state::Mint,
+        >::unpack(&mint0_account.data)?;
+        let mint1_state = spl_token_2022::extension::StateWithExtensions::<
+            spl_token_2022::state::Mint,
+        >::unpack(&mint1_account.data)?;
+
         // 5. 计算transfer fee（与CLI完全一致）
         let epoch = self.rpc_client.get_epoch_info()?.epoch;
         let transfer_fee = if zero_for_one {
@@ -741,52 +740,59 @@ impl SolanaService {
             self.get_transfer_fee_from_mint_state(&mint1_state, epoch, amount)?
         };
         let amount_specified = amount.checked_sub(transfer_fee).unwrap_or(amount);
-        
+
         // 6. 加载当前和接下来的5个tick arrays（与CLI完全一致）
-        let mut tick_arrays = self.load_cur_and_next_five_tick_array_like_cli(
-            &pool_state,
-            &tickarray_bitmap_extension,
-            zero_for_one,
-            &raydium_program_id,
-        ).await?;
-        
-        // 7. 调用CLI相同的计算逻辑（简化版本，获取核心tick arrays）
-        let tick_array_indexs = self.calculate_tick_array_indexes_from_pool_state(
-            &pool_state,
-            &tickarray_bitmap_extension,
-            zero_for_one,
-            amount_specified,
-        ).await?;
-        
+        let _tick_arrays = self
+            .load_cur_and_next_five_tick_array_like_cli(
+                &pool_state,
+                &tickarray_bitmap_extension,
+                zero_for_one,
+                &raydium_program_id,
+                &pool_pubkey, // 传递池子地址
+            )
+            .await?;
+
+        // 7. 调用CLI相同的计算逻辑（获取核心tick arrays）
+        let tick_array_indexs = self
+            .calculate_tick_array_indexes_from_pool_state(
+                &pool_state,
+                &tickarray_bitmap_extension,
+                zero_for_one,
+                amount_specified,
+            )
+            .await?;
+
         // 8. 构建remaining accounts（与CLI完全一致）
         let mut remaining_accounts = Vec::new();
-        
-        // 添加bitmap extension
-        remaining_accounts.push(tickarray_bitmap_extension.to_string());
-        
-        // 添加tick arrays
+        info!("  tickarray_bitmap_extension_pda: {}", tickarray_bitmap_extension_pda.to_string());
+        // 添加bitmap extension（使用地址）
+        remaining_accounts.push(tickarray_bitmap_extension_pda.to_string());
+
+        // 添加tick arrays（与CLI第1880-1897行逻辑完全一致）
         for tick_index in tick_array_indexs {
             let (tick_array_key, _) = Pubkey::find_program_address(
                 &[
                     "tick_array".as_bytes(),
                     pool_pubkey.as_ref(),
-                    &tick_index.to_be_bytes(),
+                    tick_index.to_be_bytes().as_ref(),
                 ],
                 &raydium_program_id,
             );
             remaining_accounts.push(tick_array_key.to_string());
         }
-        
-        // 9. 获取正确的pool price（从实际池子状态）
-        let last_pool_price_x64 = pool_state.sqrt_price_x64.to_string();
-        
+
+        // 9. 获取正确的pool price（从实际池子状态，与CLI第781行完全一致）
+        let sqrt_price_x64 = pool_state.sqrt_price_x64; // 先复制到本地变量
+        let last_pool_price_x64 = sqrt_price_x64.to_string();
+
         info!("✅ CLI相同逻辑计算完成");
         info!("  Remaining accounts数量: {}", remaining_accounts.len());
         info!("  Pool price X64: {}", last_pool_price_x64);
         info!("  Transfer fee: {}", transfer_fee);
         info!("  Amount specified: {}", amount_specified);
+        info!("  Zero for one: {}", zero_for_one);
         info!("  Remaining accounts: {:?}", remaining_accounts);
-        
+
         Ok((remaining_accounts, last_pool_price_x64))
     }
 
@@ -848,7 +854,7 @@ impl SolanaService {
                     &[
                         "tick_array".as_bytes(), // TICK_ARRAY_SEED
                         pool_id.to_bytes().as_ref(),
-                        &tick_index.to_be_bytes(),
+                        tick_index.to_be_bytes().as_ref(),
                     ],
                     &pool_config.raydium_v3_program,
                 )
@@ -984,12 +990,12 @@ impl SolanaService {
 
         // 3. 基于当前价格和交换金额计算可能需要的tick arrays
         // 这是简化计算，在实际应用中应该使用更精确的tick math
-        let current_tick = pool_info.current_tick;
-        let tick_spacing = pool_info.tick_spacing as i32;
+        let current_tick = pool_info.tick_current;
+        let tick_spacing = 64; // 默认tick spacing
 
         // 计算交换可能跨越的tick范围
         let price_impact_ticks =
-            self.estimate_price_impact_ticks(amount, pool_info.total_liquidity, tick_spacing);
+            self.estimate_price_impact_ticks(amount, pool_info.liquidity, tick_spacing);
 
         let mut tick_array_indexes = Vec::new();
         for i in -2..=2 {
@@ -1009,7 +1015,7 @@ impl SolanaService {
                 &[
                     "tick_array".as_bytes(), // TICK_ARRAY_SEED
                     pool_pubkey.to_bytes().as_ref(),
-                    &tick_index.to_be_bytes(),
+                    tick_index.to_be_bytes().as_ref(),
                 ],
                 &raydium_program_id,
             )
@@ -1067,7 +1073,7 @@ impl SolanaService {
         remaining_accounts.push(bitmap_extension.to_string());
 
         // 添加常用的tick arrays（基于标准池子配置）
-        let tick_array_indexes = [-88, 0, 88]; // 常见的tick array indexes
+        let tick_array_indexes: [i32; 3] = [-88, 0, 88]; // 常见的tick array indexes
         for &tick_index in &tick_array_indexes {
             let tick_array_key = Pubkey::find_program_address(
                 &[
@@ -1126,7 +1132,10 @@ impl SolanaService {
     }
 
     /// 反序列化anchor账户（复制CLI逻辑）
-    fn deserialize_anchor_account<T: anchor_lang::AccountDeserialize>(&self, account: &solana_sdk::account::Account) -> Result<T> {
+    fn deserialize_anchor_account<T: anchor_lang::AccountDeserialize>(
+        &self,
+        account: &solana_sdk::account::Account,
+    ) -> Result<T> {
         let mut data: &[u8] = &account.data;
         T::try_deserialize(&mut data).map_err(Into::into)
     }
@@ -1138,20 +1147,20 @@ impl SolanaService {
         tickarray_bitmap_extension: &raydium_amm_v3::states::TickArrayBitmapExtension,
         zero_for_one: bool,
         raydium_program_id: &Pubkey,
+        pool_pubkey: &Pubkey, // 新增池子地址参数
     ) -> Result<std::collections::VecDeque<raydium_amm_v3::states::TickArrayState>> {
         let (_, mut current_valid_tick_array_start_index) = pool_state
             .get_first_initialized_tick_array(&Some(*tickarray_bitmap_extension), zero_for_one)
             .map_err(|e| anyhow::anyhow!("获取第一个初始化的tick array失败: {:?}", e))?;
 
         let mut tick_array_keys = Vec::new();
-        let pool_id = pool_state.pool_id.ok_or_else(|| anyhow::anyhow!("池子ID不存在"))?;
-        
+
         tick_array_keys.push(
             Pubkey::find_program_address(
                 &[
                     "tick_array".as_bytes(),
-                    pool_id.as_ref(),
-                    &current_valid_tick_array_start_index.to_be_bytes(),
+                    pool_pubkey.as_ref(), // 使用传入的池子地址
+                    current_valid_tick_array_start_index.to_be_bytes().as_ref(),
                 ],
                 raydium_program_id,
             )
@@ -1167,7 +1176,7 @@ impl SolanaService {
                     zero_for_one,
                 )
                 .map_err(|e| anyhow::anyhow!("获取下一个tick array索引失败: {:?}", e))?;
-            
+
             if next_tick_array_index.is_none() {
                 break;
             }
@@ -1176,8 +1185,8 @@ impl SolanaService {
                 Pubkey::find_program_address(
                     &[
                         "tick_array".as_bytes(),
-                        pool_id.as_ref(),
-                        &current_valid_tick_array_start_index.to_be_bytes(),
+                        pool_pubkey.as_ref(), // 使用传入的池子地址
+                        current_valid_tick_array_start_index.to_be_bytes().as_ref(),
                     ],
                     raydium_program_id,
                 )
@@ -1188,11 +1197,11 @@ impl SolanaService {
 
         let tick_array_rsps = self.rpc_client.get_multiple_accounts(&tick_array_keys)?;
         let mut tick_arrays = std::collections::VecDeque::new();
-        
+
         for tick_array in tick_array_rsps {
             match tick_array {
                 Some(account) => {
-                    let tick_array_state: raydium_amm_v3::states::TickArrayState = 
+                    let tick_array_state: raydium_amm_v3::states::TickArrayState =
                         self.deserialize_anchor_account(&account)?;
                     tick_arrays.push_back(tick_array_state);
                 }
@@ -1236,7 +1245,11 @@ impl SolanaService {
             }
         }
 
-        info!("计算出{}个tick array索引: {:?}", tick_array_indexes.len(), tick_array_indexes);
+        info!(
+            "计算出{}个tick array索引: {:?}",
+            tick_array_indexes.len(),
+            tick_array_indexes
+        );
         Ok(tick_array_indexes)
     }
 
@@ -1247,8 +1260,8 @@ impl SolanaService {
         epoch: u64,
         amount: u64,
     ) -> Result<u64> {
-        use spl_token_2022::extension::{BaseStateWithExtensions, transfer_fee::TransferFeeConfig};
-        
+        use spl_token_2022::extension::{transfer_fee::TransferFeeConfig, BaseStateWithExtensions};
+
         let fee = if let Ok(transfer_fee_config) = mint_state.get_extension::<TransferFeeConfig>() {
             transfer_fee_config
                 .calculate_epoch_fee(epoch, amount)
