@@ -1502,7 +1502,7 @@ impl RaydiumSwap {
     ) -> Result<SwapAccounts> {
         info!("📦 获取交换账户信息");
 
-        let rpc_client = self.client.get_rpc_client();
+        let _rpc_client = self.client.get_rpc_client();
 
         // AMM配置
         let amm_config = pool_state.amm_config;

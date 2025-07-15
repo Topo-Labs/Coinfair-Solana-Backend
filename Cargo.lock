@@ -6189,6 +6189,8 @@ dependencies = [
  "axum",
  "axum-extra",
  "base64 0.21.7",
+ "bincode",
+ "borsh 1.5.7",
  "chrono",
  "clap 4.5.40",
  "database",
@@ -6206,6 +6208,8 @@ dependencies = [
  "solana-client",
  "solana-sdk",
  "spl-associated-token-account 6.0.0",
+ "spl-memo 4.0.3",
+ "spl-token 4.0.2",
  "spl-token-2022 7.0.0",
  "thiserror 1.0.69",
  "time",
@@ -8498,6 +8502,15 @@ dependencies = [
 
 [[package]]
 name = "spl-memo"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64f13e674ae639249a78e2445fb043cf70e18f60e6dcf87a5411bc8c9580f130"
+dependencies = [
+ "solana-program",
+]
+
+[[package]]
+name = "spl-memo"
 version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0dba2f2bb6419523405d21c301a32c9f9568354d4742552e7972af801f4bdb3"
@@ -8645,6 +8658,21 @@ dependencies = [
  "spl-pod 0.5.0",
  "spl-program-error 0.6.0",
  "spl-type-length-value 0.7.0",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "spl-token"
+version = "4.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e9e171cbcb4b1f72f6d78ed1e975cb467f56825c27d09b8dd2608e4e7fc8b3b"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "num-derive 0.4.2",
+ "num-traits",
+ "num_enum",
+ "solana-program",
  "thiserror 1.0.69",
 ]
 
