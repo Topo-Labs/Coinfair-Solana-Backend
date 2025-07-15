@@ -188,7 +188,7 @@ impl PreciseSwapService {
         tick_bitmap_data: &[u8],
         tick_arrays: &mut VecDeque<Vec<u8>>,
     ) -> Result<u64> {
-        info!("🔧 调用client计算方法...");
+        info!("调用client计算方法...");
 
         // 这里是关键部分：
         // 在真实环境中，你需要：

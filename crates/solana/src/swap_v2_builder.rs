@@ -231,7 +231,7 @@ impl SwapV2InstructionBuilder {
         remaining_accounts: Vec<AccountMeta>,
         params: &SwapV2BuildParams,
     ) -> Result<Instruction> {
-        info!("🔧 构建SwapV2核心指令");
+        info!("构建SwapV2核心指令");
         
         // 创建临时的payer keypair用于构建指令（不会实际签名）
         let temp_payer = Keypair::new();

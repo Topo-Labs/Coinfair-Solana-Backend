@@ -56,7 +56,7 @@ login:
 # 	@echo "📤 \033[36m Uploading project to ubuntu@ec2-43-206-90-117.ap-northeast-1.compute.amazonaws.com:/home/ubuntu/hope_new... \033[0m"
 # 	sudo ssh -i .aws/hope.pem ubuntu@ec2-43-206-90-117.ap-northeast-1.compute.amazonaws.com "mkdir -p /home/ubuntu/hope_new"
 # 	sudo rsync -avz --exclude 'target' -e "ssh -i .aws/hope.pem" ./ ubuntu@ec2-43-206-90-117.ap-northeast-1.compute.amazonaws.com:/home/ubuntu/hope_new
-# 	@echo "✅ \033[36m Upload complete! \033[0m"
+# 	@echo "\033[36m Upload complete! \033[0m"
 # deploy: 
 # 	@echo "Deploy"
 # 	@scp target/aarch64-unknown-linux-gnu/release/hope ubuntu@your-aws-ip:~/hope/deploy/

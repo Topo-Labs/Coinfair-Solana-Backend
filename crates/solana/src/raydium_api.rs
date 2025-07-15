@@ -337,7 +337,7 @@ fn is_raydium_clmm_pool(program_id: &str, data_len: usize) -> bool {
 
 /// 解析Raydium AMM池子数据
 fn parse_raydium_amm_pool(pool_address: &str, data: &[u8]) -> Result<RaydiumPoolInfo> {
-    info!("🔧 解析Raydium AMM池子数据");
+    info!("解析Raydium AMM池子数据");
 
     if data.len() < 752 {
         return Err(anyhow::anyhow!("AMM池子数据长度不足"));
@@ -378,7 +378,7 @@ fn parse_raydium_amm_pool(pool_address: &str, data: &[u8]) -> Result<RaydiumPool
 
 /// 解析Raydium CLMM池子数据（使用真实的PoolState结构）
 fn parse_raydium_clmm_pool(pool_address: &str, data: &[u8]) -> Result<RaydiumPoolInfo> {
-    info!("🔧 解析Raydium CLMM池子数据");
+    info!("解析Raydium CLMM池子数据");
 
     // 检查数据长度，CLMM池子需要至少1544字节
     if data.len() < 1544 {

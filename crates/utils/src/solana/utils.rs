@@ -64,17 +64,17 @@ pub struct LogUtils;
 impl LogUtils {
     /// 记录操作开始
     pub fn log_operation_start(operation: &str, details: &str) {
-        info!("🔧 开始{}: {}", operation, details);
+        info!("开始{}: {}", operation, details);
     }
 
     /// 记录操作成功
     pub fn log_operation_success(operation: &str, result: &str) {
-        info!("✅ {}成功: {}", operation, result);
+        info!("{}成功: {}", operation, result);
     }
 
     /// 记录操作失败
     pub fn log_operation_failure(operation: &str, error: &str) {
-        warn!("❌ {}失败: {}", operation, error);
+        warn!("{}失败: {}", operation, error);
     }
 
     /// 记录调试信息
@@ -87,7 +87,7 @@ impl LogUtils {
 
     /// 记录计算结果
     pub fn log_calculation_result(operation: &str, input: u64, output: u64, additional_info: &[(&str, &str)]) {
-        info!("💰 {}:", operation);
+        info!("{}:", operation);
         info!("  输入金额: {}", input);
         info!("  输出金额: {}", output);
         for (key, value) in additional_info {

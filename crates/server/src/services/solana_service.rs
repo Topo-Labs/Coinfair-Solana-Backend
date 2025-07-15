@@ -227,7 +227,7 @@ impl SolanaService {
     async fn initialize_raydium(&self) -> Result<()> {
         let mut raydium_guard = self.raydium_swap.lock().await;
         if raydium_guard.is_none() {
-            info!("🔧 正在初始化Raydium交换服务...");
+            info!("正在初始化Raydium交换服务...");
 
             // 确保配置可用
             let config = self.get_config()?;
@@ -341,7 +341,7 @@ impl SolanaService {
     async fn calculate_output_for_input(&self, input_mint: &str, output_mint: &str, input_amount: u64) -> Result<(u64, String)> {
         // 使用PDA方法计算池子地址
         let pool_address = self.calculate_pool_address_pda(input_mint, output_mint)?;
-        info!("🔧 使用与CLI完全相同的交换计算逻辑");
+        info!("使用与CLI完全相同的交换计算逻辑");
         info!("  池子地址: {}", pool_address);
         info!("  输入金额: {}", input_amount);
 
@@ -599,7 +599,7 @@ impl SolanaService {
         tickarray_bitmap_extension: &raydium_amm_v3::states::TickArrayBitmapExtension,
         tick_arrays: &mut std::collections::VecDeque<raydium_amm_v3::states::TickArrayState>,
     ) -> Result<(u64, std::collections::VecDeque<i32>)> {
-        info!("🔧 执行CLI精确相同的get_out_put_amount_and_remaining_accounts逻辑");
+        info!("执行CLI精确相同的get_out_put_amount_and_remaining_accounts逻辑");
 
         // 获取第一个初始化的tick array（与CLI第322-324行完全一致）
         let (is_pool_current_tick_array, current_vaild_tick_array_start_index) = pool_state
@@ -800,7 +800,7 @@ impl SolanaService {
     /// 【关键修复方法】使用与CLI完全相同的计算逻辑
     /// 这个方法复制了CLI中 SwapV2 CommandsName::SwapV2 的完整计算逻辑
     async fn calculate_output_using_cli_logic(&self, input_mint: &str, output_mint: &str, amount: u64, pool_address: &str, base_in: bool) -> Result<u64> {
-        info!("🔧 执行与CLI完全相同的交换计算逻辑");
+        info!("执行与CLI完全相同的交换计算逻辑");
 
         use std::str::FromStr;
 

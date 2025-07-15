@@ -210,9 +210,9 @@ pub async fn demonstrate_precise_swap_calculation() -> Result<()> {
 
 /// 演示client工具方法的正确使用流程
 pub async fn demonstrate_client_utils_integration() -> Result<()> {
-    info!("🔧 演示client工具方法集成");
+    info!("演示client工具方法集成");
 
-    info!("📝 使用client中的get_out_put_amount_and_remaining_accounts方法的步骤:");
+    info!("使用client中的get_out_put_amount_and_remaining_accounts方法的步骤:");
     info!("  1. 加载池子账户数据");
     info!("  2. 反序列化为PoolState结构");
     info!("  3. 加载AMM配置账户");

@@ -1159,7 +1159,7 @@ impl RaydiumSwap {
 
     /// 从池子数据中加载AMM配置
     async fn load_amm_config_from_pool(&self, pool_data: &[u8]) -> Result<(Vec<u8>, Pubkey)> {
-        info!("  🔧 从池子数据解析AMM配置...");
+        info!("  从池子数据解析AMM配置...");
         
         let rpc_client = self.client.get_rpc_client();
         
@@ -1423,7 +1423,7 @@ impl RaydiumSwap {
         minimum_amount_out: u64,
         zero_for_one: bool,
     ) -> Result<Instruction> {
-        info!("🔧 构建CLMM交换指令");
+        info!("构建CLMM交换指令");
 
         let pool_pubkey = pool_address.parse::<Pubkey>()?;
         let input_mint_pubkey = input_mint.parse::<Pubkey>()?;
@@ -1638,7 +1638,7 @@ impl RaydiumSwap {
         &self,
         mint_addresses: &[&str],
     ) -> Result<Vec<String>> {
-        info!("🔧 确保关联代币账户存在");
+        info!("确保关联代币账户存在");
         
         let wallet_pubkey = self.get_wallet_pubkey()?;
         let mut instructions = Vec::new();
@@ -1651,10 +1651,10 @@ impl RaydiumSwap {
             // 检查账户是否已存在
             match self.client.get_rpc_client().get_account(&ata) {
                 Ok(_) => {
-                    info!("  ✅ 关联代币账户已存在: {}", ata);
+                    info!("  关联代币账户已存在: {}", ata);
                 }
                 Err(_) => {
-                    info!("  🔧 创建关联代币账户: {}", ata);
+                    info!("  创建关联代币账户: {}", ata);
                     
                     let create_ata_instruction = spl_associated_token_account::instruction::create_associated_token_account(
                         &wallet_pubkey,
@@ -1680,7 +1680,7 @@ impl RaydiumSwap {
             );
 
             let signature = self.client.get_rpc_client().send_and_confirm_transaction(&transaction)?;
-            info!("  ✅ 关联代币账户创建交易完成: {}", signature);
+            info!("  关联代币账户创建交易完成: {}", signature);
         }
 
         Ok(created_accounts)
@@ -1696,7 +1696,7 @@ impl RaydiumSwap {
         slippage_bps: Option<u16>, // 以基点为单位的滑点 (100 = 1%)
         max_price_impact_bps: Option<u16>, // 最大价格影响（基点）
     ) -> Result<SwapResult> {
-        info!("🎯 开始智能交换");
+        info!("开始智能交换");
         info!("  输入: {} {} -> {} {}", input_amount, input_mint, "?", output_mint);
         
         // 1. 确保关联代币账户存在
