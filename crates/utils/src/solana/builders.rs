@@ -84,3 +84,81 @@ impl RoutePlanBuilder {
         MathUtils::calculate_fee(amount, constants::DEFAULT_FEE_RATE)
     }
 }
+
+
+/// SwapV2指令构建器 - 统一管理SwapV2指令创建
+pub struct SwapV2InstructionBuilder;
+
+impl SwapV2InstructionBuilder {
+    /// 构建SwapV2指令
+    pub fn build_swap_v2_instruction(
+        program_id: &Pubkey,
+        amm_config: &Pubkey,
+        pool_state: &Pubkey,
+        payer: &Pubkey,
+        input_token_account: &Pubkey,
+        output_token_account: &Pubkey,
+        input_vault: &Pubkey,
+        output_vault: &Pubkey,
+        input_vault_mint: &Pubkey,
+        output_vault_mint: &Pubkey,
+        observation_state: &Pubkey,
+        remaining_accounts: Vec<solana_sdk::instruction::AccountMeta>,
+        amount: u64,
+        other_amount_threshold: u64,
+        sqrt_price_limit_x64: Option<u128>,
+        is_base_input: bool,
+    ) -> Result<solana_sdk::instruction::Instruction> {
+        use super::LogUtils;
+        use borsh::BorshSerialize;
+
+        LogUtils::log_operation_start("SwapV2指令构建", &format!("金额: {}", amount));
+
+        // SwapV2指令的discriminator
+        let discriminator: [u8; 8] = [0x37, 0x32, 0xD4, 0xEC, 0xB6, 0x95, 0x4B, 0x5B];
+
+        #[derive(BorshSerialize)]
+        struct SwapV2Args {
+            amount: u64,
+            other_amount_threshold: u64,
+            sqrt_price_limit_x64: u128,
+            is_base_input: bool,
+        }
+
+        let args = SwapV2Args {
+            amount,
+            other_amount_threshold,
+            sqrt_price_limit_x64: sqrt_price_limit_x64.unwrap_or(0),
+            is_base_input,
+        };
+
+        let mut data = discriminator.to_vec();
+        args.serialize(&mut data)?;
+
+        // 构建账户列表
+        let mut accounts = vec![
+            AccountMetaBuilder::signer(*payer),
+            AccountMetaBuilder::readonly(*amm_config, false),
+            AccountMetaBuilder::writable(*pool_state, false),
+            AccountMetaBuilder::writable(*input_token_account, false),
+            AccountMetaBuilder::writable(*output_token_account, false),
+            AccountMetaBuilder::writable(*input_vault, false),
+            AccountMetaBuilder::writable(*output_vault, false),
+            AccountMetaBuilder::writable(*observation_state, false),
+            AccountMetaBuilder::readonly(spl_token::id(), false),
+            AccountMetaBuilder::readonly(spl_token_2022::id(), false),
+            AccountMetaBuilder::readonly(spl_memo::id(), false),
+            AccountMetaBuilder::readonly(*input_vault_mint, false),
+            AccountMetaBuilder::readonly(*output_vault_mint, false),
+        ];
+
+        accounts.extend(remaining_accounts);
+
+        LogUtils::log_operation_success("SwapV2指令构建", &format!("{}个账户", accounts.len()));
+        Ok(solana_sdk::instruction::Instruction { 
+            program_id: *program_id, 
+            accounts, 
+            data 
+        })
+    }
+}

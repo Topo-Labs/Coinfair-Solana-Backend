@@ -5,6 +5,8 @@ pub mod config;
 pub mod constants;
 pub mod managers;
 pub mod response;
+pub mod service_helpers;
+pub mod swap_calculator;
 pub mod utils;
 
 pub use account_loader::*;
@@ -14,4 +16,6 @@ pub use config::*;
 pub use constants::*;
 pub use managers::*;
 pub use response::*;
+pub use service_helpers::*;
+pub use swap_calculator::*;
 pub use utils::*;
