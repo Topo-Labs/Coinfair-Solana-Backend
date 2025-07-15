@@ -468,7 +468,7 @@ pub struct SwapComputeV2Data {
 }
 
 /// 转账费信息
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Copy)]
 pub struct TransferFeeInfo {
     /// 输入代币转账费
     #[serde(rename = "inputTransferFee")]
