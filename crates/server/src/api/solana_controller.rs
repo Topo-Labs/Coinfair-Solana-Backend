@@ -1,7 +1,7 @@
 use crate::{
     dtos::solana_dto::{
-        ApiResponse, BalanceResponse, ComputeSwapRequest, ComputeSwapV2Request, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeData, SwapComputeV2Data, SwapRequest, SwapResponse,
-        TransactionData, TransactionSwapRequest, TransactionSwapV2Request, WalletInfo,
+        ApiResponse, BalanceResponse, ComputeSwapRequest, ComputeSwapV2Request, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeData, SwapComputeV2Data,
+        SwapRequest, SwapResponse, TransactionData, TransactionSwapRequest, TransactionSwapV2Request, WalletInfo,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
@@ -25,15 +25,15 @@ impl SolanaController {
             .route("/quote", post(get_price_quote))
             .route("/wallet", get(get_wallet_info))
             .route("/health", get(health_check))
-            // .route("/compute/swap-base-in", get(compute_swap_base_in))
-            // .route("/compute/swap-base-out", get(compute_swap_base_out))
-            // .route("/transaction/swap-base-in", post(transaction_swap_base_in))
-            // .route("/transaction/swap-base-out", post(transaction_swap_base_out))
-            // ============ SwapV2 API兼容路由（支持转账费） ============
-            .route("/compute/swap-v2-base-in", get(compute_swap_v2_base_in))
-            .route("/compute/swap-v2-base-out", get(compute_swap_v2_base_out))
-            .route("/transaction/swap-v2-base-in", post(transaction_swap_v2_base_in))
-            .route("/transaction/swap-v2-base-out", post(transaction_swap_v2_base_out))
+            .route("/compute/swap-base-in", get(compute_swap_v2_base_in))
+            .route("/compute/swap-base-out", get(compute_swap_v2_base_out))
+            .route("/transaction/swap-base-in", post(transaction_swap_v2_base_in))
+            .route("/transaction/swap-base-out", post(transaction_swap_v2_base_out))
+        // ============ SwapV2 API兼容路由（支持转账费） ============
+        // .route("/compute/swap-v2-base-in", get(compute_swap_v2_base_in))
+        // .route("/compute/swap-v2-base-out", get(compute_swap_v2_base_out))
+        // .route("/transaction/swap-v2-base-in", post(transaction_swap_v2_base_in))
+        // .route("/transaction/swap-v2-base-out", post(transaction_swap_v2_base_out))
     }
 }
 
@@ -81,7 +81,10 @@ impl SolanaController {
     ),
     tag = "Solana交换"
 )]
-pub async fn swap_tokens(Extension(services): Extension<Services>, ValidationExtractor(request): ValidationExtractor<SwapRequest>) -> Result<Json<ApiResponse<SwapResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn swap_tokens(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<SwapRequest>,
+) -> Result<Json<ApiResponse<SwapResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔄 收到交换请求: {} {} -> {}", request.amount, request.from_token, request.to_token);
 
     match services.solana.swap_tokens(request).await {
@@ -183,7 +186,10 @@ pub async fn get_balance(Extension(services): Extension<Services>) -> Result<Jso
     ),
     tag = "Solana交换"
 )]
-pub async fn get_price_quote(Extension(services): Extension<Services>, ValidationExtractor(request): ValidationExtractor<PriceQuoteRequest>) -> Result<Json<ApiResponse<PriceQuoteResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_price_quote(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<PriceQuoteRequest>,
+) -> Result<Json<ApiResponse<PriceQuoteResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("💰 获取价格报价: {} {} -> {}", request.amount, request.from_token, request.to_token);
 
     match services.solana.get_price_quote(request).await {
@@ -275,7 +281,6 @@ pub async fn health_check(Extension(services): Extension<Services>) -> Result<Js
     }
 }
 
-
 // ============ SwapV2 API兼容接口（支持转账费） ============
 
 /// 计算swap-v2-base-in交换数据
@@ -341,7 +346,10 @@ pub async fn health_check(Extension(services): Extension<Services>) -> Result<Js
     tag = "SwapV2兼容接口"
 )]
 pub async fn compute_swap_v2_base_in(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapV2Request>) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
-    info!("📊 计算swap-v2-base-in: {} {} -> {} (转账费: {:?})", params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee);
+    info!(
+        "📊 计算swap-v2-base-in: {} {} -> {} (转账费: {:?})",
+        params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee
+    );
 
     match services.solana.compute_swap_v2_base_in(params).await {
         Ok(compute_data) => {
@@ -419,7 +427,10 @@ pub async fn compute_swap_v2_base_in(Extension(services): Extension<Services>, Q
     tag = "SwapV2兼容接口"
 )]
 pub async fn compute_swap_v2_base_out(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapV2Request>) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
-    info!("📊 计算swap-v2-base-out: {} {} -> {} (转账费: {:?})", params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee);
+    info!(
+        "📊 计算swap-v2-base-out: {} {} -> {} (转账费: {:?})",
+        params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee
+    );
 
     match services.solana.compute_swap_v2_base_out(params).await {
         Ok(compute_data) => {

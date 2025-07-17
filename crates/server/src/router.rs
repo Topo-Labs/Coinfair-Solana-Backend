@@ -56,10 +56,7 @@ impl AppRouter {
                     .layer(RateLimitLayer::new(5, Duration::from_secs(1))),
             )
             // Swagger UI 路由 - 包含 OpenAPI JSON 端点
-            .merge(
-                SwaggerUi::new("/swagger-ui")
-                    .url("/api-docs/openapi.json", docs::ApiDoc::openapi())
-            )
+            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", docs::ApiDoc::openapi()))
             .fallback(Self::handle_404);
 
         router

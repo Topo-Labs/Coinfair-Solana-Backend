@@ -15,6 +15,8 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
         )
     ),
     paths(
+        // System health check
+        crate::api::health,
         // Refer endpoints
         crate::api::refer_controller::get_upper,
         crate::api::refer_controller::get_uppers,
@@ -38,6 +40,18 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
         crate::api::solana_controller::get_price_quote,
         crate::api::solana_controller::get_wallet_info,
         crate::api::solana_controller::health_check,
+        // Solana SwapV2 endpoints
+        crate::api::solana_controller::compute_swap_v2_base_in,
+        crate::api::solana_controller::compute_swap_v2_base_out,
+        crate::api::solana_controller::transaction_swap_v2_base_in,
+        crate::api::solana_controller::transaction_swap_v2_base_out,
+        // Static endpoints
+        crate::api::static_controller::get_version,
+        crate::api::static_controller::get_auto_fee,
+        crate::api::static_controller::get_rpcs,
+        crate::api::static_controller::get_chain_time,
+        crate::api::static_controller::get_mint_list,
+        crate::api::static_controller::get_mint_price,
     ),
     components(
         schemas(
@@ -67,13 +81,48 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
             crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::WalletInfo>,
             crate::dtos::solana_dto::ApiResponse<String>,
             crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::ErrorResponse>,
-            crate::dtos::solana_dto::TransactionStatus
+            crate::dtos::solana_dto::TransactionStatus,
+            // Solana SwapV2 DTOs
+            crate::dtos::solana_dto::ComputeSwapV2Request,
+            crate::dtos::solana_dto::SwapComputeData,
+            crate::dtos::solana_dto::SwapComputeV2Data,
+            crate::dtos::solana_dto::TransferFeeInfo,
+            crate::dtos::solana_dto::RoutePlan,
+            crate::dtos::solana_dto::TransactionSwapRequest,
+            crate::dtos::solana_dto::TransactionSwapV2Request,
+            crate::dtos::solana_dto::TransactionData,
+            crate::dtos::solana_dto::RaydiumResponse<crate::dtos::solana_dto::SwapComputeData>,
+            crate::dtos::solana_dto::RaydiumResponse<crate::dtos::solana_dto::SwapComputeV2Data>,
+            crate::dtos::solana_dto::RaydiumResponse<Vec<crate::dtos::solana_dto::TransactionData>>,
+            crate::dtos::solana_dto::RaydiumErrorResponse,
+            // Static DTOs
+            crate::dtos::static_dto::VersionConfig,
+            crate::dtos::static_dto::AutoFeeConfig,
+            crate::dtos::static_dto::DefaultFeeConfig,
+            crate::dtos::static_dto::RpcConfig,
+            crate::dtos::static_dto::RpcNode,
+            crate::dtos::static_dto::ChainTimeConfig,
+            crate::dtos::static_dto::MintListResponse,
+            crate::dtos::static_dto::TokenInfo,
+            crate::dtos::static_dto::MintPriceResponse,
+            crate::dtos::static_dto::PriceData,
+            crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::VersionConfig>,
+            crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::AutoFeeConfig>,
+            crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::RpcConfig>,
+            crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::ChainTimeConfig>,
+            crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::MintListResponse>,
+            crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::MintPriceResponse>,
         )
     ),
     tags(
+        (name = "系统状态", description = "系统健康检查和状态监控"),
         (name = "refer", description = "推荐关系管理"),
         (name = "reward", description = "奖励系统"),
-        (name = "user", description = "用户管理")
+        (name = "user", description = "用户管理"),
+        (name = "Solana交换", description = "Solana 代币交换相关接口"),
+        (name = "SwapV2兼容接口", description = "SwapV2 兼容接口，支持转账费"),
+        (name = "系统配置", description = "系统配置相关接口"),
+        (name = "代币信息", description = "代币信息相关接口")
     )
 )]
 pub struct ApiDoc;

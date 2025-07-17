@@ -496,11 +496,8 @@ impl SolanaServiceTrait for SolanaService {
 
         let epoch = self.swap_v2_service.get_current_epoch()?;
 
-        // 计算真实的价格影响
-        let price_impact_pct = match service_helpers
-            .calculate_price_impact(&params.input_mint, &params.output_mint, amount_specified, output_amount, &pool_address_str)
-            .await
-        {
+        // 计算真实的价格影响（使用简化方法）
+        let price_impact_pct = match service_helpers.calculate_price_impact_simple(&params.input_mint, &params.output_mint, amount_specified, &pool_address_str).await {
             Ok(impact) => Some(impact),
             Err(e) => {
                 warn!("价格影响计算失败: {:?}，使用默认值", e);
@@ -540,22 +537,20 @@ impl SolanaServiceTrait for SolanaService {
         LogUtils::log_operation_start("swap-v2-base-out计算", &format!("{} -> {}", params.input_mint, params.output_mint));
 
         let service_helpers = self.create_service_helpers();
-        let output_amount = service_helpers.parse_amount(&params.amount)?;
-        let input_mint_pubkey = Pubkey::from_str(&params.output_mint)?;
-        let output_mint_pubkey = Pubkey::from_str(&params.input_mint)?;
+        let desired_output_amount = service_helpers.parse_amount(&params.amount)?;
+        let input_mint_pubkey = Pubkey::from_str(&params.input_mint)?;
+        let output_mint_pubkey = Pubkey::from_str(&params.output_mint)?;
 
         // 计算转账费用
         let transfer_fee_info = if params.enable_transfer_fee.unwrap_or(true) {
             LogUtils::log_operation_start("transfer fee计算", "base-out模式");
 
-            let input_transfer_fee = self.swap_v2_service.get_transfer_inverse_fee(&input_mint_pubkey, output_amount)?;
-            let output_transfer_fee = self.swap_v2_service.get_transfer_fee(&output_mint_pubkey, output_amount)?;
-
+            let output_transfer_fee = self.swap_v2_service.get_transfer_fee(&output_mint_pubkey, desired_output_amount)?;
             let input_mint_info = self.swap_v2_service.load_mint_info(&input_mint_pubkey)?;
             let output_mint_info = self.swap_v2_service.load_mint_info(&output_mint_pubkey)?;
 
             Some(TransferFeeInfo {
-                input_transfer_fee: input_transfer_fee.transfer_fee,
+                input_transfer_fee: 0, // 输入转账费稍后计算
                 output_transfer_fee: output_transfer_fee.transfer_fee,
                 input_mint_decimals: input_mint_info.decimals,
                 output_mint_decimals: output_mint_info.decimals,
@@ -564,28 +559,33 @@ impl SolanaServiceTrait for SolanaService {
             None
         };
 
-        let amount_specified = if let Some(ref fee_info) = transfer_fee_info {
-            output_amount.checked_sub(fee_info.input_transfer_fee).unwrap_or(output_amount)
-        } else {
-            output_amount
-        };
+        let amount_specified = desired_output_amount;
 
-        // 使用新的计算方法，包含滑点保护
-        let (input_amount, other_amount_threshold, pool_address_str) = service_helpers
-            .calculate_output_for_input_with_slippage(&params.input_mint, &params.output_mint, amount_specified, params.slippage_bps)
+        // 使用新的BaseOut计算方法
+        let (required_input_amount, other_amount_threshold, pool_address_str) = service_helpers
+            .calculate_input_for_output_with_slippage(&params.input_mint, &params.output_mint, amount_specified, params.slippage_bps)
             .await?;
 
-        let fee_amount = RoutePlanBuilder::calculate_standard_fee(output_amount);
+        // 计算输入转账费（在获得所需输入金额后）
+        let transfer_fee_info = if let Some(mut fee_info) = transfer_fee_info {
+            let input_transfer_fee = self.swap_v2_service.get_transfer_fee(&input_mint_pubkey, required_input_amount)?;
+            fee_info.input_transfer_fee = input_transfer_fee.transfer_fee;
+            Some(fee_info)
+        } else {
+            None
+        };
+
+        let fee_amount = RoutePlanBuilder::calculate_standard_fee(required_input_amount);
         let route_plan_json = service_helpers
-            .create_route_plan(pool_address_str.clone(), params.input_mint.clone(), params.output_mint.clone(), fee_amount, output_amount)
+            .create_route_plan(pool_address_str.clone(), params.input_mint.clone(), params.output_mint.clone(), fee_amount, required_input_amount)
             .await?;
         let route_plan = vec![self.create_route_plan_from_json(route_plan_json)?];
 
         let epoch = self.swap_v2_service.get_current_epoch()?;
 
-        // 计算真实的价格影响
+        // 计算真实的价格影响（使用简化方法）
         let price_impact_pct = match service_helpers
-            .calculate_price_impact(&params.input_mint, &params.output_mint, input_amount, output_amount, &pool_address_str)
+            .calculate_price_impact_simple(&params.input_mint, &params.output_mint, required_input_amount, &pool_address_str)
             .await
         {
             Ok(impact) => Some(impact),
@@ -598,22 +598,22 @@ impl SolanaServiceTrait for SolanaService {
         let result = ResponseBuilder::create_swap_compute_v2_data(
             "BaseOutV2".to_string(),
             params.input_mint,
-            input_amount.to_string(),
+            required_input_amount.to_string(),
             params.output_mint,
-            output_amount,
+            desired_output_amount,
             other_amount_threshold, // 使用正确计算的阈值
             params.slippage_bps,
             route_plan,
             transfer_fee_info,
-            Some(input_amount),
+            Some(required_input_amount),
             Some(epoch),
             price_impact_pct,
         );
 
         LogUtils::log_calculation_result(
             "swap-v2-base-out计算",
-            input_amount,
-            output_amount,
+            required_input_amount,
+            desired_output_amount,
             &[(
                 "转账费",
                 &transfer_fee_info
