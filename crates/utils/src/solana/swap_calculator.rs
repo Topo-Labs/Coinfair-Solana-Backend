@@ -21,7 +21,7 @@ impl<'a> SwapCalculator<'a> {
 
     /// 简化的价格影响计算（与TypeScript版本一致）
     pub async fn calculate_price_impact_simple(&self, input_mint: &str, output_mint: &str, input_amount: u64, pool_address: &str) -> Result<f64> {
-        info!("💰 计算价格影响（简化版本，与TypeScript一致）");
+        info!("💰 计算价格影响（与TypeScript一致）");
 
         let pool_pubkey = Pubkey::from_str(pool_address)?;
         let input_mint_pubkey = Pubkey::from_str(input_mint)?;

@@ -1,6 +1,6 @@
 use crate::dtos::static_dto::{ApiResponse, AutoFeeConfig, ChainTimeConfig, MintListResponse, MintPriceResponse, PriceData, RpcConfig, TokenInfo, VersionConfig};
 use axum::{extract::Query, routing::get, Json, Router};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tracing::info;
 
 pub struct StaticController;
@@ -8,10 +8,10 @@ pub struct StaticController;
 impl StaticController {
     pub fn app() -> Router {
         Router::new()
-            .route("/main/version", get(get_version))
-            .route("/main/auto-fee", get(get_auto_fee))
-            .route("/main/rpcs", get(get_rpcs))
-            .route("/main/chain-time", get(get_chain_time))
+            .route("/version", get(get_version))
+            .route("/auto-fee", get(get_auto_fee))
+            .route("/rpcs", get(get_rpcs))
+            .route("/chain-time", get(get_chain_time))
             .route("/mint/list", get(get_mint_list))
             .route("/mint/price", get(get_mint_price))
     }
@@ -174,7 +174,7 @@ pub async fn get_chain_time() -> Json<ApiResponse<ChainTimeConfig>> {
 /// ```
 #[utoipa::path(
     get,
-    path = "/api/v1/mint/list",
+    path = "/api/v1/main/mint/list",
     responses(
         (status = 200, description = "代币列表获取成功", body = ApiResponse<MintListResponse>)
     ),
@@ -220,7 +220,7 @@ pub struct MintPriceQuery {
 /// ```
 #[utoipa::path(
     get,
-    path = "/api/v1/mint/price",
+    path = "/api/v1/main/mint/price",
     params(
         ("mints" = String, Query, description = "代币mint地址列表，用逗号分隔")
     ),

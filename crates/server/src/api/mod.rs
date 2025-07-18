@@ -32,5 +32,5 @@ pub fn app() -> Router {
         .nest("/refer", refer_controller::ReferController::app())
         .nest("/reward", reward_controller::RewardController::app())
         .nest("/solana", solana_controller::SolanaController::app())
-        .nest("/", static_controller::StaticController::app())
+        .nest("/main", static_controller::StaticController::app())
 }

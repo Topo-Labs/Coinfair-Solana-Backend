@@ -185,7 +185,7 @@ impl SolanaService {
 
     pub fn new() -> Self {
         // 确保加载环境变量
-        dotenvy::dotenv().ok();
+        // dotenvy::dotenv().ok();
 
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
 
@@ -209,8 +209,8 @@ impl SolanaService {
 
     /// 使用统一的配置管理器获取配置
     fn get_config(&self) -> Result<SwapConfig> {
-        info!("🔍 加载Solana配置...");
-        dotenvy::dotenv().ok();
+        // info!("🔍 加载Solana配置...");
+        // dotenvy::dotenv().ok();
 
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
         let amm_program_id = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
@@ -233,7 +233,7 @@ impl SolanaService {
     /// 使用统一的配置管理器获取完整配置
     fn _get_config_with_private_key(&self) -> Result<SwapConfig> {
         info!("🔍 加载完整Solana配置（包含私钥）...");
-        dotenvy::dotenv().ok();
+        // dotenvy::dotenv().ok();
 
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
         let amm_program_id = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
@@ -810,13 +810,13 @@ impl SolanaServiceTrait for SolanaService {
 
         // 创建输入代币ATA账户（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
-        
+
         let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
         instructions.push(create_input_ata_ix);
 
         // 创建输出代币ATA账户（如果不存在）
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
-        
+
         let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
         instructions.push(create_output_ata_ix);
 

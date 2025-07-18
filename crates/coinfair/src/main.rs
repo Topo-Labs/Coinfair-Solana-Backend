@@ -8,16 +8,15 @@ use server::{app::ApplicationServer, services::Services};
 use std::sync::Arc;
 use telegram::HopeBot;
 use timer::Timer;
+use tokio::time::{sleep, Duration};
 use tokio::{signal, sync::Notify, task::JoinSet};
 use tracing::info;
-use utils::{logger::Logger, AppConfig};
-use tokio::time::{sleep, Duration};
+use utils::AppConfig;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    dotenv().ok();
-
-    let config = Arc::new(AppConfig::parse());
+    // 根据 CARGO_ENV 加载对应的环境配置文件
+    // utils::EnvLoader::load_env_file().ok();
 
     let coinfair = Coinfair::new().await;
     coinfair.run().await.expect("Coinfair backend error");
@@ -70,9 +69,9 @@ impl Coinfair {
         // });
 
         //set.spawn(async move {
-         //  info!("Monitor is running...");
-          //  self.monitor.run().await.expect("🔴 Failed to start monitor");
-       // });
+        //  info!("Monitor is running...");
+        //  self.monitor.run().await.expect("🔴 Failed to start monitor");
+        // });
 
         set.spawn(async move {
             loop {
@@ -89,12 +88,8 @@ impl Coinfair {
             }
         });
 
-
         set.spawn(async move {
-            ApplicationServer::serve(self.config.clone())
-                .await
-                .context("🔴 Failed to start server")
-                .expect("🔴 Failed to start server");
+            ApplicationServer::serve(self.config.clone()).await.context("🔴 Failed to start server").expect("🔴 Failed to start server");
         });
 
         tokio::select! {
@@ -114,16 +109,14 @@ impl Coinfair {
 
 impl Coinfair {
     fn with_config() -> Arc<AppConfig> {
-        dotenv().ok();
+        // 根据 CARGO_ENV 加载对应的环境配置文件
+        utils::EnvLoader::load_env_file().ok();
         let config = Arc::new(AppConfig::parse());
-        //let _ = Logger::new(config.cargo_env);
         config
     }
 
     async fn with_service(config: Arc<AppConfig>) -> Services {
-        let mongodb = Database::new(config.clone())
-            .await
-            .expect("mongodb wrong in coinfair/src/main.rs");
+        let mongodb = Database::new(config.clone()).await.expect("mongodb wrong in coinfair/src/main.rs");
 
         let services = Services::new(mongodb);
         services
@@ -147,18 +140,13 @@ impl Coinfair {
 
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("🔴 Failed to install Ctrl+C handler");
+        signal::ctrl_c().await.expect("🔴 Failed to install Ctrl+C handler");
         info!("🔔 Ctrl+C received");
     };
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("🔴 Failed to install signal handler")
-            .recv()
-            .await;
+        signal::unix::signal(signal::unix::SignalKind::terminate()).expect("🔴 Failed to install signal handler").recv().await;
         info!("🔔 Terminate signal received");
     };
 

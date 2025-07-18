@@ -1,13 +1,31 @@
 #!/usr/bin/env bash
 
-# init: 
-# 	@echo "🌃 \033[36mInstall the docker on a new machine...\033[36m" # TODO: install docker by xx.sh
+# ============ 环境配置管理 ============
 
-# build:
-# 	@cargo build
+# 开发环境启动
+dev:
+	@echo "🚀 启动开发环境..."
+	@CARGO_ENV=development RUST_LOG=debug cargo run --bin coinfair
 
-# run:
-# 	@RUST_LOG=info cargo run
+# 生产环境启动
+prod:
+	@echo "🚀 启动生产环境..."
+	@CARGO_ENV=production RUST_LOG=info cargo run --bin coinfair --release
+
+# 测试环境启动
+test:
+	@echo "🧪 启动测试环境..."
+	@CARGO_ENV=test RUST_LOG=debug cargo test
+
+# 构建项目
+build:
+	@echo "🔨 构建项目..."
+	@cargo build
+
+# 发布构建
+build-release:
+	@echo "🔨 发布构建..."
+	@cargo build --release
 
 # nohup:
 #   @echo "Run with nohup..."

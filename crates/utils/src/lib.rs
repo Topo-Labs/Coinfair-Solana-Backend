@@ -3,6 +3,7 @@ pub mod errors;
 pub mod logger;
 pub mod solana;
 
+pub use config::EnvLoader;
 pub use config::*;
 pub use errors::*;
 pub use logger::*;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::ErrorHandler;
 
@@ -51,31 +51,32 @@ impl<'a> ServiceHelpers<'a> {
                 Ok((output_amount, other_amount_threshold, pool_address))
             }
             Err(e) => {
-                warn!("  ⚠️ CLI逻辑计算失败: {:?}，使用备用计算", e);
+                error!("  ⚠️ CLI逻辑计算失败: {:?}", e);
                 // 如果计算失败，使用备用简化计算
-                let output_amount = self.fallback_price_calculation(input_mint, output_mint, input_amount).await?;
-                let other_amount_threshold = MathUtils::calculate_minimum_amount_out(output_amount, slippage_bps);
-                Ok((output_amount, other_amount_threshold, pool_address))
+                // let output_amount = self.fallback_price_calculation(input_mint, output_mint, input_amount).await?;
+                // let other_amount_threshold = MathUtils::calculate_minimum_amount_out(output_amount, slippage_bps);
+                // Ok((output_amount, other_amount_threshold, pool_address))
+                Err(e)
             }
         }
     }
 
     /// 备用价格计算方法
-    async fn fallback_price_calculation(&self, from_token: &str, to_token: &str, amount: u64) -> Result<u64> {
-        info!("🔄 使用备用价格计算");
+    // async fn fallback_price_calculation(&self, from_token: &str, to_token: &str, amount: u64) -> Result<u64> {
+    //     info!("🔄 使用备用价格计算");
 
-        let from_type = TokenUtils::get_token_type(from_token);
-        let to_type = TokenUtils::get_token_type(to_token);
+    //     let from_type = TokenUtils::get_token_type(from_token);
+    //     let to_type = TokenUtils::get_token_type(to_token);
 
-        let estimated_output = match (from_type, to_type) {
-            (super::TokenType::Sol, super::TokenType::Usdc) => MathUtils::convert_sol_to_usdc(amount),
-            (super::TokenType::Usdc, super::TokenType::Sol) => MathUtils::convert_usdc_to_sol(amount),
-            _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", from_token, to_token)),
-        };
+    //     let estimated_output = match (from_type, to_type) {
+    //         (super::TokenType::Sol, super::TokenType::Usdc) => MathUtils::convert_sol_to_usdc(amount),
+    //         (super::TokenType::Usdc, super::TokenType::Sol) => MathUtils::convert_usdc_to_sol(amount),
+    //         _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", from_token, to_token)),
+    //     };
 
-        info!("  💰 备用计算结果: {}", estimated_output);
-        Ok(estimated_output)
-    }
+    //     info!("  💰 备用计算结果: {}", estimated_output);
+    //     Ok(estimated_output)
+    // }
 
     /// 基于输出金额计算输入（base-out模式）
     pub async fn calculate_input_for_output_with_slippage(&self, input_mint: &str, output_mint: &str, desired_output_amount: u64, slippage_bps: u16) -> Result<(u64, u64, String)> {
@@ -106,31 +107,32 @@ impl<'a> ServiceHelpers<'a> {
                 Ok((required_input_amount, other_amount_threshold, pool_address))
             }
             Err(e) => {
-                warn!("  ⚠️ CLI逻辑计算失败: {:?}，使用备用计算", e);
+                warn!("  ⚠️ CLI逻辑计算失败: {:?}", e);
                 // 如果计算失败，使用备用简化计算
-                let required_input_amount = self.fallback_input_calculation(input_mint, output_mint, desired_output_amount).await?;
-                let other_amount_threshold = MathUtils::calculate_maximum_amount_in(required_input_amount, slippage_bps);
-                Ok((required_input_amount, other_amount_threshold, pool_address))
+                // let required_input_amount = self.fallback_input_calculation(input_mint, output_mint, desired_output_amount).await?;
+                // let other_amount_threshold = MathUtils::calculate_maximum_amount_in(required_input_amount, slippage_bps);
+                // Ok((required_input_amount, other_amount_threshold, pool_address))
+                Err(e)
             }
         }
     }
 
     /// 备用输入计算方法（BaseOut模式）
-    async fn fallback_input_calculation(&self, input_mint: &str, output_mint: &str, desired_output_amount: u64) -> Result<u64> {
-        info!("🔄 使用备用输入计算（BaseOut模式）");
+    // async fn fallback_input_calculation(&self, input_mint: &str, output_mint: &str, desired_output_amount: u64) -> Result<u64> {
+    //     info!("🔄 使用备用输入计算（BaseOut模式）");
 
-        let input_type = TokenUtils::get_token_type(input_mint);
-        let output_type = TokenUtils::get_token_type(output_mint);
+    //     let input_type = TokenUtils::get_token_type(input_mint);
+    //     let output_type = TokenUtils::get_token_type(output_mint);
 
-        let required_input = match (input_type, output_type) {
-            (super::TokenType::Sol, super::TokenType::Usdc) => MathUtils::convert_usdc_to_sol(desired_output_amount),
-            (super::TokenType::Usdc, super::TokenType::Sol) => MathUtils::convert_sol_to_usdc(desired_output_amount),
-            _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", input_mint, output_mint)),
-        };
+    //     let required_input = match (input_type, output_type) {
+    //         (super::TokenType::Sol, super::TokenType::Usdc) => MathUtils::convert_usdc_to_sol(desired_output_amount),
+    //         (super::TokenType::Usdc, super::TokenType::Sol) => MathUtils::convert_sol_to_usdc(desired_output_amount),
+    //         _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", input_mint, output_mint)),
+    //     };
 
-        info!("  💰 备用计算结果: 需要输入 {} 来获得 {} 输出", required_input, desired_output_amount);
-        Ok(required_input)
-    }
+    //     info!("  💰 备用计算结果: 需要输入 {} 来获得 {} 输出", required_input, desired_output_amount);
+    //     Ok(required_input)
+    // }
 
     /// 创建路由计划
     pub async fn create_route_plan(&self, pool_id: String, input_mint: String, output_mint: String, fee_amount: u64, amount_specified: u64) -> Result<serde_json::Value> {
@@ -245,7 +247,7 @@ impl<'a> ServiceHelpers<'a> {
         Ok((remaining_accounts, last_pool_price_x64))
     }
 
-    /// 计算价格影响（简化版本，与TypeScript一致）
+    /// 计算价格影响（与TypeScript一致）
     pub async fn calculate_price_impact_simple(&self, input_mint: &str, output_mint: &str, input_amount: u64, pool_address: &str) -> Result<f64> {
         self.swap_calculator.calculate_price_impact_simple(input_mint, output_mint, input_amount, pool_address).await
     }

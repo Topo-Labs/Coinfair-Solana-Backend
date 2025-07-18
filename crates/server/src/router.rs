@@ -37,8 +37,10 @@ impl AppRouter {
                 Method::DELETE,
                 Method::PUT,
                 Method::PATCH,
+                Method::OPTIONS, // 添加OPTIONS方法支持
             ])
-            .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
+            .allow_headers(Any) // 允许所有头部
+            .allow_credentials(false); // 明确设置credentials
 
         let router = Router::new()
             // API 路由
@@ -53,7 +55,7 @@ impl AppRouter {
                     .layer(HandleErrorLayer::new(Self::handle_timeout_error))
                     .timeout(Duration::from_secs(*HTTP_TIMEOUT))
                     .layer(BufferLayer::new(1024))
-                    .layer(RateLimitLayer::new(5, Duration::from_secs(1))),
+                    .layer(RateLimitLayer::new(50, Duration::from_secs(1))), // 修改为每秒50个请求
             )
             // Swagger UI 路由 - 包含 OpenAPI JSON 端点
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", docs::ApiDoc::openapi()))
