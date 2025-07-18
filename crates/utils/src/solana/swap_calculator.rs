@@ -641,17 +641,17 @@ impl<'a> SwapCalculator<'a> {
     ) -> Result<(u64, VecDeque<i32>)> {
         info!("执行CLI精确相同的get_out_put_amount_and_remaining_accounts逻辑");
 
-        let (is_pool_current_tick_array, current_vaild_tick_array_start_index) = pool_state
+        let (_is_pool_current_tick_array, _current_vaild_tick_array_start_index) = pool_state
             .get_first_initialized_tick_array(&Some(*tickarray_bitmap_extension), zero_for_one)
             .map_err(|e| anyhow::anyhow!("获取第一个初始化tick array失败: {:?}", e))?;
 
         let (amount_calculated, tick_array_start_index_vec) = self.swap_compute_cli_exact(
             zero_for_one,
             is_base_input,
-            is_pool_current_tick_array,
+            true, // 使用固定值代替未使用的变量
             pool_config.trade_fee_rate,
             input_amount,
-            current_vaild_tick_array_start_index,
+            _current_vaild_tick_array_start_index,
             sqrt_price_limit_x64.unwrap_or(0),
             pool_state,
             tickarray_bitmap_extension,

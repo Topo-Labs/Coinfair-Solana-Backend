@@ -12,6 +12,8 @@ use solana::raydium_api::RaydiumApiClient;
 use solana::{RaydiumSwap, SolanaClient, SwapConfig, SwapV2InstructionBuilder, SwapV2Service};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
+use spl_token;
+use spl_token_2022;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -71,6 +73,23 @@ pub trait SolanaServiceTrait {
 
     /// 构建swap-v2-base-out交易
     async fn build_swap_v2_transaction_base_out(&self, request: TransactionSwapV2Request) -> Result<TransactionData>;
+
+    // ============ OpenPosition API ============
+
+    /// 开仓（创建流动性位置）
+    async fn open_position(&self, request: crate::dtos::solana_dto::OpenPositionRequest) -> Result<crate::dtos::solana_dto::OpenPositionResponse>;
+
+    /// 计算流动性参数
+    async fn calculate_liquidity(&self, request: crate::dtos::solana_dto::CalculateLiquidityRequest) -> Result<crate::dtos::solana_dto::CalculateLiquidityResponse>;
+
+    /// 获取用户所有位置
+    async fn get_user_positions(&self, request: crate::dtos::solana_dto::GetUserPositionsRequest) -> Result<crate::dtos::solana_dto::UserPositionsResponse>;
+
+    /// 获取位置详情
+    async fn get_position_info(&self, position_key: String) -> Result<crate::dtos::solana_dto::PositionInfo>;
+
+    /// 检查位置是否已存在
+    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<crate::dtos::solana_dto::PositionInfo>>;
 }
 
 pub struct SolanaService {
@@ -123,6 +142,19 @@ impl SolanaService {
     /// 创建服务助手
     fn create_service_helpers(&self) -> ServiceHelpers {
         ServiceHelpers::new(&self.rpc_client)
+    }
+
+    /// 检测mint的token program类型
+    fn detect_mint_program(&self, mint: &Pubkey) -> Result<Pubkey> {
+        let account = self.rpc_client.get_account(mint)?;
+
+        if account.owner == spl_token_2022::id() {
+            Ok(spl_token_2022::id())
+        } else if account.owner == spl_token::id() {
+            Ok(spl_token::id())
+        } else {
+            Err(anyhow::anyhow!("未知的token program: {}", account.owner))
+        }
     }
 
     /// 从 serde_json::Value 创建 RoutePlan
@@ -320,7 +352,21 @@ impl SolanaService {
         }
     }
 
-    /// 反序列化anchor账户（复制CLI逻辑）
+    // ============ 辅助方法 ============
+
+    /// 获取用户钱包公钥
+    fn get_user_wallet_pubkey(&self) -> Result<Pubkey> {
+        use solana_sdk::signer::Signer;
+        let keypair = solana_sdk::signature::Keypair::from_base58_string(&self.config.private_key);
+        Ok(keypair.pubkey())
+    }
+
+    /// 获取用户钱包私钥
+    fn get_user_keypair(&self) -> Result<solana_sdk::signature::Keypair> {
+        Ok(solana_sdk::signature::Keypair::from_base58_string(&self.config.private_key))
+    }
+
+    /// 反序列化anchor账户
     fn deserialize_anchor_account<T: anchor_lang::AccountDeserialize>(&self, account: &solana_sdk::account::Account) -> Result<T> {
         let mut data: &[u8] = &account.data;
         T::try_deserialize(&mut data).map_err(Into::into)
@@ -361,7 +407,7 @@ impl SolanaService {
             amount_in: request.amount,
             amount_out_expected: estimated_output,
             amount_out_actual: None, // 需要从链上获取实际输出
-            status: TransactionStatus::Pending,
+            status: TransactionStatus::Finalized,
             explorer_url,
             timestamp: now,
         })
@@ -661,6 +707,21 @@ impl SolanaServiceTrait for SolanaService {
         let user_input_token_account = spl_associated_token_account::get_associated_token_address(&user_wallet, &input_mint);
         let user_output_token_account = spl_associated_token_account::get_associated_token_address(&user_wallet, &output_mint);
 
+        // 创建ATA账户指令（幂等操作）
+        let mut instructions = Vec::new();
+
+        // 创建输入代币ATA账户（如果不存在）
+        info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
+        let input_token_program = self.detect_mint_program(&input_mint)?;
+        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
+        instructions.push(create_input_ata_ix);
+
+        // 创建输出代币ATA账户（如果不存在）
+        info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
+        let output_token_program = self.detect_mint_program(&output_mint)?;
+        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
+        instructions.push(create_output_ata_ix);
+
         // 确定vault账户
         let (input_vault, output_vault, input_vault_mint, output_vault_mint) = service_helpers.build_vault_info(&pool_state, &input_mint);
 
@@ -689,8 +750,11 @@ impl SolanaServiceTrait for SolanaService {
             true,
         )?;
 
+        // 将swap指令添加到指令向量
+        instructions.push(ix);
+
         // 构建完整交易
-        let result_json = service_helpers.build_transaction_data(vec![ix], &user_wallet)?;
+        let result_json = service_helpers.build_transaction_data(instructions, &user_wallet)?;
         let result = self.create_transaction_data_from_json(result_json)?;
 
         LogUtils::log_operation_success("swap-v2-base-in交易构建", &format!("交易大小: {} bytes", result.transaction.len()));
@@ -735,9 +799,26 @@ impl SolanaServiceTrait for SolanaService {
         let pool_account = self.rpc_client.get_account(&pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
 
+        let input_token_program = self.detect_mint_program(&input_mint)?;
+        let output_token_program = self.detect_mint_program(&output_mint)?;
         // 计算ATA账户
-        let user_input_token_account = spl_associated_token_account::get_associated_token_address(&user_wallet, &input_mint);
-        let user_output_token_account = spl_associated_token_account::get_associated_token_address(&user_wallet, &output_mint);
+        let user_input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+
+        // 检查并创建ATA账户指令
+        let mut instructions = Vec::new();
+
+        // 创建输入代币ATA账户（如果不存在）
+        info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
+        
+        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
+        instructions.push(create_input_ata_ix);
+
+        // 创建输出代币ATA账户（如果不存在）
+        info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
+        
+        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
+        instructions.push(create_output_ata_ix);
 
         // 确定vault账户（基于mint顺序）
         let (input_vault, output_vault, input_vault_mint, output_vault_mint) = service_helpers.build_vault_info(&pool_state, &input_mint);
@@ -750,6 +831,13 @@ impl SolanaServiceTrait for SolanaService {
             let is_writable = remaining_accounts.len() > 0;
             remaining_accounts.push(solana_sdk::instruction::AccountMeta { pubkey, is_signer: false, is_writable });
         }
+
+        //多写死一个账号
+        remaining_accounts.push(solana_sdk::instruction::AccountMeta {
+            pubkey: Pubkey::from_str("E7piHoq4ryUAtq2x9rBqFB5X3ez1upF5Q1HY7vUQSLAM")?,
+            is_signer: false,
+            is_writable: true,
+        });
 
         info!("📝 构建SwapV2指令:");
         info!("  Remaining accounts数量: {}", remaining_accounts.len());
@@ -777,14 +865,307 @@ impl SolanaServiceTrait for SolanaService {
             false,                  // is_base_input = false for base-out
         )?;
 
+        // 将swap指令添加到指令向量
+        instructions.push(ix);
+
         // 构建完整交易
-        let result_json = service_helpers.build_transaction_data(vec![ix], &user_wallet)?;
+        let result_json = service_helpers.build_transaction_data(instructions, &user_wallet)?;
         let result = self.create_transaction_data_from_json(result_json)?;
 
         info!("✅ 交易构建成功");
         info!("  交易大小: {} bytes", result.transaction.len());
 
         Ok(result)
+    }
+
+    // ============ OpenPosition API实现 ============
+
+    async fn open_position(&self, request: crate::dtos::solana_dto::OpenPositionRequest) -> Result<crate::dtos::solana_dto::OpenPositionResponse> {
+        use crate::dtos::solana_dto::{OpenPositionResponse, TransactionStatus};
+        use ::utils::solana::{PositionInstructionBuilder, PositionUtils};
+        use solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer};
+        use std::str::FromStr;
+
+        info!("🎯 开始开仓操作");
+        info!("  池子地址: {}", request.pool_address);
+        info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!("  输入金额: {}", request.input_amount);
+
+        // 1. 解析和验证参数
+        let pool_address = Pubkey::from_str(&request.pool_address)?;
+        let user_wallet = self.get_user_wallet_pubkey()?;
+
+        // 2. 加载池子状态
+        let pool_account = self.rpc_client.get_account(&pool_address)?;
+        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+
+        // 3. 使用Position工具进行计算
+        let position_utils = PositionUtils::new(&self.rpc_client);
+
+        // 价格转换为tick
+        let tick_lower_index = position_utils.price_to_tick(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+        let tick_upper_index = position_utils.price_to_tick(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+
+        // 调整tick spacing
+        let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_index, pool_state.tick_spacing as i32);
+        let tick_upper_adjusted = position_utils.tick_with_spacing(tick_upper_index, pool_state.tick_spacing as i32);
+
+        info!("  计算的tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
+
+        // 4. 检查是否已存在相同位置
+        if let Some(_existing) = position_utils.find_existing_position(&user_wallet, &pool_address, tick_lower_adjusted, tick_upper_adjusted).await? {
+            return Err(anyhow::anyhow!("相同价格范围的位置已存在"));
+        }
+
+        // 5. 计算流动性和金额
+        let sqrt_price_lower = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+
+        let liquidity = position_utils.calculate_liquidity_from_single_amount(pool_state.sqrt_price_x64, sqrt_price_lower, sqrt_price_upper, request.input_amount, request.is_base_0)?;
+
+        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
+
+        // 6. 应用滑点保护
+        let amount_0_max = position_utils.apply_slippage(amount_0, request.max_slippage_percent, false);
+        let amount_1_max = position_utils.apply_slippage(amount_1, request.max_slippage_percent, false);
+
+        info!("  流动性: {}", liquidity);
+        info!("  Token0最大消耗: {}", amount_0_max);
+        info!("  Token1最大消耗: {}", amount_1_max);
+
+        // 7. 生成NFT mint
+        let nft_mint = Keypair::new();
+
+        // 8. 构建remaining accounts
+        let remaining_accounts = position_utils.build_remaining_accounts(&pool_address, tick_lower_adjusted, tick_upper_adjusted, pool_state.tick_spacing).await?;
+
+        // 9. 计算tick array索引
+        let tick_array_lower_start = position_utils.get_tick_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
+        let tick_array_upper_start = position_utils.get_tick_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
+
+        // 10. 构建交易指令
+        let token_mints = vec![pool_state.token_mint_0, pool_state.token_mint_1];
+        let instructions = PositionInstructionBuilder::build_complete_open_position_transaction(
+            &pool_address,
+            &user_wallet,
+            &nft_mint.pubkey(),
+            &token_mints,
+            tick_lower_adjusted,
+            tick_upper_adjusted,
+            tick_array_lower_start,
+            tick_array_upper_start,
+            liquidity,
+            amount_0_max,
+            amount_1_max,
+            request.with_metadata,
+            remaining_accounts,
+            Some(1_400_000),
+        )?;
+
+        // 11. 发送交易
+        let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
+        let keypair = self.get_user_keypair()?;
+        let transaction = solana_sdk::transaction::Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&keypair, &nft_mint], recent_blockhash);
+
+        let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
+
+        // 12. 计算position key
+        let (position_key, _) = Pubkey::find_program_address(&[b"position", nft_mint.pubkey().as_ref()], &::utils::solana::ConfigManager::get_raydium_program_id()?);
+
+        // 13. 构建响应
+        let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
+        let now = chrono::Utc::now().timestamp();
+
+        Ok(OpenPositionResponse {
+            signature: signature.to_string(),
+            position_nft_mint: nft_mint.pubkey().to_string(),
+            position_key: position_key.to_string(),
+            tick_lower_index: tick_lower_adjusted,
+            tick_upper_index: tick_upper_adjusted,
+            liquidity: liquidity.to_string(),
+            amount_0,
+            amount_1,
+            pool_address: request.pool_address,
+            status: TransactionStatus::Finalized,
+            explorer_url,
+            timestamp: now,
+        })
+    }
+
+    async fn calculate_liquidity(&self, request: crate::dtos::solana_dto::CalculateLiquidityRequest) -> Result<crate::dtos::solana_dto::CalculateLiquidityResponse> {
+        use crate::dtos::solana_dto::CalculateLiquidityResponse;
+        use ::utils::solana::PositionUtils;
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        info!("🧮 计算流动性参数");
+
+        // 1. 解析参数
+        let pool_address = Pubkey::from_str(&request.pool_address)?;
+
+        // 2. 加载池子状态
+        let pool_account = self.rpc_client.get_account(&pool_address)?;
+        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+
+        // 3. 使用Position工具进行计算
+        let position_utils = PositionUtils::new(&self.rpc_client);
+
+        // 价格转换为tick
+        let tick_lower_index = position_utils.price_to_tick(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+        let tick_upper_index = position_utils.price_to_tick(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+
+        // 调整tick spacing
+        let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_index, pool_state.tick_spacing as i32);
+        let tick_upper_adjusted = position_utils.tick_with_spacing(tick_upper_index, pool_state.tick_spacing as i32);
+
+        // 计算流动性
+        let sqrt_price_lower = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+
+        let liquidity = position_utils.calculate_liquidity_from_single_amount(pool_state.sqrt_price_x64, sqrt_price_lower, sqrt_price_upper, request.input_amount, request.is_base_0)?;
+
+        // 计算所需金额
+        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
+
+        // 计算当前价格和利用率
+        let current_price = position_utils.sqrt_price_x64_to_price(pool_state.sqrt_price_x64, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+
+        let price_range_utilization = position_utils.calculate_price_range_utilization(current_price, request.tick_lower_price, request.tick_upper_price);
+
+        Ok(CalculateLiquidityResponse {
+            liquidity: liquidity.to_string(),
+            amount_0,
+            amount_1,
+            tick_lower_index: tick_lower_adjusted,
+            tick_upper_index: tick_upper_adjusted,
+            current_price,
+            price_range_utilization,
+        })
+    }
+
+    async fn get_user_positions(&self, request: crate::dtos::solana_dto::GetUserPositionsRequest) -> Result<crate::dtos::solana_dto::UserPositionsResponse> {
+        use crate::dtos::solana_dto::{PositionInfo, UserPositionsResponse};
+        use ::utils::solana::PositionUtils;
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        info!("📋 获取用户位置列表");
+
+        // 1. 确定查询的钱包地址
+        let wallet_address = if let Some(addr) = request.wallet_address {
+            Pubkey::from_str(&addr)?
+        } else {
+            self.get_user_wallet_pubkey()?
+        };
+
+        // 2. 使用Position工具获取NFT信息
+        let position_utils = PositionUtils::new(&self.rpc_client);
+        let position_nfts = position_utils.get_user_position_nfts(&wallet_address).await?;
+
+        // 3. 批量加载position状态
+        let mut positions = Vec::new();
+        for nft_info in position_nfts {
+            if let Ok(position_account) = self.rpc_client.get_account(&nft_info.position_pda) {
+                if let Ok(position_state) = position_utils.deserialize_position_state(&position_account) {
+                    // 过滤池子（如果指定）
+                    if let Some(ref pool_filter) = request.pool_address {
+                        let pool_pubkey = Pubkey::from_str(pool_filter)?;
+                        if position_state.pool_id != pool_pubkey {
+                            continue;
+                        }
+                    }
+
+                    // 计算价格
+                    let pool_account = self.rpc_client.get_account(&position_state.pool_id)?;
+                    let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+
+                    let tick_lower_price = position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+                    let tick_upper_price = position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+
+                    positions.push(PositionInfo {
+                        position_key: nft_info.position_pda.to_string(),
+                        nft_mint: position_state.nft_mint.to_string(),
+                        pool_id: position_state.pool_id.to_string(),
+                        tick_lower_index: position_state.tick_lower_index,
+                        tick_upper_index: position_state.tick_upper_index,
+                        liquidity: position_state.liquidity.to_string(),
+                        tick_lower_price,
+                        tick_upper_price,
+                        token_fees_owed_0: position_state.token_fees_owed_0,
+                        token_fees_owed_1: position_state.token_fees_owed_1,
+                        reward_infos: vec![],                       // 简化处理
+                        created_at: chrono::Utc::now().timestamp(), // 暂时使用当前时间
+                    });
+                }
+            }
+        }
+
+        let total_count = positions.len();
+        let now = chrono::Utc::now().timestamp();
+
+        Ok(UserPositionsResponse {
+            positions,
+            total_count,
+            wallet_address: wallet_address.to_string(),
+            timestamp: now,
+        })
+    }
+
+    async fn get_position_info(&self, position_key: String) -> Result<crate::dtos::solana_dto::PositionInfo> {
+        use crate::dtos::solana_dto::PositionInfo;
+        use ::utils::solana::PositionUtils;
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        info!("🔍 获取位置详情: {}", position_key);
+
+        let position_pubkey = Pubkey::from_str(&position_key)?;
+        let position_utils = PositionUtils::new(&self.rpc_client);
+
+        // 加载position状态
+        let position_account = self.rpc_client.get_account(&position_pubkey)?;
+        let position_state = position_utils.deserialize_position_state(&position_account)?;
+
+        // 加载池子状态以计算价格
+        let pool_account = self.rpc_client.get_account(&position_state.pool_id)?;
+        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+
+        let tick_lower_price = position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+        let tick_upper_price = position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+
+        Ok(PositionInfo {
+            position_key,
+            nft_mint: position_state.nft_mint.to_string(),
+            pool_id: position_state.pool_id.to_string(),
+            tick_lower_index: position_state.tick_lower_index,
+            tick_upper_index: position_state.tick_upper_index,
+            liquidity: position_state.liquidity.to_string(),
+            tick_lower_price,
+            tick_upper_price,
+            token_fees_owed_0: position_state.token_fees_owed_0,
+            token_fees_owed_1: position_state.token_fees_owed_1,
+            reward_infos: vec![], // 简化处理
+            created_at: chrono::Utc::now().timestamp(),
+        })
+    }
+
+    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<crate::dtos::solana_dto::PositionInfo>> {
+        use ::utils::solana::PositionUtils;
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        let pool_pubkey = Pubkey::from_str(&pool_address)?;
+        let wallet_pubkey = if let Some(addr) = wallet_address { Pubkey::from_str(&addr)? } else { self.get_user_wallet_pubkey()? };
+
+        let position_utils = PositionUtils::new(&self.rpc_client);
+
+        if let Some(existing) = position_utils.find_existing_position(&wallet_pubkey, &pool_pubkey, tick_lower, tick_upper).await? {
+            // 转换为PositionInfo
+            let position_info = self.get_position_info(existing.position_key.to_string()).await?;
+            Ok(Some(position_info))
+        } else {
+            Ok(None)
+        }
     }
 }
 

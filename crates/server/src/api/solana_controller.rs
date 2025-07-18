@@ -1,7 +1,27 @@
 use crate::{
     dtos::solana_dto::{
-        ApiResponse, BalanceResponse, ComputeSwapRequest, ComputeSwapV2Request, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeData, SwapComputeV2Data,
-        SwapRequest, SwapResponse, TransactionData, TransactionSwapRequest, TransactionSwapV2Request, WalletInfo,
+        ApiResponse,
+        BalanceResponse,
+        CalculateLiquidityRequest,
+        CalculateLiquidityResponse,
+        ComputeSwapV2Request,
+        ErrorResponse,
+        GetUserPositionsRequest,
+        // OpenPosition相关DTO
+        OpenPositionRequest,
+        OpenPositionResponse,
+        PositionInfo,
+        PriceQuoteRequest,
+        PriceQuoteResponse,
+        RaydiumErrorResponse,
+        RaydiumResponse,
+        SwapComputeV2Data,
+        SwapRequest,
+        SwapResponse,
+        TransactionData,
+        TransactionSwapV2Request,
+        UserPositionsResponse,
+        WalletInfo,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
@@ -25,15 +45,17 @@ impl SolanaController {
             .route("/quote", post(get_price_quote))
             .route("/wallet", get(get_wallet_info))
             .route("/health", get(health_check))
+            // ============ SwapV2 API兼容路由（支持转账费） ============
             .route("/compute/swap-base-in", get(compute_swap_v2_base_in))
             .route("/compute/swap-base-out", get(compute_swap_v2_base_out))
             .route("/transaction/swap-base-in", post(transaction_swap_v2_base_in))
             .route("/transaction/swap-base-out", post(transaction_swap_v2_base_out))
-        // ============ SwapV2 API兼容路由（支持转账费） ============
-        // .route("/compute/swap-v2-base-in", get(compute_swap_v2_base_in))
-        // .route("/compute/swap-v2-base-out", get(compute_swap_v2_base_out))
-        // .route("/transaction/swap-v2-base-in", post(transaction_swap_v2_base_in))
-        // .route("/transaction/swap-v2-base-out", post(transaction_swap_v2_base_out))
+            // ============ OpenPosition API路由 ============
+            .route("/position/open", post(open_position))
+            .route("/position/calculate", post(calculate_liquidity))
+            .route("/position/list", get(get_user_positions))
+            .route("/position/info", get(get_position_info))
+            .route("/position/check", get(check_position_exists))
     }
 }
 
@@ -566,6 +588,280 @@ pub async fn transaction_swap_v2_base_out(
         Err(e) => {
             error!("❌ swap-v2-base-out交易构建失败: {:?}", e);
             let error_response = RaydiumErrorResponse::new(&format!("交易构建失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+// ============ OpenPosition API处理函数 ============
+
+/// 开仓（创建流动性位置）
+///
+/// 在指定的池子中创建新的流动性位置，提供流动性以获取手续费收益。
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "pool_address": "池子地址",
+///   "tick_lower_price": 1.2,
+///   "tick_upper_price": 1.8,
+///   "is_base_0": true,
+///   "input_amount": 1000000,
+///   "with_metadata": false,
+///   "max_slippage_percent": 0.5
+/// }
+/// ```
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "signature": "交易签名",
+///   "position_nft_mint": "位置NFT地址",
+///   "position_key": "位置键值",
+///   "tick_lower_index": -1000,
+///   "tick_upper_index": 1000,
+///   "liquidity": "123456789",
+///   "amount_0": 1000000,
+///   "amount_1": 500000,
+///   "pool_address": "池子地址",
+///   "status": "Success",
+///   "explorer_url": "https://explorer.solana.com/tx/...",
+///   "timestamp": 1640995200
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/position/open",
+    request_body = OpenPositionRequest,
+    responses(
+        (status = 200, description = "开仓成功", body = OpenPositionResponse),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn open_position(Extension(services): Extension<Services>, ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>) -> Result<Json<OpenPositionResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("🎯 接收到开仓请求");
+    info!("  池子地址: {}", request.pool_address);
+    info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+
+    match services.solana.open_position(request).await {
+        Ok(response) => {
+            info!("✅ 开仓成功: {}", response.signature);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 开仓失败: {:?}", e);
+            let error_response = ErrorResponse::new("OPEN_POSITION_ERROR", &format!("开仓失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 计算流动性参数
+///
+/// 根据价格范围和输入金额计算所需的流动性和代币数量。
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "pool_address": "池子地址",
+///   "tick_lower_price": 1.2,
+///   "tick_upper_price": 1.8,
+///   "is_base_0": true,
+///   "input_amount": 1000000
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/position/calculate",
+    request_body = CalculateLiquidityRequest,
+    responses(
+        (status = 200, description = "计算成功", body = CalculateLiquidityResponse),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn calculate_liquidity(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<CalculateLiquidityRequest>,
+) -> Result<Json<CalculateLiquidityResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("🧮 接收到流动性计算请求");
+
+    match services.solana.calculate_liquidity(request).await {
+        Ok(response) => {
+            info!("✅ 流动性计算成功");
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 流动性计算失败: {:?}", e);
+            let error_response = ErrorResponse::new("CALCULATE_LIQUIDITY_ERROR", &format!("流动性计算失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 获取用户位置列表
+///
+/// 查询用户的所有流动性位置。
+///
+/// # 查询参数
+///
+/// - `wallet_address` (可选): 钱包地址，默认使用配置的钱包
+/// - `pool_address` (可选): 池子地址过滤
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/position/list",
+    params(
+        ("wallet_address" = Option<String>, Query, description = "钱包地址"),
+        ("pool_address" = Option<String>, Query, description = "池子地址过滤")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = UserPositionsResponse),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn get_user_positions(Extension(services): Extension<Services>, Query(request): Query<GetUserPositionsRequest>) -> Result<Json<UserPositionsResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("📋 接收到获取用户位置列表请求");
+
+    match services.solana.get_user_positions(request).await {
+        Ok(response) => {
+            info!("✅ 获取用户位置列表成功，共{}个位置", response.total_count);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 获取用户位置列表失败: {:?}", e);
+            let error_response = ErrorResponse::new("GET_USER_POSITIONS_ERROR", &format!("获取位置列表失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 获取位置详情
+///
+/// 根据位置键值获取位置的详细信息。
+///
+/// # 查询参数
+///
+/// - `position_key`: 位置键值
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/position/info",
+    params(
+        ("position_key" = String, Query, description = "位置键值")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = PositionInfo),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 404, description = "位置不存在", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn get_position_info(Extension(services): Extension<Services>, Query(params): Query<std::collections::HashMap<String, String>>) -> Result<Json<PositionInfo>, (StatusCode, Json<ErrorResponse>)> {
+    let position_key = params.get("position_key").ok_or_else(|| {
+        let error_response = ErrorResponse::new("POSITION_INFO_ERROR", "缺少position_key参数");
+        (StatusCode::BAD_REQUEST, Json(error_response))
+    })?;
+
+    info!("🔍 接收到获取位置详情请求: {}", position_key);
+
+    match services.solana.get_position_info(position_key.clone()).await {
+        Ok(response) => {
+            info!("✅ 获取位置详情成功");
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 获取位置详情失败: {:?}", e);
+            let error_response = ErrorResponse::new("GET_POSITION_INFO_ERROR", &format!("获取位置详情失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 检查位置是否存在
+///
+/// 检查指定价格范围的位置是否已经存在。
+///
+/// # 查询参数
+///
+/// - `pool_address`: 池子地址
+/// - `tick_lower`: 下限tick
+/// - `tick_upper`: 上限tick
+/// - `wallet_address` (可选): 钱包地址
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/position/check",
+    params(
+        ("pool_address" = String, Query, description = "池子地址"),
+        ("tick_lower" = i32, Query, description = "下限tick"),
+        ("tick_upper" = i32, Query, description = "上限tick"),
+        ("wallet_address" = Option<String>, Query, description = "钱包地址")
+    ),
+    responses(
+        (status = 200, description = "检查完成", body = Option<PositionInfo>),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn check_position_exists(Extension(services): Extension<Services>, Query(params): Query<std::collections::HashMap<String, String>>) -> Result<Json<Option<PositionInfo>>, (StatusCode, Json<ErrorResponse>)> {
+    let pool_address = params
+        .get("pool_address")
+        .ok_or_else(|| {
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", "缺少pool_address参数");
+            (StatusCode::BAD_REQUEST, Json(error_response))
+        })?
+        .clone();
+
+    let tick_lower = params
+        .get("tick_lower")
+        .ok_or_else(|| {
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", "缺少tick_lower参数");
+            (StatusCode::BAD_REQUEST, Json(error_response))
+        })?
+        .parse::<i32>()
+        .map_err(|_| {
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", "tick_lower参数格式错误");
+            (StatusCode::BAD_REQUEST, Json(error_response))
+        })?;
+
+    let tick_upper = params
+        .get("tick_upper")
+        .ok_or_else(|| {
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", "缺少tick_upper参数");
+            (StatusCode::BAD_REQUEST, Json(error_response))
+        })?
+        .parse::<i32>()
+        .map_err(|_| {
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", "tick_upper参数格式错误");
+            (StatusCode::BAD_REQUEST, Json(error_response))
+        })?;
+
+    let wallet_address = params.get("wallet_address").cloned();
+
+    info!("🔍 检查位置是否存在");
+    info!("  池子: {}", pool_address);
+    info!("  Tick范围: {} - {}", tick_lower, tick_upper);
+
+    match services.solana.check_position_exists(pool_address, tick_lower, tick_upper, wallet_address).await {
+        Ok(response) => {
+            if response.is_some() {
+                info!("✅ 找到相同范围的位置");
+            } else {
+                info!("✅ 没有找到相同范围的位置");
+            }
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 检查位置存在性失败: {:?}", e);
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", &format!("检查位置失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }

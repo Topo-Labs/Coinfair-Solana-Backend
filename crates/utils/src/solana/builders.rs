@@ -115,7 +115,7 @@ impl SwapV2InstructionBuilder {
         LogUtils::log_operation_start("SwapV2指令构建", &format!("金额: {}", amount));
 
         // SwapV2指令的discriminator
-        let discriminator: [u8; 8] = [0x37, 0x32, 0xD4, 0xEC, 0xB6, 0x95, 0x4B, 0x5B];
+        let discriminator: [u8; 8] = [0x2B, 0x04, 0xED, 0x0B, 0x1A, 0xC9, 0x1E, 0x62];
 
         #[derive(BorshSerialize)]
         struct SwapV2Args {

@@ -2,7 +2,7 @@ use anyhow::Result;
 use solana_sdk::pubkey::Pubkey;
 
 use super::constants;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Transfer Fee 计算器 - 统一管理转账费计算逻辑
 pub struct TransferFeeCalculator;
@@ -38,7 +38,10 @@ impl PDACalculator {
 
     /// 计算池子PDA
     pub fn calculate_pool_pda(raydium_program_id: &Pubkey, amm_config_key: &Pubkey, mint0: &Pubkey, mint1: &Pubkey) -> (Pubkey, u8) {
-        info!("计算池子PDA: raydium_program_id: {:?}, amm_config_key: {:?}, mint0: {:?}, mint1: {:?}", raydium_program_id, amm_config_key, mint0, mint1);
+        info!(
+            "计算池子PDA: raydium_program_id: {:?}, amm_config_key: {:?}, mint0: {:?}, mint1: {:?}",
+            raydium_program_id, amm_config_key, mint0, mint1
+        );
         Pubkey::find_program_address(&["pool".as_bytes(), amm_config_key.to_bytes().as_ref(), mint0.to_bytes().as_ref(), mint1.to_bytes().as_ref()], raydium_program_id)
     }
 

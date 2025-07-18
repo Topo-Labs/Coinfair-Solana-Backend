@@ -45,6 +45,12 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
         crate::api::solana_controller::compute_swap_v2_base_out,
         crate::api::solana_controller::transaction_swap_v2_base_in,
         crate::api::solana_controller::transaction_swap_v2_base_out,
+        // Solana OpenPosition endpoints
+        crate::api::solana_controller::open_position,
+        crate::api::solana_controller::calculate_liquidity,
+        crate::api::solana_controller::get_user_positions,
+        crate::api::solana_controller::get_position_info,
+        crate::api::solana_controller::check_position_exists,
         // Static endpoints
         crate::api::static_controller::get_version,
         crate::api::static_controller::get_auto_fee,
@@ -95,6 +101,14 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
             crate::dtos::solana_dto::RaydiumResponse<crate::dtos::solana_dto::SwapComputeV2Data>,
             crate::dtos::solana_dto::RaydiumResponse<Vec<crate::dtos::solana_dto::TransactionData>>,
             crate::dtos::solana_dto::RaydiumErrorResponse,
+            // Solana OpenPosition DTOs
+            crate::dtos::solana_dto::OpenPositionRequest,
+            crate::dtos::solana_dto::OpenPositionResponse,
+            crate::dtos::solana_dto::CalculateLiquidityRequest,
+            crate::dtos::solana_dto::CalculateLiquidityResponse,
+            crate::dtos::solana_dto::GetUserPositionsRequest,
+            crate::dtos::solana_dto::UserPositionsResponse,
+            crate::dtos::solana_dto::PositionInfo,
             // Static DTOs
             crate::dtos::static_dto::VersionConfig,
             crate::dtos::static_dto::AutoFeeConfig,
@@ -121,6 +135,7 @@ use database::{refer::model::Refer, reward::model::*, user::model::User};
         (name = "user", description = "用户管理"),
         (name = "Solana交换", description = "Solana 代币交换相关接口"),
         (name = "SwapV2兼容接口", description = "SwapV2 兼容接口，支持转账费"),
+        (name = "Solana流动性", description = "Solana 流动性位置管理接口"),
         (name = "系统配置", description = "系统配置相关接口"),
         (name = "代币信息", description = "代币信息相关接口")
     )
