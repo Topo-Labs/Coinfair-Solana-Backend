@@ -2,19 +2,22 @@ use anyhow::Result;
 use solana_sdk::pubkey::Pubkey;
 
 use super::constants;
+use spl_token_2022::extension::{transfer_fee::TransferFeeConfig, BaseStateWithExtensions, StateWithExtensions};
 use tracing::info;
 
+pub const MAX_FEE_BASIS_POINTS: u16 = 10_000;
 /// Transfer Fee 计算器 - 统一管理转账费计算逻辑
 pub struct TransferFeeCalculator;
 
 impl TransferFeeCalculator {
-    /// 从mint状态计算transfer fee（简化版本）
-    pub fn get_transfer_fee_from_mint_state_simple(mint_account_data: &[u8], epoch: u64, amount: u64) -> Result<u64> {
-        // 简化实现，避免复杂的生命周期参数
-        if let Ok(mint_state) = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Mint>::unpack(mint_account_data) {
-            use spl_token_2022::extension::{transfer_fee::TransferFeeConfig, BaseStateWithExtensions};
-
-            let fee = if let Ok(transfer_fee_config) = mint_state.get_extension::<TransferFeeConfig>() {
+    /// 从mint状态计算transfer fee
+    pub fn get_transfer_fee_from_mint_state(mint_account_data: &[u8], epoch: u64, amount: u64) -> Result<u64> {
+        let account_state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(mint_account_data);
+        info!("💰 正算 Account state: {:?}", account_state);
+        if let Ok(mint_state) = account_state {
+            let transfer_fee_config = mint_state.get_extension::<TransferFeeConfig>();
+            info!("💰 正算 Transfer fee config: {:?}", transfer_fee_config);
+            let fee = if let Ok(transfer_fee_config) = transfer_fee_config {
                 transfer_fee_config.calculate_epoch_fee(epoch, amount).unwrap_or(0)
             } else {
                 0
@@ -24,8 +27,30 @@ impl TransferFeeCalculator {
             Ok(0)
         }
     }
-}
 
+    pub fn get_transfer_fee_from_mint_state_inverse(mint_account_data: &[u8], epoch: u64, amount: u64) -> Result<u64> {
+        let account_state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(mint_account_data);
+        info!("💰 反算 Account state: {:?}", account_state);
+        if let Ok(mint_state) = account_state {
+            let transfer_fee_config = mint_state.get_extension::<TransferFeeConfig>();
+            info!("💰 反算 Transfer fee config: {:?}", transfer_fee_config);
+            let fee = if let Ok(transfer_fee_config) = transfer_fee_config {
+                let transfer_fee = transfer_fee_config.get_epoch_fee(epoch);
+                info!("💰 Transfer fee: {:?}", transfer_fee);
+                if u16::from(transfer_fee.transfer_fee_basis_points) == MAX_FEE_BASIS_POINTS {
+                    u64::from(transfer_fee.maximum_fee)
+                } else {
+                    transfer_fee_config.calculate_inverse_epoch_fee(epoch, amount).unwrap_or(0)
+                }
+            } else {
+                MAX_FEE_BASIS_POINTS as u64 * 2
+            };
+            Ok(fee)
+        } else {
+            Ok(0)
+        }
+    }
+}
 /// PDA计算器 - 统一管理PDA地址计算
 pub struct PDACalculator;
 
@@ -42,7 +67,10 @@ impl PDACalculator {
             "计算池子PDA: raydium_program_id: {:?}, amm_config_key: {:?}, mint0: {:?}, mint1: {:?}",
             raydium_program_id, amm_config_key, mint0, mint1
         );
-        Pubkey::find_program_address(&["pool".as_bytes(), amm_config_key.to_bytes().as_ref(), mint0.to_bytes().as_ref(), mint1.to_bytes().as_ref()], raydium_program_id)
+        Pubkey::find_program_address(
+            &["pool".as_bytes(), amm_config_key.to_bytes().as_ref(), mint0.to_bytes().as_ref(), mint1.to_bytes().as_ref()],
+            raydium_program_id,
+        )
     }
 
     /// 计算tick array bitmap extension PDA

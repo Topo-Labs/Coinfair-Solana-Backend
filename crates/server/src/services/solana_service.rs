@@ -542,7 +542,7 @@ impl SolanaServiceTrait for SolanaService {
 
         let epoch = self.swap_v2_service.get_current_epoch()?;
 
-        // 计算真实的价格影响（使用简化方法）
+        // 计算真实的价格影响
         let price_impact_pct = match service_helpers.calculate_price_impact_simple(&params.input_mint, &params.output_mint, amount_specified, &pool_address_str).await {
             Ok(impact) => Some(impact),
             Err(e) => {
@@ -552,7 +552,7 @@ impl SolanaServiceTrait for SolanaService {
         };
 
         let result = ResponseBuilder::create_swap_compute_v2_data(
-            "BaseInV2".to_string(),
+            "BaseIn".to_string(),
             params.input_mint,
             params.amount,
             params.output_mint,
@@ -607,7 +607,7 @@ impl SolanaServiceTrait for SolanaService {
 
         let amount_specified = desired_output_amount;
 
-        // 使用新的BaseOut计算方法
+        // BaseOut计算方法
         let (required_input_amount, other_amount_threshold, pool_address_str) = service_helpers
             .calculate_input_for_output_with_slippage(&params.input_mint, &params.output_mint, amount_specified, params.slippage_bps)
             .await?;
@@ -642,7 +642,7 @@ impl SolanaServiceTrait for SolanaService {
         };
 
         let result = ResponseBuilder::create_swap_compute_v2_data(
-            "BaseOutV2".to_string(),
+            "BaseOut".to_string(),
             params.input_mint,
             required_input_amount.to_string(),
             params.output_mint,
@@ -703,22 +703,25 @@ impl SolanaServiceTrait for SolanaService {
         let pool_account = self.rpc_client.get_account(&pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
 
+        let input_token_program = self.detect_mint_program(&input_mint)?;
+        let output_token_program = self.detect_mint_program(&output_mint)?;
+
         // 计算ATA账户
-        let user_input_token_account = spl_associated_token_account::get_associated_token_address(&user_wallet, &input_mint);
-        let user_output_token_account = spl_associated_token_account::get_associated_token_address(&user_wallet, &output_mint);
+        let user_input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
 
         // 创建ATA账户指令（幂等操作）
         let mut instructions = Vec::new();
 
         // 创建输入代币ATA账户（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
-        let input_token_program = self.detect_mint_program(&input_mint)?;
+
         let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
         instructions.push(create_input_ata_ix);
 
         // 创建输出代币ATA账户（如果不存在）
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
-        let output_token_program = self.detect_mint_program(&output_mint)?;
+
         let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
         instructions.push(create_output_ata_ix);
 
@@ -831,13 +834,6 @@ impl SolanaServiceTrait for SolanaService {
             let is_writable = remaining_accounts.len() > 0;
             remaining_accounts.push(solana_sdk::instruction::AccountMeta { pubkey, is_signer: false, is_writable });
         }
-
-        //多写死一个账号
-        remaining_accounts.push(solana_sdk::instruction::AccountMeta {
-            pubkey: Pubkey::from_str("E7piHoq4ryUAtq2x9rBqFB5X3ez1upF5Q1HY7vUQSLAM")?,
-            is_signer: false,
-            is_writable: true,
-        });
 
         info!("📝 构建SwapV2指令:");
         info!("  Remaining accounts数量: {}", remaining_accounts.len());

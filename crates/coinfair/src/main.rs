@@ -15,15 +15,8 @@ use utils::AppConfig;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    // 根据 CARGO_ENV 加载对应的环境配置文件
-    // utils::EnvLoader::load_env_file().ok();
-
     let coinfair = Coinfair::new().await;
     coinfair.run().await.expect("Coinfair backend error");
-
-    //ApplicationServer::serve(config)
-    //  .await
-    //  .context("🔴 Failed to start server")?;
 
     Ok(())
 }

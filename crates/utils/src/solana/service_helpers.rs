@@ -43,7 +43,14 @@ impl<'a> ServiceHelpers<'a> {
         // 使用与CLI完全相同的计算逻辑
         match self
             .swap_calculator
-            .calculate_output_using_cli_logic(input_mint, output_mint, input_amount, &pool_address, true, slippage_bps)
+            .calculate_output_using_cli_logic(
+                input_mint, 
+                output_mint, 
+                input_amount, 
+                &pool_address, 
+                true, // base_in = true
+                slippage_bps
+            )
             .await
         {
             Ok((output_amount, other_amount_threshold)) => {
