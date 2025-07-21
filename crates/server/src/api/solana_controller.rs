@@ -367,7 +367,10 @@ pub async fn health_check(Extension(services): Extension<Services>) -> Result<Js
     ),
     tag = "SwapV2兼容接口"
 )]
-pub async fn compute_swap_v2_base_in(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapV2Request>) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
+pub async fn compute_swap_v2_base_in(
+    Extension(services): Extension<Services>,
+    Query(params): Query<ComputeSwapV2Request>,
+) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
     info!(
         "📊 计算swap-v2-base-in: {} {} -> {} (转账费: {:?})",
         params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee
@@ -448,7 +451,10 @@ pub async fn compute_swap_v2_base_in(Extension(services): Extension<Services>, Q
     ),
     tag = "SwapV2兼容接口"
 )]
-pub async fn compute_swap_v2_base_out(Extension(services): Extension<Services>, Query(params): Query<ComputeSwapV2Request>) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
+pub async fn compute_swap_v2_base_out(
+    Extension(services): Extension<Services>,
+    Query(params): Query<ComputeSwapV2Request>,
+) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
     info!(
         "📊 计算swap-v2-base-out: {} {} -> {} (转账费: {:?})",
         params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee
@@ -642,7 +648,10 @@ pub async fn transaction_swap_v2_base_out(
     ),
     tag = "Solana流动性"
 )]
-async fn open_position(Extension(services): Extension<Services>, ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>) -> Result<Json<OpenPositionResponse>, (StatusCode, Json<ErrorResponse>)> {
+async fn open_position(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>,
+) -> Result<Json<OpenPositionResponse>, (StatusCode, Json<ErrorResponse>)> {
     info!("🎯 接收到开仓请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
@@ -728,15 +737,15 @@ async fn calculate_liquidity(
     tag = "Solana流动性"
 )]
 async fn get_user_positions(Extension(services): Extension<Services>, Query(request): Query<GetUserPositionsRequest>) -> Result<Json<UserPositionsResponse>, (StatusCode, Json<ErrorResponse>)> {
-    info!("📋 接收到获取用户位置列表请求");
+    info!("📋 接收到获取用户仓位列表请求");
 
     match services.solana.get_user_positions(request).await {
         Ok(response) => {
-            info!("✅ 获取用户位置列表成功，共{}个位置", response.total_count);
+            info!("✅ 获取用户仓位列表成功，共{}个位置", response.total_count);
             Ok(Json(response))
         }
         Err(e) => {
-            error!("❌ 获取用户位置列表失败: {:?}", e);
+            error!("❌ 获取用户仓位列表失败: {:?}", e);
             let error_response = ErrorResponse::new("GET_USER_POSITIONS_ERROR", &format!("获取位置列表失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
@@ -811,7 +820,10 @@ async fn get_position_info(Extension(services): Extension<Services>, Query(param
     ),
     tag = "Solana流动性"
 )]
-async fn check_position_exists(Extension(services): Extension<Services>, Query(params): Query<std::collections::HashMap<String, String>>) -> Result<Json<Option<PositionInfo>>, (StatusCode, Json<ErrorResponse>)> {
+async fn check_position_exists(
+    Extension(services): Extension<Services>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Option<PositionInfo>>, (StatusCode, Json<ErrorResponse>)> {
     let pool_address = params
         .get("pool_address")
         .ok_or_else(|| {

@@ -1,7 +1,9 @@
 use anyhow::Result;
-use base64;
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_request::TokenAccountsFilter;
+use solana_sdk::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
+use spl_token::state::Account as TokenAccount;
 use std::str::FromStr;
 use tracing::info;
 
@@ -83,7 +85,8 @@ impl<'a> PositionUtils<'a> {
 
     /// 根据流动性计算token数量
     pub fn calculate_amounts_from_liquidity(&self, current_tick: i32, current_sqrt_price_x64: u128, tick_lower: i32, tick_upper: i32, liquidity: u128) -> Result<(u64, u64)> {
-        raydium_amm_v3::libraries::liquidity_math::get_delta_amounts_signed(current_tick, current_sqrt_price_x64, tick_lower, tick_upper, liquidity as i128).map_err(|e| anyhow::anyhow!("流动性计算金额失败: {:?}", e))
+        raydium_amm_v3::libraries::liquidity_math::get_delta_amounts_signed(current_tick, current_sqrt_price_x64, tick_lower, tick_upper, liquidity as i128)
+            .map_err(|e| anyhow::anyhow!("流动性计算金额失败: {:?}", e))
     }
 
     /// 应用滑点保护
@@ -125,14 +128,8 @@ impl<'a> PositionUtils<'a> {
 
     /// 获取用户的position NFTs
     pub async fn get_user_position_nfts(&self, user_wallet: &Pubkey) -> Result<Vec<PositionNftInfo>> {
-        use base64::Engine;
-        use solana_sdk::program_pack::Pack;
-        use spl_token::state::Account as TokenAccount;
-
         // 获取用户所有代币账户
-        let token_accounts = self
-            .rpc_client
-            .get_token_accounts_by_owner(user_wallet, solana_client::rpc_request::TokenAccountsFilter::ProgramId(spl_token::id()))?;
+        let token_accounts = self.rpc_client.get_token_accounts_by_owner(user_wallet, TokenAccountsFilter::ProgramId(spl_token::id()))?;
 
         let mut position_nfts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;

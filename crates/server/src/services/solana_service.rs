@@ -1,17 +1,18 @@
 use crate::dtos::solana_dto::{
-    BalanceResponse, ComputeSwapV2Request, PriceQuoteRequest, PriceQuoteResponse, RoutePlan, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionStatus, TransactionSwapV2Request, TransferFeeInfo,
-    WalletInfo,
+    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, GetUserPositionsRequest, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
+    PriceQuoteResponse, RoutePlan, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionStatus, TransactionSwapV2Request, TransferFeeInfo, UserPositionsResponse, WalletInfo,
 };
 
 use ::utils::solana::{ServiceHelpers, SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder};
 
 use ::utils::solana::*;
+use ::utils::solana::{PositionInstructionBuilder, PositionUtils};
 use anyhow::Result;
 use async_trait::async_trait;
 use solana::raydium_api::RaydiumApiClient;
 use solana::{RaydiumSwap, SolanaClient, SwapConfig, SwapV2InstructionBuilder, SwapV2Service};
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
+use solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer};
 use spl_token;
 use spl_token_2022;
 use std::str::FromStr;
@@ -543,7 +544,10 @@ impl SolanaServiceTrait for SolanaService {
         let epoch = self.swap_v2_service.get_current_epoch()?;
 
         // 计算真实的价格影响
-        let price_impact_pct = match service_helpers.calculate_price_impact_simple(&params.input_mint, &params.output_mint, amount_specified, &pool_address_str).await {
+        let price_impact_pct = match service_helpers
+            .calculate_price_impact_simple(&params.input_mint, &params.output_mint, amount_specified, &pool_address_str)
+            .await
+        {
             Ok(impact) => Some(impact),
             Err(e) => {
                 warn!("价格影响计算失败: {:?}，使用默认值", e);
@@ -696,7 +700,11 @@ impl SolanaServiceTrait for SolanaService {
 
         LogUtils::log_debug_info(
             "交易参数",
-            &[("池子ID", &pool_id.to_string()), ("输入金额", &actual_amount.to_string()), ("最小输出", &other_amount_threshold.to_string())],
+            &[
+                ("池子ID", &pool_id.to_string()),
+                ("输入金额", &actual_amount.to_string()),
+                ("最小输出", &other_amount_threshold.to_string()),
+            ],
         );
 
         // 获取池子状态
@@ -832,7 +840,11 @@ impl SolanaServiceTrait for SolanaService {
             let pubkey = Pubkey::from_str(account_str)?;
             // 第一个是bitmap extension (只读)，其他是tick arrays (可写)
             let is_writable = remaining_accounts.len() > 0;
-            remaining_accounts.push(solana_sdk::instruction::AccountMeta { pubkey, is_signer: false, is_writable });
+            remaining_accounts.push(solana_sdk::instruction::AccountMeta {
+                pubkey,
+                is_signer: false,
+                is_writable,
+            });
         }
 
         info!("📝 构建SwapV2指令:");
@@ -876,12 +888,7 @@ impl SolanaServiceTrait for SolanaService {
 
     // ============ OpenPosition API实现 ============
 
-    async fn open_position(&self, request: crate::dtos::solana_dto::OpenPositionRequest) -> Result<crate::dtos::solana_dto::OpenPositionResponse> {
-        use crate::dtos::solana_dto::{OpenPositionResponse, TransactionStatus};
-        use ::utils::solana::{PositionInstructionBuilder, PositionUtils};
-        use solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer};
-        use std::str::FromStr;
-
+    async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse> {
         info!("🎯 开始开仓操作");
         info!("  池子地址: {}", request.pool_address);
         info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
@@ -933,7 +940,9 @@ impl SolanaServiceTrait for SolanaService {
         let nft_mint = Keypair::new();
 
         // 8. 构建remaining accounts
-        let remaining_accounts = position_utils.build_remaining_accounts(&pool_address, tick_lower_adjusted, tick_upper_adjusted, pool_state.tick_spacing).await?;
+        let remaining_accounts = position_utils
+            .build_remaining_accounts(&pool_address, tick_lower_adjusted, tick_upper_adjusted, pool_state.tick_spacing)
+            .await?;
 
         // 9. 计算tick array索引
         let tick_array_lower_start = position_utils.get_tick_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
@@ -988,12 +997,7 @@ impl SolanaServiceTrait for SolanaService {
         })
     }
 
-    async fn calculate_liquidity(&self, request: crate::dtos::solana_dto::CalculateLiquidityRequest) -> Result<crate::dtos::solana_dto::CalculateLiquidityResponse> {
-        use crate::dtos::solana_dto::CalculateLiquidityResponse;
-        use ::utils::solana::PositionUtils;
-        use solana_sdk::pubkey::Pubkey;
-        use std::str::FromStr;
-
+    async fn calculate_liquidity(&self, request: CalculateLiquidityRequest) -> Result<CalculateLiquidityResponse> {
         info!("🧮 计算流动性参数");
 
         // 1. 解析参数
@@ -1039,13 +1043,8 @@ impl SolanaServiceTrait for SolanaService {
         })
     }
 
-    async fn get_user_positions(&self, request: crate::dtos::solana_dto::GetUserPositionsRequest) -> Result<crate::dtos::solana_dto::UserPositionsResponse> {
-        use crate::dtos::solana_dto::{PositionInfo, UserPositionsResponse};
-        use ::utils::solana::PositionUtils;
-        use solana_sdk::pubkey::Pubkey;
-        use std::str::FromStr;
-
-        info!("📋 获取用户位置列表");
+    async fn get_user_positions(&self, request: GetUserPositionsRequest) -> Result<UserPositionsResponse> {
+        info!("📋 获取用户仓位列表");
 
         // 1. 确定查询的钱包地址
         let wallet_address = if let Some(addr) = request.wallet_address {
@@ -1107,12 +1106,7 @@ impl SolanaServiceTrait for SolanaService {
         })
     }
 
-    async fn get_position_info(&self, position_key: String) -> Result<crate::dtos::solana_dto::PositionInfo> {
-        use crate::dtos::solana_dto::PositionInfo;
-        use ::utils::solana::PositionUtils;
-        use solana_sdk::pubkey::Pubkey;
-        use std::str::FromStr;
-
+    async fn get_position_info(&self, position_key: String) -> Result<PositionInfo> {
         info!("🔍 获取位置详情: {}", position_key);
 
         let position_pubkey = Pubkey::from_str(&position_key)?;
@@ -1145,13 +1139,13 @@ impl SolanaServiceTrait for SolanaService {
         })
     }
 
-    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<crate::dtos::solana_dto::PositionInfo>> {
-        use ::utils::solana::PositionUtils;
-        use solana_sdk::pubkey::Pubkey;
-        use std::str::FromStr;
-
+    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<PositionInfo>> {
         let pool_pubkey = Pubkey::from_str(&pool_address)?;
-        let wallet_pubkey = if let Some(addr) = wallet_address { Pubkey::from_str(&addr)? } else { self.get_user_wallet_pubkey()? };
+        let wallet_pubkey = if let Some(addr) = wallet_address {
+            Pubkey::from_str(&addr)?
+        } else {
+            self.get_user_wallet_pubkey()?
+        };
 
         let position_utils = PositionUtils::new(&self.rpc_client);
 
