@@ -2,10 +2,11 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// Raydium池子信息（从API获取）
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(non_snake_case)]
 pub struct RaydiumPoolInfo {
     pub id: String,
     pub baseMint: String,
@@ -121,11 +122,7 @@ impl RaydiumApiClient {
     }
 
     /// 计算池子的储备和流动性
-    pub async fn calculate_pool_reserves(
-        &self,
-        pool_info: &RaydiumPoolInfo,
-        rpc_client: &solana_client::rpc_client::RpcClient,
-    ) -> Result<(u64, u64, f64)> {
+    pub async fn calculate_pool_reserves(&self, pool_info: &RaydiumPoolInfo, rpc_client: &solana_client::rpc_client::RpcClient) -> Result<(u64, u64, f64)> {
         info!("📊 计算池子储备: {}", pool_info.id);
 
         // 获取base vault余额
@@ -145,16 +142,9 @@ impl RaydiumApiClient {
         let base_ui_amount = base_amount as f64 / base_decimal_factor;
         let quote_ui_amount = quote_amount as f64 / quote_decimal_factor;
 
-        let price = if base_ui_amount > 0.0 {
-            quote_ui_amount / base_ui_amount
-        } else {
-            0.0
-        };
+        let price = if base_ui_amount > 0.0 { quote_ui_amount / base_ui_amount } else { 0.0 };
 
-        info!(
-            "💰 池子储备: base={}, quote={}, 价格={:.6}",
-            base_amount, quote_amount, price
-        );
+        info!("💰 池子储备: base={}, quote={}, 价格={:.6}", base_amount, quote_amount, price);
 
         Ok((base_amount, quote_amount, price))
     }
@@ -162,119 +152,35 @@ impl RaydiumApiClient {
     /// 解析池子信息
     fn parse_pool_info(&self, json: &serde_json::Value) -> Result<RaydiumPoolInfo> {
         Ok(RaydiumPoolInfo {
-            id: json
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            baseMint: json
-                .get("baseMint")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            quoteMint: json
-                .get("quoteMint")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            lpMint: json
-                .get("lpMint")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            baseDecimals: json
-                .get("baseDecimals")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u8,
-            quoteDecimals: json
-                .get("quoteDecimals")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u8,
+            id: json.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            baseMint: json.get("baseMint").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            quoteMint: json.get("quoteMint").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            lpMint: json.get("lpMint").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            baseDecimals: json.get("baseDecimals").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
+            quoteDecimals: json.get("quoteDecimals").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
             lpDecimals: json.get("lpDecimals").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
             version: json.get("version").and_then(|v| v.as_u64()).unwrap_or(4) as u8,
-            programId: json
-                .get("programId")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            authority: json
-                .get("authority")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            openOrders: json
-                .get("openOrders")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            targetOrders: json
-                .get("targetOrders")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            baseVault: json
-                .get("baseVault")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            quoteVault: json
-                .get("quoteVault")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketVersion: json
-                .get("marketVersion")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(3) as u8,
-            marketProgramId: json
-                .get("marketProgramId")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketId: json
-                .get("marketId")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketAuthority: json
-                .get("marketAuthority")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketBaseVault: json
-                .get("marketBaseVault")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketQuoteVault: json
-                .get("marketQuoteVault")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketBids: json
-                .get("marketBids")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketAsks: json
-                .get("marketAsks")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            marketEventQueue: json
-                .get("marketEventQueue")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
+            programId: json.get("programId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            authority: json.get("authority").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            openOrders: json.get("openOrders").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            targetOrders: json.get("targetOrders").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            baseVault: json.get("baseVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            quoteVault: json.get("quoteVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketVersion: json.get("marketVersion").and_then(|v| v.as_u64()).unwrap_or(3) as u8,
+            marketProgramId: json.get("marketProgramId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketId: json.get("marketId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketAuthority: json.get("marketAuthority").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketBaseVault: json.get("marketBaseVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketQuoteVault: json.get("marketQuoteVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketBids: json.get("marketBids").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketAsks: json.get("marketAsks").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketEventQueue: json.get("marketEventQueue").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         })
     }
 }
 
 /// 直接从链上获取池子基本信息（轻量级）
-pub async fn get_pool_info_from_chain(
-    pool_address: &str,
-    rpc_client: &solana_client::rpc_client::RpcClient,
-) -> Result<RaydiumPoolInfo> {
+pub async fn get_pool_info_from_chain(pool_address: &str, rpc_client: &solana_client::rpc_client::RpcClient) -> Result<RaydiumPoolInfo> {
     info!("🔍 直接从链上获取池子信息: {}", pool_address);
 
     let pool_pubkey = pool_address.parse::<Pubkey>()?;
@@ -382,10 +288,7 @@ fn parse_raydium_clmm_pool(pool_address: &str, data: &[u8]) -> Result<RaydiumPoo
 
     // 检查数据长度，CLMM池子需要至少1544字节
     if data.len() < 1544 {
-        return Err(anyhow::anyhow!(
-            "CLMM池子数据长度不足: {} < 1544",
-            data.len()
-        ));
+        return Err(anyhow::anyhow!("CLMM池子数据长度不足: {} < 1544", data.len()));
     }
 
     // 跳过账户discriminator（前8字节）
@@ -476,11 +379,7 @@ fn parse_raydium_clmm_pool(pool_address: &str, data: &[u8]) -> Result<RaydiumPoo
 }
 
 /// 简化的价格计算函数（避免下载885MB文件）
-pub async fn calculate_swap_output_with_simple_math(
-    input_amount: u64,
-    from_mint: &str,
-    to_mint: &str,
-) -> Result<u64> {
+pub async fn calculate_swap_output_with_simple_math(input_amount: u64, from_mint: &str, to_mint: &str) -> Result<u64> {
     info!("💰 使用简化数学模型计算交换输出");
 
     // 简化的价格模型，基于主要代币的大致汇率
@@ -516,13 +415,7 @@ pub async fn calculate_swap_output_with_simple_math(
             let sol_amount = usdt_amount / sol_price_usd;
             (sol_amount * 1_000_000_000.0) as u64
         }
-        _ => {
-            return Err(anyhow::anyhow!(
-                "不支持的交换对: {} -> {}",
-                from_mint,
-                to_mint
-            ))
-        }
+        _ => return Err(anyhow::anyhow!("不支持的交换对: {} -> {}", from_mint, to_mint)),
     };
 
     // 扣除0.25%手续费
@@ -535,10 +428,7 @@ pub async fn calculate_swap_output_with_simple_math(
 }
 
 /// 直接计算池子储备（不依赖API客户端）
-pub async fn calculate_pool_reserves_direct(
-    pool_info: &RaydiumPoolInfo,
-    rpc_client: &solana_client::rpc_client::RpcClient,
-) -> Result<(u64, u64, f64)> {
+pub async fn calculate_pool_reserves_direct(pool_info: &RaydiumPoolInfo, rpc_client: &solana_client::rpc_client::RpcClient) -> Result<(u64, u64, f64)> {
     info!("📊 直接计算池子储备: {}", pool_info.id);
 
     // 检查是否有有效的vault地址
@@ -563,26 +453,15 @@ pub async fn calculate_pool_reserves_direct(
     let base_ui_amount = base_amount as f64 / base_decimal_factor;
     let quote_ui_amount = quote_amount as f64 / quote_decimal_factor;
 
-    let price = if base_ui_amount > 0.0 {
-        quote_ui_amount / base_ui_amount
-    } else {
-        0.0
-    };
+    let price = if base_ui_amount > 0.0 { quote_ui_amount / base_ui_amount } else { 0.0 };
 
-    info!(
-        "💰 直接计算池子储备: base={}, quote={}, 价格={:.6}",
-        base_amount, quote_amount, price
-    );
+    info!("💰 直接计算池子储备: base={}, quote={}, 价格={:.6}", base_amount, quote_amount, price);
 
     Ok((base_amount, quote_amount, price))
 }
 
 /// 最终备用计算方法
-pub async fn calculate_fallback_output(
-    input_amount: u64,
-    from_mint: &str,
-    to_mint: &str,
-) -> Result<u64> {
+pub async fn calculate_fallback_output(input_amount: u64, from_mint: &str, to_mint: &str) -> Result<u64> {
     // 直接调用简化数学模型作为最后的备用
     calculate_swap_output_with_simple_math(input_amount, from_mint, to_mint).await
 }

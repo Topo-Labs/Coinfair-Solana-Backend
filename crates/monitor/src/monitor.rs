@@ -1,28 +1,10 @@
-use super::util::{current_date_and_time, magic_number, keccak256};
-use tracing::{info, error};
-use colored::*;
+use super::util::{current_date_and_time, magic_number};
 use database::reward::model::RewardItem;
-use ethers::{
-    abi::ParamType,
-    middleware::SignerMiddleware,
-    prelude::*,
-    providers::Provider,
-    signers::{LocalWallet, Signer},
-    types::Address,
-    utils::to_checksum,
-};
-use futures::future::join_all;
+use ethers::{abi::ParamType, prelude::*, providers::Provider, types::Address, utils::to_checksum};
 use serde::Deserialize;
 use server::services::Services;
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
-use tokio::{
-    task,
-    time::{sleep, Duration},
-};
+use std::sync::Arc;
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct Monitor {
@@ -99,12 +81,7 @@ impl Monitor {
                         let from: String = to_checksum(&from, None);
                         let to: String = to_checksum(&to, None);
 
-                        info!(
-                            "{:?} Claim Event: {} -> {}",
-                            current_date_and_time(),
-                            from,
-                            to
-                        );
+                        info!("{:?} Claim Event: {} -> {}", current_date_and_time(), from, to);
 
                         match self.handle_claim(from.clone(), to.clone()).await {
                             Ok(()) => {
@@ -113,7 +90,7 @@ impl Monitor {
                             Err(e) => {
                                 error!("Failed to handle claim for {} -> {}: {:?}", from, to, e);
                                 // 这里可以添加其他恢复逻辑，或者什么都不做，继续循环
-                            }                            
+                            }
                         }
                     }
 
@@ -136,19 +113,13 @@ impl Monitor {
                         let sender = to_checksum(&sender, None);
                         let to = to_checksum(&to, None);
 
-
                         let amount0_in: U256 = decoded[0].clone().into_uint().unwrap();
                         let amount1_in: U256 = decoded[1].clone().into_uint().unwrap();
                         let amount0_out: U256 = decoded[2].clone().into_uint().unwrap();
                         let amount1_out: U256 = decoded[3].clone().into_uint().unwrap();
 
                         if self.is_buy(amount0_in, amount1_in, amount0_out, amount1_out) {
-                            info!(
-                                "{:?} Buy Event: {} -> {}",
-                                current_date_and_time(),
-                                sender,
-                                to.clone()
-                            );
+                            info!("{:?} Buy Event: {} -> {}", current_date_and_time(), sender, to.clone());
 
                             // amount1_in: （兑换所需的）BNB数量
                             // amount0_out: （兑换出来的）HOPE数量
@@ -159,7 +130,7 @@ impl Monitor {
                                 Err(e) => {
                                     error!("Failed to handle buy for {}: {:?}", to.clone(), e);
                                     // 这里可以添加其他恢复逻辑，或者什么都不做，继续循环
-                                }                                
+                                }
                             }
                         }
                     }
@@ -168,13 +139,13 @@ impl Monitor {
                     x if x == magic_number(event_batch_reward) => {
                         info!("event_batch_reward");
                         match self.handler_batch_rewards().await {
-                                Ok(()) => {
-                                    info!("Batch_rewards handled successfully");
-                                }
-                                Err(e) => {
-                                    error!("Failed to handle batch_rewards: {:?}", e);
-                                    // 这里可以添加其他恢复逻辑，或者什么都不做，继续循环
-                                }                            
+                            Ok(()) => {
+                                info!("Batch_rewards handled successfully");
+                            }
+                            Err(e) => {
+                                error!("Failed to handle batch_rewards: {:?}", e);
+                                // 这里可以添加其他恢复逻辑，或者什么都不做，继续循环
+                            }
                         }
                     }
                     _ => println!("Unknown event received"),
@@ -188,44 +159,24 @@ impl Monitor {
 
 impl Monitor {
     async fn handle_claim(&self, minter: String, claimer: String) -> eyre::Result<()> {
-        self.services
-            .refer
-            .create_refer(
-                &claimer.to_lowercase(),
-                &minter.to_lowercase(),
-            )
-            .await?;
+        self.services.refer.create_refer(&claimer.to_lowercase(), &minter.to_lowercase()).await?;
 
         Ok(())
     }
 
     //NOTE 地址要转小写
-    async fn handler_buy(
-        &self,
-        user: String,
-        bnb_count: U256,
-        hope_count: U256,
-    ) -> eyre::Result<()> {
-        
+    async fn handler_buy(&self, user: String, bnb_count: U256, hope_count: U256) -> eyre::Result<()> {
         if self.is_valid_user(user.clone(), bnb_count).await {
-
             let price_by_usdt = self.price_by_usdt(bnb_count, hope_count).await;
 
             self.services
                 .user
-                .create_user(
-                    user.to_string(),
-                    hope_count.as_u128() as f64 / 1e9,
-                    price_by_usdt,
-                )
+                .create_user(user.to_string(), hope_count.as_u128() as f64 / 1e9, price_by_usdt)
                 .await?;
 
             // 2. 存储该有效新用户所触发的奖励(上级 8U对应的HOPE数量，上上级 2U对应的HOPE数量)
             let rewards = self.gen_rewards(user.clone(), price_by_usdt).await;
-            self.services
-                .reward
-                .create_reward(user.to_string().to_lowercase(), rewards)
-                .await?;
+            self.services.reward.create_reward(user.to_string().to_lowercase(), rewards).await?;
 
             Ok(())
         } else {
@@ -255,9 +206,7 @@ impl Monitor {
     }
 
     async fn get_ws_provider(rpc_url: &str) -> Provider<Ws> {
-        Provider::<Ws>::connect(rpc_url)
-            .await
-            .expect("Cannot establish ws connection")
+        Provider::<Ws>::connect(rpc_url).await.expect("Cannot establish ws connection")
     }
 
     // 有效新用户：
@@ -265,15 +214,9 @@ impl Monitor {
     // 2. Swap:Buy的HOPE价值大于100U
     // 3. 其Refer关系创建的时间戳在活动开启时间之后
     async fn is_valid_user(&self, user: String, bnb_count: U256) -> bool {
-
-
-        let refer_result = self.services
-                .refer
-                .get_user(user.to_lowercase()).await;
-
+        let refer_result = self.services.refer.get_user(user.to_lowercase()).await;
 
         let is_valid_usdt = self.is_valid_buy(bnb_count).await;
-
 
         // 处理 `get_user` 可能的错误
         let refer = match refer_result {
@@ -287,7 +230,7 @@ impl Monitor {
         is_valid_usdt && is_valid_timestamp
     }
 
-    fn price_by_bnb(&self, bnb_count: U256, hope_count: U256) -> f64 {
+    fn _price_by_bnb(&self, bnb_count: U256, hope_count: U256) -> f64 {
         let hope = hope_count.as_u128() as f64 / 1e9; // 10^9
         let bnb = bnb_count.as_u128() as f64 / 1e18; // 10^18
 
@@ -304,7 +247,6 @@ impl Monitor {
         let hope_price_by_usdt = bnb_price * (bnb_count.as_u128() as f64) / (hope_count.as_u128() as f64) / 1e9;
 
         hope_price_by_usdt
-
     }
 
     async fn is_valid_buy(&self, bnb_count: U256) -> bool {
@@ -316,33 +258,19 @@ impl Monitor {
         flag
     }
 
-    fn is_buy(
-        &self,
-        amount0_in: U256,
-        amount1_in: U256,
-        amount0_out: U256,
-        amount1_out: U256,
-    ) -> bool {
-        amount1_in > U256::zero()
-            && amount0_out > U256::zero()
-            && amount0_in.is_zero()
-            && amount1_out.is_zero()
+    fn is_buy(&self, amount0_in: U256, amount1_in: U256, amount0_out: U256, amount1_out: U256) -> bool {
+        amount1_in > U256::zero() && amount0_out > U256::zero() && amount0_in.is_zero() && amount1_out.is_zero()
     }
 
     async fn get_bnb_price(&self) -> Result<f64, reqwest::Error> {
         let url = "https://min-api.cryptocompare.com/data/price?fsym=BNB&tsyms=USD";
 
-        let response = reqwest::Client::new()
-            .get(url)
-            .header("Accept", "application/json")
-            .send()
-            .await?;
+        let response = reqwest::Client::new().get(url).header("Accept", "application/json").send().await?;
 
         // 解析 JSON
         let crypto_price: CryptoPrice = response.json().await?;
 
         let price = crypto_price.USD;
-
 
         Ok(price)
     }
@@ -384,6 +312,7 @@ impl Monitor {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
 struct CryptoPrice {
     USD: f64,
 }

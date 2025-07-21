@@ -18,11 +18,7 @@ impl Timer {
     // "59 59 11 * * *": 每天11:59:59执行
     pub fn new(time: Option<String>, services: Services, telegram: HopeBot) -> Self {
         match time {
-            Some(time) => Timer {
-                time,
-                services,
-                telegram,
-            },
+            Some(time) => Timer { time, services, telegram },
             None => Timer {
                 time: "59 59 11 * * *".to_string(),
                 services,
@@ -40,9 +36,7 @@ impl Timer {
             let now = Utc::now();
             let next_run_time = schedule.upcoming(Utc).next().unwrap();
 
-            let duration_until_next_run = (next_run_time - now)
-                .to_std()
-                .unwrap_or(Duration::from_secs(0));
+            let duration_until_next_run = (next_run_time - now).to_std().unwrap_or(Duration::from_secs(0));
 
             sleep_until(tokio::time::Instant::now() + duration_until_next_run).await;
 

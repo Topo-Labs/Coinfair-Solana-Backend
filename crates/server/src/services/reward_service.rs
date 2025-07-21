@@ -13,11 +13,7 @@ pub type DynRewardService = Arc<dyn RewardServiceTrait + Send + Sync>;
 
 #[async_trait]
 pub trait RewardServiceTrait {
-    async fn create_reward(
-        &self,
-        address: String,
-        rewards: Vec<RewardItem>,
-    ) -> AppResult<InsertOneResult>;
+    async fn create_reward(&self, address: String, rewards: Vec<RewardItem>) -> AppResult<InsertOneResult>;
     async fn set_reward(&self, address: String) -> AppResult<UpdateResult>;
     async fn set_rewards(&self, addresses: Vec<String>) -> AppResult<UpdateResult>;
     async fn get_reward(&self, address: String) -> AppResult<Option<Reward>>;
@@ -42,11 +38,7 @@ impl RewardService {
 
 #[async_trait]
 impl RewardServiceTrait for RewardService {
-    async fn create_reward(
-        &self,
-        address: String,
-        rewards: Vec<RewardItem>,
-    ) -> AppResult<InsertOneResult> {
+    async fn create_reward(&self, address: String, rewards: Vec<RewardItem>) -> AppResult<InsertOneResult> {
         let reward = self.repository.create_reward(&address, rewards).await?;
 
         Ok(reward)

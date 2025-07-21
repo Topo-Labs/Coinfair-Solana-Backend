@@ -2,10 +2,7 @@ use super::services::Services;
 use crate::{api, docs};
 use axum::{
     error_handling::HandleErrorLayer,
-    http::{
-        header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-        Method, StatusCode,
-    },
+    http::{Method, StatusCode},
     response::IntoResponse,
     routing::get,
     BoxError, Extension, Json, Router,

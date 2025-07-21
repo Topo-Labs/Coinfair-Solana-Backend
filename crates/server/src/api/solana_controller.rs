@@ -35,7 +35,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct SolanaController;
 
@@ -664,17 +664,36 @@ async fn open_position(
 ) -> Result<Json<OpenPositionResponse>, (StatusCode, Json<ErrorResponse>)> {
     info!("🎯 接收到开仓请求");
     info!("  池子地址: {}", request.pool_address);
+    info!("  用户钱包: {}", request.user_wallet);
     info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+    info!("  输入金额: {}", request.input_amount);
+
+    // check if tick_lower_price is less than tick_upper_price
+    if request.tick_lower_price >= request.tick_upper_price {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("TICK_PRICE_ERROR", "tick_lower_price must be less than tick_upper_price")),
+        ));
+    }
 
     match services.solana.open_position(request).await {
         Ok(response) => {
-            info!("✅ 开仓成功: {}", response.signature);
+            info!("✅ 开仓交易构建成功: {}", response.transaction_message);
             Ok(Json(response))
         }
         Err(e) => {
             error!("❌ 开仓失败: {:?}", e);
-            let error_response = ErrorResponse::new("OPEN_POSITION_ERROR", &format!("开仓失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+
+            // 检查是否是重复位置错误
+            let error_msg = e.to_string();
+            if error_msg.contains("相同价格范围的位置已存在") {
+                warn!("🔄 检测到重复位置创建尝试");
+                let error_response = ErrorResponse::new("POSITION_ALREADY_EXISTS", "相同价格范围的位置已存在，请检查您的现有位置或稍后重试");
+                Err((StatusCode::CONFLICT, Json(error_response)))
+            } else {
+                let error_response = ErrorResponse::new("OPEN_POSITION_ERROR", &format!("开仓失败: {}", e));
+                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+            }
         }
     }
 }

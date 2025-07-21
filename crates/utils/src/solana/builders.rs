@@ -21,7 +21,11 @@ impl TransactionBuilder {
     }
 
     /// 构建完整的交易
-    pub fn build_transaction(instructions: Vec<solana_sdk::instruction::Instruction>, payer: &Pubkey, recent_blockhash: solana_sdk::hash::Hash) -> Result<solana_sdk::transaction::Transaction> {
+    pub fn build_transaction(
+        instructions: Vec<solana_sdk::instruction::Instruction>,
+        payer: &Pubkey,
+        recent_blockhash: solana_sdk::hash::Hash,
+    ) -> Result<solana_sdk::transaction::Transaction> {
         let mut full_instructions = vec![Self::create_compute_budget_instruction(1_400_000)];
         full_instructions.extend(instructions);
 
@@ -45,22 +49,38 @@ pub struct AccountMetaBuilder;
 impl AccountMetaBuilder {
     /// 创建只读账户元数据
     pub fn readonly(pubkey: Pubkey, is_signer: bool) -> solana_sdk::instruction::AccountMeta {
-        solana_sdk::instruction::AccountMeta { pubkey, is_signer, is_writable: false }
+        solana_sdk::instruction::AccountMeta {
+            pubkey,
+            is_signer,
+            is_writable: false,
+        }
     }
 
     /// 创建可写账户元数据
     pub fn writable(pubkey: Pubkey, is_signer: bool) -> solana_sdk::instruction::AccountMeta {
-        solana_sdk::instruction::AccountMeta { pubkey, is_signer, is_writable: true }
+        solana_sdk::instruction::AccountMeta {
+            pubkey,
+            is_signer,
+            is_writable: true,
+        }
     }
 
     /// 创建签名者账户元数据
     pub fn signer(pubkey: Pubkey) -> solana_sdk::instruction::AccountMeta {
-        solana_sdk::instruction::AccountMeta { pubkey, is_signer: true, is_writable: false }
+        solana_sdk::instruction::AccountMeta {
+            pubkey,
+            is_signer: true,
+            is_writable: false,
+        }
     }
 
     /// 创建可写签名者账户元数据
     pub fn writable_signer(pubkey: Pubkey) -> solana_sdk::instruction::AccountMeta {
-        solana_sdk::instruction::AccountMeta { pubkey, is_signer: true, is_writable: true }
+        solana_sdk::instruction::AccountMeta {
+            pubkey,
+            is_signer: true,
+            is_writable: true,
+        }
     }
 
     /// 批量创建remaining accounts
@@ -69,7 +89,11 @@ impl AccountMetaBuilder {
         for (index, account_str) in account_addresses.iter().enumerate() {
             let pubkey = Pubkey::from_str(account_str)?;
             let is_writable = if first_readonly { index > 0 } else { true };
-            accounts.push(solana_sdk::instruction::AccountMeta { pubkey, is_signer: false, is_writable });
+            accounts.push(solana_sdk::instruction::AccountMeta {
+                pubkey,
+                is_signer: false,
+                is_writable,
+            });
         }
         Ok(accounts)
     }
@@ -84,7 +108,6 @@ impl RoutePlanBuilder {
         MathUtils::calculate_fee(amount, constants::DEFAULT_FEE_RATE)
     }
 }
-
 
 /// SwapV2指令构建器 - 统一管理SwapV2指令创建
 pub struct SwapV2InstructionBuilder;
@@ -155,10 +178,10 @@ impl SwapV2InstructionBuilder {
         accounts.extend(remaining_accounts);
 
         LogUtils::log_operation_success("SwapV2指令构建", &format!("{}个账户", accounts.len()));
-        Ok(solana_sdk::instruction::Instruction { 
-            program_id: *program_id, 
-            accounts, 
-            data 
+        Ok(solana_sdk::instruction::Instruction {
+            program_id: *program_id,
+            accounts,
+            data,
         })
     }
 }

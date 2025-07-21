@@ -117,10 +117,7 @@ fn load_cfg(client_config: &String) -> Result<ClientConfig> {
     let amm_config_index = config.getuint("Pool", "amm_config_index").unwrap().unwrap() as u16;
 
     let (amm_config_key, __bump) = Pubkey::find_program_address(
-        &[
-            raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(),
-            &amm_config_index.to_be_bytes(),
-        ],
+        &[raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
         &raydium_v3_program,
     );
 
@@ -148,10 +145,7 @@ fn load_cfg(client_config: &String) -> Result<ClientConfig> {
     let tickarray_bitmap_extension = if pool_id_account != None {
         Some(
             Pubkey::find_program_address(
-                &[
-                    POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(),
-                    pool_id_account.unwrap().to_bytes().as_ref(),
-                ],
+                &[POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(), pool_id_account.unwrap().to_bytes().as_ref()],
                 &raydium_v3_program,
             )
             .0,
@@ -176,12 +170,10 @@ fn load_cfg(client_config: &String) -> Result<ClientConfig> {
     })
 }
 fn read_keypair_file(s: &str) -> Result<Keypair> {
-    solana_sdk::signature::read_keypair_file(s)
-        .map_err(|_| format_err!("failed to read keypair from {}", s))
+    solana_sdk::signature::read_keypair_file(s).map_err(|_| format_err!("failed to read keypair from {}", s))
 }
 fn write_keypair_file(keypair: &Keypair, outfile: &str) -> Result<String> {
-    solana_sdk::signature::write_keypair_file(keypair, outfile)
-        .map_err(|_| format_err!("failed to write keypair to {}", outfile))
+    solana_sdk::signature::write_keypair_file(keypair, outfile).map_err(|_| format_err!("failed to write keypair to {}", outfile))
 }
 fn path_is_exist(path: &str) -> bool {
     Path::new(path).exists()
@@ -212,11 +204,7 @@ fn load_cur_and_next_five_tick_array(
     let mut max_array_size = 5;
     while max_array_size != 0 {
         let next_tick_array_index = pool_state
-            .next_initialized_tick_array_start_index(
-                &Some(*tickarray_bitmap_extension),
-                current_vaild_tick_array_start_index,
-                zero_for_one,
-            )
+            .next_initialized_tick_array_start_index(&Some(*tickarray_bitmap_extension), current_vaild_tick_array_start_index, zero_for_one)
             .unwrap();
         if next_tick_array_index.is_none() {
             break;
@@ -238,11 +226,7 @@ fn load_cur_and_next_five_tick_array(
     let tick_array_rsps = rpc_client.get_multiple_accounts(&tick_array_keys).unwrap();
     let mut tick_arrays = VecDeque::new();
     for tick_array in tick_array_rsps {
-        let tick_array_state =
-            deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(
-                &tick_array.unwrap(),
-            )
-            .unwrap();
+        let tick_array_state = deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(&tick_array.unwrap()).unwrap();
         tick_arrays.push_back(tick_array_state);
     }
     tick_arrays
@@ -257,23 +241,9 @@ struct PositionNftTokenInfo {
     amount: u64,
     decimals: u8,
 }
-fn get_all_nft_and_position_by_owner(
-    client: &RpcClient,
-    owner: &Pubkey,
-    raydium_amm_v3_program: &Pubkey,
-) -> Vec<PositionNftTokenInfo> {
-    let mut spl_nfts = get_nft_account_and_position_by_owner(
-        client,
-        owner,
-        spl_token::id(),
-        raydium_amm_v3_program,
-    );
-    let spl_2022_nfts = get_nft_account_and_position_by_owner(
-        client,
-        owner,
-        spl_token_2022::id(),
-        raydium_amm_v3_program,
-    );
+fn get_all_nft_and_position_by_owner(client: &RpcClient, owner: &Pubkey, raydium_amm_v3_program: &Pubkey) -> Vec<PositionNftTokenInfo> {
+    let mut spl_nfts = get_nft_account_and_position_by_owner(client, owner, spl_token::id(), raydium_amm_v3_program);
+    let spl_2022_nfts = get_nft_account_and_position_by_owner(client, owner, spl_token_2022::id(), raydium_amm_v3_program);
     spl_nfts.extend(spl_2022_nfts);
     spl_nfts
 }
@@ -290,15 +260,10 @@ fn get_nft_account_and_position_by_owner(
     for keyed_account in all_tokens {
         if let UiAccountData::Json(parsed_account) = keyed_account.account.data {
             if parsed_account.program == "spl-token" || parsed_account.program == "spl-token-2022" {
-                if let Ok(TokenAccountType::Account(ui_token_account)) =
-                    serde_json::from_value(parsed_account.parsed)
-                {
+                if let Ok(TokenAccountType::Account(ui_token_account)) = serde_json::from_value(parsed_account.parsed) {
                     let _frozen = ui_token_account.state == UiAccountState::Frozen;
 
-                    let token = ui_token_account
-                        .mint
-                        .parse::<Pubkey>()
-                        .unwrap_or_else(|err| panic!("Invalid mint: {}", err));
+                    let token = ui_token_account.mint.parse::<Pubkey>().unwrap_or_else(|err| panic!("Invalid mint: {}", err));
                     let token_account = keyed_account
                         .pubkey
                         .parse::<Pubkey>()
@@ -309,17 +274,13 @@ fn get_nft_account_and_position_by_owner(
                         .parse::<u64>()
                         .unwrap_or_else(|err| panic!("Invalid token amount: {}", err));
 
-                    let _close_authority = ui_token_account.close_authority.map_or(*owner, |s| {
-                        s.parse::<Pubkey>()
-                            .unwrap_or_else(|err| panic!("Invalid close authority: {}", err))
-                    });
+                    let _close_authority = ui_token_account
+                        .close_authority
+                        .map_or(*owner, |s| s.parse::<Pubkey>().unwrap_or_else(|err| panic!("Invalid close authority: {}", err)));
 
                     if ui_token_account.token_amount.decimals == 0 && token_amount == 1 {
                         let (position_pda, _) = Pubkey::find_program_address(
-                            &[
-                                raydium_amm_v3::states::POSITION_SEED.as_bytes(),
-                                token.to_bytes().as_ref(),
-                            ],
+                            &[raydium_amm_v3::states::POSITION_SEED.as_bytes(), token.to_bytes().as_ref()],
                             &raydium_amm_v3_program,
                         );
                         position_nft_accounts.push(PositionNftTokenInfo {
@@ -575,16 +536,8 @@ fn main() -> Result<()> {
             transfer_fee,
             confidential_transfer_auto_approve,
         } => {
-            let token_program = if token_2022 {
-                spl_token_2022::id()
-            } else {
-                spl_token::id()
-            };
-            let authority = if let Some(key) = authority {
-                key
-            } else {
-                payer.pubkey()
-            };
+            let token_program = if token_2022 { spl_token_2022::id() } else { spl_token::id() };
+            let authority = if let Some(key) = authority { key } else { payer.pubkey() };
             let freeze_authority = if enable_freeze { Some(authority) } else { None };
             let mut extensions = vec![];
             if enable_close {
@@ -593,9 +546,7 @@ fn main() -> Result<()> {
                 });
             }
             if enable_permanent_delegate {
-                extensions.push(ExtensionInitializationParams::PermanentDelegate {
-                    delegate: authority,
-                });
+                extensions.push(ExtensionInitializationParams::PermanentDelegate { delegate: authority });
             }
             if let Some(rate_bps) = rate_bps {
                 extensions.push(ExtensionInitializationParams::InterestBearingConfig {
@@ -604,10 +555,7 @@ fn main() -> Result<()> {
                 })
             }
             if let Some(state) = default_account_state {
-                assert!(
-                    enable_freeze,
-                    "Token requires a freeze authority to default to frozen accounts"
-                );
+                assert!(enable_freeze, "Token requires a freeze authority to default to frozen accounts");
                 let account_state;
                 match state.as_str() {
                     "Uninitialized" => account_state = AccountState::Uninitialized,
@@ -615,9 +563,7 @@ fn main() -> Result<()> {
                     "Frozen" => account_state = AccountState::Frozen,
                     _ => panic!("error default_account_state[Uninitialized, Initialized, Frozen]"),
                 }
-                extensions.push(ExtensionInitializationParams::DefaultAccountState {
-                    state: account_state,
-                })
+                extensions.push(ExtensionInitializationParams::DefaultAccountState { state: account_state })
             }
             if let Some(transfer_fee_value) = transfer_fee {
                 let transfer_fee_basis_points = transfer_fee_value[0] as u16;
@@ -653,73 +599,33 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer, &mint];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_and_init_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_and_init_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
-        CommandsName::NewToken {
-            mint,
-            authority,
-            not_ata,
-        } => {
+        CommandsName::NewToken { mint, authority, not_ata } => {
             let mut signers = vec![&payer];
             let auxiliary_token_keypair = Keypair::new();
             let create_ata_instr = if not_ata {
                 signers.push(&auxiliary_token_keypair);
-                create_and_init_auxiliary_token(
-                    &pool_config.clone(),
-                    &auxiliary_token_keypair.pubkey(),
-                    &mint,
-                    &authority,
-                )?
+                create_and_init_auxiliary_token(&pool_config.clone(), &auxiliary_token_keypair.pubkey(), &mint, &authority)?
             } else {
                 let mint_account = rpc_client.get_account(&mint)?;
-                create_ata_token_account_instr(
-                    &pool_config.clone(),
-                    mint_account.owner,
-                    &mint,
-                    &authority,
-                )?
+                create_ata_token_account_instr(&pool_config.clone(), mint_account.owner, &mint, &authority)?
             };
             // send
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_ata_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_ata_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
-        CommandsName::MintTo {
-            mint,
-            to_token,
-            amount,
-        } => {
+        CommandsName::MintTo { mint, to_token, amount } => {
             let mint_account = rpc_client.get_account(&mint)?;
-            let mint_to_instr = spl_token_mint_to_instr(
-                &pool_config.clone(),
-                mint_account.owner,
-                &mint,
-                &to_token,
-                amount,
-                &payer,
-            )?;
+            let mint_to_instr = spl_token_mint_to_instr(&pool_config.clone(), mint_account.owner, &mint, &to_token, amount, &payer)?;
             // send
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &mint_to_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&mint_to_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -728,27 +634,16 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &wrap_sol_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&wrap_sol_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
         CommandsName::UnWrapSol { wrap_sol_account } => {
-            let unwrap_sol_instr =
-                close_token_account(&pool_config, &wrap_sol_account, &payer.pubkey(), &payer)?;
+            let unwrap_sol_instr = close_token_account(&pool_config, &wrap_sol_account, &payer.pubkey(), &payer)?;
             // send
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &unwrap_sol_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&unwrap_sol_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -770,12 +665,7 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer, &admin];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -803,28 +693,14 @@ fn main() -> Result<()> {
                 _ => panic!("error input"),
             }
             let (amm_config_key, __bump) = Pubkey::find_program_address(
-                &[
-                    raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(),
-                    &config_index.to_be_bytes(),
-                ],
+                &[raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(), &config_index.to_be_bytes()],
                 &pool_config.raydium_v3_program,
             );
-            let update_amm_config_instr = update_amm_config_instr(
-                &pool_config.clone(),
-                amm_config_key,
-                remaing_accounts,
-                param,
-                update_value,
-            )?;
+            let update_amm_config_instr = update_amm_config_instr(&pool_config.clone(), amm_config_key, remaing_accounts, param, update_value)?;
             // send
             let signers = vec![&payer, &admin];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &update_amm_config_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&update_amm_config_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -833,12 +709,7 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer, &admin];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -847,12 +718,7 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer, &admin];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -875,17 +741,11 @@ fn main() -> Result<()> {
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
             let mint0_owner = rsps[0].clone().unwrap().owner;
             let mint1_owner = rsps[1].clone().unwrap().owner;
-            let mint0_account =
-                spl_token::state::Mint::unpack(&rsps[0].as_ref().unwrap().data).unwrap();
-            let mint1_account =
-                spl_token::state::Mint::unpack(&rsps[1].as_ref().unwrap().data).unwrap();
-            let sqrt_price_x64 =
-                price_to_sqrt_price_x64(price, mint0_account.decimals, mint1_account.decimals);
+            let mint0_account = spl_token::state::Mint::unpack(&rsps[0].as_ref().unwrap().data).unwrap();
+            let mint1_account = spl_token::state::Mint::unpack(&rsps[1].as_ref().unwrap().data).unwrap();
+            let sqrt_price_x64 = price_to_sqrt_price_x64(price, mint0_account.decimals, mint1_account.decimals);
             let (amm_config_key, __bump) = Pubkey::find_program_address(
-                &[
-                    raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(),
-                    &config_index.to_be_bytes(),
-                ],
+                &[raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(), &config_index.to_be_bytes()],
                 &pool_config.raydium_v3_program,
             );
             let tick = tick_math::get_tick_at_sqrt_price(sqrt_price_x64).unwrap();
@@ -909,12 +769,7 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_pool_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_pool_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -928,13 +783,8 @@ fn main() -> Result<()> {
             let emissions_per_second_x64 = (emissions * fixed_point_64::Q64 as f64) as u128;
             let program = anchor_client.program(pool_config.raydium_v3_program)?;
             println!("{}", pool_config.pool_id_account.unwrap());
-            let pool_account: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
-            let operator_account_key = Pubkey::find_program_address(
-                &[raydium_amm_v3::states::OPERATION_SEED.as_bytes()],
-                &program.id(),
-            )
-            .0;
+            let pool_account: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
+            let operator_account_key = Pubkey::find_program_address(&[raydium_amm_v3::states::OPERATION_SEED.as_bytes()], &program.id()).0;
 
             let reward_token_vault = Pubkey::find_program_address(
                 &[
@@ -962,12 +812,7 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer, &admin];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -982,13 +827,8 @@ fn main() -> Result<()> {
 
             let program = anchor_client.program(pool_config.raydium_v3_program)?;
             println!("{}", pool_config.pool_id_account.unwrap());
-            let pool_account: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
-            let operator_account_key = Pubkey::find_program_address(
-                &[raydium_amm_v3::states::OPERATION_SEED.as_bytes()],
-                &program.id(),
-            )
-            .0;
+            let pool_account: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
+            let operator_account_key = Pubkey::find_program_address(&[raydium_amm_v3::states::OPERATION_SEED.as_bytes()], &program.id()).0;
 
             let reward_token_vault = Pubkey::find_program_address(
                 &[
@@ -1015,12 +855,7 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer, &admin];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &create_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&create_instr, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -1030,14 +865,9 @@ fn main() -> Result<()> {
             encode,
             authority,
         } => {
-            let transfer_reward_owner_instrs =
-                transfer_reward_owner(&pool_config.clone(), pool_id, new_owner, encode, authority)
-                    .unwrap();
+            let transfer_reward_owner_instrs = transfer_reward_owner(&pool_config.clone(), pool_id, new_owner, encode, authority).unwrap();
             if encode {
-                println!(
-                    "instruction.data:{:?}",
-                    transfer_reward_owner_instrs[0].data
-                );
+                println!("instruction.data:{:?}", transfer_reward_owner_instrs[0].data);
                 let message = Message::new(&transfer_reward_owner_instrs, None);
                 let serialize_data = serialize(&message).unwrap();
                 let raw_data = bs58::encode(serialize_data).into_string();
@@ -1046,12 +876,7 @@ fn main() -> Result<()> {
                 // send
                 let signers = vec![&payer, &admin];
                 let recent_hash = rpc_client.get_latest_blockhash()?;
-                let txn = Transaction::new_signed_with_payer(
-                    &transfer_reward_owner_instrs,
-                    Some(&payer.pubkey()),
-                    &signers,
-                    recent_hash,
-                );
+                let txn = Transaction::new_signed_with_payer(&transfer_reward_owner_instrs, Some(&payer.pubkey()), &signers, recent_hash);
                 let signature = send_txn(&rpc_client, &txn, true)?;
                 println!("{}", signature);
             }
@@ -1064,64 +889,26 @@ fn main() -> Result<()> {
             with_metadata,
         } => {
             // load pool to get observation
-            let pool: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
+            let pool: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
 
-            let tick_lower_price_x64 = price_to_sqrt_price_x64(
-                tick_lower_price,
-                pool.mint_decimals_0,
-                pool.mint_decimals_1,
-            );
-            let tick_upper_price_x64 = price_to_sqrt_price_x64(
-                tick_upper_price,
-                pool.mint_decimals_0,
-                pool.mint_decimals_1,
-            );
-            let tick_lower_index = tick_with_spacing(
-                tick_math::get_tick_at_sqrt_price(tick_lower_price_x64)?,
-                pool.tick_spacing.into(),
-            );
-            let tick_upper_index = tick_with_spacing(
-                tick_math::get_tick_at_sqrt_price(tick_upper_price_x64)?,
-                pool.tick_spacing.into(),
-            );
-            println!(
-                "tick_lower_index:{}, tick_upper_index:{}",
-                tick_lower_index, tick_upper_index
-            );
+            let tick_lower_price_x64 = price_to_sqrt_price_x64(tick_lower_price, pool.mint_decimals_0, pool.mint_decimals_1);
+            let tick_upper_price_x64 = price_to_sqrt_price_x64(tick_upper_price, pool.mint_decimals_0, pool.mint_decimals_1);
+            let tick_lower_index = tick_with_spacing(tick_math::get_tick_at_sqrt_price(tick_lower_price_x64)?, pool.tick_spacing.into());
+            let tick_upper_index = tick_with_spacing(tick_math::get_tick_at_sqrt_price(tick_upper_price_x64)?, pool.tick_spacing.into());
+            println!("tick_lower_index:{}, tick_upper_index:{}", tick_lower_index, tick_upper_index);
             let tick_lower_price_x64 = tick_math::get_sqrt_price_at_tick(tick_lower_index)?;
             let tick_upper_price_x64 = tick_math::get_sqrt_price_at_tick(tick_upper_index)?;
             let liquidity = if is_base_0 {
-                liquidity_math::get_liquidity_from_single_amount_0(
-                    pool.sqrt_price_x64,
-                    tick_lower_price_x64,
-                    tick_upper_price_x64,
-                    input_amount,
-                )
+                liquidity_math::get_liquidity_from_single_amount_0(pool.sqrt_price_x64, tick_lower_price_x64, tick_upper_price_x64, input_amount)
             } else {
-                liquidity_math::get_liquidity_from_single_amount_1(
-                    pool.sqrt_price_x64,
-                    tick_lower_price_x64,
-                    tick_upper_price_x64,
-                    input_amount,
-                )
+                liquidity_math::get_liquidity_from_single_amount_1(pool.sqrt_price_x64, tick_lower_price_x64, tick_upper_price_x64, input_amount)
             };
-            let (amount_0, amount_1) = liquidity_math::get_delta_amounts_signed(
-                pool.tick_current,
-                pool.sqrt_price_x64,
-                tick_lower_index,
-                tick_upper_index,
-                liquidity as i128,
-            )?;
-            println!(
-                "amount_0:{}, amount_1:{}, liquidity:{}",
-                amount_0, amount_1, liquidity
-            );
+            let (amount_0, amount_1) =
+                liquidity_math::get_delta_amounts_signed(pool.tick_current, pool.sqrt_price_x64, tick_lower_index, tick_upper_index, liquidity as i128)?;
+            println!("amount_0:{}, amount_1:{}, liquidity:{}", amount_0, amount_1, liquidity);
             // calc with slippage
-            let amount_0_with_slippage =
-                amount_with_slippage(amount_0 as u64, pool_config.slippage, true);
-            let amount_1_with_slippage =
-                amount_with_slippage(amount_1 as u64, pool_config.slippage, true);
+            let amount_0_with_slippage = amount_with_slippage(amount_0 as u64, pool_config.slippage, true);
+            let amount_1_with_slippage = amount_with_slippage(amount_1 as u64, pool_config.slippage, true);
             // calc with transfer_fee
             let transfer_fee = get_pool_mints_inverse_fee(
                 &rpc_client,
@@ -1130,46 +917,22 @@ fn main() -> Result<()> {
                 amount_0_with_slippage,
                 amount_1_with_slippage,
             );
-            println!(
-                "transfer_fee_0:{}, transfer_fee_1:{}",
-                transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
-            );
-            let amount_0_max = (amount_0_with_slippage as u64)
-                .checked_add(transfer_fee.0.transfer_fee)
-                .unwrap();
-            let amount_1_max = (amount_1_with_slippage as u64)
-                .checked_add(transfer_fee.1.transfer_fee)
-                .unwrap();
+            println!("transfer_fee_0:{}, transfer_fee_1:{}", transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee);
+            let amount_0_max = (amount_0_with_slippage as u64).checked_add(transfer_fee.0.transfer_fee).unwrap();
+            let amount_1_max = (amount_1_with_slippage as u64).checked_add(transfer_fee.1.transfer_fee).unwrap();
 
-            let tick_array_lower_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick_lower_index,
-                    pool.tick_spacing.into(),
-                );
-            let tick_array_upper_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick_upper_index,
-                    pool.tick_spacing.into(),
-                );
+            let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_index, pool.tick_spacing.into());
+            let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_index, pool.tick_spacing.into());
             // load position
-            let position_nft_infos = get_all_nft_and_position_by_owner(
-                &rpc_client,
-                &payer.pubkey(),
-                &pool_config.raydium_v3_program,
-            );
-            let positions: Vec<Pubkey> = position_nft_infos
-                .iter()
-                .map(|item| item.position)
-                .collect();
+            let position_nft_infos = get_all_nft_and_position_by_owner(&rpc_client, &payer.pubkey(), &pool_config.raydium_v3_program);
+            let positions: Vec<Pubkey> = position_nft_infos.iter().map(|item| item.position).collect();
             let rsps = rpc_client.get_multiple_accounts(&positions)?;
             let mut user_positions = Vec::new();
             for rsp in rsps {
                 match rsp {
                     None => continue,
                     Some(rsp) => {
-                        let position = deserialize_anchor_account::<
-                            raydium_amm_v3::states::PersonalPositionState,
-                        >(&rsp)?;
+                        let position = deserialize_anchor_account::<raydium_amm_v3::states::PersonalPositionState>(&rsp)?;
                         user_positions.push(position);
                     }
                 }
@@ -1188,14 +951,10 @@ fn main() -> Result<()> {
                 // new nft mint
                 let nft_mint = Keypair::new();
                 let mut remaining_accounts = Vec::new();
-                remaining_accounts.push(AccountMeta::new(
-                    pool_config.tickarray_bitmap_extension.unwrap(),
-                    false,
-                ));
+                remaining_accounts.push(AccountMeta::new(pool_config.tickarray_bitmap_extension.unwrap(), false));
 
                 let mut instructions = Vec::new();
-                let request_inits_instr =
-                    ComputeBudgetInstruction::set_compute_unit_limit(1400_000u32);
+                let request_inits_instr = ComputeBudgetInstruction::set_compute_unit_limit(1400_000u32);
                 instructions.push(request_inits_instr);
                 let open_position_instr = open_position_with_token22_nft_instr(
                     &pool_config.clone(),
@@ -1230,12 +989,7 @@ fn main() -> Result<()> {
                 // send
                 let signers = vec![&payer, &nft_mint];
                 let recent_hash = rpc_client.get_latest_blockhash()?;
-                let txn = Transaction::new_signed_with_payer(
-                    &instructions,
-                    Some(&payer.pubkey()),
-                    &signers,
-                    recent_hash,
-                );
+                let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
                 let signature = send_txn(&rpc_client, &txn, true)?;
                 println!("{}", signature);
             } else {
@@ -1250,88 +1004,41 @@ fn main() -> Result<()> {
             imput_amount,
         } => {
             // load pool to get observation
-            let pool: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
+            let pool: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
 
             // load position
-            let position_nft_infos = get_all_nft_and_position_by_owner(
-                &rpc_client,
-                &payer.pubkey(),
-                &pool_config.raydium_v3_program,
-            );
-            let positions: Vec<Pubkey> = position_nft_infos
-                .iter()
-                .map(|item| item.position)
-                .collect();
+            let position_nft_infos = get_all_nft_and_position_by_owner(&rpc_client, &payer.pubkey(), &pool_config.raydium_v3_program);
+            let positions: Vec<Pubkey> = position_nft_infos.iter().map(|item| item.position).collect();
             let rsps = rpc_client.get_multiple_accounts(&positions)?;
             let mut user_positions = Vec::new();
             for rsp in rsps {
                 match rsp {
                     None => continue,
                     Some(rsp) => {
-                        let position = deserialize_anchor_account::<
-                            raydium_amm_v3::states::PersonalPositionState,
-                        >(&rsp)?;
+                        let position = deserialize_anchor_account::<raydium_amm_v3::states::PersonalPositionState>(&rsp)?;
                         user_positions.push(position);
                     }
                 }
             }
 
-            let tick_lower_price_x64 = price_to_sqrt_price_x64(
-                tick_lower_price,
-                pool.mint_decimals_0,
-                pool.mint_decimals_1,
-            );
-            let tick_upper_price_x64 = price_to_sqrt_price_x64(
-                tick_upper_price,
-                pool.mint_decimals_0,
-                pool.mint_decimals_1,
-            );
-            let tick_lower_index = tick_with_spacing(
-                tick_math::get_tick_at_sqrt_price(tick_lower_price_x64)?,
-                pool.tick_spacing.into(),
-            );
-            let tick_upper_index = tick_with_spacing(
-                tick_math::get_tick_at_sqrt_price(tick_upper_price_x64)?,
-                pool.tick_spacing.into(),
-            );
-            println!(
-                "tick_lower_index:{}, tick_upper_index:{}",
-                tick_lower_index, tick_upper_index
-            );
+            let tick_lower_price_x64 = price_to_sqrt_price_x64(tick_lower_price, pool.mint_decimals_0, pool.mint_decimals_1);
+            let tick_upper_price_x64 = price_to_sqrt_price_x64(tick_upper_price, pool.mint_decimals_0, pool.mint_decimals_1);
+            let tick_lower_index = tick_with_spacing(tick_math::get_tick_at_sqrt_price(tick_lower_price_x64)?, pool.tick_spacing.into());
+            let tick_upper_index = tick_with_spacing(tick_math::get_tick_at_sqrt_price(tick_upper_price_x64)?, pool.tick_spacing.into());
+            println!("tick_lower_index:{}, tick_upper_index:{}", tick_lower_index, tick_upper_index);
             let tick_lower_price_x64 = tick_math::get_sqrt_price_at_tick(tick_lower_index)?;
             let tick_upper_price_x64 = tick_math::get_sqrt_price_at_tick(tick_upper_index)?;
             let liquidity = if is_base_0 {
-                liquidity_math::get_liquidity_from_single_amount_0(
-                    pool.sqrt_price_x64,
-                    tick_lower_price_x64,
-                    tick_upper_price_x64,
-                    imput_amount,
-                )
+                liquidity_math::get_liquidity_from_single_amount_0(pool.sqrt_price_x64, tick_lower_price_x64, tick_upper_price_x64, imput_amount)
             } else {
-                liquidity_math::get_liquidity_from_single_amount_1(
-                    pool.sqrt_price_x64,
-                    tick_lower_price_x64,
-                    tick_upper_price_x64,
-                    imput_amount,
-                )
+                liquidity_math::get_liquidity_from_single_amount_1(pool.sqrt_price_x64, tick_lower_price_x64, tick_upper_price_x64, imput_amount)
             };
-            let (amount_0, amount_1) = liquidity_math::get_delta_amounts_signed(
-                pool.tick_current,
-                pool.sqrt_price_x64,
-                tick_lower_index,
-                tick_upper_index,
-                liquidity as i128,
-            )?;
-            println!(
-                "amount_0:{}, amount_1:{}, liquidity:{}",
-                amount_0, amount_1, liquidity
-            );
+            let (amount_0, amount_1) =
+                liquidity_math::get_delta_amounts_signed(pool.tick_current, pool.sqrt_price_x64, tick_lower_index, tick_upper_index, liquidity as i128)?;
+            println!("amount_0:{}, amount_1:{}, liquidity:{}", amount_0, amount_1, liquidity);
             // calc with slippage
-            let amount_0_with_slippage =
-                amount_with_slippage(amount_0 as u64, pool_config.slippage, true);
-            let amount_1_with_slippage =
-                amount_with_slippage(amount_1 as u64, pool_config.slippage, true);
+            let amount_0_with_slippage = amount_with_slippage(amount_0 as u64, pool_config.slippage, true);
+            let amount_1_with_slippage = amount_with_slippage(amount_1 as u64, pool_config.slippage, true);
             // calc with transfer_fee
             let transfer_fee = get_pool_mints_inverse_fee(
                 &rpc_client,
@@ -1340,27 +1047,12 @@ fn main() -> Result<()> {
                 amount_0_with_slippage,
                 amount_1_with_slippage,
             );
-            println!(
-                "transfer_fee_0:{}, transfer_fee_1:{}",
-                transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
-            );
-            let amount_0_max = (amount_0_with_slippage as u64)
-                .checked_add(transfer_fee.0.transfer_fee)
-                .unwrap();
-            let amount_1_max = (amount_1_with_slippage as u64)
-                .checked_add(transfer_fee.1.transfer_fee)
-                .unwrap();
+            println!("transfer_fee_0:{}, transfer_fee_1:{}", transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee);
+            let amount_0_max = (amount_0_with_slippage as u64).checked_add(transfer_fee.0.transfer_fee).unwrap();
+            let amount_1_max = (amount_1_with_slippage as u64).checked_add(transfer_fee.1.transfer_fee).unwrap();
 
-            let tick_array_lower_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick_lower_index,
-                    pool.tick_spacing.into(),
-                );
-            let tick_array_upper_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick_upper_index,
-                    pool.tick_spacing.into(),
-                );
+            let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_index, pool.tick_spacing.into());
+            let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_index, pool.tick_spacing.into());
             let mut find_position = raydium_amm_v3::states::PersonalPositionState::default();
             for position in user_positions {
                 if position.pool_id == pool_config.pool_id_account.unwrap()
@@ -1370,19 +1062,11 @@ fn main() -> Result<()> {
                     find_position = position.clone();
                 }
             }
-            if find_position.nft_mint != Pubkey::default()
-                && find_position.pool_id == pool_config.pool_id_account.unwrap()
-            {
-                let user_nft_token_info = position_nft_infos
-                    .iter()
-                    .find(|&nft_info| nft_info.mint == find_position.nft_mint)
-                    .unwrap();
+            if find_position.nft_mint != Pubkey::default() && find_position.pool_id == pool_config.pool_id_account.unwrap() {
+                let user_nft_token_info = position_nft_infos.iter().find(|&nft_info| nft_info.mint == find_position.nft_mint).unwrap();
                 // personal position exist
                 let mut remaining_accounts = Vec::new();
-                remaining_accounts.push(AccountMeta::new_readonly(
-                    pool_config.tickarray_bitmap_extension.unwrap(),
-                    false,
-                ));
+                remaining_accounts.push(AccountMeta::new_readonly(pool_config.tickarray_bitmap_extension.unwrap(), false));
 
                 let increase_instr = increase_liquidity_instr(
                     &pool_config.clone(),
@@ -1415,12 +1099,7 @@ fn main() -> Result<()> {
                 // send
                 let signers = vec![&payer];
                 let recent_hash = rpc_client.get_latest_blockhash()?;
-                let txn = Transaction::new_signed_with_payer(
-                    &increase_instr,
-                    Some(&payer.pubkey()),
-                    &signers,
-                    recent_hash,
-                );
+                let txn = Transaction::new_signed_with_payer(&increase_instr, Some(&payer.pubkey()), &signers, recent_hash);
                 let signature = send_txn(&rpc_client, &txn, true)?;
                 println!("{}", signature);
             } else {
@@ -1435,38 +1114,20 @@ fn main() -> Result<()> {
             simulate,
         } => {
             // load pool to get observation
-            let pool: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
+            let pool: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
 
-            let tick_array_lower_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick_lower_index,
-                    pool.tick_spacing.into(),
-                );
-            let tick_array_upper_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick_upper_index,
-                    pool.tick_spacing.into(),
-                );
+            let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_index, pool.tick_spacing.into());
+            let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_index, pool.tick_spacing.into());
             // load position
-            let position_nft_infos = get_all_nft_and_position_by_owner(
-                &rpc_client,
-                &payer.pubkey(),
-                &pool_config.raydium_v3_program,
-            );
-            let positions: Vec<Pubkey> = position_nft_infos
-                .iter()
-                .map(|item| item.position)
-                .collect();
+            let position_nft_infos = get_all_nft_and_position_by_owner(&rpc_client, &payer.pubkey(), &pool_config.raydium_v3_program);
+            let positions: Vec<Pubkey> = position_nft_infos.iter().map(|item| item.position).collect();
             let rsps = rpc_client.get_multiple_accounts(&positions)?;
             let mut user_positions = Vec::new();
             for rsp in rsps {
                 match rsp {
                     None => continue,
                     Some(rsp) => {
-                        let position = deserialize_anchor_account::<
-                            raydium_amm_v3::states::PersonalPositionState,
-                        >(&rsp)?;
+                        let position = deserialize_anchor_account::<raydium_amm_v3::states::PersonalPositionState>(&rsp)?;
                         user_positions.push(position);
                     }
                 }
@@ -1481,21 +1142,13 @@ fn main() -> Result<()> {
                     println!("liquidity:{:?}", find_position);
                 }
             }
-            if find_position.nft_mint != Pubkey::default()
-                && find_position.pool_id == pool_config.pool_id_account.unwrap()
-            {
-                let user_nft_token_info = position_nft_infos
-                    .iter()
-                    .find(|&nft_info| nft_info.mint == find_position.nft_mint)
-                    .unwrap();
+            if find_position.nft_mint != Pubkey::default() && find_position.pool_id == pool_config.pool_id_account.unwrap() {
+                let user_nft_token_info = position_nft_infos.iter().find(|&nft_info| nft_info.mint == find_position.nft_mint).unwrap();
                 let mut reward_vault_with_user_vault: Vec<Pubkey> = Vec::new();
                 for item in pool.reward_infos.into_iter() {
                     if item.token_mint != Pubkey::default() {
                         reward_vault_with_user_vault.push(item.token_vault);
-                        reward_vault_with_user_vault.push(get_associated_token_address(
-                            &payer.pubkey(),
-                            &item.token_mint,
-                        ));
+                        reward_vault_with_user_vault.push(get_associated_token_address(&payer.pubkey(), &item.token_mint));
                         reward_vault_with_user_vault.push(item.token_mint);
                     }
                 }
@@ -1504,17 +1157,10 @@ fn main() -> Result<()> {
                 } else {
                     find_position.liquidity
                 };
-                let (amount_0, amount_1) = liquidity_math::get_delta_amounts_signed(
-                    pool.tick_current,
-                    pool.sqrt_price_x64,
-                    tick_lower_index,
-                    tick_upper_index,
-                    -(liquidity as i128),
-                )?;
-                let amount_0_with_slippage =
-                    amount_with_slippage(amount_0, pool_config.slippage, false);
-                let amount_1_with_slippage =
-                    amount_with_slippage(amount_1, pool_config.slippage, false);
+                let (amount_0, amount_1) =
+                    liquidity_math::get_delta_amounts_signed(pool.tick_current, pool.sqrt_price_x64, tick_lower_index, tick_upper_index, -(liquidity as i128))?;
+                let amount_0_with_slippage = amount_with_slippage(amount_0, pool_config.slippage, false);
+                let amount_1_with_slippage = amount_with_slippage(amount_1, pool_config.slippage, false);
                 let transfer_fee = get_pool_mints_transfer_fee(
                     &rpc_client,
                     pool.token_mint_0,
@@ -1522,23 +1168,13 @@ fn main() -> Result<()> {
                     amount_0_with_slippage,
                     amount_1_with_slippage,
                 );
-                let amount_0_min = amount_0_with_slippage
-                    .checked_sub(transfer_fee.0.transfer_fee)
-                    .unwrap();
-                let amount_1_min = amount_1_with_slippage
-                    .checked_sub(transfer_fee.1.transfer_fee)
-                    .unwrap();
+                let amount_0_min = amount_0_with_slippage.checked_sub(transfer_fee.0.transfer_fee).unwrap();
+                let amount_1_min = amount_1_with_slippage.checked_sub(transfer_fee.1.transfer_fee).unwrap();
 
                 let mut remaining_accounts = Vec::new();
-                remaining_accounts.push(AccountMeta::new(
-                    pool_config.tickarray_bitmap_extension.unwrap(),
-                    false,
-                ));
+                remaining_accounts.push(AccountMeta::new(pool_config.tickarray_bitmap_extension.unwrap(), false));
 
-                let mut accounts = reward_vault_with_user_vault
-                    .into_iter()
-                    .map(|item| AccountMeta::new(item, false))
-                    .collect();
+                let mut accounts = reward_vault_with_user_vault.into_iter().map(|item| AccountMeta::new(item, false)).collect();
                 remaining_accounts.append(&mut accounts);
                 // personal position exist
                 let mut decrease_instr = decrease_liquidity_instr(
@@ -1581,19 +1217,9 @@ fn main() -> Result<()> {
                 // send
                 let signers = vec![&payer];
                 let recent_hash = rpc_client.get_latest_blockhash()?;
-                let txn = Transaction::new_signed_with_payer(
-                    &decrease_instr,
-                    Some(&payer.pubkey()),
-                    &signers,
-                    recent_hash,
-                );
+                let txn = Transaction::new_signed_with_payer(&decrease_instr, Some(&payer.pubkey()), &signers, recent_hash);
                 if simulate {
-                    let ret = simulate_transaction(
-                        &rpc_client,
-                        &txn,
-                        true,
-                        CommitmentConfig::confirmed(),
-                    )?;
+                    let ret = simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
                     println!("{:#?}", ret);
                 } else {
                     let signature = send_txn(&rpc_client, &txn, true)?;
@@ -1621,69 +1247,41 @@ fn main() -> Result<()> {
                 pool_config.tickarray_bitmap_extension.unwrap(),
             ];
             let rsps = rpc_client.get_multiple_accounts(&load_accounts)?;
-            let [user_input_account, user_output_account, amm_config_account, pool_account, tickarray_bitmap_extension_account] =
-                array_ref![rsps, 0, 5];
-            let user_input_state =
-                StateWithExtensions::<Account>::unpack(&user_input_account.as_ref().unwrap().data)
-                    .unwrap();
-            let user_output_state =
-                StateWithExtensions::<Account>::unpack(&user_output_account.as_ref().unwrap().data)
-                    .unwrap();
-            let amm_config_state = deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(
-                amm_config_account.as_ref().unwrap(),
-            )?;
-            let pool_state = deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(
-                pool_account.as_ref().unwrap(),
-            )?;
+            let [user_input_account, user_output_account, amm_config_account, pool_account, tickarray_bitmap_extension_account] = array_ref![rsps, 0, 5];
+            let user_input_state = StateWithExtensions::<Account>::unpack(&user_input_account.as_ref().unwrap().data).unwrap();
+            let user_output_state = StateWithExtensions::<Account>::unpack(&user_output_account.as_ref().unwrap().data).unwrap();
+            let amm_config_state = deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(amm_config_account.as_ref().unwrap())?;
+            let pool_state = deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(pool_account.as_ref().unwrap())?;
             let tickarray_bitmap_extension =
-                deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(
-                    tickarray_bitmap_extension_account.as_ref().unwrap(),
-                )?;
-            let zero_for_one = user_input_state.base.mint == pool_state.token_mint_0
-                && user_output_state.base.mint == pool_state.token_mint_1;
+                deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(tickarray_bitmap_extension_account.as_ref().unwrap())?;
+            let zero_for_one = user_input_state.base.mint == pool_state.token_mint_0 && user_output_state.base.mint == pool_state.token_mint_1;
             // load tick_arrays
-            let mut tick_arrays = load_cur_and_next_five_tick_array(
-                &rpc_client,
-                &pool_config,
-                &pool_state,
-                &tickarray_bitmap_extension,
-                zero_for_one,
-            );
+            let mut tick_arrays = load_cur_and_next_five_tick_array(&rpc_client, &pool_config, &pool_state, &tickarray_bitmap_extension, zero_for_one);
 
             let mut sqrt_price_limit_x64 = None;
             if limit_price.is_some() {
-                let sqrt_price_x64 = price_to_sqrt_price_x64(
-                    limit_price.unwrap(),
-                    pool_state.mint_decimals_0,
-                    pool_state.mint_decimals_1,
-                );
+                let sqrt_price_x64 = price_to_sqrt_price_x64(limit_price.unwrap(), pool_state.mint_decimals_0, pool_state.mint_decimals_1);
                 sqrt_price_limit_x64 = Some(sqrt_price_x64);
             }
 
-            let (mut other_amount_threshold, mut tick_array_indexs) =
-                utils::get_out_put_amount_and_remaining_accounts(
-                    amount,
-                    sqrt_price_limit_x64,
-                    zero_for_one,
-                    base_in,
-                    &amm_config_state,
-                    &pool_state,
-                    &tickarray_bitmap_extension,
-                    &mut tick_arrays,
-                )
-                .unwrap();
-            println!(
-                "amount:{}, other_amount_threshold:{}",
-                amount, other_amount_threshold
-            );
+            let (mut other_amount_threshold, mut tick_array_indexs) = utils::get_out_put_amount_and_remaining_accounts(
+                amount,
+                sqrt_price_limit_x64,
+                zero_for_one,
+                base_in,
+                &amm_config_state,
+                &pool_state,
+                &tickarray_bitmap_extension,
+                &mut tick_arrays,
+            )
+            .unwrap();
+            println!("amount:{}, other_amount_threshold:{}", amount, other_amount_threshold);
             if base_in {
                 // min out
-                other_amount_threshold =
-                    amount_with_slippage(other_amount_threshold, pool_config.slippage, false);
+                other_amount_threshold = amount_with_slippage(other_amount_threshold, pool_config.slippage, false);
             } else {
                 // max in
-                other_amount_threshold =
-                    amount_with_slippage(other_amount_threshold, pool_config.slippage, true);
+                other_amount_threshold = amount_with_slippage(other_amount_threshold, pool_config.slippage, true);
             }
 
             let current_or_next_tick_array_key = Pubkey::find_program_address(
@@ -1696,10 +1294,7 @@ fn main() -> Result<()> {
             )
             .0;
             let mut remaining_accounts = Vec::new();
-            remaining_accounts.push(AccountMeta::new_readonly(
-                pool_config.tickarray_bitmap_extension.unwrap(),
-                false,
-            ));
+            remaining_accounts.push(AccountMeta::new_readonly(pool_config.tickarray_bitmap_extension.unwrap(), false));
             let mut accounts = tick_array_indexs
                 .into_iter()
                 .map(|index| {
@@ -1725,16 +1320,8 @@ fn main() -> Result<()> {
                 &pool_config.clone(),
                 pool_state.amm_config,
                 pool_config.pool_id_account.unwrap(),
-                if zero_for_one {
-                    pool_state.token_vault_0
-                } else {
-                    pool_state.token_vault_1
-                },
-                if zero_for_one {
-                    pool_state.token_vault_1
-                } else {
-                    pool_state.token_vault_0
-                },
+                if zero_for_one { pool_state.token_vault_0 } else { pool_state.token_vault_1 },
+                if zero_for_one { pool_state.token_vault_1 } else { pool_state.token_vault_0 },
                 pool_state.observation_key,
                 input_token,
                 output_token,
@@ -1750,15 +1337,9 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             if simulate {
-                let ret =
-                    simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
+                let ret = simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
                 println!("{:#?}", ret);
             } else {
                 let signature = send_txn(&rpc_client, &txn, true)?;
@@ -1791,24 +1372,16 @@ fn main() -> Result<()> {
             let user_input_token_data = user_input_account.clone().unwrap().data;
             let user_input_state = StateWithExtensions::<Account>::unpack(&user_input_token_data)?;
             let user_output_token_data = user_output_account.clone().unwrap().data;
-            let user_output_state =
-                StateWithExtensions::<Account>::unpack(&user_output_token_data)?;
+            let user_output_state = StateWithExtensions::<Account>::unpack(&user_output_token_data)?;
             let mint0_data = mint0_account.clone().unwrap().data;
             let mint0_state = StateWithExtensions::<Mint>::unpack(&mint0_data)?;
             let mint1_data = mint1_account.clone().unwrap().data;
             let mint1_state = StateWithExtensions::<Mint>::unpack(&mint1_data)?;
-            let amm_config_state = deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(
-                amm_config_account.as_ref().unwrap(),
-            )?;
-            let pool_state = deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(
-                pool_account.as_ref().unwrap(),
-            )?;
+            let amm_config_state = deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(amm_config_account.as_ref().unwrap())?;
+            let pool_state = deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(pool_account.as_ref().unwrap())?;
             let tickarray_bitmap_extension =
-                deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(
-                    tickarray_bitmap_extension_account.as_ref().unwrap(),
-                )?;
-            let zero_for_one = user_input_state.base.mint == pool_state.token_mint_0
-                && user_output_state.base.mint == pool_state.token_mint_1;
+                deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(tickarray_bitmap_extension_account.as_ref().unwrap())?;
+            let zero_for_one = user_input_state.base.mint == pool_state.token_mint_0 && user_output_state.base.mint == pool_state.token_mint_1;
 
             let transfer_fee = if base_in {
                 if zero_for_one {
@@ -1821,48 +1394,32 @@ fn main() -> Result<()> {
             };
             let amount_specified = amount.checked_sub(transfer_fee).unwrap();
             // load tick_arrays
-            let mut tick_arrays = load_cur_and_next_five_tick_array(
-                &rpc_client,
-                &pool_config,
-                &pool_state,
-                &tickarray_bitmap_extension,
-                zero_for_one,
-            );
+            let mut tick_arrays = load_cur_and_next_five_tick_array(&rpc_client, &pool_config, &pool_state, &tickarray_bitmap_extension, zero_for_one);
 
             let mut sqrt_price_limit_x64 = None;
             if limit_price.is_some() {
-                let sqrt_price_x64 = price_to_sqrt_price_x64(
-                    limit_price.unwrap(),
-                    pool_state.mint_decimals_0,
-                    pool_state.mint_decimals_1,
-                );
+                let sqrt_price_x64 = price_to_sqrt_price_x64(limit_price.unwrap(), pool_state.mint_decimals_0, pool_state.mint_decimals_1);
                 sqrt_price_limit_x64 = Some(sqrt_price_x64);
             }
 
-            let (mut other_amount_threshold, tick_array_indexs) =
-                utils::get_out_put_amount_and_remaining_accounts(
-                    amount_specified,
-                    sqrt_price_limit_x64,
-                    zero_for_one,
-                    base_in,
-                    &amm_config_state,
-                    &pool_state,
-                    &tickarray_bitmap_extension,
-                    &mut tick_arrays,
-                )
-                .unwrap();
-            println!(
-                "amount:{}, other_amount_threshold:{}",
-                amount, other_amount_threshold
-            );
+            let (mut other_amount_threshold, tick_array_indexs) = utils::get_out_put_amount_and_remaining_accounts(
+                amount_specified,
+                sqrt_price_limit_x64,
+                zero_for_one,
+                base_in,
+                &amm_config_state,
+                &pool_state,
+                &tickarray_bitmap_extension,
+                &mut tick_arrays,
+            )
+            .unwrap();
+            println!("amount:{}, other_amount_threshold:{}", amount, other_amount_threshold);
             if base_in {
                 // calc mint out amount with slippage
-                other_amount_threshold =
-                    amount_with_slippage(other_amount_threshold, pool_config.slippage, false);
+                other_amount_threshold = amount_with_slippage(other_amount_threshold, pool_config.slippage, false);
             } else {
                 // calc max in with slippage
-                other_amount_threshold =
-                    amount_with_slippage(other_amount_threshold, pool_config.slippage, true);
+                other_amount_threshold = amount_with_slippage(other_amount_threshold, pool_config.slippage, true);
                 // calc max in with transfer_fee
                 let transfer_fee = if zero_for_one {
                     get_transfer_inverse_fee(&mint0_state, epoch, other_amount_threshold)
@@ -1873,10 +1430,7 @@ fn main() -> Result<()> {
             }
 
             let mut remaining_accounts = Vec::new();
-            remaining_accounts.push(AccountMeta::new_readonly(
-                pool_config.tickarray_bitmap_extension.unwrap(),
-                false,
-            ));
+            remaining_accounts.push(AccountMeta::new_readonly(pool_config.tickarray_bitmap_extension.unwrap(), false));
             let mut accounts = tick_array_indexs
                 .into_iter()
                 .map(|index| {
@@ -1902,29 +1456,13 @@ fn main() -> Result<()> {
                 &pool_config.clone(),
                 pool_state.amm_config,
                 pool_config.pool_id_account.unwrap(),
-                if zero_for_one {
-                    pool_state.token_vault_0
-                } else {
-                    pool_state.token_vault_1
-                },
-                if zero_for_one {
-                    pool_state.token_vault_1
-                } else {
-                    pool_state.token_vault_0
-                },
+                if zero_for_one { pool_state.token_vault_0 } else { pool_state.token_vault_1 },
+                if zero_for_one { pool_state.token_vault_1 } else { pool_state.token_vault_0 },
                 pool_state.observation_key,
                 input_token,
                 output_token,
-                if zero_for_one {
-                    pool_state.token_mint_0
-                } else {
-                    pool_state.token_mint_1
-                },
-                if zero_for_one {
-                    pool_state.token_mint_1
-                } else {
-                    pool_state.token_mint_0
-                },
+                if zero_for_one { pool_state.token_mint_0 } else { pool_state.token_mint_1 },
+                if zero_for_one { pool_state.token_mint_1 } else { pool_state.token_mint_0 },
                 remaining_accounts,
                 amount,
                 other_amount_threshold,
@@ -1936,15 +1474,9 @@ fn main() -> Result<()> {
             // send
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             if simulate {
-                let ret =
-                    simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
+                let ret = simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
                 println!("{:#?}", ret);
             } else {
                 let signature = send_txn(&rpc_client, &txn, true)?;
@@ -1953,32 +1485,30 @@ fn main() -> Result<()> {
         }
         CommandsName::PPositionByOwner { user_wallet } => {
             // load position
-            let position_nft_infos = get_all_nft_and_position_by_owner(
-                &rpc_client,
-                &user_wallet,
-                &pool_config.raydium_v3_program,
-            );
-            let positions: Vec<Pubkey> = position_nft_infos
-                .iter()
-                .map(|item| item.position)
-                .collect();
+            let position_nft_infos = get_all_nft_and_position_by_owner(&rpc_client, &user_wallet, &pool_config.raydium_v3_program);
+            let positions: Vec<Pubkey> = position_nft_infos.iter().map(|item| item.position).collect();
             let rsps = rpc_client.get_multiple_accounts(&positions)?;
             let mut user_positions = Vec::new();
             for rsp in rsps {
                 match rsp {
                     None => continue,
                     Some(rsp) => {
-                        let position = deserialize_anchor_account::<
-                            raydium_amm_v3::states::PersonalPositionState,
-                        >(&rsp)?;
+                        let position = deserialize_anchor_account::<raydium_amm_v3::states::PersonalPositionState>(&rsp)?;
                         let (personal_position_key, __bump) = Pubkey::find_program_address(
-                            &[
-                                raydium_amm_v3::states::POSITION_SEED.as_bytes(),
-                                position.nft_mint.to_bytes().as_ref(),
-                            ],
+                            &[raydium_amm_v3::states::POSITION_SEED.as_bytes(), position.nft_mint.to_bytes().as_ref()],
                             &program.id(),
                         );
-                        println!("id:{}, lower:{}, upper:{}, liquidity:{}, fees_owed_0:{}, fees_owed_1:{}, fee_growth_inside_0:{}, fee_growth_inside_1:{}", personal_position_key, position.tick_lower_index, position.tick_upper_index, position.liquidity, position.token_fees_owed_0, position.token_fees_owed_1, position.fee_growth_inside_0_last_x64, position.fee_growth_inside_1_last_x64);
+                        println!(
+                            "id:{}, lower:{}, upper:{}, liquidity:{}, fees_owed_0:{}, fees_owed_1:{}, fee_growth_inside_0:{}, fee_growth_inside_1:{}",
+                            personal_position_key,
+                            position.tick_lower_index,
+                            position.tick_upper_index,
+                            position.liquidity,
+                            position.token_fees_owed_0,
+                            position.token_fees_owed_1,
+                            position.fee_growth_inside_0_last_x64,
+                            position.fee_growth_inside_1_last_x64
+                        );
                         user_positions.push(position);
                     }
                 }
@@ -1993,11 +1523,7 @@ fn main() -> Result<()> {
             println!("pool_id:{}", pool_id);
             let pool: raydium_amm_v3::states::PoolState = program.account(pool_id)?;
 
-            let tick_array_start_index =
-                raydium_amm_v3::states::TickArrayState::get_array_start_index(
-                    tick,
-                    pool.tick_spacing.into(),
-                );
+            let tick_array_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick, pool.tick_spacing.into());
             let program = anchor_client.program(pool_config.raydium_v3_program)?;
             let (tick_array_key, __bump) = Pubkey::find_program_address(
                 &[
@@ -2007,11 +1533,8 @@ fn main() -> Result<()> {
                 ],
                 &program.id(),
             );
-            let mut tick_array_account: raydium_amm_v3::states::TickArrayState =
-                program.account(tick_array_key)?;
-            let tick_state = tick_array_account
-                .get_tick_state_mut(tick, pool.tick_spacing.into())
-                .unwrap();
+            let mut tick_array_account: raydium_amm_v3::states::TickArrayState = program.account(tick_array_key)?;
+            let tick_state = tick_array_account.get_tick_state_mut(tick, pool.tick_spacing.into()).unwrap();
             println!("{:?}", tick_state);
         }
         CommandsName::CompareKey { key0, key1 } => {
@@ -2037,34 +1560,24 @@ fn main() -> Result<()> {
             println!("token_extensions:{:#?}", extensions);
         }
         CommandsName::POperation => {
-            let (operation_account_key, __bump) = Pubkey::find_program_address(
-                &[raydium_amm_v3::states::OPERATION_SEED.as_bytes()],
-                &program.id(),
-            );
+            let (operation_account_key, __bump) = Pubkey::find_program_address(&[raydium_amm_v3::states::OPERATION_SEED.as_bytes()], &program.id());
             println!("{}", operation_account_key);
-            let operation_account: raydium_amm_v3::states::OperationState =
-                program.account(operation_account_key)?;
+            let operation_account: raydium_amm_v3::states::OperationState = program.account(operation_account_key)?;
             println!("{:#?}", operation_account);
         }
         CommandsName::PObservation => {
-            let pool: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
+            let pool: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
             println!("{}", pool.observation_key);
-            let observation_account: raydium_amm_v3::states::ObservationState =
-                program.account(pool.observation_key)?;
+            let observation_account: raydium_amm_v3::states::ObservationState = program.account(pool.observation_key)?;
             println!("{:#?}", observation_account);
         }
         CommandsName::PConfig { config_index } => {
             let (amm_config_key, __bump) = Pubkey::find_program_address(
-                &[
-                    raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(),
-                    &config_index.to_be_bytes(),
-                ],
+                &[raydium_amm_v3::states::AMM_CONFIG_SEED.as_bytes(), &config_index.to_be_bytes()],
                 &program.id(),
             );
             println!("{}", amm_config_key);
-            let amm_config_account: raydium_amm_v3::states::AmmConfig =
-                program.account(amm_config_key)?;
+            let amm_config_account: raydium_amm_v3::states::AmmConfig = program.account(amm_config_key)?;
             println!("{:#?}", amm_config_account);
         }
         CommandsName::PriceToTick { price } => {
@@ -2094,15 +1607,9 @@ fn main() -> Result<()> {
             tick_upper,
             liquidity,
         } => {
-            let pool_account: raydium_amm_v3::states::PoolState =
-                program.account(pool_config.pool_id_account.unwrap())?;
-            let amounts = raydium_amm_v3::libraries::get_delta_amounts_signed(
-                pool_account.tick_current,
-                pool_account.sqrt_price_x64,
-                tick_lower,
-                tick_upper,
-                liquidity,
-            )?;
+            let pool_account: raydium_amm_v3::states::PoolState = program.account(pool_config.pool_id_account.unwrap())?;
+            let amounts =
+                raydium_amm_v3::libraries::get_delta_amounts_signed(pool_account.tick_current, pool_account.sqrt_price_x64, tick_lower, tick_upper, liquidity)?;
             println!("amount_0:{}, amount_1:{}", amounts.0, amounts.1);
         }
         CommandsName::PPersonalPositionByPool { pool_id } => {
@@ -2116,13 +1623,8 @@ fn main() -> Result<()> {
                 &pool_config.raydium_v3_program,
                 RpcProgramAccountsConfig {
                     filters: Some(vec![
-                        RpcFilterType::Memcmp(Memcmp::new_base58_encoded(
-                            8 + 1 + size_of::<Pubkey>(),
-                            &pool_id.to_bytes(),
-                        )),
-                        RpcFilterType::DataSize(
-                            raydium_amm_v3::states::PersonalPositionState::LEN as u64,
-                        ),
+                        RpcFilterType::Memcmp(Memcmp::new_base58_encoded(8 + 1 + size_of::<Pubkey>(), &pool_id.to_bytes())),
+                        RpcFilterType::DataSize(raydium_amm_v3::states::PersonalPositionState::LEN as u64),
                     ]),
                     account_config: RpcAccountInfoConfig {
                         encoding: Some(UiAccountEncoding::Base64),
@@ -2137,9 +1639,7 @@ fn main() -> Result<()> {
             let mut total_fees_owed_1 = 0;
             let mut total_reward_owed = 0;
             for position in position_accounts_by_pool {
-                let personal_position = deserialize_anchor_account::<
-                    raydium_amm_v3::states::PersonalPositionState,
-                >(&position.1)?;
+                let personal_position = deserialize_anchor_account::<raydium_amm_v3::states::PersonalPositionState>(&position.1)?;
                 if personal_position.pool_id == pool_id {
                     println!(
                         "personal_position:{}, lower:{}, upper:{}, liquidity:{}, token_fees_owed_0:{}, token_fees_owed_1:{}, reward_amount_owed:{}, fee_growth_inside:{}, fee_growth_inside_1:{}, reward_inside:{}",
@@ -2175,13 +1675,8 @@ fn main() -> Result<()> {
                 &pool_config.raydium_v3_program,
                 RpcProgramAccountsConfig {
                     filters: Some(vec![
-                        RpcFilterType::Memcmp(Memcmp::new_base58_encoded(
-                            8 + 1,
-                            &pool_id.to_bytes(),
-                        )),
-                        RpcFilterType::DataSize(
-                            raydium_amm_v3::states::ProtocolPositionState::LEN as u64,
-                        ),
+                        RpcFilterType::Memcmp(Memcmp::new_base58_encoded(8 + 1, &pool_id.to_bytes())),
+                        RpcFilterType::DataSize(raydium_amm_v3::states::ProtocolPositionState::LEN as u64),
                     ]),
                     account_config: RpcAccountInfoConfig {
                         encoding: Some(UiAccountEncoding::Base64Zstd),
@@ -2193,16 +1688,11 @@ fn main() -> Result<()> {
             )?;
 
             for position in position_accounts_by_pool {
-                let protocol_position = deserialize_anchor_account::<
-                    raydium_amm_v3::states::ProtocolPositionState,
-                >(&position.1)?;
+                let protocol_position = deserialize_anchor_account::<raydium_amm_v3::states::ProtocolPositionState>(&position.1)?;
                 if protocol_position.pool_id == pool_id {
                     println!(
                         "protocol_position:{} lower_index:{}, upper_index:{}, liquidity:{}",
-                        position.0,
-                        protocol_position.tick_lower_index,
-                        protocol_position.tick_upper_index,
-                        protocol_position.liquidity,
+                        position.0, protocol_position.tick_lower_index, protocol_position.tick_upper_index, protocol_position.liquidity,
                     );
                 }
             }
@@ -2231,9 +1721,7 @@ fn main() -> Result<()> {
             )?;
 
             for tick_array in tick_arrays_by_pool {
-                let tick_array_state = deserialize_anchor_account::<
-                    raydium_amm_v3::states::TickArrayState,
-                >(&tick_array.1)?;
+                let tick_array_state = deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(&tick_array.1)?;
                 if tick_array_state.pool_id == pool_id {
                     println!(
                         "tick_array:{}, {}, {}",
@@ -2266,29 +1754,22 @@ fn main() -> Result<()> {
                 pool_config.tickarray_bitmap_extension.unwrap()
             };
             println!("bitmap_extension:{}", bitmap_extension);
-            let bitmap_extension_account: raydium_amm_v3::states::TickArrayBitmapExtension =
-                program.account(bitmap_extension)?;
+            let bitmap_extension_account: raydium_amm_v3::states::TickArrayBitmapExtension = program.account(bitmap_extension)?;
             println!("{:#?}", bitmap_extension_account);
         }
         CommandsName::PProtocol { protocol_id } => {
-            let protocol_account: raydium_amm_v3::states::ProtocolPositionState =
-                program.account(protocol_id)?;
+            let protocol_account: raydium_amm_v3::states::ProtocolPositionState = program.account(protocol_id)?;
             println!("{:#?}", protocol_account);
         }
         CommandsName::PPersonal { personal_id } => {
-            let personal_account: raydium_amm_v3::states::PersonalPositionState =
-                program.account(personal_id)?;
+            let personal_account: raydium_amm_v3::states::PersonalPositionState = program.account(personal_id)?;
             println!("{:#?}", personal_account);
         }
         CommandsName::DecodeInstruction { instr_hex_data } => {
             handle_program_instruction(&instr_hex_data, InstructionDecodeType::BaseHex)?;
         }
         CommandsName::DecodeEvent { log_event } => {
-            handle_program_log(
-                &pool_config.raydium_v3_program.to_string(),
-                &log_event,
-                false,
-            )?;
+            handle_program_log(&pool_config.raydium_v3_program.to_string(), &log_event, false)?;
         }
         CommandsName::DecodeTxLog { tx_id } => {
             let signature = Signature::from_str(&tx_id)?;
@@ -2302,19 +1783,11 @@ fn main() -> Result<()> {
             )?;
             let transaction = tx.transaction;
             // get meta
-            let meta = if transaction.meta.is_some() {
-                transaction.meta
-            } else {
-                None
-            };
+            let meta = if transaction.meta.is_some() { transaction.meta } else { None };
             // get encoded_transaction
             let encoded_transaction = transaction.transaction;
             // decode instruction data
-            parse_program_instruction(
-                &pool_config.raydium_v3_program.to_string(),
-                encoded_transaction,
-                meta.clone(),
-            )?;
+            parse_program_instruction(&pool_config.raydium_v3_program.to_string(), encoded_transaction, meta.clone())?;
             // decode logs
             parse_program_event(&pool_config.raydium_v3_program.to_string(), meta.clone())?;
         }

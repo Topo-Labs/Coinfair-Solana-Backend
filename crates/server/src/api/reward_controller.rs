@@ -66,16 +66,10 @@ pub async fn set_rewards(
         (status = 404, description = "未找到奖励信息")
     )
 )]
-pub async fn get_reward(
-    Extension(services): Extension<Services>,
-    Path(address): Path<String>,
-) -> AppResult<Json<Reward>> {
+pub async fn get_reward(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<Reward>> {
     match services.reward.get_reward(address.to_string()).await? {
         Some(reward) => Ok(Json(reward)),
-        None => Err(AppError::NotFound(format!(
-            "Reward with address {} not found.",
-            address
-        ))),
+        None => Err(AppError::NotFound(format!("Reward with address {} not found.", address))),
     }
 }
 
@@ -91,19 +85,14 @@ pub async fn get_reward(
         (status = 200, description = "成功返回当日奖励列表", body = Vec<RewardItem>)
     )
 )]
-pub async fn get_rewards_by_day(
-    Extension(services): Extension<Services>,
-    Path(day): Path<String>,
-) -> AppResult<Json<Vec<RewardItem>>> {
+pub async fn get_rewards_by_day(Extension(services): Extension<Services>, Path(day): Path<String>) -> AppResult<Json<Vec<RewardItem>>> {
     let rewards = services.reward.get_rewards_by_day(day.to_string()).await?;
 
     Ok(Json(rewards))
 }
 
 /// 获取今日奖励列表
-pub async fn get_rewards_by_today(
-    Extension(services): Extension<Services>,
-) -> AppResult<Json<Vec<RewardItem>>> {
+pub async fn get_rewards_by_today(Extension(services): Extension<Services>) -> AppResult<Json<Vec<RewardItem>>> {
     let today = Utc::now().date_naive().to_string();
 
     let rewards = services.reward.get_rewards_by_day(today).await?;
@@ -120,9 +109,7 @@ pub async fn get_rewards_by_today(
         (status = 200, description = "成功返回所有待发放奖励", body = Vec<RewardItem>)
     )
 )]
-pub async fn get_all_rewards(
-    Extension(services): Extension<Services>,
-) -> AppResult<Json<Vec<RewardItem>>> {
+pub async fn get_all_rewards(Extension(services): Extension<Services>) -> AppResult<Json<Vec<RewardItem>>> {
     let rewards = services.reward.get_all_rewards().await?;
 
     Ok(Json(rewards))
@@ -137,9 +124,7 @@ pub async fn get_all_rewards(
         (status = 200, description = "成功设置所有奖励")
     )
 )]
-pub async fn set_all_rewards(
-    Extension(services): Extension<Services>,
-) -> AppResult<Json<UpdateResult>> {
+pub async fn set_all_rewards(Extension(services): Extension<Services>) -> AppResult<Json<UpdateResult>> {
     let rewards = services.reward.set_all_rewards().await?;
 
     Ok(Json(rewards))
@@ -154,9 +139,7 @@ pub async fn set_all_rewards(
         (status = 200, description = "成功返回奖励排行榜", body = Vec<RewardItem>)
     )
 )]
-pub async fn get_rank_rewards(
-    Extension(services): Extension<Services>,
-) -> AppResult<Json<Vec<RewardItem>>> {
+pub async fn get_rank_rewards(Extension(services): Extension<Services>) -> AppResult<Json<Vec<RewardItem>>> {
     let rewards = services.reward.get_rank_rewards().await?;
 
     Ok(Json(rewards))
@@ -174,14 +157,8 @@ pub async fn get_rank_rewards(
         (status = 200, description = "成功返回奖励历史", body = Vec<RewardItemWithTime>)
     )
 )]
-pub async fn list_rewards_by_address(
-    Extension(services): Extension<Services>,
-    Path(address): Path<String>,
-) -> AppResult<Json<Vec<RewardItemWithTime>>> {
-    let rewards = services
-        .reward
-        .list_rewards_by_address(address.to_string().to_lowercase())
-        .await?;
+pub async fn list_rewards_by_address(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<Vec<RewardItemWithTime>>> {
+    let rewards = services.reward.list_rewards_by_address(address.to_string().to_lowercase()).await?;
 
     Ok(Json(rewards))
 }
@@ -217,10 +194,7 @@ impl RewardController {
             .route("/all_rewards", get(get_all_rewards)) // api 查询所有待发放的奖励
             .route("/set_all_rewards", get(set_all_rewards)) //Test
             .route("/rank_rewards", get(get_rank_rewards)) // api 查询奖励榜单
-            .route(
-                "/list_rewards_by_address/:address",
-                get(list_rewards_by_address),
-            ) // api查询某个地址的奖励历史
+            .route("/list_rewards_by_address/:address", get(list_rewards_by_address)) // api查询某个地址的奖励历史
             .route("/mock_rewards", post(mock_rewards))
     }
 }

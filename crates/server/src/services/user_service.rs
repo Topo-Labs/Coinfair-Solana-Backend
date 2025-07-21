@@ -13,12 +13,7 @@ pub type DynUserService = Arc<dyn UserServiceTrait + Send + Sync>;
 #[async_trait]
 pub trait UserServiceTrait {
     async fn get_user(&self, address: String) -> AppResult<Option<User>>;
-    async fn create_user(
-        &self,
-        address: String,
-        amount: f64,
-        price: f64,
-    ) -> AppResult<InsertOneResult>;
+    async fn create_user(&self, address: String, amount: f64, price: f64) -> AppResult<InsertOneResult>;
     async fn create_users(&self, users: Vec<User>) -> AppResult<InsertManyResult>;
 }
 
@@ -43,12 +38,7 @@ impl UserServiceTrait for UserService {
         Ok(user)
     }
 
-    async fn create_user(
-        &self,
-        address: String,
-        amount: f64,
-        price: f64,
-    ) -> AppResult<InsertOneResult> {
+    async fn create_user(&self, address: String, amount: f64, price: f64) -> AppResult<InsertOneResult> {
         let user = self.repository.create_user(&address, amount, price).await?;
 
         Ok(user)

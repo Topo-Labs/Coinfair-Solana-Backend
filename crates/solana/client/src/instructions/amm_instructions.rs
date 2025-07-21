@@ -2,16 +2,11 @@ use anchor_client::{Client, Cluster};
 use anchor_lang::prelude::AccountMeta;
 use anyhow::Result;
 use mpl_token_metadata::accounts::Metadata;
-use solana_sdk::{
-    instruction::Instruction, pubkey::Pubkey, signature::Signer, system_program, sysvar,
-};
+use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signature::Signer, system_program, sysvar};
 
 use raydium_amm_v3::accounts as raydium_accounts;
 use raydium_amm_v3::instruction as raydium_instruction;
-use raydium_amm_v3::states::{
-    AMM_CONFIG_SEED, OBSERVATION_SEED, OPERATION_SEED, POOL_SEED, POOL_VAULT_SEED, POSITION_SEED,
-    TICK_ARRAY_SEED,
-};
+use raydium_amm_v3::states::{AMM_CONFIG_SEED, OBSERVATION_SEED, OPERATION_SEED, POOL_SEED, POOL_VAULT_SEED, POSITION_SEED, TICK_ARRAY_SEED};
 use std::rc::Rc;
 
 use super::super::{read_keypair_file, ClientConfig};
@@ -29,10 +24,7 @@ pub fn create_amm_config_instr(
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
-    let (amm_config_key, __bump) = Pubkey::find_program_address(
-        &[AMM_CONFIG_SEED.as_bytes(), &config_index.to_be_bytes()],
-        &program.id(),
-    );
+    let (amm_config_key, __bump) = Pubkey::find_program_address(&[AMM_CONFIG_SEED.as_bytes(), &config_index.to_be_bytes()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::CreateAmmConfig {
@@ -82,8 +74,7 @@ pub fn create_operation_account_instr(config: &ClientConfig) -> Result<Vec<Instr
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
-    let (operation_account_key, __bump) =
-        Pubkey::find_program_address(&[OPERATION_SEED.as_bytes()], &program.id());
+    let (operation_account_key, __bump) = Pubkey::find_program_address(&[OPERATION_SEED.as_bytes()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::CreateOperationAccount {
@@ -96,18 +87,13 @@ pub fn create_operation_account_instr(config: &ClientConfig) -> Result<Vec<Instr
     Ok(instructions)
 }
 
-pub fn update_operation_account_instr(
-    config: &ClientConfig,
-    param: u8,
-    keys: Vec<Pubkey>,
-) -> Result<Vec<Instruction>> {
+pub fn update_operation_account_instr(config: &ClientConfig, param: u8, keys: Vec<Pubkey>) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.admin_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
-    let (operation_account_key, __bump) =
-        Pubkey::find_program_address(&[OPERATION_SEED.as_bytes()], &program.id());
+    let (operation_account_key, __bump) = Pubkey::find_program_address(&[OPERATION_SEED.as_bytes()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::UpdateOperationAccount {
@@ -161,13 +147,7 @@ pub fn create_pool_instr(
         ],
         &program.id(),
     );
-    let (observation_key, __bump) = Pubkey::find_program_address(
-        &[
-            OBSERVATION_SEED.as_bytes(),
-            pool_account_key.to_bytes().as_ref(),
-        ],
-        &program.id(),
-    );
+    let (observation_key, __bump) = Pubkey::find_program_address(&[OBSERVATION_SEED.as_bytes(), pool_account_key.to_bytes().as_ref()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::CreatePool {
@@ -185,10 +165,7 @@ pub fn create_pool_instr(
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
         })
-        .args(raydium_instruction::CreatePool {
-            sqrt_price_x64,
-            open_time,
-        })
+        .args(raydium_instruction::CreatePool { sqrt_price_x64, open_time })
         .instructions()?;
     Ok(instructions)
 }
@@ -219,14 +196,9 @@ pub fn open_position_instr(
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
-    let nft_ata_token_account =
-        spl_associated_token_account::get_associated_token_address(&program.payer(), &nft_mint_key);
+    let nft_ata_token_account = spl_associated_token_account::get_associated_token_address(&program.payer(), &nft_mint_key);
     let (metadata_account_key, _bump) = Pubkey::find_program_address(
-        &[
-            Metadata::PREFIX,
-            mpl_token_metadata::ID.to_bytes().as_ref(),
-            nft_mint_key.to_bytes().as_ref(),
-        ],
+        &[Metadata::PREFIX, mpl_token_metadata::ID.to_bytes().as_ref(), nft_mint_key.to_bytes().as_ref()],
         &mpl_token_metadata::ID,
     );
     let (protocol_position_key, __bump) = Pubkey::find_program_address(
@@ -254,10 +226,7 @@ pub fn open_position_instr(
         ],
         &program.id(),
     );
-    let (personal_position_key, __bump) = Pubkey::find_program_address(
-        &[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()],
-        &program.id(),
-    );
+    let (personal_position_key, __bump) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::OpenPositionV2 {
@@ -327,11 +296,7 @@ pub fn open_position_with_token22_nft_instr(
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
     let nft_ata_token_account =
-        spl_associated_token_account::get_associated_token_address_with_program_id(
-            &program.payer(),
-            &nft_mint_key,
-            &spl_token_2022::id(),
-        );
+        spl_associated_token_account::get_associated_token_address_with_program_id(&program.payer(), &nft_mint_key, &spl_token_2022::id());
     let (protocol_position_key, __bump) = Pubkey::find_program_address(
         &[
             POSITION_SEED.as_bytes(),
@@ -357,10 +322,7 @@ pub fn open_position_with_token22_nft_instr(
         ],
         &program.id(),
     );
-    let (personal_position_key, __bump) = Pubkey::find_program_address(
-        &[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()],
-        &program.id(),
-    );
+    let (personal_position_key, __bump) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::OpenPositionWithToken22Nft {
@@ -451,10 +413,7 @@ pub fn increase_liquidity_instr(
         ],
         &program.id(),
     );
-    let (personal_position_key, __bump) = Pubkey::find_program_address(
-        &[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()],
-        &program.id(),
-    );
+    let (personal_position_key, __bump) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()], &program.id());
 
     let instructions = program
         .request()
@@ -511,10 +470,7 @@ pub fn decrease_liquidity_instr(
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
-    let (personal_position_key, __bump) = Pubkey::find_program_address(
-        &[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()],
-        &program.id(),
-    );
+    let (personal_position_key, __bump) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()], &program.id());
     let (protocol_position_key, __bump) = Pubkey::find_program_address(
         &[
             POSITION_SEED.as_bytes(),
@@ -581,10 +537,7 @@ pub fn close_personal_position_instr(
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_v3_program)?;
-    let (personal_position_key, __bump) = Pubkey::find_program_address(
-        &[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()],
-        &program.id(),
-    );
+    let (personal_position_key, __bump) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint_key.to_bytes().as_ref()], &program.id());
     let instructions = program
         .request()
         .accounts(raydium_accounts::ClosePosition {
@@ -801,11 +754,7 @@ pub fn transfer_reward_owner(
     let instructions = program
         .request()
         .accounts(raydium_accounts::TransferRewardOwner {
-            authority: if encode {
-                authority.unwrap()
-            } else {
-                program.payer()
-            },
+            authority: if encode { authority.unwrap() } else { program.payer() },
             pool_state: pool_account_key,
         })
         .args(raydium_instruction::TransferRewardOwner { new_owner })

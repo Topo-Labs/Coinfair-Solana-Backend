@@ -18,7 +18,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
-
+#[allow(dead_code)]
 pub struct Coinfair {
     services: Services,
     monitor: Monitor,

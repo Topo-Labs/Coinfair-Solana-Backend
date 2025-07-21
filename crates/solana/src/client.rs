@@ -6,7 +6,7 @@ use solana_sdk::{
     signature::{Keypair, Signature},
     transaction::Transaction,
 };
-use tracing::{info, error};
+use tracing::{error, info};
 
 pub struct SolanaClient {
     rpc_client: RpcClient,
@@ -15,17 +15,11 @@ pub struct SolanaClient {
 
 impl SolanaClient {
     pub fn new(config: &SwapConfig) -> Result<Self> {
-        let rpc_client = RpcClient::new_with_commitment(
-            config.rpc_url.clone(),
-            CommitmentConfig::confirmed(),
-        );
+        let rpc_client = RpcClient::new_with_commitment(config.rpc_url.clone(), CommitmentConfig::confirmed());
 
         let wallet = Keypair::from_base58_string(&config.private_key);
 
-        Ok(Self {
-            rpc_client,
-            wallet,
-        })
+        Ok(Self { rpc_client, wallet })
     }
 
     pub fn get_rpc_client(&self) -> &RpcClient {
@@ -38,7 +32,7 @@ impl SolanaClient {
 
     pub async fn send_transaction(&self, transaction: &Transaction) -> Result<Signature> {
         info!("发送交易到 Solana 网络...");
-        
+
         match self.rpc_client.send_and_confirm_transaction(transaction) {
             Ok(signature) => {
                 info!("交易成功! 签名: {}", signature);
@@ -58,8 +52,6 @@ impl SolanaClient {
     }
 
     pub fn get_account_data(&self, pubkey: &solana_sdk::pubkey::Pubkey) -> Result<Vec<u8>> {
-        self.rpc_client
-            .get_account_data(pubkey)
-            .map_err(|e| anyhow::anyhow!("获取账户数据失败: {}", e))
+        self.rpc_client.get_account_data(pubkey).map_err(|e| anyhow::anyhow!("获取账户数据失败: {}", e))
     }
-} 
+}

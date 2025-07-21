@@ -2,7 +2,7 @@ use anyhow::Result;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 
-use super::{ConfigManager};
+use super::ConfigManager;
 
 /// 核心交换账户结构体
 pub struct SwapCoreAccounts {
@@ -50,10 +50,15 @@ impl<'a> AccountLoader<'a> {
 
         // 计算所需的PDA地址
         let (amm_config_key, _) = Pubkey::find_program_address(&["amm_config".as_bytes(), &amm_config_index.to_be_bytes()], &raydium_program_id);
-        let (tickarray_bitmap_extension_pda, _) = Pubkey::find_program_address(&["pool_tick_array_bitmap_extension".as_bytes(), pool_pubkey.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension_pda, _) =
+            Pubkey::find_program_address(&["pool_tick_array_bitmap_extension".as_bytes(), pool_pubkey.as_ref()], &raydium_program_id);
 
         // 标准化mint顺序
-        let (mint0, mint1) = if input_mint < output_mint { (*input_mint, *output_mint) } else { (*output_mint, *input_mint) };
+        let (mint0, mint1) = if input_mint < output_mint {
+            (*input_mint, *output_mint)
+        } else {
+            (*output_mint, *input_mint)
+        };
 
         // 批量加载账户
         let load_accounts = vec![amm_config_key, *pool_pubkey, tickarray_bitmap_extension_pda, mint0, mint1];

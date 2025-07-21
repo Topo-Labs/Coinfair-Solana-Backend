@@ -27,22 +27,18 @@ impl Default for SwapConfig {
 
 impl SwapConfig {
     pub fn get_amm_program_id(&self) -> anyhow::Result<Pubkey> {
-        Pubkey::from_str(&self.amm_program_id)
-            .map_err(|e| anyhow::anyhow!("Invalid AMM program ID: {}", e))
+        Pubkey::from_str(&self.amm_program_id).map_err(|e| anyhow::anyhow!("Invalid AMM program ID: {}", e))
     }
 
     pub fn get_openbook_program_id(&self) -> anyhow::Result<Pubkey> {
-        Pubkey::from_str(&self.openbook_program_id)
-            .map_err(|e| anyhow::anyhow!("Invalid OpenBook program ID: {}", e))
+        Pubkey::from_str(&self.openbook_program_id).map_err(|e| anyhow::anyhow!("Invalid OpenBook program ID: {}", e))
     }
 
     pub fn get_usdc_mint(&self) -> anyhow::Result<Pubkey> {
-        Pubkey::from_str(&self.usdc_mint)
-            .map_err(|e| anyhow::anyhow!("Invalid USDC mint: {}", e))
+        Pubkey::from_str(&self.usdc_mint).map_err(|e| anyhow::anyhow!("Invalid USDC mint: {}", e))
     }
 
     pub fn get_pool_id(&self) -> anyhow::Result<Pubkey> {
-        Pubkey::from_str(&self.sol_usdc_pool_id)
-            .map_err(|e| anyhow::anyhow!("Invalid pool ID: {}", e))
+        Pubkey::from_str(&self.sol_usdc_pool_id).map_err(|e| anyhow::anyhow!("Invalid pool ID: {}", e))
     }
-} 
+}

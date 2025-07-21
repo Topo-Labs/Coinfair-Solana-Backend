@@ -6,8 +6,9 @@ use crate::dtos::solana_dto::{
 
 use ::utils::solana::{ServiceHelpers, SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder};
 use anchor_lang::AccountDeserialize;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use solana_sdk::account::Account;
-use solana_sdk::transaction::Transaction;
 
 use ::utils::solana::{PositionInstructionBuilder, PositionUtils};
 use ::utils::{solana::*, AppConfig};
@@ -103,6 +104,7 @@ pub trait SolanaServiceTrait {
     ) -> Result<Option<PositionInfo>>;
 }
 
+#[allow(dead_code)]
 pub struct SolanaService {
     config: SwapConfig,
     app_config: AppConfig,
@@ -370,30 +372,6 @@ impl SolanaService {
     }
 
     // ============ 辅助方法 ============
-
-    /// 获取用户钱包公钥
-    fn get_user_wallet_pubkey(&self) -> Result<Pubkey> {
-        let private_key = self
-            .app_config
-            .private_key
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
-
-        let keypair = Keypair::from_base58_string(private_key);
-        info!("🔍 获取用户钱包公钥: {}", keypair.pubkey());
-        Ok(keypair.pubkey())
-    }
-
-    /// 获取用户钱包私钥
-    fn get_user_keypair(&self) -> Result<Keypair> {
-        let private_key = self
-            .app_config
-            .private_key
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
-
-        Ok(Keypair::from_base58_string(private_key))
-    }
 
     /// 反序列化anchor账户
     fn deserialize_anchor_account<T: AccountDeserialize>(&self, account: &Account) -> Result<T> {
@@ -974,24 +952,15 @@ impl SolanaServiceTrait for SolanaService {
     // ============ OpenPosition API实现 ============
 
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse> {
-        info!("🎯 开始开仓操作");
+        info!("🎯 开始构建开仓交易");
         info!("  池子地址: {}", request.pool_address);
+        info!("  用户钱包: {}", request.user_wallet);
         info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
         info!("  输入金额: {}", request.input_amount);
 
         // 1. 解析和验证参数
         let pool_address = Pubkey::from_str(&request.pool_address)?;
         let user_wallet = Pubkey::from_str(&request.user_wallet)?;
-
-        // 从环境配置中获取私钥
-        let private_key = self
-            .app_config
-            .private_key
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
-
-        // 使用正确的Base58解码方法
-        let user_keypair = Keypair::from_base58_string(private_key);
 
         // 2. 加载池子状态
         let pool_account = self.rpc_client.get_account(&pool_address)?;
@@ -1005,19 +974,38 @@ impl SolanaServiceTrait for SolanaService {
         let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
         let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
 
+        info!("  价格转换详情:");
+        info!("    下限价格: {} -> sqrt_price_x64: {}", request.tick_lower_price, sqrt_price_lower);
+        info!("    上限价格: {} -> sqrt_price_x64: {}", request.tick_upper_price, sqrt_price_upper);
+
         // 步骤2: sqrt_price转tick
         let tick_lower_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_lower)?;
         let tick_upper_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_upper)?;
 
+        info!("  原始tick计算:");
+        info!("    tick_lower_raw: {}", tick_lower_raw);
+        info!("    tick_upper_raw: {}", tick_upper_raw);
+
         // 步骤3: 调整tick spacing
         let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_raw, pool_state.tick_spacing as i32);
         let tick_upper_adjusted = position_utils.tick_with_spacing(tick_upper_raw, pool_state.tick_spacing as i32);
-
-        info!("  计算的tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
+        let tick_spacing = pool_state.tick_spacing;
+        info!("  Tick spacing调整 (spacing = {}):", tick_spacing);
+        info!("    tick_lower: {} -> {}", tick_lower_raw, tick_lower_adjusted);
+        info!("    tick_upper: {} -> {}", tick_upper_raw, tick_upper_adjusted);
 
         // 步骤4: 重新计算调整后的sqrt_price（关键步骤！）
         let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
         let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+
+        // 反向验证：从调整后的tick计算回实际价格
+        let actual_lower_price = position_utils.sqrt_price_x64_to_price(sqrt_price_lower_adjusted, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let actual_upper_price = position_utils.sqrt_price_x64_to_price(sqrt_price_upper_adjusted, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+
+        info!("  最终价格验证:");
+        info!("    请求价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!("    实际价格范围: {} - {}", actual_lower_price, actual_upper_price);
+        info!("    最终tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
 
         // 4. 检查是否已存在相同位置
         if let Some(_existing) = position_utils
@@ -1120,24 +1108,34 @@ impl SolanaServiceTrait for SolanaService {
             remaining_accounts,
         )?;
 
-        // 14. 构建交易
-        let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair, &nft_mint], recent_blockhash);
+        // 14. 构建未签名交易
+        // 创建未签名的交易消息
+        let mut message = solana_sdk::message::Message::new(&instructions, Some(&user_wallet));
+        message.recent_blockhash = self.rpc_client.get_latest_blockhash()?;
 
-        // 15. 发送交易
-        let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
+        // 序列化交易消息为Base64
+        let transaction_data = bincode::serialize(&message).map_err(|e| anyhow::anyhow!("序列化交易失败: {}", e))?;
+        let transaction_base64 = BASE64_STANDARD.encode(&transaction_data);
 
-        info!("✅ 开仓成功，交易签名: {}", signature);
+        info!("✅ 未签名交易构建成功");
 
         // 计算position key
         let (position_key, _) = Pubkey::find_program_address(&[b"position", nft_mint.pubkey().as_ref()], &raydium_program_id);
 
-        // 构建响应
-        let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
+        // 构建交易消息摘要
+        let transaction_message = format!(
+            "开仓操作 - 池子: {}, 价格范围: {:.4}-{:.4}, 流动性: {}",
+            &request.pool_address[..8],
+            request.tick_lower_price,
+            request.tick_upper_price,
+            liquidity
+        );
+
         let now = chrono::Utc::now().timestamp();
 
         Ok(OpenPositionResponse {
-            signature: signature.to_string(),
+            transaction: transaction_base64,
+            transaction_message,
             position_nft_mint: nft_mint.pubkey().to_string(),
             position_key: position_key.to_string(),
             tick_lower_index: tick_lower_adjusted,
@@ -1146,8 +1144,6 @@ impl SolanaServiceTrait for SolanaService {
             amount_0: amount_0_max,
             amount_1: amount_1_max,
             pool_address: request.pool_address,
-            status: TransactionStatus::Finalized,
-            explorer_url,
             timestamp: now,
         })
     }
@@ -1217,7 +1213,7 @@ impl SolanaServiceTrait for SolanaService {
         let wallet_address = if let Some(addr) = request.wallet_address {
             Pubkey::from_str(&addr)?
         } else {
-            self.get_user_wallet_pubkey()?
+            return Err(anyhow::anyhow!("缺少必需的钱包地址参数"));
         };
 
         // 2. 使用Position工具获取NFT信息
@@ -1319,7 +1315,7 @@ impl SolanaServiceTrait for SolanaService {
         let wallet_pubkey = if let Some(addr) = wallet_address {
             Pubkey::from_str(&addr)?
         } else {
-            self.get_user_wallet_pubkey()?
+            return Err(anyhow::anyhow!("缺少必需的钱包地址参数"));
         };
 
         let position_utils = PositionUtils::new(&self.rpc_client);

@@ -16,12 +16,7 @@ pub type DynUserRepository = Arc<dyn UserRepositoryTrait + Send + Sync>;
 #[async_trait]
 pub trait UserRepositoryTrait {
     // 创建用户(不会由前端调用，仅仅来自链上监听事件)
-    async fn create_user(
-        &self,
-        address: &str,
-        amount: f64,
-        price: f64,
-    ) -> AppResult<InsertOneResult>;
+    async fn create_user(&self, address: &str, amount: f64, price: f64) -> AppResult<InsertOneResult>;
 
     // 获取活动开始后的新用户
     async fn get_user(&self, address: &str) -> AppResult<Option<User>>;
@@ -31,22 +26,11 @@ pub trait UserRepositoryTrait {
 
 #[async_trait]
 impl UserRepositoryTrait for Database {
-    async fn create_user(
-        &self,
-        address: &str,
-        amount: f64,
-        price: f64,
-    ) -> AppResult<InsertOneResult> {
-        let existing_user = self
-            .users
-            .find_one(doc! { "address": address.to_lowercase()}, None)
-            .await?;
+    async fn create_user(&self, address: &str, amount: f64, price: f64) -> AppResult<InsertOneResult> {
+        let existing_user = self.users.find_one(doc! { "address": address.to_lowercase()}, None).await?;
 
         if existing_user.is_some() {
-            return Err(AppError::Conflict(format!(
-                "Valid User with address: {} already exists.",
-                address
-            )));
+            return Err(AppError::Conflict(format!("Valid User with address: {} already exists.", address)));
         }
 
         let new_doc = User {
@@ -78,16 +62,10 @@ impl UserRepositoryTrait for Database {
             .collect();
 
         // Step 2: Extract all unique `lower` addresses
-        let users: Vec<String> = unique_users
-            .iter()
-            .map(|user| user.address.clone().to_lowercase())
-            .collect();
+        let users: Vec<String> = unique_users.iter().map(|user| user.address.clone().to_lowercase()).collect();
 
         // Step 3: Query the database for existing `lower` addresses
-        let cursor: Cursor<User> = self
-            .users
-            .find(doc! { "address": { "$in": users }}, None)
-            .await?;
+        let cursor: Cursor<User> = self.users.find(doc! { "address": { "$in": users }}, None).await?;
 
         // Step 4: Collect all existing lowers from the cursor
         let mut existing_users: HashSet<String> = HashSet::new();

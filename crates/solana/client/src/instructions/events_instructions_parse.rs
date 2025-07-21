@@ -8,9 +8,7 @@ use raydium_amm_v3::instruction;
 use raydium_amm_v3::instructions::*;
 use raydium_amm_v3::states::*;
 use regex::Regex;
-use solana_transaction_status::{
-    option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta,
-};
+use solana_transaction_status::{option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta};
 
 const PROGRAM_LOG: &str = "Program log: ";
 const PROGRAM_DATA: &str = "Program data: ";
@@ -21,10 +19,7 @@ pub enum InstructionDecodeType {
     Base58,
 }
 
-pub fn parse_program_event(
-    self_program_str: &str,
-    meta: Option<UiTransactionStatusMeta>,
-) -> Result<(), ClientError> {
+pub fn parse_program_event(self_program_str: &str, meta: Option<UiTransactionStatusMeta>) -> Result<(), ClientError> {
     let logs: Vec<String> = if let Some(meta_data) = meta {
         let log_messages = if let OptionSerializer::Some(log_messages) = meta_data.log_messages {
             log_messages
@@ -39,16 +34,15 @@ pub fn parse_program_event(
     if !logs.is_empty() {
         if let Ok(mut execution) = Execution::new(&mut logs) {
             for l in logs {
-                let (new_program, did_pop) =
-                    if !execution.is_empty() && self_program_str == execution.program() {
-                        handle_program_log(self_program_str, &l, true).unwrap_or_else(|e| {
-                            println!("Unable to parse log: {e}");
-                            std::process::exit(1);
-                        })
-                    } else {
-                        let (program, did_pop) = handle_system_log(self_program_str, l);
-                        (program, did_pop)
-                    };
+                let (new_program, did_pop) = if !execution.is_empty() && self_program_str == execution.program() {
+                    handle_program_log(self_program_str, &l, true).unwrap_or_else(|e| {
+                        println!("Unable to parse log: {e}");
+                        std::process::exit(1);
+                    })
+                } else {
+                    let (program, did_pop) = handle_system_log(self_program_str, l);
+                    (program, did_pop)
+                };
                 // Switch program context on CPI.
                 if let Some(new_program) = new_program {
                     execution.push(new_program);
@@ -75,17 +69,9 @@ impl Execution {
         *logs = &logs[1..];
 
         let re = Regex::new(r"^Program (.*) invoke.*$").unwrap();
-        let c = re
-            .captures(l)
-            .ok_or_else(|| ClientError::LogParseError(l.to_string()))?;
-        let program = c
-            .get(1)
-            .ok_or_else(|| ClientError::LogParseError(l.to_string()))?
-            .as_str()
-            .to_string();
-        Ok(Self {
-            stack: vec![program],
-        })
+        let c = re.captures(l).ok_or_else(|| ClientError::LogParseError(l.to_string()))?;
+        let program = c.get(1).ok_or_else(|| ClientError::LogParseError(l.to_string()))?.as_str().to_string();
+        Ok(Self { stack: vec![program] })
     }
 
     pub fn program(&self) -> String {
@@ -107,15 +93,10 @@ impl Execution {
     }
 }
 
-pub fn handle_program_log(
-    self_program_str: &str,
-    l: &str,
-    with_prefix: bool,
-) -> Result<(Option<String>, bool), ClientError> {
+pub fn handle_program_log(self_program_str: &str, l: &str, with_prefix: bool) -> Result<(Option<String>, bool), ClientError> {
     // Log emitted from the current program.
     if let Some(log) = if with_prefix {
-        l.strip_prefix(PROGRAM_LOG)
-            .or_else(|| l.strip_prefix(PROGRAM_DATA))
+        l.strip_prefix(PROGRAM_LOG).or_else(|| l.strip_prefix(PROGRAM_DATA))
     } else {
         Some(l)
     } {
@@ -123,14 +104,13 @@ pub fn handle_program_log(
             // not log event
             return Ok((None, false));
         }
-        let borsh_bytes =
-            match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, log) {
-                Ok(borsh_bytes) => borsh_bytes,
-                _ => {
-                    println!("Could not base64 decode log: {}", log);
-                    return Ok((None, false));
-                }
-            };
+        let borsh_bytes = match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, log) {
+            Ok(borsh_bytes) => borsh_bytes,
+            _ => {
+                println!("Could not base64 decode log: {}", log);
+                return Ok((None, false));
+            }
+        };
 
         let mut slice: &[u8] = &borsh_bytes[..];
         let disc: [u8; 8] = {
@@ -144,22 +124,13 @@ pub fn handle_program_log(
                 println!("{:#?}", decode_event::<ConfigChangeEvent>(&mut slice)?);
             }
             CollectPersonalFeeEvent::DISCRIMINATOR => {
-                println!(
-                    "{:#?}",
-                    decode_event::<CollectPersonalFeeEvent>(&mut slice)?
-                );
+                println!("{:#?}", decode_event::<CollectPersonalFeeEvent>(&mut slice)?);
             }
             CollectProtocolFeeEvent::DISCRIMINATOR => {
-                println!(
-                    "{:#?}",
-                    decode_event::<CollectProtocolFeeEvent>(&mut slice)?
-                );
+                println!("{:#?}", decode_event::<CollectProtocolFeeEvent>(&mut slice)?);
             }
             CreatePersonalPositionEvent::DISCRIMINATOR => {
-                println!(
-                    "{:#?}",
-                    decode_event::<CreatePersonalPositionEvent>(&mut slice)?
-                );
+                println!("{:#?}", decode_event::<CreatePersonalPositionEvent>(&mut slice)?);
             }
             DecreaseLiquidityEvent::DISCRIMINATOR => {
                 println!("{:#?}", decode_event::<DecreaseLiquidityEvent>(&mut slice)?);
@@ -168,10 +139,7 @@ pub fn handle_program_log(
                 println!("{:#?}", decode_event::<IncreaseLiquidityEvent>(&mut slice)?);
             }
             LiquidityCalculateEvent::DISCRIMINATOR => {
-                println!(
-                    "{:#?}",
-                    decode_event::<LiquidityCalculateEvent>(&mut slice)?
-                );
+                println!("{:#?}", decode_event::<LiquidityCalculateEvent>(&mut slice)?);
             }
             LiquidityChangeEvent::DISCRIMINATOR => {
                 println!("{:#?}", decode_event::<LiquidityChangeEvent>(&mut slice)?);
@@ -211,11 +179,8 @@ fn handle_system_log(this_program_str: &str, log: &str) -> (Option<String>, bool
     }
 }
 
-fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(
-    slice: &mut &[u8],
-) -> Result<T, ClientError> {
-    let event: T = anchor_lang::AnchorDeserialize::deserialize(slice)
-        .map_err(|e| ClientError::LogParseError(e.to_string()))?;
+fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(slice: &mut &[u8]) -> Result<T, ClientError> {
+    let event: T = anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|e| ClientError::LogParseError(e.to_string()))?;
     Ok(event)
 }
 
@@ -260,20 +225,14 @@ pub fn parse_program_instruction(
             }
             _ => {}
         }
-        let program_index = account_keys
-            .iter()
-            .position(|r| r == self_program_str)
-            .unwrap();
+        let program_index = account_keys.iter().position(|r| r == self_program_str).unwrap();
         // println!("{}", program_index);
         // println!("{:#?}", account_keys);
         for (i, ui_compiled_instruction) in ui_raw_msg.instructions.iter().enumerate() {
             if (ui_compiled_instruction.program_id_index as usize) == program_index {
                 let out_put = format!("instruction #{}", i + 1);
                 println!("{}", out_put.gradient(Color::Green));
-                handle_program_instruction(
-                    &ui_compiled_instruction.data,
-                    InstructionDecodeType::Base58,
-                )?;
+                handle_program_instruction(&ui_compiled_instruction.data, InstructionDecodeType::Base58)?;
             }
         }
 
@@ -282,19 +241,11 @@ pub fn parse_program_instruction(
                 for inner in inner_instructions {
                     for (i, instruction) in inner.instructions.iter().enumerate() {
                         match instruction {
-                            solana_transaction_status::UiInstruction::Compiled(
-                                ui_compiled_instruction,
-                            ) => {
-                                if (ui_compiled_instruction.program_id_index as usize)
-                                    == program_index
-                                {
-                                    let out_put =
-                                        format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
+                            solana_transaction_status::UiInstruction::Compiled(ui_compiled_instruction) => {
+                                if (ui_compiled_instruction.program_id_index as usize) == program_index {
+                                    let out_put = format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
                                     println!("{}", out_put.gradient(Color::Green));
-                                    handle_program_instruction(
-                                        &ui_compiled_instruction.data,
-                                        InstructionDecodeType::Base58,
-                                    )?;
+                                    handle_program_instruction(&ui_compiled_instruction.data, InstructionDecodeType::Base58)?;
                                 }
                             }
                             _ => {}
@@ -308,20 +259,14 @@ pub fn parse_program_instruction(
     Ok(())
 }
 
-pub fn handle_program_instruction(
-    instr_data: &str,
-    decode_type: InstructionDecodeType,
-) -> Result<(), ClientError> {
+pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDecodeType) -> Result<(), ClientError> {
     let data;
     match decode_type {
         InstructionDecodeType::BaseHex => {
             data = hex::decode(instr_data).unwrap();
         }
         InstructionDecodeType::Base64 => {
-            let borsh_bytes = match base64::Engine::decode(
-                &base64::engine::general_purpose::STANDARD,
-                instr_data,
-            ) {
+            let borsh_bytes = match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, instr_data) {
                 Ok(borsh_bytes) => borsh_bytes,
                 _ => {
                     println!("Could not base64 decode instruction: {}", instr_data);
@@ -355,6 +300,7 @@ pub fn handle_program_instruction(
         instruction::CreateAmmConfig::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CreateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CreateAmmConfig {
                 pub index: u16,
                 pub tick_spacing: u16,
@@ -378,6 +324,7 @@ pub fn handle_program_instruction(
         instruction::UpdateAmmConfig::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::UpdateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct UpdateAmmConfig {
                 pub param: u8,
                 pub value: u32,
@@ -395,6 +342,7 @@ pub fn handle_program_instruction(
         instruction::CreatePool::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CreatePool>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CreatePool {
                 pub sqrt_price_x64: u128,
                 pub open_time: u64,
@@ -412,21 +360,19 @@ pub fn handle_program_instruction(
         instruction::UpdatePoolStatus::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::UpdatePoolStatus>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct UpdatePoolStatus {
                 pub status: u8,
             }
             impl From<instruction::UpdatePoolStatus> for UpdatePoolStatus {
                 fn from(instr: instruction::UpdatePoolStatus) -> UpdatePoolStatus {
-                    UpdatePoolStatus {
-                        status: instr.status,
-                    }
+                    UpdatePoolStatus { status: instr.status }
                 }
             }
             println!("{:#?}", UpdatePoolStatus::from(ix));
         }
         instruction::CreateOperationAccount::DISCRIMINATOR => {
-            let ix =
-                decode_instruction::<instruction::CreateOperationAccount>(&mut ix_data).unwrap();
+            let ix = decode_instruction::<instruction::CreateOperationAccount>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct CreateOperationAccount;
             impl From<instruction::CreateOperationAccount> for CreateOperationAccount {
@@ -437,9 +383,9 @@ pub fn handle_program_instruction(
             println!("{:#?}", CreateOperationAccount::from(ix));
         }
         instruction::UpdateOperationAccount::DISCRIMINATOR => {
-            let ix =
-                decode_instruction::<instruction::UpdateOperationAccount>(&mut ix_data).unwrap();
+            let ix = decode_instruction::<instruction::UpdateOperationAccount>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct UpdateOperationAccount {
                 pub param: u8,
                 pub keys: Vec<Pubkey>,
@@ -457,14 +403,13 @@ pub fn handle_program_instruction(
         instruction::TransferRewardOwner::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::TransferRewardOwner>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct TransferRewardOwner {
                 pub new_owner: Pubkey,
             }
             impl From<instruction::TransferRewardOwner> for TransferRewardOwner {
                 fn from(instr: instruction::TransferRewardOwner) -> TransferRewardOwner {
-                    TransferRewardOwner {
-                        new_owner: instr.new_owner,
-                    }
+                    TransferRewardOwner { new_owner: instr.new_owner }
                 }
             }
             println!("{:#?}", TransferRewardOwner::from(ix));
@@ -472,6 +417,7 @@ pub fn handle_program_instruction(
         instruction::InitializeReward::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::InitializeReward>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct InitializeReward {
                 pub param: InitializeRewardParam,
             }
@@ -483,9 +429,9 @@ pub fn handle_program_instruction(
             println!("{:#?}", InitializeReward::from(ix));
         }
         instruction::CollectRemainingRewards::DISCRIMINATOR => {
-            let ix =
-                decode_instruction::<instruction::CollectRemainingRewards>(&mut ix_data).unwrap();
+            let ix = decode_instruction::<instruction::CollectRemainingRewards>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CollectRemainingRewards {
                 pub reward_index: u8,
             }
@@ -512,6 +458,7 @@ pub fn handle_program_instruction(
         instruction::SetRewardParams::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SetRewardParams>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct SetRewardParams {
                 pub reward_index: u8,
                 pub emissions_per_second_x64: u128,
@@ -533,6 +480,7 @@ pub fn handle_program_instruction(
         instruction::CollectProtocolFee::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CollectProtocolFee>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CollectProtocolFee {
                 pub amount_0_requested: u64,
                 pub amount_1_requested: u64,
@@ -550,6 +498,7 @@ pub fn handle_program_instruction(
         instruction::CollectFundFee::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CollectFundFee>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CollectFundFee {
                 pub amount_0_requested: u64,
                 pub amount_1_requested: u64,
@@ -567,6 +516,7 @@ pub fn handle_program_instruction(
         instruction::OpenPosition::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::OpenPosition>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct OpenPosition {
                 pub tick_lower_index: i32,
                 pub tick_upper_index: i32,
@@ -594,6 +544,7 @@ pub fn handle_program_instruction(
         instruction::OpenPositionV2::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::OpenPositionV2>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct OpenPositionV2 {
                 pub tick_lower_index: i32,
                 pub tick_upper_index: i32,
@@ -636,6 +587,7 @@ pub fn handle_program_instruction(
         instruction::IncreaseLiquidity::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::IncreaseLiquidity>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct IncreaseLiquidity {
                 pub liquidity: u128,
                 pub amount_0_max: u64,
@@ -655,6 +607,7 @@ pub fn handle_program_instruction(
         instruction::IncreaseLiquidityV2::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::IncreaseLiquidityV2>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct IncreaseLiquidityV2 {
                 pub liquidity: u128,
                 pub amount_0_max: u64,
@@ -676,6 +629,7 @@ pub fn handle_program_instruction(
         instruction::DecreaseLiquidity::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::DecreaseLiquidity>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct DecreaseLiquidity {
                 pub liquidity: u128,
                 pub amount_0_min: u64,
@@ -695,6 +649,7 @@ pub fn handle_program_instruction(
         instruction::DecreaseLiquidityV2::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::DecreaseLiquidityV2>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct DecreaseLiquidityV2 {
                 pub liquidity: u128,
                 pub amount_0_min: u64,
@@ -714,6 +669,7 @@ pub fn handle_program_instruction(
         instruction::Swap::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Swap>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct Swap {
                 pub amount: u64,
                 pub other_amount_threshold: u64,
@@ -735,6 +691,7 @@ pub fn handle_program_instruction(
         instruction::SwapV2::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapV2>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct SwapV2 {
                 pub amount: u64,
                 pub other_amount_threshold: u64,
@@ -756,6 +713,7 @@ pub fn handle_program_instruction(
         instruction::SwapRouterBaseIn::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapRouterBaseIn>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct SwapRouterBaseIn {
                 pub amount_in: u64,
                 pub amount_out_minimum: u64,
@@ -777,10 +735,7 @@ pub fn handle_program_instruction(
     Ok(())
 }
 
-fn decode_instruction<T: anchor_lang::AnchorDeserialize>(
-    slice: &mut &[u8],
-) -> Result<T, anchor_lang::error::ErrorCode> {
-    let instruction: T = anchor_lang::AnchorDeserialize::deserialize(slice)
-        .map_err(|_| anchor_lang::error::ErrorCode::InstructionDidNotDeserialize)?;
+fn decode_instruction<T: anchor_lang::AnchorDeserialize>(slice: &mut &[u8]) -> Result<T, anchor_lang::error::ErrorCode> {
+    let instruction: T = anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|_| anchor_lang::error::ErrorCode::InstructionDidNotDeserialize)?;
     Ok(instruction)
 }

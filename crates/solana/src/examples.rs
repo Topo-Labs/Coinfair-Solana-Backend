@@ -2,56 +2,60 @@ use crate::{SolanaSwap, SwapConfig};
 use anyhow::Result;
 use tracing::info;
 
-use crate::{SolanaClient, PreciseSwapService};
+use crate::{PreciseSwapService, SolanaClient};
 
 /// 基本的 SOL 到 USDC 交换示例（演示版本）
 pub async fn example_swap_sol_to_usdc() -> Result<()> {
     info!("🚀 开始 SOL 到 USDC 交换演示");
-    
+
     // 配置Solana交换参数
-    let mut config = SwapConfig::default();
-    
+    let config = SwapConfig::default();
+
     // ⚠️ 重要：在实际使用中，你需要设置你的私钥
     // config.private_key = "你的Base58编码的私钥".to_string();
-    
+
     // 如果使用测试网，可以更改RPC URL
     // config.rpc_url = "https://api.devnet.solana.com".to_string();
-    
+
     info!("⚠️ 注意：这是演示模式，不会执行真实的代币交换");
     info!("要启用真实交换，请:");
     info!("1. 设置环境变量 SOLANA_PRIVATE_KEY");
     info!("2. 确保有足够的SOL余额");
     info!("3. 将代码中的demo指令替换为真实的Raydium AMM指令");
-    
+
     // 如果没有私钥，跳过实际的区块链操作
     if config.private_key.is_empty() {
         info!("📝 私钥未设置，跳过实际交换演示");
-        
+
         // 演示价格计算
         let mock_swap = SolanaSwap::new(config)?;
         let amount_in = 100_000_000; // 0.1 SOL
         let estimated_output = mock_swap.calculate_swap_output(amount_in, true)?;
         info!("💰 模拟计算：{} lamports SOL -> {} micro-USDC", amount_in, estimated_output);
-        
+
         return Ok(());
     }
-    
+
     // 创建交换实例
     let swap = SolanaSwap::new(config)?;
-    
+
     // 检查账户余额
     let (sol_balance, usdc_balance) = swap.get_account_balances().await?;
     info!("当前 SOL 余额: {} lamports ({:.4} SOL)", sol_balance, sol_balance as f64 / 1_000_000_000.0);
     info!("当前 USDC 余额: {} ({:.2} USDC)", usdc_balance, usdc_balance as f64 / 1_000_000.0);
-    
+
     // 交换 0.01 SOL 到 USDC（较小金额用于演示）
     let amount_in = 10_000_000; // 0.01 SOL (以 lamports 为单位)
     let minimum_amount_out = 0; // 最小输出量
-    
+
     // 计算预期输出
     let estimated_output = swap.calculate_swap_output(amount_in, true)?;
-    info!("📊 预期输出: {} micro-USDC ({:.6} USDC)", estimated_output, estimated_output as f64 / 1_000_000.0);
-    
+    info!(
+        "📊 预期输出: {} micro-USDC ({:.6} USDC)",
+        estimated_output,
+        estimated_output as f64 / 1_000_000.0
+    );
+
     match swap.swap_sol_to_usdc(amount_in, minimum_amount_out).await {
         Ok(signature) => {
             info!("✅ 演示交易成功!");
@@ -62,30 +66,30 @@ pub async fn example_swap_sol_to_usdc() -> Result<()> {
             info!("❌ 交换失败: {:?}", e);
         }
     }
-    
+
     Ok(())
 }
 
 /// 基本的 USDC 到 SOL 交换示例
 pub async fn example_swap_usdc_to_sol() -> Result<()> {
     // 配置Solana交换参数
-    let mut config = SwapConfig::default();
-    
+    let config = SwapConfig::default();
+
     // ⚠️ 重要：在实际使用中，你需要设置你的私钥
     // config.private_key = "你的Base58编码的私钥".to_string();
-    
+
     // 创建交换实例
     let swap = SolanaSwap::new(config)?;
-    
+
     // 检查账户余额
     let (sol_balance, usdc_balance) = swap.get_account_balances().await?;
     info!("当前 SOL 余额: {} lamports", sol_balance);
     info!("当前 USDC 余额: {}", usdc_balance);
-    
+
     // 交换 10 USDC 到 SOL
     let amount_in = 10_000_000; // 10 USDC (以微单位为单位，1 USDC = 1,000,000 microUSDC)
     let minimum_amount_out = 0; // 最小输出量
-    
+
     match swap.swap_usdc_to_sol(amount_in, minimum_amount_out).await {
         Ok(signature) => {
             info!("✅ USDC 到 SOL 交换成功!");
@@ -95,7 +99,7 @@ pub async fn example_swap_usdc_to_sol() -> Result<()> {
             info!("❌ 交换失败: {:?}", e);
         }
     }
-    
+
     Ok(())
 }
 
@@ -109,16 +113,16 @@ pub async fn example_custom_config() -> Result<()> {
         usdc_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
         sol_usdc_pool_id: "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2".to_string(),
     };
-    
+
     let swap = SolanaSwap::new(config)?;
-    
+
     // 获取余额信息
     let (sol_balance, usdc_balance) = swap.get_account_balances().await?;
-    
+
     info!("配置完成，当前余额:");
     info!("SOL: {} lamports ({} SOL)", sol_balance, sol_balance as f64 / 1_000_000_000.0);
     info!("USDC: {} ({} USDC)", usdc_balance, usdc_balance as f64 / 1_000_000.0);
-    
+
     Ok(())
 }
 
@@ -138,13 +142,16 @@ pub async fn demonstrate_precise_swap_calculation() -> Result<()> {
     let pool_address = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2"; // 示例池地址
     let sol_amount = 1_000_000_000u64; // 1 SOL
 
-    match precise_swap_service.calculate_exact_swap_output(
-        sol_mint,
-        usdc_mint,
-        pool_address,
-        sol_amount,
-        Some(0.005), // 0.5% 滑点
-    ).await {
+    match precise_swap_service
+        .calculate_exact_swap_output(
+            sol_mint,
+            usdc_mint,
+            pool_address,
+            sol_amount,
+            Some(0.005), // 0.5% 滑点
+        )
+        .await
+    {
         Ok(result) => {
             info!("✅ 计算成功!");
             info!("  预估输出: {} USDC (micro units)", result.estimated_output);
@@ -175,9 +182,9 @@ pub async fn demonstrate_precise_swap_calculation() -> Result<()> {
     // 示例3：不同金额的计算对比
     info!("\n📊 示例3: 不同金额的计算对比");
     let test_amounts = vec![
-        500_000_000u64,   // 0.5 SOL
-        1_000_000_000u64, // 1 SOL
-        5_000_000_000u64, // 5 SOL
+        500_000_000u64,    // 0.5 SOL
+        1_000_000_000u64,  // 1 SOL
+        5_000_000_000u64,  // 5 SOL
         10_000_000_000u64, // 10 SOL
     ];
 
@@ -185,18 +192,19 @@ pub async fn demonstrate_precise_swap_calculation() -> Result<()> {
         let sol_amount = amount as f64 / 1_000_000_000.0;
         info!("  计算 {:.1} SOL 的输出...", sol_amount);
 
-        match precise_swap_service.calculate_exact_swap_output(
-            sol_mint,
-            usdc_mint,
-            pool_address,
-            amount,
-            Some(0.005),
-        ).await {
+        match precise_swap_service
+            .calculate_exact_swap_output(sol_mint, usdc_mint, pool_address, amount, Some(0.005))
+            .await
+        {
             Ok(result) => {
                 let usdc_output = result.estimated_output as f64 / 1_000_000.0;
                 let price_per_sol = usdc_output / sol_amount;
-                info!("    输出: {:.6} USDC (价格: {:.2} USDC/SOL, 影响: {:.4}%)", 
-                      usdc_output, price_per_sol, result.price_impact * 100.0);
+                info!(
+                    "    输出: {:.6} USDC (价格: {:.2} USDC/SOL, 影响: {:.4}%)",
+                    usdc_output,
+                    price_per_sol,
+                    result.price_impact * 100.0
+                );
             }
             Err(e) => {
                 info!("    计算失败: {:?}", e);
@@ -277,20 +285,20 @@ pub async fn example_calculate_1_sol_swap() -> Result<()> {
     info!("  滑点设置: {:.2}%", slippage * 100.0);
 
     // 步骤3：计算预估输出
-    match precise_swap_service.calculate_exact_swap_output(
-        sol_mint,
-        usdc_mint,
-        pool_address,
-        input_amount,
-        Some(slippage),
-    ).await {
+    match precise_swap_service
+        .calculate_exact_swap_output(sol_mint, usdc_mint, pool_address, input_amount, Some(slippage))
+        .await
+    {
         Ok(result) => {
             info!("\n✅ 计算完成!");
             info!("📊 结果详情:");
             info!("  预估输出: {} micro-USDC", result.estimated_output);
             info!("  预估输出: {:.6} USDC", result.estimated_output as f64 / 1_000_000.0);
-            info!("  最小输出: {} micro-USDC (含{:.2}%滑点)", 
-                  result.min_output_with_slippage, result.slippage_rate * 100.0);
+            info!(
+                "  最小输出: {} micro-USDC (含{:.2}%滑点)",
+                result.min_output_with_slippage,
+                result.slippage_rate * 100.0
+            );
             info!("  最小输出: {:.6} USDC", result.min_output_with_slippage as f64 / 1_000_000.0);
             info!("  价格影响: {:.4}%", result.price_impact * 100.0);
             info!("  隐含价格: {:.2} USDC/SOL", result.estimated_output as f64 / 1_000_000.0);
@@ -312,7 +320,7 @@ pub async fn example_calculate_1_sol_swap() -> Result<()> {
             info!("  - 网络连接问题");
             info!("  - RPC节点限流");
             info!("  - 池子数据格式不匹配");
-            
+
             Err(e)
         }
     }
@@ -321,11 +329,11 @@ pub async fn example_calculate_1_sol_swap() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_config_creation() {
         let config = SwapConfig::default();
         assert!(!config.rpc_url.is_empty());
         assert!(!config.amm_program_id.is_empty());
     }
-} 
+}

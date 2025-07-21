@@ -10,7 +10,7 @@
 use mongodb::{Client, Collection}; // 源码中集成了mongodb，因此数据是直接存储在这个程序中的(此处的是driver还是mongodb本身?)
 use std::sync::Arc;
 use tracing::info;
-use utils::{AppConfig, AppResult, CargoEnv};
+use utils::{AppConfig, AppResult};
 
 pub mod refer;
 use refer::model::Refer;

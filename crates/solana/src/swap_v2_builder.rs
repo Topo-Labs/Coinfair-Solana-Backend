@@ -1,17 +1,12 @@
-use anyhow::Result;
-use solana_sdk::{
-    compute_budget::ComputeBudgetInstruction,
-    instruction::Instruction,
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
-use anchor_lang::prelude::AccountMeta;
 use anchor_client::{Client, Cluster};
-use std::str::FromStr;
+use anchor_lang::prelude::AccountMeta;
+use anyhow::Result;
+use solana_sdk::{compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey, signature::Keypair};
 use std::rc::Rc;
-use tracing::{info, warn};
+use std::str::FromStr;
+use tracing::info;
 
-use crate::swap_v2_service::{SwapV2Service, SwapV2AccountsInfo};
+use crate::swap_v2_service::{SwapV2AccountsInfo, SwapV2Service};
 use raydium_amm_v3::accounts as raydium_accounts;
 use raydium_amm_v3::instruction as raydium_instruction;
 
@@ -50,21 +45,11 @@ pub struct SwapV2InstructionResult {
 }
 
 impl SwapV2InstructionBuilder {
-    pub fn new(
-        rpc_url: &str,
-        raydium_program_id: &str,
-        amm_config_index: u16,
-    ) -> Result<Self> {
+    pub fn new(rpc_url: &str, raydium_program_id: &str, amm_config_index: u16) -> Result<Self> {
         let raydium_program_id = Pubkey::from_str(raydium_program_id)?;
-        
+
         // 计算AMM配置密钥
-        let (amm_config_key, _bump) = Pubkey::find_program_address(
-            &[
-                b"amm_config",
-                &amm_config_index.to_be_bytes(),
-            ],
-            &raydium_program_id,
-        );
+        let (amm_config_key, _bump) = Pubkey::find_program_address(&[b"amm_config", &amm_config_index.to_be_bytes()], &raydium_program_id);
 
         // 构建WebSocket URL
         let ws_url = rpc_url.replace("https://", "wss://").replace("http://", "ws://");
@@ -79,10 +64,7 @@ impl SwapV2InstructionBuilder {
     }
 
     /// 构建完整的SwapV2交易指令
-    pub async fn build_swap_v2_instructions(
-        &self,
-        params: SwapV2BuildParams,
-    ) -> Result<SwapV2InstructionResult> {
+    pub async fn build_swap_v2_instructions(&self, params: SwapV2BuildParams) -> Result<SwapV2InstructionResult> {
         info!("🔨 开始构建SwapV2指令");
         info!("  输入代币: {}", params.input_mint);
         info!("  输出代币: {}", params.output_mint);
@@ -121,12 +103,7 @@ impl SwapV2InstructionBuilder {
         }
 
         // 构建SwapV2核心指令
-        let swap_v2_instruction = self.build_swap_v2_core_instruction(
-            &accounts_info,
-            &vault_addresses,
-            remaining_accounts,
-            &params,
-        )?;
+        let swap_v2_instruction = self.build_swap_v2_core_instruction(&accounts_info, &vault_addresses, remaining_accounts, &params)?;
 
         instructions.push(swap_v2_instruction);
 
@@ -177,26 +154,13 @@ impl SwapV2InstructionBuilder {
 
     /// 计算池子vault地址
     fn calculate_pool_vault_address(&self, pool_id: &Pubkey, mint: &Pubkey) -> Result<Pubkey> {
-        let (vault_pda, _bump) = Pubkey::find_program_address(
-            &[
-                b"pool_vault",
-                pool_id.as_ref(),
-                mint.as_ref(),
-            ],
-            &self.raydium_program_id,
-        );
+        let (vault_pda, _bump) = Pubkey::find_program_address(&[b"pool_vault", pool_id.as_ref(), mint.as_ref()], &self.raydium_program_id);
         Ok(vault_pda)
     }
 
     /// 计算observation地址
     fn calculate_observation_address(&self, pool_id: &Pubkey) -> Result<Pubkey> {
-        let (observation_pda, _bump) = Pubkey::find_program_address(
-            &[
-                b"observation",
-                pool_id.as_ref(),
-            ],
-            &self.raydium_program_id,
-        );
+        let (observation_pda, _bump) = Pubkey::find_program_address(&[b"observation", pool_id.as_ref()], &self.raydium_program_id);
         Ok(observation_pda)
     }
 
@@ -210,7 +174,7 @@ impl SwapV2InstructionBuilder {
             Pubkey::new_from_array(
                 accounts_info.tickarray_bitmap_extension_account.data[..32]
                     .try_into()
-                    .map_err(|_| anyhow::anyhow!("无效的bitmap扩展账户地址"))?
+                    .map_err(|_| anyhow::anyhow!("无效的bitmap扩展账户地址"))?,
             ),
             false,
         ));
@@ -232,7 +196,7 @@ impl SwapV2InstructionBuilder {
         params: &SwapV2BuildParams,
     ) -> Result<Instruction> {
         info!("构建SwapV2核心指令");
-        
+
         // 创建临时的payer keypair用于构建指令（不会实际签名）
         let temp_payer = Keypair::new();
         let url = Cluster::Custom(self.rpc_url.clone(), self.ws_url.clone());
@@ -240,18 +204,12 @@ impl SwapV2InstructionBuilder {
         let program = client.program(self.raydium_program_id)?;
 
         // 获取用户token账户地址（优先使用提供的账户，否则计算ATA）
-        let user_input_token = params.user_input_token_account.unwrap_or_else(|| {
-            spl_associated_token_account::get_associated_token_address(
-                &params.user_wallet,
-                &accounts_info.input_mint_info.mint
-            )
-        });
-        let user_output_token = params.user_output_token_account.unwrap_or_else(|| {
-            spl_associated_token_account::get_associated_token_address(
-                &params.user_wallet,
-                &accounts_info.output_mint_info.mint
-            )
-        });
+        let user_input_token = params
+            .user_input_token_account
+            .unwrap_or_else(|| spl_associated_token_account::get_associated_token_address(&params.user_wallet, &accounts_info.input_mint_info.mint));
+        let user_output_token = params
+            .user_output_token_account
+            .unwrap_or_else(|| spl_associated_token_account::get_associated_token_address(&params.user_wallet, &accounts_info.output_mint_info.mint));
 
         info!("  用户输入token账户: {}", user_input_token);
         info!("  用户输出token账户: {}", user_output_token);
@@ -286,8 +244,7 @@ impl SwapV2InstructionBuilder {
             .instructions()?;
 
         // 返回第一个指令（应该是SwapV2指令）
-        instructions.into_iter().next()
-            .ok_or_else(|| anyhow::anyhow!("SwapV2指令构建失败：无指令返回"))
+        instructions.into_iter().next().ok_or_else(|| anyhow::anyhow!("SwapV2指令构建失败：无指令返回"))
     }
 
     /// 估算交易费用
@@ -295,7 +252,7 @@ impl SwapV2InstructionBuilder {
         // 基础费用：每个指令5000 lamports + 签名费用
         let base_fee = instructions.len() as u64 * 5000;
         let signature_fee = 5000; // 一个签名的费用
-        
+
         Ok(base_fee + signature_fee)
     }
 }
@@ -314,12 +271,8 @@ mod tests {
 
     #[test]
     fn test_swap_v2_builder_creation() {
-        let builder = SwapV2InstructionBuilder::new(
-            "https://api.mainnet-beta.solana.com",
-            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
-            0,
-        );
-        
+        let builder = SwapV2InstructionBuilder::new("https://api.mainnet-beta.solana.com", "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK", 0);
+
         assert!(builder.is_ok());
         let builder = builder.unwrap();
         assert_eq!(builder.raydium_program_id.to_string(), "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
@@ -327,11 +280,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_swap_v2_instruction_building() {
-        let builder = SwapV2InstructionBuilder::new(
-            "https://api.mainnet-beta.solana.com",
-            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
-            0,
-        ).unwrap();
+        let builder = SwapV2InstructionBuilder::new("https://api.mainnet-beta.solana.com", "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK", 0).unwrap();
 
         let params = SwapV2BuildParams {
             input_mint: "So11111111111111111111111111111111111111112".to_string(),

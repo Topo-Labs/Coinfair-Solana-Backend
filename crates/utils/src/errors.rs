@@ -86,9 +86,7 @@ impl AppError {
                                 .params
                                 .iter()
                                 .filter(|(key, _value)| key.to_owned() != "value")
-                                .map(|(key, value)| {
-                                    Cow::from(format!("{} value is {}", key, value.to_string()))
-                                })
+                                .map(|(key, value)| Cow::from(format!("{} value is {}", key, value.to_string())))
                                 .collect();
 
                             if params.len() >= 1 {
@@ -107,9 +105,7 @@ impl AppError {
                             validation_errors
                                 .entry(Cow::from(struct_property))
                                 .or_insert_with(Vec::new)
-                                .push(error.message.unwrap_or_else(|| {
-                                    Cow::from(format!("{} is required", struct_property))
-                                }));
+                                .push(error.message.unwrap_or_else(|| Cow::from(format!("{} is required", struct_property))));
                         }
                     }
                 }
@@ -140,10 +136,7 @@ impl IntoResponse for AppError {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, Self::Unauthorized.to_string()),
             Self::Forbidden => (StatusCode::FORBIDDEN, Self::Forbidden.to_string()),
             Self::AxumJsonRejection(err) => (StatusCode::BAD_REQUEST, err.body_text()),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Self::InternalServerError.to_string(),
-            ),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, Self::InternalServerError.to_string()),
         };
 
         let body = Json(HttpError::new(error_message));

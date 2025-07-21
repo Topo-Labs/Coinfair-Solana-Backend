@@ -23,18 +23,16 @@ impl Logger {
         // Set the default verbosity level for the root of the dependency graph.
         // env var: `RUST_LOG`
         let env_filter =
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!("{}=debug,tower_http=debug", env!("CARGO_PKG_NAME")).into()
-            });
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format!("{}=debug,tower_http=debug", env!("CARGO_PKG_NAME")).into());
 
         tracing_subscriber::registry()
             .with(env_filter)
             .with(
                 tracing_subscriber::fmt::layer()
                     .with_writer(non_blocking)
-                    .with_file(true)        // 显示文件名
+                    .with_file(true) // 显示文件名
                     .with_line_number(true) // 显示行号
-                    .with_target(false)     // 隐藏target减少冗余
+                    .with_target(false), // 隐藏target减少冗余
             )
             .init();
 

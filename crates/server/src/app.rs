@@ -30,7 +30,10 @@ impl ApplicationServer {
 
         info!("🟢 server:referring_reward has launched on {local_addr} 🚀");
 
-        serve(tcp_listener, router).with_graceful_shutdown(Self::shutdown_signal()).await.context("🔴 Failed to start server")?;
+        serve(tcp_listener, router)
+            .with_graceful_shutdown(Self::shutdown_signal())
+            .await
+            .context("🔴 Failed to start server")?;
 
         Ok(())
     }
@@ -42,7 +45,10 @@ impl ApplicationServer {
 
         #[cfg(unix)]
         let terminate = async {
-            signal::unix::signal(signal::unix::SignalKind::terminate()).expect("🔴 Failed to install signal handler").recv().await;
+            signal::unix::signal(signal::unix::SignalKind::terminate())
+                .expect("🔴 Failed to install signal handler")
+                .recv()
+                .await;
         };
 
         #[cfg(not(unix))]

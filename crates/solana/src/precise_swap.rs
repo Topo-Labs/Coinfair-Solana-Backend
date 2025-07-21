@@ -1,8 +1,7 @@
 use anyhow::Result;
-use tracing::{info, warn, error};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::VecDeque;
-use std::str::FromStr;
+use tracing::{info, warn};
 
 use crate::{SolanaClient, SwapConfig};
 
@@ -15,11 +14,8 @@ pub struct PreciseSwapService {
 impl PreciseSwapService {
     pub fn new(client: SolanaClient, config: &SwapConfig) -> Result<Self> {
         let program_id = config.amm_program_id.parse::<Pubkey>()?;
-        
-        Ok(Self {
-            client,
-            program_id,
-        })
+
+        Ok(Self { client, program_id })
     }
 
     /// 使用client工具方法进行精确的预估计算
@@ -45,35 +41,21 @@ impl PreciseSwapService {
 
         // 第一步：加载池子数据和相关账户
         let (pool_data, amm_config, tick_bitmap) = self.load_pool_accounts(&pool_pubkey).await?;
-        
+
         // 第二步：确定交换方向
-        let zero_for_one = self.determine_swap_direction(
-            &input_mint_pubkey,
-            &output_mint_pubkey,
-            &pool_data,
-        )?;
+        let zero_for_one = self.determine_swap_direction(&input_mint_pubkey, &output_mint_pubkey, &pool_data)?;
 
         info!("  交换方向: {}", if zero_for_one { "Token0 -> Token1" } else { "Token1 -> Token0" });
 
         // 第三步：加载所需的tick数组
-        let mut tick_arrays = self.load_required_tick_arrays(
-            &pool_pubkey,
-            &pool_data,
-            &tick_bitmap,
-            zero_for_one,
-        ).await?;
+        let mut tick_arrays = self.load_required_tick_arrays(&pool_pubkey, &pool_data, &tick_bitmap, zero_for_one).await?;
 
         // 第四步：调用client的精确计算方法
         // 注意：这里需要将pool_data反序列化为正确的结构体
         // 在真实环境中，你需要引入raydium AMM的状态结构
-        let output_amount = self.call_client_calculation_method(
-            input_amount,
-            zero_for_one,
-            &pool_data,
-            &amm_config,
-            &tick_bitmap,
-            &mut tick_arrays,
-        ).await?;
+        let output_amount = self
+            .call_client_calculation_method(input_amount, zero_for_one, &pool_data, &amm_config, &tick_bitmap, &mut tick_arrays)
+            .await?;
 
         info!("  💰 精确计算输出: {}", output_amount);
 
@@ -100,7 +82,9 @@ impl PreciseSwapService {
         info!("📦 加载池子相关账户数据...");
 
         // 加载池子账户
-        let pool_account = self.client.get_rpc_client()
+        let pool_account = self
+            .client
+            .get_rpc_client()
             .get_account(pool_pubkey)
             .map_err(|e| anyhow::anyhow!("获取池子账户失败: {}", e))?;
 
@@ -113,7 +97,7 @@ impl PreciseSwapService {
 
         // 模拟AMM配置数据
         let amm_config_data = vec![0u8; 100]; // 简化处理
-        
+
         // 模拟tick bitmap数据
         let tick_bitmap_data = vec![0u8; 100]; // 简化处理
 
@@ -123,30 +107,19 @@ impl PreciseSwapService {
     }
 
     /// 确定交换方向
-    fn determine_swap_direction(
-        &self,
-        input_mint: &Pubkey,
-        output_mint: &Pubkey,
-        pool_data: &[u8],
-    ) -> Result<bool> {
+    fn determine_swap_direction(&self, input_mint: &Pubkey, output_mint: &Pubkey, _pool_data: &[u8]) -> Result<bool> {
         // 这里需要从池子数据中解析出token_mint_0和token_mint_1
         // 然后确定交换方向
-        
+
         // 简化处理：基于地址大小比较
         let zero_for_one = input_mint < output_mint;
-        
+
         info!("  交换方向确定: zero_for_one = {}", zero_for_one);
         Ok(zero_for_one)
     }
 
     /// 加载交换所需的tick数组
-    async fn load_required_tick_arrays(
-        &self,
-        pool_pubkey: &Pubkey,
-        pool_data: &[u8],
-        tick_bitmap: &[u8],
-        zero_for_one: bool,
-    ) -> Result<VecDeque<Vec<u8>>> {
+    async fn load_required_tick_arrays(&self, pool_pubkey: &Pubkey, _pool_data: &[u8], _tick_bitmap: &[u8], _zero_for_one: bool) -> Result<VecDeque<Vec<u8>>> {
         info!("📊 加载所需的tick数组...");
 
         let mut tick_arrays = VecDeque::new();
@@ -160,7 +133,7 @@ impl PreciseSwapService {
         for i in 0..3 {
             // 计算tick数组地址
             let tick_array_address = self.get_tick_array_address(pool_pubkey, i * 1000)?;
-            
+
             match self.client.get_rpc_client().get_account(&tick_array_address) {
                 Ok(account) => {
                     tick_arrays.push_back(account.data);
@@ -183,10 +156,10 @@ impl PreciseSwapService {
         &self,
         input_amount: u64,
         zero_for_one: bool,
-        pool_data: &[u8],
-        amm_config_data: &[u8],
-        tick_bitmap_data: &[u8],
-        tick_arrays: &mut VecDeque<Vec<u8>>,
+        _pool_data: &[u8],
+        _amm_config_data: &[u8],
+        _tick_bitmap_data: &[u8],
+        _tick_arrays: &mut VecDeque<Vec<u8>>,
     ) -> Result<u64> {
         info!("调用client计算方法...");
 
@@ -194,7 +167,7 @@ impl PreciseSwapService {
         // 在真实环境中，你需要：
         // 1. 将原始数据反序列化为正确的结构体
         // 2. 调用client::instructions::utils::get_out_put_amount_and_remaining_accounts
-        
+
         // 示例伪代码：
         /*
         use client::instructions::utils::{
@@ -207,7 +180,7 @@ impl PreciseSwapService {
         let pool_state: PoolState = deserialize_anchor_account(&create_account_from_data(pool_data))?;
         let amm_config: AmmConfig = deserialize_anchor_account(&create_account_from_data(amm_config_data))?;
         let tick_bitmap: TickArrayBitmapExtension = deserialize_anchor_account(&create_account_from_data(tick_bitmap_data))?;
-        
+
         // 转换tick数组
         let mut tick_array_states = VecDeque::new();
         for tick_array_data in tick_arrays {
@@ -232,20 +205,19 @@ impl PreciseSwapService {
 
         // 目前简化处理，返回一个估算值
         let estimated_output = self.simplified_calculation(input_amount, zero_for_one)?;
-        
+
         info!("  ✅ 计算完成，输出: {}", estimated_output);
         Ok(estimated_output)
     }
 
     /// 简化的计算方法（作为fallback）
-    fn simplified_calculation(&self, input_amount: u64, zero_for_one: bool) -> Result<u64> {
+    fn simplified_calculation(&self, input_amount: u64, _zero_for_one: bool) -> Result<u64> {
         // 简化的1:1比率计算，扣除手续费
         let fee_rate = 0.0025; // 0.25%
         let output_after_fee = (input_amount as f64 * (1.0 - fee_rate)) as u64;
-        
-        info!("  📊 简化计算: {} -> {} (扣除{}%手续费)", 
-              input_amount, output_after_fee, fee_rate * 100.0);
-        
+
+        info!("  📊 简化计算: {} -> {} (扣除{}%手续费)", input_amount, output_after_fee, fee_rate * 100.0);
+
         Ok(output_after_fee)
     }
 
@@ -267,37 +239,32 @@ impl PreciseSwapService {
 
     /// 获取tick数组地址
     fn get_tick_array_address(&self, pool_pubkey: &Pubkey, start_index: i32) -> Result<Pubkey> {
-        let (pubkey, _) = Pubkey::find_program_address(
-            &[
-                "tick_array".as_bytes(),
-                pool_pubkey.as_ref(),
-                &start_index.to_be_bytes(),
-            ],
-            &self.program_id,
-        );
+        let (pubkey, _) = Pubkey::find_program_address(&["tick_array".as_bytes(), pool_pubkey.as_ref(), &start_index.to_be_bytes()], &self.program_id);
         Ok(pubkey)
     }
 
     /// 示例：计算1 SOL的预估输出
     pub async fn estimate_1_sol_output(&self, pool_address: &str, output_mint: &str) -> Result<u64> {
         info!("💰 计算1 SOL的预估输出");
-        
+
         let sol_mint = "So11111111111111111111111111111111111111112";
         let input_amount = 1_000_000_000u64; // 1 SOL = 10^9 lamports
-        
-        let result = self.calculate_exact_swap_output(
-            sol_mint,
-            output_mint,
-            pool_address,
-            input_amount,
-            Some(0.005), // 0.5% 滑点
-        ).await?;
-        
+
+        let result = self
+            .calculate_exact_swap_output(
+                sol_mint,
+                output_mint,
+                pool_address,
+                input_amount,
+                Some(0.005), // 0.5% 滑点
+            )
+            .await?;
+
         info!("💰 1 SOL 预估输出结果:");
         info!("  预估输出: {}", result.estimated_output);
         info!("  最小输出(含滑点): {}", result.min_output_with_slippage);
         info!("  价格影响: {:.4}%", result.price_impact * 100.0);
-        
+
         Ok(result.estimated_output)
     }
 }
@@ -330,4 +297,4 @@ fn create_account_from_data(data: &[u8]) -> solana_sdk::account::Account {
         rent_epoch: 0,
     }
 }
-*/ 
+*/

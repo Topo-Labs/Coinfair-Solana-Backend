@@ -10300,6 +10300,7 @@ dependencies = [
  "spl-token-2022 7.0.0",
  "thiserror 1.0.69",
  "time",
+ "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

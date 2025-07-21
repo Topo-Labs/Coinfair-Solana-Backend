@@ -6,7 +6,7 @@ use tracing::{error, info, warn};
 
 use crate::ErrorHandler;
 
-use super::{ConfigManager, LogUtils, MathUtils, PDACalculator, PoolInfoManager, SwapCalculator, TokenUtils};
+use super::{ConfigManager, LogUtils, PDACalculator, PoolInfoManager, SwapCalculator, TokenUtils};
 
 /// 服务层辅助工具 - 抽取服务层的通用逻辑
 pub struct ServiceHelpers<'a> {
@@ -33,7 +33,13 @@ impl<'a> ServiceHelpers<'a> {
     }
 
     /// 基于输入金额计算输出（base-in模式）
-    pub async fn calculate_output_for_input_with_slippage(&self, input_mint: &str, output_mint: &str, input_amount: u64, slippage_bps: u16) -> Result<(u64, u64, String)> {
+    pub async fn calculate_output_for_input_with_slippage(
+        &self,
+        input_mint: &str,
+        output_mint: &str,
+        input_amount: u64,
+        slippage_bps: u16,
+    ) -> Result<(u64, u64, String)> {
         // 使用PDA方法计算池子地址
         let pool_address = self.calculate_pool_address_pda(input_mint, output_mint)?;
         info!("使用与CLI完全相同的交换计算逻辑");
@@ -44,12 +50,12 @@ impl<'a> ServiceHelpers<'a> {
         match self
             .swap_calculator
             .calculate_output_using_cli_logic(
-                input_mint, 
-                output_mint, 
-                input_amount, 
-                &pool_address, 
+                input_mint,
+                output_mint,
+                input_amount,
+                &pool_address,
                 true, // base_in = true
-                slippage_bps
+                slippage_bps,
             )
             .await
         {
@@ -86,7 +92,13 @@ impl<'a> ServiceHelpers<'a> {
     // }
 
     /// 基于输出金额计算输入（base-out模式）
-    pub async fn calculate_input_for_output_with_slippage(&self, input_mint: &str, output_mint: &str, desired_output_amount: u64, slippage_bps: u16) -> Result<(u64, u64, String)> {
+    pub async fn calculate_input_for_output_with_slippage(
+        &self,
+        input_mint: &str,
+        output_mint: &str,
+        desired_output_amount: u64,
+        slippage_bps: u16,
+    ) -> Result<(u64, u64, String)> {
         // 使用PDA方法计算池子地址
         let pool_address = self.calculate_pool_address_pda(input_mint, output_mint)?;
         info!("使用与CLI完全相同的交换计算逻辑（BaseOut模式）");
@@ -142,11 +154,20 @@ impl<'a> ServiceHelpers<'a> {
     // }
 
     /// 创建路由计划
-    pub async fn create_route_plan(&self, pool_id: String, input_mint: String, output_mint: String, fee_amount: u64, amount_specified: u64) -> Result<serde_json::Value> {
+    pub async fn create_route_plan(
+        &self,
+        pool_id: String,
+        input_mint: String,
+        output_mint: String,
+        fee_amount: u64,
+        amount_specified: u64,
+    ) -> Result<serde_json::Value> {
         LogUtils::log_operation_start("路由计划创建", &format!("池子: {}", pool_id));
 
         // 获取正确的remaining accounts和pool price
-        let (remaining_accounts, last_pool_price_x64) = self.get_remaining_accounts_and_pool_price(&pool_id, &input_mint, &output_mint, amount_specified).await?;
+        let (remaining_accounts, last_pool_price_x64) = self
+            .get_remaining_accounts_and_pool_price(&pool_id, &input_mint, &output_mint, amount_specified)
+            .await?;
 
         let route_plan = serde_json::json!({
             "pool_id": pool_id,
@@ -164,7 +185,13 @@ impl<'a> ServiceHelpers<'a> {
     }
 
     /// 获取remaining accounts和pool price
-    async fn get_remaining_accounts_and_pool_price(&self, pool_id: &str, input_mint: &str, output_mint: &str, amount_specified: u64) -> Result<(Vec<String>, String)> {
+    async fn get_remaining_accounts_and_pool_price(
+        &self,
+        pool_id: &str,
+        input_mint: &str,
+        output_mint: &str,
+        amount_specified: u64,
+    ) -> Result<(Vec<String>, String)> {
         info!("🔍 使用CLI完全相同逻辑获取remainingAccounts和lastPoolPriceX64");
         info!("  池子ID: {}", pool_id);
         info!("  输入代币: {}", input_mint);
@@ -172,18 +199,29 @@ impl<'a> ServiceHelpers<'a> {
         info!("  扣除转账费后的金额: {}", amount_specified);
 
         // 尝试使用本地计算
-        match self.get_remaining_accounts_and_pool_price_local(pool_id, input_mint, output_mint, amount_specified).await {
+        match self
+            .get_remaining_accounts_and_pool_price_local(pool_id, input_mint, output_mint, amount_specified)
+            .await
+        {
             Ok(result) => Ok(result),
             Err(e) => {
                 warn!("⚠️ 本地计算失败: {:?}，尝试使用官方API", e);
                 // 备用方案：调用官方API获取正确的值
-                self.swap_calculator.get_remaining_accounts_from_official_api(pool_id, input_mint, output_mint, amount_specified).await
+                self.swap_calculator
+                    .get_remaining_accounts_from_official_api(pool_id, input_mint, output_mint, amount_specified)
+                    .await
             }
         }
     }
 
     /// 本地计算remaining accounts和pool price
-    async fn get_remaining_accounts_and_pool_price_local(&self, pool_id: &str, input_mint: &str, output_mint: &str, amount_specified: u64) -> Result<(Vec<String>, String)> {
+    async fn get_remaining_accounts_and_pool_price_local(
+        &self,
+        pool_id: &str,
+        input_mint: &str,
+        output_mint: &str,
+        amount_specified: u64,
+    ) -> Result<(Vec<String>, String)> {
         LogUtils::log_operation_start("本地remaining accounts计算", pool_id);
 
         let pool_pubkey = Pubkey::from_str(pool_id)?;
@@ -210,7 +248,15 @@ impl<'a> ServiceHelpers<'a> {
         );
 
         // 批量加载账户
-        let load_accounts = vec![input_mint_pubkey, output_mint_pubkey, amm_config_key, pool_pubkey, tickarray_bitmap_extension_pda, mint0, mint1];
+        let load_accounts = vec![
+            input_mint_pubkey,
+            output_mint_pubkey,
+            amm_config_key,
+            pool_pubkey,
+            tickarray_bitmap_extension_pda,
+            mint0,
+            mint1,
+        ];
 
         let accounts = self.rpc_client.get_multiple_accounts(&load_accounts)?;
 
@@ -222,10 +268,14 @@ impl<'a> ServiceHelpers<'a> {
         // 反序列化关键状态
         let amm_config_state: raydium_amm_v3::states::AmmConfig = self.deserialize_anchor_account(amm_config_account)?;
         let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(pool_account)?;
-        let tickarray_bitmap_extension: raydium_amm_v3::states::TickArrayBitmapExtension = self.deserialize_anchor_account(tickarray_bitmap_extension_account)?;
+        let tickarray_bitmap_extension: raydium_amm_v3::states::TickArrayBitmapExtension =
+            self.deserialize_anchor_account(tickarray_bitmap_extension_account)?;
 
         let epoch = self.rpc_client.get_epoch_info()?.epoch;
-        LogUtils::log_debug_info("计算状态", &[("epoch", &epoch.to_string()), ("amount_specified", &amount_specified.to_string())]);
+        LogUtils::log_debug_info(
+            "计算状态",
+            &[("epoch", &epoch.to_string()), ("amount_specified", &amount_specified.to_string())],
+        );
 
         // 加载tick arrays
         let mut tick_arrays = self
@@ -234,9 +284,16 @@ impl<'a> ServiceHelpers<'a> {
             .await?;
 
         // 执行计算
-        let (_other_amount_threshold, tick_array_indexs) =
-            self.swap_calculator
-                .get_output_amount_and_remaining_accounts_cli_exact(amount_specified, None, zero_for_one, true, &amm_config_state, &pool_state, &tickarray_bitmap_extension, &mut tick_arrays)?;
+        let (_other_amount_threshold, tick_array_indexs) = self.swap_calculator.get_output_amount_and_remaining_accounts_cli_exact(
+            amount_specified,
+            None,
+            zero_for_one,
+            true,
+            &amm_config_state,
+            &pool_state,
+            &tickarray_bitmap_extension,
+            &mut tick_arrays,
+        )?;
 
         // 构建remaining accounts
         let mut remaining_accounts = Vec::new();
@@ -256,12 +313,16 @@ impl<'a> ServiceHelpers<'a> {
 
     /// 计算价格影响（与TypeScript一致）
     pub async fn calculate_price_impact_simple(&self, input_mint: &str, output_mint: &str, input_amount: u64, pool_address: &str) -> Result<f64> {
-        self.swap_calculator.calculate_price_impact_simple(input_mint, output_mint, input_amount, pool_address).await
+        self.swap_calculator
+            .calculate_price_impact_simple(input_mint, output_mint, input_amount, pool_address)
+            .await
     }
 
     /// 计算价格影响
     pub async fn calculate_price_impact(&self, input_mint: &str, output_mint: &str, input_amount: u64, output_amount: u64, pool_address: &str) -> Result<f64> {
-        self.swap_calculator.calculate_price_impact(input_mint, output_mint, input_amount, output_amount, pool_address).await
+        self.swap_calculator
+            .calculate_price_impact(input_mint, output_mint, input_amount, output_amount, pool_address)
+            .await
     }
 
     /// 解析金额字符串
@@ -289,9 +350,19 @@ impl<'a> ServiceHelpers<'a> {
     /// 构建池子相关的vault信息
     pub fn build_vault_info(&self, pool_state: &raydium_amm_v3::states::PoolState, input_mint: &Pubkey) -> (Pubkey, Pubkey, Pubkey, Pubkey) {
         if *input_mint == pool_state.token_mint_0 {
-            (pool_state.token_vault_0, pool_state.token_vault_1, pool_state.token_mint_0, pool_state.token_mint_1)
+            (
+                pool_state.token_vault_0,
+                pool_state.token_vault_1,
+                pool_state.token_mint_0,
+                pool_state.token_mint_1,
+            )
         } else {
-            (pool_state.token_vault_1, pool_state.token_vault_0, pool_state.token_mint_1, pool_state.token_mint_0)
+            (
+                pool_state.token_vault_1,
+                pool_state.token_vault_0,
+                pool_state.token_mint_1,
+                pool_state.token_mint_0,
+            )
         }
     }
 }

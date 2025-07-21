@@ -1,11 +1,14 @@
 use anyhow::Result;
+use solana_account_decoder::parse_token::TokenAccountType;
+use solana_account_decoder::parse_token::UiAccountState;
+use solana_account_decoder::UiAccountData;
 use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_request::TokenAccountsFilter;
-use solana_sdk::program_pack::Pack;
+// use solana_sdk::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
-use spl_token::state::Account as TokenAccount;
+// use spl_token::state::Account as TokenAccount;
 use std::str::FromStr;
 use tracing::info;
+use tracing::warn;
 
 use super::{ConfigManager, PDACalculator};
 
@@ -116,7 +119,7 @@ impl<'a> PositionUtils<'a> {
         }
     }
 
-    /// 检查位置是否已存在
+    /// 检查位置是否已存在 - 带重试逻辑
     pub async fn find_existing_position(
         &self,
         user_wallet: &Pubkey,
@@ -125,27 +128,74 @@ impl<'a> PositionUtils<'a> {
         tick_upper: i32,
     ) -> Result<Option<ExistingPosition>> {
         info!("🔍 检查是否存在相同范围的位置");
+        info!("  钱包: {}", user_wallet);
+        info!("  池子: {}", pool_address);
+        info!("  Tick范围: {} - {}", tick_lower, tick_upper);
 
+        match self.find_existing_position_internal(user_wallet, pool_address, tick_lower, tick_upper).await {
+            Ok(Some(position)) => {
+                info!("✅ 找到相同范围的位置: {}", position.position_key);
+                return Ok(Some(position));
+            }
+            Ok(None) => {
+                info!("✅ 确认没有相同范围的位置");
+                return Ok(None);
+            }
+            Err(e) => {
+                warn!("⚠️ 查找位置失败: {:?}", e);
+                return Err(e);
+            }
+        }
+    }
+
+    /// 内部查找方法 - 单次尝试
+    async fn find_existing_position_internal(
+        &self,
+        user_wallet: &Pubkey,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+    ) -> Result<Option<ExistingPosition>> {
         // 获取用户所有NFT和position
         let position_nfts = self.get_user_position_nfts(user_wallet).await?;
-        info!("🔍 获取用户所有NFT和position: {:#?}", position_nfts);
+        info!("🔍 找到 {} 个Position NFT", position_nfts.len());
 
-        for nft_info in position_nfts {
+        for (index, nft_info) in position_nfts.iter().enumerate() {
+            info!("🔍 检查NFT #{}: mint={}, position_pda={}", index + 1, nft_info.nft_mint, nft_info.position_pda);
+
             let position_account = self.rpc_client.get_account(&nft_info.position_pda);
-            info!("🔍 获取position账户: {:#?}", position_account);
-            // 加载position状态
-            if let Ok(position_account) = position_account {
-                let position_state = self.deserialize_position_state(&position_account);
-                info!("🔍 反序列化position状态: {:#?}", position_state);
-                if let Ok(position_state) = position_state {
-                    if position_state.pool_id == *pool_address && position_state.tick_lower_index == tick_lower && position_state.tick_upper_index == tick_upper
-                    {
-                        return Ok(Some(ExistingPosition {
-                            nft_mint: nft_info.nft_mint,
-                            position_key: nft_info.position_pda,
-                            liquidity: position_state.liquidity,
-                        }));
+            match position_account {
+                Ok(position_account) => {
+                    info!("  ✅ 成功获取position账户数据，大小: {} bytes", position_account.data.len());
+
+                    match self.deserialize_position_state(&position_account) {
+                        Ok(position_state) => {
+                            info!("  ✅ 成功反序列化position状态:");
+                            info!("    池子ID: {}", position_state.pool_id);
+                            info!("    tick范围: {} - {}", position_state.tick_lower_index, position_state.tick_upper_index);
+                            info!("    流动性: {}", position_state.liquidity);
+
+                            if position_state.pool_id == *pool_address
+                                && position_state.tick_lower_index == tick_lower
+                                && position_state.tick_upper_index == tick_upper
+                            {
+                                info!("  🎯 找到匹配的位置！");
+                                return Ok(Some(ExistingPosition {
+                                    nft_mint: nft_info.nft_mint,
+                                    position_key: nft_info.position_pda,
+                                    liquidity: position_state.liquidity,
+                                }));
+                            } else {
+                                info!("  ⏭️ 位置不匹配，继续搜索");
+                            }
+                        }
+                        Err(e) => {
+                            warn!("  ⚠️ 反序列化position状态失败: {:?}", e);
+                        }
                     }
+                }
+                Err(e) => {
+                    warn!("  ⚠️ 获取position账户失败: {:?}", e);
                 }
             }
         }
@@ -153,89 +203,86 @@ impl<'a> PositionUtils<'a> {
         Ok(None)
     }
 
-    /// 获取用户的position NFTs（同时支持经典Token和Token-2022）
+    /// 获取用户的position NFTs（同时支持经典Token和Token-2022）- 增强版本
     pub async fn get_user_position_nfts(&self, user_wallet: &Pubkey) -> Result<Vec<PositionNftInfo>> {
         info!("🔍 获取用户的Position NFTs（包括Token和Token-2022）");
 
         let mut all_position_nfts = Vec::new();
 
-        // 1. 获取经典Token的NFT
-        let classic_nfts = self.get_position_nfts_by_program(user_wallet, &spl_token::id()).await?;
+        // 1. 获取经典Token的NFT - 使用 Confirmed commitment 确保数据新鲜度
+        let classic_nfts = self.get_position_nfts_by_program_enhanced(user_wallet, &spl_token::id()).await?;
         all_position_nfts.extend(classic_nfts.clone());
 
-        // 2. 获取Token-2022的NFT
-        let token2022_nfts = self.get_position_nfts_by_program(user_wallet, &spl_token_2022::id()).await?;
+        // 2. 获取Token-2022的NFT - 使用 Confirmed commitment 确保数据新鲜度
+        let token2022_nfts = self.get_position_nfts_by_program_enhanced(user_wallet, &spl_token_2022::id()).await?;
         all_position_nfts.extend(token2022_nfts.clone());
+
         info!(
-            "  找到 {} 个经典Token NFT，{} 个Token-2022 NFT",
-            classic_nfts.iter().count(),
-            token2022_nfts.iter().count()
+            "  找到 {} 个经典Token NFT，{} 个Token-2022 NFT，总共 {} 个NFT",
+            classic_nfts.len(),
+            token2022_nfts.len(),
+            all_position_nfts.len()
         );
+
+        // 3. 按NFT mint地址排序以确保一致性
+        all_position_nfts.sort_by_key(|nft| nft.nft_mint.to_string());
 
         Ok(all_position_nfts)
     }
 
-    /// 根据特定的Token程序获取position NFTs
-    async fn get_position_nfts_by_program(&self, user_wallet: &Pubkey, token_program: &Pubkey) -> Result<Vec<PositionNftInfo>> {
-        // 获取指定Token程序的所有代币账户
-        let token_accounts = self
-            .rpc_client
-            .get_token_accounts_by_owner(user_wallet, TokenAccountsFilter::ProgramId(*token_program))?;
+    /// 根据特定的Token程序获取position NFTs - 增强版本，使用 Confirmed commitment
+    async fn get_position_nfts_by_program_enhanced(&self, user_wallet: &Pubkey, token_program: &Pubkey) -> Result<Vec<PositionNftInfo>> {
+        use solana_sdk::commitment_config::CommitmentConfig;
+
+        info!(
+            "🔍 获取{}程序的Position NFT",
+            if *token_program == spl_token::id() { "经典Token" } else { "Token-2022" }
+        );
+
+        // 使用 Confirmed commitment 确保获取到最新数据
+        let commitment = CommitmentConfig::confirmed();
+
+        // 获取指定Token程序的所有代币账户 - 使用 Confirmed commitment
+        let config = solana_client::rpc_request::TokenAccountsFilter::ProgramId(*token_program);
+        let token_accounts_response = self.rpc_client.get_token_accounts_by_owner_with_commitment(user_wallet, config, commitment)?;
+
+        let token_accounts = token_accounts_response.value;
+        info!("  找到 {} 个Token账户", token_accounts.len());
 
         let mut position_nfts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
 
         for token_account_info in token_accounts {
-            // 直接尝试解析账户数据
-            if let Ok(raw_account) = self.rpc_client.get_account(&Pubkey::from_str(&token_account_info.pubkey)?) {
-                // 根据Token程序类型解析账户
-                let (amount, mint) = if *token_program == spl_token::id() {
-                    // 经典Token
-                    if let Ok(token_account) = TokenAccount::unpack(&raw_account.data) {
-                        (token_account.amount, token_account.mint)
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // Token-2022 - 需要处理扩展
-                    if let Ok(token_account_state) = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(&raw_account.data)
-                    {
-                        let base = token_account_state.base;
-                        (base.amount, base.mint)
-                    } else {
-                        continue;
-                    }
-                };
+            info!("  检查Token账户 {}", token_account_info.pubkey);
+            if let UiAccountData::Json(parsed_account) = token_account_info.account.data {
+                if parsed_account.program == "spl-token" || parsed_account.program == "spl-token-2022" {
+                    if let Ok(TokenAccountType::Account(ui_token_account)) = serde_json::from_value(parsed_account.parsed) {
+                        let _frozen = ui_token_account.state == UiAccountState::Frozen;
 
-                // 检查是否为NFT（amount = 1）
-                if amount == 1 {
-                    // 检查mint的decimals
-                    if let Ok(mint_account) = self.rpc_client.get_account(&mint) {
-                        let decimals = if *token_program == spl_token::id() {
-                            // 经典Token mint
-                            if let Ok(mint_state) = spl_token::state::Mint::unpack(&mint_account.data) {
-                                mint_state.decimals
-                            } else {
-                                continue;
-                            }
-                        } else {
-                            // Token-2022 mint
-                            if let Ok(mint_state) = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_account.data) {
-                                mint_state.base.decimals
-                            } else {
-                                continue;
-                            }
-                        };
+                        let token = ui_token_account.mint.parse::<Pubkey>().unwrap_or_else(|err| panic!("Invalid mint: {}", err));
+                        // let token_account = token_account_info
+                        //     .pubkey
+                        //     .parse::<Pubkey>()
+                        //     .unwrap_or_else(|err| panic!("Invalid token account: {}", err));
+                        let token_amount = ui_token_account
+                            .token_amount
+                            .amount
+                            .parse::<u64>()
+                            .unwrap_or_else(|err| panic!("Invalid token amount: {}", err));
 
-                        if decimals == 0 {
+                        let _close_authority = ui_token_account.close_authority.map_or(*user_wallet, |s| {
+                            s.parse::<Pubkey>().unwrap_or_else(|err| panic!("Invalid close authority: {}", err))
+                        });
+
+                        if ui_token_account.token_amount.decimals == 0 && token_amount == 1 {
                             // 计算position PDA
-                            let (position_pda, _) = Pubkey::find_program_address(&[b"position", mint.as_ref()], &raydium_program_id);
-
+                            let (position_pda, _) = Pubkey::find_program_address(&[b"position", token.as_ref()], &raydium_program_id);
                             // 解析账户地址
                             let nft_account_pubkey = Pubkey::from_str(&token_account_info.pubkey)?;
+                            info!("      ✅ 找到Position NFT: mint={}, pda={}", token, position_pda);
 
                             position_nfts.push(PositionNftInfo {
-                                nft_mint: mint,
+                                nft_mint: token,
                                 nft_account: nft_account_pubkey,
                                 position_pda,
                             });
@@ -244,6 +291,12 @@ impl<'a> PositionUtils<'a> {
                 }
             }
         }
+
+        info!(
+            "  ✅ 从{}程序找到 {} 个Position NFT",
+            if *token_program == spl_token::id() { "经典Token" } else { "Token-2022" },
+            position_nfts.len()
+        );
 
         Ok(position_nfts)
     }

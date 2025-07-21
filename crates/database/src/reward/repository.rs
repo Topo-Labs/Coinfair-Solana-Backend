@@ -7,25 +7,21 @@ use async_trait::async_trait;
 use chrono::{NaiveDate, TimeZone, Utc};
 // use futures::stream::TryStreamExt;
 use mongodb::{
-    bson::{doc, oid::ObjectId, DateTime},
-    results::{DeleteResult, InsertManyResult, InsertOneResult, UpdateResult},
+    bson::{doc, DateTime},
+    results::{InsertManyResult, InsertOneResult, UpdateResult},
 };
+use std::cmp::Ordering;
 use std::{collections::hash_map::HashMap, sync::Arc};
 use tokio_stream::StreamExt;
-use utils::{AppError, AppResult};
-use std::cmp::Ordering;
 use tracing::info;
+use utils::{AppError, AppResult};
 
 pub type DynRewardRepository = Arc<dyn RewardRepositoryTrait + Send + Sync>;
 
 #[async_trait]
 pub trait RewardRepositoryTrait {
     // 创建奖励
-    async fn create_reward(
-        &self,
-        user_address: &str,
-        rewards: Vec<RewardItem>,
-    ) -> AppResult<InsertOneResult>;
+    async fn create_reward(&self, user_address: &str, rewards: Vec<RewardItem>) -> AppResult<InsertOneResult>;
 
     // 将某笔奖励设置为已发放
     async fn set_reward(&self, user_address: &str) -> AppResult<UpdateResult>;
@@ -60,21 +56,11 @@ pub trait RewardRepositoryTrait {
 
 #[async_trait]
 impl RewardRepositoryTrait for Database {
-    async fn create_reward(
-        &self,
-        user_address: &str,
-        rewards: Vec<RewardItem>,
-    ) -> AppResult<InsertOneResult> {
-        let existing_user = self
-            .rewards
-            .find_one(doc! { "user_address": user_address.to_lowercase()}, None)
-            .await?;
+    async fn create_reward(&self, user_address: &str, rewards: Vec<RewardItem>) -> AppResult<InsertOneResult> {
+        let existing_user = self.rewards.find_one(doc! { "user_address": user_address.to_lowercase()}, None).await?;
 
         if existing_user.is_some() {
-            return Err(AppError::Conflict(format!(
-                "Reward of User with address: {} already exists.",
-                user_address
-            )));
+            return Err(AppError::Conflict(format!("Reward of User with address: {} already exists.", user_address)));
         }
 
         let new_doc = Reward {
@@ -126,8 +112,7 @@ impl RewardRepositoryTrait for Database {
 
     // 获取某一天应该发放的奖励
     async fn get_rewards_by_day(&self, day: &str) -> AppResult<Vec<RewardItem>> {
-        let naive_date =
-            NaiveDate::parse_from_str(day, "%Y-%m-%d").context("Invalid date format")?;
+        let naive_date = NaiveDate::parse_from_str(day, "%Y-%m-%d").context("Invalid date format")?;
 
         let start_of_day = Utc.from_utc_datetime(&naive_date.and_hms_opt(0, 0, 0).unwrap());
         let end_of_day = Utc.from_utc_datetime(&naive_date.and_hms_opt(23, 59, 59).unwrap());
@@ -151,10 +136,7 @@ impl RewardRepositoryTrait for Database {
             }
         }
 
-        let result: Vec<RewardItem> = reward_map
-            .into_iter()
-            .map(|(address, amount)| RewardItem { address, amount })
-            .collect();
+        let result: Vec<RewardItem> = reward_map.into_iter().map(|(address, amount)| RewardItem { address, amount }).collect();
 
         Ok(result)
     }
@@ -176,10 +158,7 @@ impl RewardRepositoryTrait for Database {
             }
         }
 
-        let result: Vec<RewardItem> = reward_map
-            .into_iter()
-            .map(|(address, amount)| RewardItem { address, amount })
-            .collect();
+        let result: Vec<RewardItem> = reward_map.into_iter().map(|(address, amount)| RewardItem { address, amount }).collect();
 
         Ok(result)
     }
@@ -193,7 +172,7 @@ impl RewardRepositoryTrait for Database {
                     "is_rewarded": true,
                 },
         };
-        
+
         info!("set_all_rewards in repo.rs");
         let updated_doc = self.rewards.update_many(filter, update, None).await?;
 
@@ -215,10 +194,7 @@ impl RewardRepositoryTrait for Database {
             }
         }
 
-        let mut result: Vec<RewardItem> = reward_map
-            .into_iter()
-            .map(|(address, amount)| RewardItem { address, amount })
-            .collect();
+        let mut result: Vec<RewardItem> = reward_map.into_iter().map(|(address, amount)| RewardItem { address, amount }).collect();
 
         result.sort_by(|a, b| b.amount.partial_cmp(&a.amount).unwrap_or(Ordering::Equal));
         Ok(result)

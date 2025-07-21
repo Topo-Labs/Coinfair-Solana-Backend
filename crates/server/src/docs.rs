@@ -1,8 +1,5 @@
 use utoipa::OpenApi;
 
-// 导入所有需要文档化的组件
-use database::{refer::model::Refer, reward::model::*, user::model::User};
-
 #[derive(OpenApi)]
 #[openapi(
     info(

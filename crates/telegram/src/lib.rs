@@ -9,10 +9,7 @@ mod utils;
 // pub use crate::{idle::*, types::*};
 use server::services::Services;
 use std::sync::Arc;
-use teloxide::{
-    dispatching::dialogue::{self, InMemStorage},
-    prelude::*,
-};
+use teloxide::prelude::*;
 use tracing::info;
 
 #[derive(Clone)]

@@ -22,7 +22,10 @@ impl TokenUtils {
 
     /// 判断是否为USDC代币
     pub fn is_usdc_mint(mint: &str) -> bool {
-        matches!(mint, constants::USDC_MINT_STANDARD | constants::USDC_MINT_CONFIG | constants::USDC_MINT_ALTERNATIVE)
+        matches!(
+            mint,
+            constants::USDC_MINT_STANDARD | constants::USDC_MINT_CONFIG | constants::USDC_MINT_ALTERNATIVE
+        )
     }
 
     /// 获取代币类型

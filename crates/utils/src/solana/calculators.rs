@@ -57,7 +57,10 @@ pub struct PDACalculator;
 impl PDACalculator {
     /// 计算AMM配置PDA
     pub fn calculate_amm_config_pda(raydium_program_id: &Pubkey, amm_config_index: u16) -> (Pubkey, u8) {
-        info!("计算AMM配置PDA: raydium_program_id: {:?}, amm_config_index: {:?}", raydium_program_id, amm_config_index);
+        info!(
+            "计算AMM配置PDA: raydium_program_id: {:?}, amm_config_index: {:?}",
+            raydium_program_id, amm_config_index
+        );
         Pubkey::find_program_address(&["amm_config".as_bytes(), &amm_config_index.to_be_bytes()], raydium_program_id)
     }
 
@@ -68,7 +71,12 @@ impl PDACalculator {
             raydium_program_id, amm_config_key, mint0, mint1
         );
         Pubkey::find_program_address(
-            &["pool".as_bytes(), amm_config_key.to_bytes().as_ref(), mint0.to_bytes().as_ref(), mint1.to_bytes().as_ref()],
+            &[
+                "pool".as_bytes(),
+                amm_config_key.to_bytes().as_ref(),
+                mint0.to_bytes().as_ref(),
+                mint1.to_bytes().as_ref(),
+            ],
             raydium_program_id,
         )
     }
@@ -80,7 +88,10 @@ impl PDACalculator {
 
     /// 计算tick array PDA
     pub fn calculate_tick_array_pda(raydium_program_id: &Pubkey, pool_pubkey: &Pubkey, tick_index: i32) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&["tick_array".as_bytes(), pool_pubkey.as_ref(), tick_index.to_be_bytes().as_ref()], raydium_program_id)
+        Pubkey::find_program_address(
+            &["tick_array".as_bytes(), pool_pubkey.as_ref(), tick_index.to_be_bytes().as_ref()],
+            raydium_program_id,
+        )
     }
 
     /// 计算observation PDA

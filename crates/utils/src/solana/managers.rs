@@ -19,9 +19,18 @@ impl PoolInfoManager {
         let coinfair_mint = "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz";
 
         // 添加主要交易对
-        pools.insert(format!("{}_{}", sol_mint, usdc_mint), "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2".to_string());
-        pools.insert(format!("{}_{}", sol_mint, usdt_mint), "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string());
-        pools.insert(format!("{}_{}", usdt_mint, coinfair_mint), "EWsjgXuVrcAESbAyBo6Q2JCuuAdotBhp8g7Qhvf8GNek".to_string());
+        pools.insert(
+            format!("{}_{}", sol_mint, usdc_mint),
+            "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2".to_string(),
+        );
+        pools.insert(
+            format!("{}_{}", sol_mint, usdt_mint),
+            "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string(),
+        );
+        pools.insert(
+            format!("{}_{}", usdt_mint, coinfair_mint),
+            "EWsjgXuVrcAESbAyBo6Q2JCuuAdotBhp8g7Qhvf8GNek".to_string(),
+        );
 
         pools
     }

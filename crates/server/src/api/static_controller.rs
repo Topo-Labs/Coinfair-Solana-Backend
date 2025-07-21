@@ -1,4 +1,4 @@
-use crate::dtos::static_dto::{ApiResponse, AutoFeeConfig, ChainTimeConfig, MintListResponse, MintPriceResponse, PriceData, RpcConfig, TokenInfo, VersionConfig};
+use crate::dtos::static_dto::{ApiResponse, AutoFeeConfig, ChainTimeConfig, MintListResponse, MintPriceResponse, PriceData, RpcConfig, VersionConfig};
 use axum::{extract::Query, routing::get, Json, Router};
 use serde::Deserialize;
 use tracing::info;
@@ -82,7 +82,9 @@ pub async fn get_version() -> Json<ApiResponse<VersionConfig>> {
 pub async fn get_auto_fee() -> Json<ApiResponse<AutoFeeConfig>> {
     info!("💰 获取自动费用配置");
 
-    let auto_fee_config = AutoFeeConfig { default: AutoFeeConfig::default_fees() };
+    let auto_fee_config = AutoFeeConfig {
+        default: AutoFeeConfig::default_fees(),
+    };
 
     Json(ApiResponse::success(auto_fee_config))
 }

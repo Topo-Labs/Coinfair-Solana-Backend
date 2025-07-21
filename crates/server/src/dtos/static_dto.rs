@@ -239,7 +239,9 @@ impl Default for MintListResponse {
                     name: "USD Coin".to_string(),
                     symbol: "USDC".to_string(),
                     decimals: 6,
-                    logo_uri: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png".to_string(),
+                    logo_uri:
+                        "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png"
+                            .to_string(),
                     tags: vec!["community".to_string(), "strict".to_string(), "verified".to_string()],
                     daily_volume: 1047104708.8575294,
                     created_at: DateTime::parse_from_rfc3339("2024-04-26T10:56:58.893768Z").unwrap().with_timezone(&Utc),

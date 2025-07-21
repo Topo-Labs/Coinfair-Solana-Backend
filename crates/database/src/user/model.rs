@@ -1,4 +1,3 @@
-use chrono::prelude::{DateTime, Utc};
 use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -13,10 +12,10 @@ pub struct User {
     /// 用户钱包地址
     pub address: String, // Address
     /// 购买金额
-    pub amount: String,  // Amount
+    pub amount: String, // Amount
     /// 购买时的代币价格
-    pub price: String,   // Price
+    pub price: String, // Price
     /// 购买时间戳
     #[serde(with = "mongodb::bson::serde_helpers::u64_as_f64")]
-    pub timestamp: u64,  // 1734187238
+    pub timestamp: u64, // 1734187238
 }
