@@ -12,14 +12,14 @@ import { TransactionDto } from 'src/transaction/transaction.dto';
 import { buildTickArrayAccounts } from './buildTickerAddress';
 import Decimal from 'decimal.js';
 
-  
+
 export class SolanaFactory {
   private static connection: Connection;
   private static anchorProvider: AnchorProvider;
   private static clmmProgram: Program;
 
   // 私有构造函数，防止外部实例化
-  private constructor() {}
+  private constructor() { }
   // 静态初始化
   static {
     SolanaFactory.initialize();
@@ -62,23 +62,23 @@ export class SolanaFactory {
     return this.clmmProgram;
   }
 
-    //  获取pool state
-    static async getPoolState() {
-        return await this.clmmProgram.account.poolState.fetch(new PublicKey(POOL_PROGRAM_ID)) as PoolState;
-    }
+  //  获取pool state
+  static async getPoolState() {
+    return await this.clmmProgram.account.poolState.fetch(new PublicKey(POOL_PROGRAM_ID)) as PoolState;
+  }
 
   // 交易构建
   static async generateSwapTransaction(request: TransactionDto, swapType: 'BaseIn' | 'BaseOut') {
-    const {swapResponse:{data:swapResponse},wallet} = request;
-    const {inputMint,outputMint,inputAmount,outputAmount} = swapResponse;
+    const { swapResponse: { data: swapResponse }, wallet } = request;
+    const { inputMint, outputMint, inputAmount, outputAmount } = swapResponse;
     const poolState = await this.clmmProgram.account.poolState.fetch(new PublicKey(POOL_PROGRAM_ID)) as PoolState;
     const mint0ATA = await getTokenAta(poolState.tokenMint0, wallet);
     const mint1ATA = await getTokenAta(poolState.tokenMint1, wallet);
 
-    // 判断from to，需要换算mint位置
+    // 判断from to，需要换算mint仓位
     let mintInfos;
-    console.log('inputMint===>',inputMint,poolState.tokenMint0.toString());
-    if(inputMint===poolState.tokenMint0.toString()){
+    console.log('inputMint===>', inputMint, poolState.tokenMint0.toString());
+    if (inputMint === poolState.tokenMint0.toString()) {
       console.log('0===>1');
       mintInfos = {
         inputTokenAccount: mint0ATA,//ata账户
@@ -88,7 +88,7 @@ export class SolanaFactory {
         inputVaultMint: new PublicKey(poolState.tokenMint0),
         outputVaultMint: new PublicKey(poolState.tokenMint1)
       }
-    }else{
+    } else {
       console.log('1===>0');
       mintInfos = {
         inputTokenAccount: mint1ATA,//ata账户
@@ -99,53 +99,53 @@ export class SolanaFactory {
         outputVaultMint: new PublicKey(poolState.tokenMint0)
       }
     }
-    console.log('inputAmount===>',mintInfos);
-     try {
-         console.log('创建交易指令===>BaseIn:',swapType==='BaseIn');
-         const transaction = await this.clmmProgram.methods
-         .swapV2(
-            new BN(inputAmount),
-            new BN(0),
-            undefined,
-            swapType==='BaseIn'
-          )
-         .accounts({
-             payer: new PublicKey(wallet),
-             ammConfig: new PublicKey(poolState.ammConfig),
-             poolState: new PublicKey(POOL_PROGRAM_ID),
-             observationState: new PublicKey(poolState.observationKey),
-             tokenProgram: TOKEN_PROGRAM_ID,
-             tokenProgram2022: TOKEN_2022_PROGRAM_ID,
-             memoProgram: MEMO_PROGRAM_ID,
-             ...mintInfos
-         })
-         .remainingAccounts([{
-            pubkey: new PublicKey('9Z2PpBfmJxR7MPdG2cuCy6JdJ8Yj9qMJGvAtBRuMGZ5L'),
-            isSigner: false,
-            isWritable: false
-         },{
-            pubkey: new PublicKey('DLgwxP8SGTrRcssS3qd1tusvWD669r1p3USDo9eqsfTz'),
-            isSigner: false,
-            isWritable: true
-         },{
-            pubkey: new PublicKey('E7piHoq4ryUAtq2x9rBqFB5X3ez1upF5Q1HY7vUQSLAM'),
-            isSigner: false,
-            isWritable: true
-         }])
-         .transaction();
-         let blockhash = (await this.connection.getLatestBlockhash("finalized")).blockhash;
-         transaction.recentBlockhash = blockhash;
-         transaction.feePayer = new PublicKey(wallet);
-         const serialize = transaction.serialize({
-             requireAllSignatures: false,
-             verifySignatures: false,
-         })
-         const swapV2Instruction = Buffer.from(serialize).toString("base64")
-         return swapV2Instruction
-     } catch (error) {
-         console.error('Error swapV2Instruction:', error);
-         return null
-     }
+    console.log('inputAmount===>', mintInfos);
+    try {
+      console.log('创建交易指令===>BaseIn:', swapType === 'BaseIn');
+      const transaction = await this.clmmProgram.methods
+        .swapV2(
+          new BN(inputAmount),
+          new BN(0),
+          undefined,
+          swapType === 'BaseIn'
+        )
+        .accounts({
+          payer: new PublicKey(wallet),
+          ammConfig: new PublicKey(poolState.ammConfig),
+          poolState: new PublicKey(POOL_PROGRAM_ID),
+          observationState: new PublicKey(poolState.observationKey),
+          tokenProgram: TOKEN_PROGRAM_ID,
+          tokenProgram2022: TOKEN_2022_PROGRAM_ID,
+          memoProgram: MEMO_PROGRAM_ID,
+          ...mintInfos
+        })
+        .remainingAccounts([{
+          pubkey: new PublicKey('9Z2PpBfmJxR7MPdG2cuCy6JdJ8Yj9qMJGvAtBRuMGZ5L'),
+          isSigner: false,
+          isWritable: false
+        }, {
+          pubkey: new PublicKey('DLgwxP8SGTrRcssS3qd1tusvWD669r1p3USDo9eqsfTz'),
+          isSigner: false,
+          isWritable: true
+        }, {
+          pubkey: new PublicKey('E7piHoq4ryUAtq2x9rBqFB5X3ez1upF5Q1HY7vUQSLAM'),
+          isSigner: false,
+          isWritable: true
+        }])
+        .transaction();
+      let blockhash = (await this.connection.getLatestBlockhash("finalized")).blockhash;
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = new PublicKey(wallet);
+      const serialize = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false,
+      })
+      const swapV2Instruction = Buffer.from(serialize).toString("base64")
+      return swapV2Instruction
+    } catch (error) {
+      console.error('Error swapV2Instruction:', error);
+      return null
+    }
   }
 
 }

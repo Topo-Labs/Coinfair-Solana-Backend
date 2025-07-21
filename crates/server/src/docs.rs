@@ -132,7 +132,7 @@ use utoipa::OpenApi;
         (name = "user", description = "用户管理"),
         (name = "Solana交换", description = "Solana 代币交换相关接口"),
         (name = "SwapV2兼容接口", description = "SwapV2 兼容接口，支持转账费"),
-        (name = "Solana流动性", description = "Solana 流动性位置管理接口"),
+        (name = "Solana流动性", description = "Solana 流动性仓位管理接口"),
         (name = "系统配置", description = "系统配置相关接口"),
         (name = "代币信息", description = "代币信息相关接口")
     )

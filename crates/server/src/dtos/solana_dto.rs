@@ -689,10 +689,10 @@ pub struct OpenPositionResponse {
     /// 交易消息摘要（用于前端显示）
     pub transaction_message: String,
 
-    /// 预期的位置NFT mint地址
+    /// 预期的仓位NFT mint地址
     pub position_nft_mint: String,
 
-    /// 预期的位置键值
+    /// 预期的仓位键值
     pub position_key: String,
 
     /// 下限tick索引
@@ -717,13 +717,13 @@ pub struct OpenPositionResponse {
     pub timestamp: i64,
 }
 
-/// 位置信息DTO
+/// 仓位信息DTO
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PositionInfo {
-    /// 位置键值
+    /// 仓位键值
     pub position_key: String,
 
-    /// 位置NFT mint地址
+    /// 仓位NFT mint地址
     pub nft_mint: String,
 
     /// 池子地址
@@ -757,7 +757,7 @@ pub struct PositionInfo {
     pub created_at: i64,
 }
 
-/// 位置奖励信息
+/// 仓位奖励信息
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PositionRewardInfo {
     /// 奖励代币mint地址
@@ -770,7 +770,7 @@ pub struct PositionRewardInfo {
     pub growth_inside_last_x64: String,
 }
 
-/// 获取用户位置列表请求DTO
+/// 获取用户仓位列表请求DTO
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct GetUserPositionsRequest {
     /// 用户钱包地址（可选，默认使用服务配置的钱包）
@@ -782,13 +782,13 @@ pub struct GetUserPositionsRequest {
     pub pool_address: Option<String>,
 }
 
-/// 用户位置列表响应DTO
+/// 用户仓位列表响应DTO
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserPositionsResponse {
-    /// 位置列表
+    /// 仓位列表
     pub positions: Vec<PositionInfo>,
 
-    /// 总位置数量
+    /// 总仓位数量
     pub total_count: usize,
 
     /// 查询的钱包地址

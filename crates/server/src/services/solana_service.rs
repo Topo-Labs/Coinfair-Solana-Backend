@@ -82,19 +82,19 @@ pub trait SolanaServiceTrait {
 
     // ============ OpenPosition API ============
 
-    /// 开仓（创建流动性位置）
+    /// 开仓（创建流动性仓位）
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
 
     /// 计算流动性参数
     async fn calculate_liquidity(&self, request: CalculateLiquidityRequest) -> Result<CalculateLiquidityResponse>;
 
-    /// 获取用户所有位置
+    /// 获取用户所有仓位
     async fn get_user_positions(&self, request: GetUserPositionsRequest) -> Result<UserPositionsResponse>;
 
-    /// 获取位置详情
+    /// 获取仓位详情
     async fn get_position_info(&self, position_key: String) -> Result<PositionInfo>;
 
-    /// 检查位置是否已存在
+    /// 检查仓位是否已存在
     async fn check_position_exists(
         &self,
         pool_address: String,
@@ -1007,12 +1007,12 @@ impl SolanaServiceTrait for SolanaService {
         info!("    实际价格范围: {} - {}", actual_lower_price, actual_upper_price);
         info!("    最终tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
 
-        // 4. 检查是否已存在相同位置
+        // 4. 检查是否已存在相同仓位
         if let Some(_existing) = position_utils
             .find_existing_position(&user_wallet, &pool_address, tick_lower_adjusted, tick_upper_adjusted)
             .await?
         {
-            return Err(anyhow::anyhow!("相同价格范围的位置已存在"));
+            return Err(anyhow::anyhow!("相同价格范围的仓位已存在"));
         }
 
         // 5. 使用重新计算的sqrt_price计算流动性（与CLI版本一致）

@@ -119,7 +119,7 @@ impl<'a> PositionUtils<'a> {
         }
     }
 
-    /// 检查位置是否已存在 - 带重试逻辑
+    /// 检查仓位是否已存在 - 带重试逻辑
     pub async fn find_existing_position(
         &self,
         user_wallet: &Pubkey,
@@ -127,22 +127,22 @@ impl<'a> PositionUtils<'a> {
         tick_lower: i32,
         tick_upper: i32,
     ) -> Result<Option<ExistingPosition>> {
-        info!("🔍 检查是否存在相同范围的位置");
+        info!("🔍 检查是否存在相同范围的仓位");
         info!("  钱包: {}", user_wallet);
         info!("  池子: {}", pool_address);
         info!("  Tick范围: {} - {}", tick_lower, tick_upper);
 
         match self.find_existing_position_internal(user_wallet, pool_address, tick_lower, tick_upper).await {
             Ok(Some(position)) => {
-                info!("✅ 找到相同范围的位置: {}", position.position_key);
+                info!("✅ 找到相同范围的仓位: {}", position.position_key);
                 return Ok(Some(position));
             }
             Ok(None) => {
-                info!("✅ 确认没有相同范围的位置");
+                info!("✅ 确认没有相同范围的仓位");
                 return Ok(None);
             }
             Err(e) => {
-                warn!("⚠️ 查找位置失败: {:?}", e);
+                warn!("⚠️ 查找仓位失败: {:?}", e);
                 return Err(e);
             }
         }
@@ -179,14 +179,14 @@ impl<'a> PositionUtils<'a> {
                                 && position_state.tick_lower_index == tick_lower
                                 && position_state.tick_upper_index == tick_upper
                             {
-                                info!("  🎯 找到匹配的位置！");
+                                info!("  🎯 找到匹配的仓位！");
                                 return Ok(Some(ExistingPosition {
                                     nft_mint: nft_info.nft_mint,
                                     position_key: nft_info.position_pda,
                                     liquidity: position_state.liquidity,
                                 }));
                             } else {
-                                info!("  ⏭️ 位置不匹配，继续搜索");
+                                info!("  ⏭️ 仓位不匹配，继续搜索");
                             }
                         }
                         Err(e) => {
@@ -360,7 +360,7 @@ impl<'a> PositionUtils<'a> {
     }
 }
 
-/// 用户NFT位置信息
+/// 用户NFT仓位信息
 #[derive(Debug, Clone, Copy)]
 pub struct PositionNftInfo {
     pub nft_mint: Pubkey,
@@ -368,7 +368,7 @@ pub struct PositionNftInfo {
     pub position_pda: Pubkey,
 }
 
-/// 已存在的位置信息
+/// 已存在的仓位信息
 #[derive(Debug, Clone)]
 pub struct ExistingPosition {
     pub nft_mint: Pubkey,
