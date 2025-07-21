@@ -65,7 +65,14 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 计算单一代币流动性（基于输入金额）
-    pub fn calculate_liquidity_from_single_amount(&self, current_sqrt_price_x64: u128, sqrt_price_lower_x64: u128, sqrt_price_upper_x64: u128, amount: u64, is_token_0: bool) -> Result<u128> {
+    pub fn calculate_liquidity_from_single_amount(
+        &self,
+        current_sqrt_price_x64: u128,
+        sqrt_price_lower_x64: u128,
+        sqrt_price_upper_x64: u128,
+        amount: u64,
+        is_token_0: bool,
+    ) -> Result<u128> {
         if is_token_0 {
             Ok(raydium_amm_v3::libraries::liquidity_math::get_liquidity_from_single_amount_0(
                 current_sqrt_price_x64,
@@ -84,35 +91,55 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 根据流动性计算token数量
-    pub fn calculate_amounts_from_liquidity(&self, current_tick: i32, current_sqrt_price_x64: u128, tick_lower: i32, tick_upper: i32, liquidity: u128) -> Result<(u64, u64)> {
+    pub fn calculate_amounts_from_liquidity(
+        &self,
+        current_tick: i32,
+        current_sqrt_price_x64: u128,
+        tick_lower: i32,
+        tick_upper: i32,
+        liquidity: u128,
+    ) -> Result<(u64, u64)> {
         raydium_amm_v3::libraries::liquidity_math::get_delta_amounts_signed(current_tick, current_sqrt_price_x64, tick_lower, tick_upper, liquidity as i128)
             .map_err(|e| anyhow::anyhow!("流动性计算金额失败: {:?}", e))
     }
 
     /// 应用滑点保护
     pub fn apply_slippage(&self, amount: u64, slippage_percent: f64, is_min: bool) -> u64 {
-        let slippage_factor = slippage_percent / 100.0;
+        // 注意：对于OpenPosition，我们需要计算最大输入金额，所以is_min应该为false
+        // 这将增加金额以提供滑点保护
         if is_min {
-            // 最小输出，减去滑点
-            (amount as f64 * (1.0 - slippage_factor)) as u64
+            // 减少金额（用于计算最小输出）
+            ((amount as f64) * (1.0 - slippage_percent / 100.0)).floor() as u64
         } else {
-            // 最大输入，加上滑点
-            (amount as f64 * (1.0 + slippage_factor)) as u64
+            // 增加金额（用于计算最大输入） - 与CLI版本的round_up=true一致
+            ((amount as f64) * (1.0 + slippage_percent / 100.0)).ceil() as u64
         }
     }
 
     /// 检查位置是否已存在
-    pub async fn find_existing_position(&self, user_wallet: &Pubkey, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32) -> Result<Option<ExistingPosition>> {
+    pub async fn find_existing_position(
+        &self,
+        user_wallet: &Pubkey,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+    ) -> Result<Option<ExistingPosition>> {
         info!("🔍 检查是否存在相同范围的位置");
 
         // 获取用户所有NFT和position
         let position_nfts = self.get_user_position_nfts(user_wallet).await?;
+        info!("🔍 获取用户所有NFT和position: {:#?}", position_nfts);
 
         for nft_info in position_nfts {
+            let position_account = self.rpc_client.get_account(&nft_info.position_pda);
+            info!("🔍 获取position账户: {:#?}", position_account);
             // 加载position状态
-            if let Ok(position_account) = self.rpc_client.get_account(&nft_info.position_pda) {
-                if let Ok(position_state) = self.deserialize_position_state(&position_account) {
-                    if position_state.pool_id == *pool_address && position_state.tick_lower_index == tick_lower && position_state.tick_upper_index == tick_upper {
+            if let Ok(position_account) = position_account {
+                let position_state = self.deserialize_position_state(&position_account);
+                info!("🔍 反序列化position状态: {:#?}", position_state);
+                if let Ok(position_state) = position_state {
+                    if position_state.pool_id == *pool_address && position_state.tick_lower_index == tick_lower && position_state.tick_upper_index == tick_upper
+                    {
                         return Ok(Some(ExistingPosition {
                             nft_mint: nft_info.nft_mint,
                             position_key: nft_info.position_pda,
@@ -126,10 +153,34 @@ impl<'a> PositionUtils<'a> {
         Ok(None)
     }
 
-    /// 获取用户的position NFTs
+    /// 获取用户的position NFTs（同时支持经典Token和Token-2022）
     pub async fn get_user_position_nfts(&self, user_wallet: &Pubkey) -> Result<Vec<PositionNftInfo>> {
-        // 获取用户所有代币账户
-        let token_accounts = self.rpc_client.get_token_accounts_by_owner(user_wallet, TokenAccountsFilter::ProgramId(spl_token::id()))?;
+        info!("🔍 获取用户的Position NFTs（包括Token和Token-2022）");
+
+        let mut all_position_nfts = Vec::new();
+
+        // 1. 获取经典Token的NFT
+        let classic_nfts = self.get_position_nfts_by_program(user_wallet, &spl_token::id()).await?;
+        all_position_nfts.extend(classic_nfts.clone());
+
+        // 2. 获取Token-2022的NFT
+        let token2022_nfts = self.get_position_nfts_by_program(user_wallet, &spl_token_2022::id()).await?;
+        all_position_nfts.extend(token2022_nfts.clone());
+        info!(
+            "  找到 {} 个经典Token NFT，{} 个Token-2022 NFT",
+            classic_nfts.iter().count(),
+            token2022_nfts.iter().count()
+        );
+
+        Ok(all_position_nfts)
+    }
+
+    /// 根据特定的Token程序获取position NFTs
+    async fn get_position_nfts_by_program(&self, user_wallet: &Pubkey, token_program: &Pubkey) -> Result<Vec<PositionNftInfo>> {
+        // 获取指定Token程序的所有代币账户
+        let token_accounts = self
+            .rpc_client
+            .get_token_accounts_by_owner(user_wallet, TokenAccountsFilter::ProgramId(*token_program))?;
 
         let mut position_nfts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
@@ -137,26 +188,57 @@ impl<'a> PositionUtils<'a> {
         for token_account_info in token_accounts {
             // 直接尝试解析账户数据
             if let Ok(raw_account) = self.rpc_client.get_account(&Pubkey::from_str(&token_account_info.pubkey)?) {
-                if let Ok(token_account) = TokenAccount::unpack(&raw_account.data) {
-                    // 检查是否为NFT（amount = 1, decimals = 0）
-                    if token_account.amount == 1 {
-                        // 检查mint的decimals
-                        if let Ok(mint_account) = self.rpc_client.get_account(&token_account.mint) {
+                // 根据Token程序类型解析账户
+                let (amount, mint) = if *token_program == spl_token::id() {
+                    // 经典Token
+                    if let Ok(token_account) = TokenAccount::unpack(&raw_account.data) {
+                        (token_account.amount, token_account.mint)
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // Token-2022 - 需要处理扩展
+                    if let Ok(token_account_state) = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(&raw_account.data)
+                    {
+                        let base = token_account_state.base;
+                        (base.amount, base.mint)
+                    } else {
+                        continue;
+                    }
+                };
+
+                // 检查是否为NFT（amount = 1）
+                if amount == 1 {
+                    // 检查mint的decimals
+                    if let Ok(mint_account) = self.rpc_client.get_account(&mint) {
+                        let decimals = if *token_program == spl_token::id() {
+                            // 经典Token mint
                             if let Ok(mint_state) = spl_token::state::Mint::unpack(&mint_account.data) {
-                                if mint_state.decimals == 0 {
-                                    // 计算position PDA
-                                    let (position_pda, _) = Pubkey::find_program_address(&[b"position", token_account.mint.as_ref()], &raydium_program_id);
-
-                                    // 解析账户地址
-                                    let nft_account_pubkey = Pubkey::from_str(&token_account_info.pubkey)?;
-
-                                    position_nfts.push(PositionNftInfo {
-                                        nft_mint: token_account.mint,
-                                        nft_account: nft_account_pubkey,
-                                        position_pda,
-                                    });
-                                }
+                                mint_state.decimals
+                            } else {
+                                continue;
                             }
+                        } else {
+                            // Token-2022 mint
+                            if let Ok(mint_state) = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_account.data) {
+                                mint_state.base.decimals
+                            } else {
+                                continue;
+                            }
+                        };
+
+                        if decimals == 0 {
+                            // 计算position PDA
+                            let (position_pda, _) = Pubkey::find_program_address(&[b"position", mint.as_ref()], &raydium_program_id);
+
+                            // 解析账户地址
+                            let nft_account_pubkey = Pubkey::from_str(&token_account_info.pubkey)?;
+
+                            position_nfts.push(PositionNftInfo {
+                                nft_mint: mint,
+                                nft_account: nft_account_pubkey,
+                                position_pda,
+                            });
                         }
                     }
                 }
@@ -178,7 +260,13 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 构建remaining accounts（tick arrays和bitmap）
-    pub async fn build_remaining_accounts(&self, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32, tick_spacing: u16) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
+    pub async fn build_remaining_accounts(
+        &self,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+        tick_spacing: u16,
+    ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let mut remaining_accounts = Vec::new();
 
@@ -220,7 +308,7 @@ impl<'a> PositionUtils<'a> {
 }
 
 /// 用户NFT位置信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PositionNftInfo {
     pub nft_mint: Pubkey,
     pub nft_account: Pubkey,
@@ -249,51 +337,32 @@ pub struct PersonalPositionState {
 
 impl anchor_lang::AccountDeserialize for PersonalPositionState {
     fn try_deserialize(buf: &mut &[u8]) -> anchor_lang::Result<Self> {
-        // 跳过discriminator
-        if buf.len() < 8 {
-            return Err(anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into());
-        }
-        *buf = &buf[8..];
-
-        // 简化的反序列化实现
-        if buf.len() < 256 {
-            return Err(anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into());
-        }
-
-        // 读取关键字段（这里需要根据实际的内存布局调整）
-        let nft_mint = Pubkey::new_from_array({
-            let mut array = [0u8; 32];
-            array.copy_from_slice(&buf[0..32]);
-            array
-        });
-
-        let pool_id = Pubkey::new_from_array({
-            let mut array = [0u8; 32];
-            array.copy_from_slice(&buf[32..64]);
-            array
-        });
-
-        // 跳过其他字段，直接读取tick indexes
-        let tick_lower_index = i32::from_le_bytes([buf[64], buf[65], buf[66], buf[67]]);
-        let tick_upper_index = i32::from_le_bytes([buf[68], buf[69], buf[70], buf[71]]);
-
-        // 读取流动性（u128）
-        let mut liquidity_bytes = [0u8; 16];
-        liquidity_bytes.copy_from_slice(&buf[72..88]);
-        let liquidity = u128::from_le_bytes(liquidity_bytes);
+        // 使用正确的Raydium CLMM PersonalPositionState反序列化
+        // 直接使用raydium_amm_v3的反序列化方法
+        let position_state = raydium_amm_v3::states::PersonalPositionState::try_deserialize(buf)?;
 
         Ok(PersonalPositionState {
-            nft_mint,
-            pool_id,
-            tick_lower_index,
-            tick_upper_index,
-            liquidity,
-            token_fees_owed_0: 0, // 简化处理
-            token_fees_owed_1: 0, // 简化处理
+            nft_mint: position_state.nft_mint,
+            pool_id: position_state.pool_id,
+            tick_lower_index: position_state.tick_lower_index,
+            tick_upper_index: position_state.tick_upper_index,
+            liquidity: position_state.liquidity,
+            token_fees_owed_0: position_state.token_fees_owed_0,
+            token_fees_owed_1: position_state.token_fees_owed_1,
         })
     }
 
-    fn try_deserialize_unchecked(_buf: &mut &[u8]) -> anchor_lang::Result<Self> {
-        unimplemented!()
+    fn try_deserialize_unchecked(buf: &mut &[u8]) -> anchor_lang::Result<Self> {
+        let position_state = raydium_amm_v3::states::PersonalPositionState::try_deserialize_unchecked(buf)?;
+
+        Ok(PersonalPositionState {
+            nft_mint: position_state.nft_mint,
+            pool_id: position_state.pool_id,
+            tick_lower_index: position_state.tick_lower_index,
+            tick_upper_index: position_state.tick_upper_index,
+            liquidity: position_state.liquidity,
+            token_fees_owed_0: position_state.token_fees_owed_0,
+            token_fees_owed_1: position_state.token_fees_owed_1,
+        })
     }
 }

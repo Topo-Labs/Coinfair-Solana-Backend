@@ -1,3 +1,5 @@
+use clap::Parser;
+
 #[derive(clap::ValueEnum, Clone, Debug, Copy)]
 pub enum CargoEnv {
     Development,
@@ -79,4 +81,11 @@ pub struct AppConfig {
 
     #[clap(long, env, default_value = "info")]
     pub rust_log: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        EnvLoader::load_env_file().ok();
+        AppConfig::parse()
+    }
 }

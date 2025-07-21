@@ -84,3 +84,6 @@ STATIC_API_IMPLEMENTATION.md
 static_api.md
 .env.development
 .env.production
+OPEN_POSITION_FINAL_VERIFICATION.md
+test_position_check.rs
+test_pool.rs

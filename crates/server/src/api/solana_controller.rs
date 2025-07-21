@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     dtos::solana_dto::{
         ApiResponse,
@@ -150,7 +152,9 @@ pub async fn swap_tokens(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_balance(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_balance(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 查询账户余额");
 
     match services.solana.get_balance().await {
@@ -252,12 +256,18 @@ pub async fn get_price_quote(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_wallet_info(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_wallet_info(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔍 查询钱包信息");
 
     match services.solana.get_wallet_info().await {
         Ok(wallet_info) => {
-            info!("✅ 钱包信息查询成功: {} ({})", wallet_info.address, if wallet_info.connected { "已连接" } else { "未连接" });
+            info!(
+                "✅ 钱包信息查询成功: {} ({})",
+                wallet_info.address,
+                if wallet_info.connected { "已连接" } else { "未连接" }
+            );
             Ok(Json(ApiResponse::success(wallet_info)))
         }
         Err(e) => {
@@ -714,9 +724,9 @@ async fn calculate_liquidity(
     }
 }
 
-/// 获取用户位置列表
+/// 获取用户仓位列表
 ///
-/// 查询用户的所有流动性位置。
+/// 查询用户的所有流动性仓位。
 ///
 /// # 查询参数
 ///
@@ -736,7 +746,10 @@ async fn calculate_liquidity(
     ),
     tag = "Solana流动性"
 )]
-async fn get_user_positions(Extension(services): Extension<Services>, Query(request): Query<GetUserPositionsRequest>) -> Result<Json<UserPositionsResponse>, (StatusCode, Json<ErrorResponse>)> {
+async fn get_user_positions(
+    Extension(services): Extension<Services>,
+    Query(request): Query<GetUserPositionsRequest>,
+) -> Result<Json<UserPositionsResponse>, (StatusCode, Json<ErrorResponse>)> {
     info!("📋 接收到获取用户仓位列表请求");
 
     match services.solana.get_user_positions(request).await {
@@ -773,21 +786,24 @@ async fn get_user_positions(Extension(services): Extension<Services>, Query(requ
     ),
     tag = "Solana流动性"
 )]
-async fn get_position_info(Extension(services): Extension<Services>, Query(params): Query<std::collections::HashMap<String, String>>) -> Result<Json<PositionInfo>, (StatusCode, Json<ErrorResponse>)> {
+async fn get_position_info(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<PositionInfo>, (StatusCode, Json<ErrorResponse>)> {
     let position_key = params.get("position_key").ok_or_else(|| {
         let error_response = ErrorResponse::new("POSITION_INFO_ERROR", "缺少position_key参数");
         (StatusCode::BAD_REQUEST, Json(error_response))
     })?;
 
-    info!("🔍 接收到获取位置详情请求: {}", position_key);
+    info!("🔍 接收到获取仓位详情请求: {}", position_key);
 
     match services.solana.get_position_info(position_key.clone()).await {
         Ok(response) => {
-            info!("✅ 获取位置详情成功");
+            info!("✅ 获取仓位详情成功");
             Ok(Json(response))
         }
         Err(e) => {
-            error!("❌ 获取位置详情失败: {:?}", e);
+            error!("❌ 获取仓位详情失败: {:?}", e);
             let error_response = ErrorResponse::new("GET_POSITION_INFO_ERROR", &format!("获取位置详情失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
@@ -862,7 +878,11 @@ async fn check_position_exists(
     info!("  池子: {}", pool_address);
     info!("  Tick范围: {} - {}", tick_lower, tick_upper);
 
-    match services.solana.check_position_exists(pool_address, tick_lower, tick_upper, wallet_address).await {
+    match services
+        .solana
+        .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
+        .await
+    {
         Ok(response) => {
             if response.is_some() {
                 info!("✅ 找到相同范围的位置");

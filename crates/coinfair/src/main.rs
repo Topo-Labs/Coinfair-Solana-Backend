@@ -1,8 +1,6 @@
 use anyhow::{Context, Result};
-use axum::{routing::Router, serve};
 use clap::Parser;
 use database::Database;
-use dotenvy::dotenv;
 use monitor::monitor::Monitor;
 use server::{app::ApplicationServer, services::Services};
 use std::sync::Arc;
@@ -82,7 +80,10 @@ impl Coinfair {
         });
 
         set.spawn(async move {
-            ApplicationServer::serve(self.config.clone()).await.context("🔴 Failed to start server").expect("🔴 Failed to start server");
+            ApplicationServer::serve(self.config.clone())
+                .await
+                .context("🔴 Failed to start server")
+                .expect("🔴 Failed to start server");
         });
 
         tokio::select! {
@@ -139,7 +140,10 @@ async fn shutdown_signal() {
 
     #[cfg(unix)]
     let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate()).expect("🔴 Failed to install signal handler").recv().await;
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("🔴 Failed to install signal handler")
+            .recv()
+            .await;
         info!("🔔 Terminate signal received");
     };
 

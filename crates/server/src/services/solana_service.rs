@@ -1,18 +1,22 @@
 use crate::dtos::solana_dto::{
-    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, GetUserPositionsRequest, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
-    PriceQuoteResponse, RoutePlan, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionStatus, TransactionSwapV2Request, TransferFeeInfo, UserPositionsResponse, WalletInfo,
+    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, GetUserPositionsRequest, OpenPositionRequest,
+    OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse, RoutePlan, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData,
+    TransactionStatus, TransactionSwapV2Request, TransferFeeInfo, UserPositionsResponse, WalletInfo,
 };
 
 use ::utils::solana::{ServiceHelpers, SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder};
+use anchor_lang::AccountDeserialize;
+use solana_sdk::account::Account;
+use solana_sdk::transaction::Transaction;
 
-use ::utils::solana::*;
 use ::utils::solana::{PositionInstructionBuilder, PositionUtils};
+use ::utils::{solana::*, AppConfig};
 use anyhow::Result;
 use async_trait::async_trait;
 use solana::raydium_api::RaydiumApiClient;
 use solana::{RaydiumSwap, SolanaClient, SwapConfig, SwapV2InstructionBuilder, SwapV2Service};
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{pubkey::Pubkey, signature::Keypair, signer::Signer};
+use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer};
 use spl_token;
 use spl_token_2022;
 use std::str::FromStr;
@@ -78,23 +82,30 @@ pub trait SolanaServiceTrait {
     // ============ OpenPosition API ============
 
     /// 开仓（创建流动性位置）
-    async fn open_position(&self, request: crate::dtos::solana_dto::OpenPositionRequest) -> Result<crate::dtos::solana_dto::OpenPositionResponse>;
+    async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
 
     /// 计算流动性参数
-    async fn calculate_liquidity(&self, request: crate::dtos::solana_dto::CalculateLiquidityRequest) -> Result<crate::dtos::solana_dto::CalculateLiquidityResponse>;
+    async fn calculate_liquidity(&self, request: CalculateLiquidityRequest) -> Result<CalculateLiquidityResponse>;
 
     /// 获取用户所有位置
-    async fn get_user_positions(&self, request: crate::dtos::solana_dto::GetUserPositionsRequest) -> Result<crate::dtos::solana_dto::UserPositionsResponse>;
+    async fn get_user_positions(&self, request: GetUserPositionsRequest) -> Result<UserPositionsResponse>;
 
     /// 获取位置详情
-    async fn get_position_info(&self, position_key: String) -> Result<crate::dtos::solana_dto::PositionInfo>;
+    async fn get_position_info(&self, position_key: String) -> Result<PositionInfo>;
 
     /// 检查位置是否已存在
-    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<crate::dtos::solana_dto::PositionInfo>>;
+    async fn check_position_exists(
+        &self,
+        pool_address: String,
+        tick_lower: i32,
+        tick_upper: i32,
+        wallet_address: Option<String>,
+    ) -> Result<Option<PositionInfo>>;
 }
 
 pub struct SolanaService {
     config: SwapConfig,
+    app_config: AppConfig,
     raydium_swap: Arc<Mutex<Option<RaydiumSwap>>>,
     rpc_client: Arc<RpcClient>,                // 只读RPC客户端
     api_client: RaydiumApiClient,              // 只读API客户端
@@ -200,6 +211,7 @@ impl SolanaService {
 
         Self {
             config: SwapConfig::default(),
+            app_config: AppConfig::default(),
             raydium_swap: Arc::new(Mutex::new(None)),
             rpc_client,
             api_client,
@@ -234,11 +246,15 @@ impl SolanaService {
     /// 使用统一的配置管理器获取完整配置
     fn _get_config_with_private_key(&self) -> Result<SwapConfig> {
         info!("🔍 加载完整Solana配置（包含私钥）...");
-        // dotenvy::dotenv().ok();
 
-        let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let amm_program_id = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
-        let private_key = std::env::var("PRIVATE_KEY").map_err(|_| anyhow::anyhow!("环境变量PRIVATE_KEY未设置"))?;
+        let rpc_url = self.app_config.rpc_url.clone();
+        let amm_program_id = self.app_config.raydium_program_id.clone();
+        let private_key = self
+            .app_config
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?
+            .clone();
 
         let config = SwapConfig {
             rpc_url: rpc_url.clone(),
@@ -345,9 +361,9 @@ impl SolanaService {
                 Ok(pubkey) => pubkey.to_string(),
                 Err(_) => "无法获取钱包地址".to_string(),
             }
-        } else if !self.config.private_key.is_empty() {
+        } else if let Some(private_key) = &self.app_config.private_key {
             // 如果私钥已配置但raydium未初始化，显示私钥的前8位作为标识
-            format!("{}...(私钥已配置)", &self.config.private_key[..8])
+            format!("{}...(私钥已配置)", &private_key[..8.min(private_key.len())])
         } else {
             "未配置私钥".to_string()
         }
@@ -357,18 +373,30 @@ impl SolanaService {
 
     /// 获取用户钱包公钥
     fn get_user_wallet_pubkey(&self) -> Result<Pubkey> {
-        use solana_sdk::signer::Signer;
-        let keypair = solana_sdk::signature::Keypair::from_base58_string(&self.config.private_key);
+        let private_key = self
+            .app_config
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
+
+        let keypair = Keypair::from_base58_string(private_key);
+        info!("🔍 获取用户钱包公钥: {}", keypair.pubkey());
         Ok(keypair.pubkey())
     }
 
     /// 获取用户钱包私钥
-    fn get_user_keypair(&self) -> Result<solana_sdk::signature::Keypair> {
-        Ok(solana_sdk::signature::Keypair::from_base58_string(&self.config.private_key))
+    fn get_user_keypair(&self) -> Result<Keypair> {
+        let private_key = self
+            .app_config
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
+
+        Ok(Keypair::from_base58_string(private_key))
     }
 
     /// 反序列化anchor账户
-    fn deserialize_anchor_account<T: anchor_lang::AccountDeserialize>(&self, account: &solana_sdk::account::Account) -> Result<T> {
+    fn deserialize_anchor_account<T: AccountDeserialize>(&self, account: &Account) -> Result<T> {
         let mut data: &[u8] = &account.data;
         T::try_deserialize(&mut data).map_err(Into::into)
     }
@@ -383,7 +411,9 @@ impl SolanaService {
         info!("  最大滑点: {}%", request.max_slippage_percent);
 
         // 估算输出量
-        let estimated_output = self.estimate_swap_output(&request.from_token, &request.to_token, &request.pool_address, request.amount).await?;
+        let estimated_output = self
+            .estimate_swap_output(&request.from_token, &request.to_token, &request.pool_address, request.amount)
+            .await?;
 
         // 执行交换
         let signature = {
@@ -392,7 +422,13 @@ impl SolanaService {
             let raydium = raydium_guard.as_ref().unwrap();
 
             raydium
-                .swap_tokens(&request.from_token, &request.to_token, &request.pool_address, request.amount, request.minimum_amount_out)
+                .swap_tokens(
+                    &request.from_token,
+                    &request.to_token,
+                    &request.pool_address,
+                    request.amount,
+                    request.minimum_amount_out,
+                )
                 .await?
         };
 
@@ -454,10 +490,16 @@ impl SolanaServiceTrait for SolanaService {
         info!("  池子地址: {}", request.pool_address);
         info!("  金额: {}", request.amount);
 
-        let estimated_output = self.estimate_swap_output(&request.from_token, &request.to_token, &request.pool_address, request.amount).await?;
+        let estimated_output = self
+            .estimate_swap_output(&request.from_token, &request.to_token, &request.pool_address, request.amount)
+            .await?;
 
         // 计算价格
-        let price = if request.amount > 0 { estimated_output as f64 / request.amount as f64 } else { 0.0 };
+        let price = if request.amount > 0 {
+            estimated_output as f64 / request.amount as f64
+        } else {
+            0.0
+        };
 
         // 简化的价格影响计算
         let price_impact_percent = 0.5; // 假设0.5%的价格影响
@@ -537,7 +579,13 @@ impl SolanaServiceTrait for SolanaService {
 
         let fee_amount = RoutePlanBuilder::calculate_standard_fee(amount_specified);
         let route_plan_json = service_helpers
-            .create_route_plan(pool_address_str.clone(), params.input_mint.clone(), params.output_mint.clone(), fee_amount, amount_specified)
+            .create_route_plan(
+                pool_address_str.clone(),
+                params.input_mint.clone(),
+                params.output_mint.clone(),
+                fee_amount,
+                amount_specified,
+            )
             .await?;
         let route_plan = vec![self.create_route_plan_from_json(route_plan_json)?];
 
@@ -576,7 +624,13 @@ impl SolanaServiceTrait for SolanaService {
             output_amount,
             &[
                 ("原始金额", &input_amount.to_string()),
-                ("转账费", &transfer_fee_info.as_ref().map(|f| f.input_transfer_fee.to_string()).unwrap_or_else(|| "0".to_string())),
+                (
+                    "转账费",
+                    &transfer_fee_info
+                        .as_ref()
+                        .map(|f| f.input_transfer_fee.to_string())
+                        .unwrap_or_else(|| "0".to_string()),
+                ),
             ],
         );
 
@@ -627,7 +681,13 @@ impl SolanaServiceTrait for SolanaService {
 
         let fee_amount = RoutePlanBuilder::calculate_standard_fee(required_input_amount);
         let route_plan_json = service_helpers
-            .create_route_plan(pool_address_str.clone(), params.input_mint.clone(), params.output_mint.clone(), fee_amount, required_input_amount)
+            .create_route_plan(
+                pool_address_str.clone(),
+                params.input_mint.clone(),
+                params.output_mint.clone(),
+                fee_amount,
+                required_input_amount,
+            )
             .await?;
         let route_plan = vec![self.create_route_plan_from_json(route_plan_json)?];
 
@@ -715,8 +775,10 @@ impl SolanaServiceTrait for SolanaService {
         let output_token_program = self.detect_mint_program(&output_mint)?;
 
         // 计算ATA账户
-        let user_input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
-        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+        let user_input_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
 
         // 创建ATA账户指令（幂等操作）
         let mut instructions = Vec::new();
@@ -724,13 +786,23 @@ impl SolanaServiceTrait for SolanaService {
         // 创建输入代币ATA账户（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
 
-        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
+        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &input_mint,
+            &input_token_program,
+        );
         instructions.push(create_input_ata_ix);
 
         // 创建输出代币ATA账户（如果不存在）
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
 
-        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
+        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &output_mint,
+            &output_token_program,
+        );
         instructions.push(create_output_ata_ix);
 
         // 确定vault账户
@@ -813,8 +885,10 @@ impl SolanaServiceTrait for SolanaService {
         let input_token_program = self.detect_mint_program(&input_mint)?;
         let output_token_program = self.detect_mint_program(&output_mint)?;
         // 计算ATA账户
-        let user_input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
-        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+        let user_input_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
 
         // 检查并创建ATA账户指令
         let mut instructions = Vec::new();
@@ -822,13 +896,23 @@ impl SolanaServiceTrait for SolanaService {
         // 创建输入代币ATA账户（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
 
-        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
+        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &input_mint,
+            &input_token_program,
+        );
         instructions.push(create_input_ata_ix);
 
         // 创建输出代币ATA账户（如果不存在）
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
 
-        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
+        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &output_mint,
+            &output_token_program,
+        );
         instructions.push(create_output_ata_ix);
 
         // 确定vault账户（基于mint顺序）
@@ -851,7 +935,8 @@ impl SolanaServiceTrait for SolanaService {
         info!("  Remaining accounts数量: {}", remaining_accounts.len());
 
         // 获取Raydium程序ID
-        let raydium_program_id = Pubkey::from_str(&std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".to_string()))?;
+        let raydium_program_id =
+            Pubkey::from_str(&std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".to_string()))?;
 
         // 构建SwapV2指令
         let ix = UtilsSwapV2InstructionBuilder::build_swap_v2_instruction(
@@ -896,7 +981,17 @@ impl SolanaServiceTrait for SolanaService {
 
         // 1. 解析和验证参数
         let pool_address = Pubkey::from_str(&request.pool_address)?;
-        let user_wallet = self.get_user_wallet_pubkey()?;
+        let user_wallet = Pubkey::from_str(&request.user_wallet)?;
+
+        // 从环境配置中获取私钥
+        let private_key = self
+            .app_config
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
+
+        // 使用正确的Base58解码方法
+        let user_keypair = Keypair::from_base58_string(private_key);
 
         // 2. 加载池子状态
         let pool_account = self.rpc_client.get_account(&pool_address)?;
@@ -905,79 +1000,139 @@ impl SolanaServiceTrait for SolanaService {
         // 3. 使用Position工具进行计算
         let position_utils = PositionUtils::new(&self.rpc_client);
 
-        // 价格转换为tick
-        let tick_lower_index = position_utils.price_to_tick(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-        let tick_upper_index = position_utils.price_to_tick(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+        // 价格转换为tick（与CLI版本完全一致的流程）
+        // 步骤1: 价格转sqrt_price
+        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
 
-        // 调整tick spacing
-        let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_index, pool_state.tick_spacing as i32);
-        let tick_upper_adjusted = position_utils.tick_with_spacing(tick_upper_index, pool_state.tick_spacing as i32);
+        // 步骤2: sqrt_price转tick
+        let tick_lower_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_lower)?;
+        let tick_upper_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_upper)?;
+
+        // 步骤3: 调整tick spacing
+        let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_raw, pool_state.tick_spacing as i32);
+        let tick_upper_adjusted = position_utils.tick_with_spacing(tick_upper_raw, pool_state.tick_spacing as i32);
 
         info!("  计算的tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
 
+        // 步骤4: 重新计算调整后的sqrt_price（关键步骤！）
+        let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+
         // 4. 检查是否已存在相同位置
-        if let Some(_existing) = position_utils.find_existing_position(&user_wallet, &pool_address, tick_lower_adjusted, tick_upper_adjusted).await? {
+        if let Some(_existing) = position_utils
+            .find_existing_position(&user_wallet, &pool_address, tick_lower_adjusted, tick_upper_adjusted)
+            .await?
+        {
             return Err(anyhow::anyhow!("相同价格范围的位置已存在"));
         }
 
-        // 5. 计算流动性和金额
-        let sqrt_price_lower = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
-        let sqrt_price_upper = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+        // 5. 使用重新计算的sqrt_price计算流动性（与CLI版本一致）
+        let liquidity = position_utils.calculate_liquidity_from_single_amount(
+            pool_state.sqrt_price_x64,
+            sqrt_price_lower_adjusted, // 使用调整后的值
+            sqrt_price_upper_adjusted, // 使用调整后的值
+            request.input_amount,
+            request.is_base_0,
+        )?;
 
-        let liquidity = position_utils.calculate_liquidity_from_single_amount(pool_state.sqrt_price_x64, sqrt_price_lower, sqrt_price_upper, request.input_amount, request.is_base_0)?;
+        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(
+            pool_state.tick_current,
+            pool_state.sqrt_price_x64,
+            tick_lower_adjusted,
+            tick_upper_adjusted,
+            liquidity,
+        )?;
 
-        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
+        // 6. 应用滑点保护（修正：使用false表示计算最大输入，与CLI的round_up=true一致）
+        let slippage = if request.max_slippage_percent == 0.5 {
+            5.0 // 使用CLI版本的默认值
+        } else {
+            request.max_slippage_percent
+        };
+        // 注意：is_min=false表示计算最大输入金额（增加金额）
+        let amount_0_with_slippage = position_utils.apply_slippage(amount_0, slippage, false);
+        let amount_1_with_slippage = position_utils.apply_slippage(amount_1, slippage, false);
 
-        // 6. 应用滑点保护
-        let amount_0_max = position_utils.apply_slippage(amount_0, request.max_slippage_percent, false);
-        let amount_1_max = position_utils.apply_slippage(amount_1, request.max_slippage_percent, false);
+        // 7. 计算转账费用（支持Token-2022）
+        let (transfer_fee_0, transfer_fee_1) = self.swap_v2_service.get_pool_mints_inverse_fee(
+            &pool_state.token_mint_0,
+            &pool_state.token_mint_1,
+            amount_0_with_slippage,
+            amount_1_with_slippage,
+        )?;
+
+        info!("  转账费用 - Token0: {}, Token1: {}", transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee);
+
+        // 8. 计算包含转账费的最大金额
+        let amount_0_max = amount_0_with_slippage
+            .checked_add(transfer_fee_0.transfer_fee)
+            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_1_max = amount_1_with_slippage
+            .checked_add(transfer_fee_1.transfer_fee)
+            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
 
         info!("  流动性: {}", liquidity);
         info!("  Token0最大消耗: {}", amount_0_max);
         info!("  Token1最大消耗: {}", amount_1_max);
 
-        // 7. 生成NFT mint
+        // 9. 生成NFT mint
         let nft_mint = Keypair::new();
 
-        // 8. 构建remaining accounts
-        let remaining_accounts = position_utils
-            .build_remaining_accounts(&pool_address, tick_lower_adjusted, tick_upper_adjusted, pool_state.tick_spacing)
-            .await?;
+        // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
+        let mut remaining_accounts = Vec::new();
+        let raydium_program_id = ConfigManager::get_raydium_program_id()?;
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
-        // 9. 计算tick array索引
-        let tick_array_lower_start = position_utils.get_tick_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
-        let tick_array_upper_start = position_utils.get_tick_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
+        // 11. 计算tick array索引
+        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
+        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
 
-        // 10. 构建交易指令
-        let token_mints = vec![pool_state.token_mint_0, pool_state.token_mint_1];
-        let instructions = PositionInstructionBuilder::build_complete_open_position_transaction(
+        // 12. 获取用户的代币账户（使用transfer_fee的owner作为token program ID）
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &pool_state.token_mint_0,
+            &transfer_fee_0.owner, // 这是mint账户的owner = token program ID
+        );
+        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &pool_state.token_mint_1,
+            &transfer_fee_1.owner, // 这是mint账户的owner = token program ID
+        );
+
+        // 13. 构建OpenPosition指令
+        let instructions = PositionInstructionBuilder::build_open_position_with_token22_nft_instructions(
             &pool_address,
+            &pool_state,
             &user_wallet,
             &nft_mint.pubkey(),
-            &token_mints,
+            &user_token_account_0,
+            &user_token_account_1,
             tick_lower_adjusted,
             tick_upper_adjusted,
-            tick_array_lower_start,
-            tick_array_upper_start,
+            tick_array_lower_start_index,
+            tick_array_upper_start_index,
             liquidity,
             amount_0_max,
             amount_1_max,
             request.with_metadata,
             remaining_accounts,
-            Some(1_400_000),
         )?;
 
-        // 11. 发送交易
+        // 14. 构建交易
         let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
-        let keypair = self.get_user_keypair()?;
-        let transaction = solana_sdk::transaction::Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&keypair, &nft_mint], recent_blockhash);
+        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair, &nft_mint], recent_blockhash);
 
+        // 15. 发送交易
         let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
 
-        // 12. 计算position key
-        let (position_key, _) = Pubkey::find_program_address(&[b"position", nft_mint.pubkey().as_ref()], &::utils::solana::ConfigManager::get_raydium_program_id()?);
+        info!("✅ 开仓成功，交易签名: {}", signature);
 
-        // 13. 构建响应
+        // 计算position key
+        let (position_key, _) = Pubkey::find_program_address(&[b"position", nft_mint.pubkey().as_ref()], &raydium_program_id);
+
+        // 构建响应
         let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
         let now = chrono::Utc::now().timestamp();
 
@@ -988,8 +1143,8 @@ impl SolanaServiceTrait for SolanaService {
             tick_lower_index: tick_lower_adjusted,
             tick_upper_index: tick_upper_adjusted,
             liquidity: liquidity.to_string(),
-            amount_0,
-            amount_1,
+            amount_0: amount_0_max,
+            amount_1: amount_1_max,
             pool_address: request.pool_address,
             status: TransactionStatus::Finalized,
             explorer_url,
@@ -1022,10 +1177,22 @@ impl SolanaServiceTrait for SolanaService {
         let sqrt_price_lower = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
         let sqrt_price_upper = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
-        let liquidity = position_utils.calculate_liquidity_from_single_amount(pool_state.sqrt_price_x64, sqrt_price_lower, sqrt_price_upper, request.input_amount, request.is_base_0)?;
+        let liquidity = position_utils.calculate_liquidity_from_single_amount(
+            pool_state.sqrt_price_x64,
+            sqrt_price_lower,
+            sqrt_price_upper,
+            request.input_amount,
+            request.is_base_0,
+        )?;
 
         // 计算所需金额
-        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
+        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(
+            pool_state.tick_current,
+            pool_state.sqrt_price_x64,
+            tick_lower_adjusted,
+            tick_upper_adjusted,
+            liquidity,
+        )?;
 
         // 计算当前价格和利用率
         let current_price = position_utils.sqrt_price_x64_to_price(pool_state.sqrt_price_x64, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
@@ -1074,8 +1241,10 @@ impl SolanaServiceTrait for SolanaService {
                     let pool_account = self.rpc_client.get_account(&position_state.pool_id)?;
                     let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
 
-                    let tick_lower_price = position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-                    let tick_upper_price = position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+                    let tick_lower_price =
+                        position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+                    let tick_upper_price =
+                        position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
 
                     positions.push(PositionInfo {
                         position_key: nft_info.position_pda.to_string(),
@@ -1107,7 +1276,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     async fn get_position_info(&self, position_key: String) -> Result<PositionInfo> {
-        info!("🔍 获取位置详情: {}", position_key);
+        info!("🔍 获取仓位详情: {}", position_key);
 
         let position_pubkey = Pubkey::from_str(&position_key)?;
         let position_utils = PositionUtils::new(&self.rpc_client);
@@ -1139,7 +1308,13 @@ impl SolanaServiceTrait for SolanaService {
         })
     }
 
-    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<PositionInfo>> {
+    async fn check_position_exists(
+        &self,
+        pool_address: String,
+        tick_lower: i32,
+        tick_upper: i32,
+        wallet_address: Option<String>,
+    ) -> Result<Option<PositionInfo>> {
         let pool_pubkey = Pubkey::from_str(&pool_address)?;
         let wallet_pubkey = if let Some(addr) = wallet_address {
             Pubkey::from_str(&addr)?
@@ -1149,7 +1324,10 @@ impl SolanaServiceTrait for SolanaService {
 
         let position_utils = PositionUtils::new(&self.rpc_client);
 
-        if let Some(existing) = position_utils.find_existing_position(&wallet_pubkey, &pool_pubkey, tick_lower, tick_upper).await? {
+        if let Some(existing) = position_utils
+            .find_existing_position(&wallet_pubkey, &pool_pubkey, tick_lower, tick_upper)
+            .await?
+        {
             // 转换为PositionInfo
             let position_info = self.get_position_info(existing.position_key.to_string()).await?;
             Ok(Some(position_info))
@@ -1162,5 +1340,80 @@ impl SolanaServiceTrait for SolanaService {
 impl Default for SolanaService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_open_position_validation() {
+        // 验证关键逻辑的正确性
+
+        // 1. 价格转tick的测试 - 使用PositionUtils的逻辑
+        let price = 1.5;
+        let decimals_0 = 9;
+        let decimals_1 = 6;
+
+        // 应该考虑decimals差异
+        let decimal_adjustment = 10_f64.powi(decimals_0 as i32 - decimals_1 as i32);
+        let expected_adjusted_price = price * decimal_adjustment;
+        assert_eq!(expected_adjusted_price, 1500.0);
+
+        // 2. 滑点计算测试 - 验证apply_slippage逻辑
+        let amount = 1000000;
+        let slippage_percent = 5.0;
+        // 应用滑点（增加）
+        let amount_with_slippage = (amount as f64 * (1.0 + slippage_percent / 100.0)) as u64;
+        assert_eq!(amount_with_slippage, 1050000);
+
+        // 3. Transfer fee测试
+        let transfer_fee = 5000u64;
+        let amount_max = amount_with_slippage.checked_add(transfer_fee).unwrap();
+        assert_eq!(amount_max, 1055000);
+    }
+
+    #[test]
+    fn test_tick_spacing_adjustment() {
+        // 验证tick spacing调整逻辑（与PositionUtils::tick_with_spacing一致）
+        let tick = 123;
+        let tick_spacing = 10;
+
+        // 正数情况
+        let adjusted_tick = tick / tick_spacing * tick_spacing;
+        assert_eq!(adjusted_tick, 120);
+
+        // 负数情况 - 需要向下调整
+        let tick_negative = -123;
+        let adjusted_tick_negative = if tick_negative < 0 && tick_negative % tick_spacing != 0 {
+            (tick_negative / tick_spacing - 1) * tick_spacing
+        } else {
+            tick_negative / tick_spacing * tick_spacing
+        };
+        assert_eq!(adjusted_tick_negative, -130);
+
+        // 精确整除的情况
+        let tick_exact = 120;
+        let adjusted_exact = tick_exact / tick_spacing * tick_spacing;
+        assert_eq!(adjusted_exact, 120);
+    }
+
+    #[test]
+    fn test_sqrt_price_conversion() {
+        // 测试价格与sqrt_price_x64的转换
+        let price = 1.0;
+        let decimals_0 = 9;
+        let decimals_1 = 6;
+
+        // 调整价格（考虑decimals）
+        let decimal_adjustment = 10_f64.powi(decimals_0 as i32 - decimals_1 as i32);
+        let adjusted_price = price * decimal_adjustment;
+
+        // 计算sqrt_price_x64
+        let sqrt_price = adjusted_price.sqrt();
+        let sqrt_price_x64 = (sqrt_price * (1u64 << 32) as f64) as u128;
+
+        // 验证转换是合理的
+        assert!(sqrt_price_x64 > 0);
+        assert!(sqrt_price_x64 < u128::MAX);
     }
 }

@@ -646,6 +646,10 @@ pub struct OpenPositionRequest {
     /// 池子地址
     #[validate(length(min = 32, max = 44))]
     pub pool_address: String,
+
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
     
     /// 下限价格
     #[validate(range(min = 0.000001, max = 1000000.0))]
@@ -803,6 +807,10 @@ pub struct CalculateLiquidityRequest {
     /// 池子地址
     #[validate(length(min = 32, max = 44))]
     pub pool_address: String,
+
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
     
     /// 下限价格
     #[validate(range(min = 0.000001, max = 1000000.0))]
