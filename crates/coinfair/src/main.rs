@@ -147,12 +147,19 @@ async fn shutdown_signal() {
         info!("🔔 Terminate signal received");
     };
 
+    #[cfg(not(unix))]
+    let terminate = async {
+        // Windows 系统下，我们只监听 Ctrl+C 信号
+        // 这里创建一个永远不会完成的 future
+        std::future::pending::<()>().await;
+    };
+
     tokio::select! {
         _ = ctrl_c => {
-            info!("🔔 Terminate signal received 1");
+            info!("🔔 Ctrl+C signal received");
         },
         _ = terminate => {
-            info!("🔔 Terminate signal received 2");
+            info!("🔔 Terminate signal received");
         },
     }
 
