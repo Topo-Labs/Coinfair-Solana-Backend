@@ -2,6 +2,7 @@
 /target/
 **/*.rs.bk
 *.pdb
+*.kiro/
 
 # Cargo
 Cargo.lock

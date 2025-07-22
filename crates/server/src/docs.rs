@@ -48,6 +48,12 @@ use utoipa::OpenApi;
         crate::api::solana_controller::get_user_positions,
         crate::api::solana_controller::get_position_info,
         crate::api::solana_controller::check_position_exists,
+        // Solana Pool Creation endpoints
+        crate::api::solana_controller::create_pool,
+        crate::api::solana_controller::create_pool_and_send_transaction,
+        // Solana Classic AMM Pool endpoints
+        crate::api::solana_controller::create_classic_amm_pool,
+        crate::api::solana_controller::create_classic_amm_pool_and_send_transaction,
         // Static endpoints
         crate::api::static_controller::get_version,
         crate::api::static_controller::get_auto_fee,
@@ -106,6 +112,18 @@ use utoipa::OpenApi;
             crate::dtos::solana_dto::GetUserPositionsRequest,
             crate::dtos::solana_dto::UserPositionsResponse,
             crate::dtos::solana_dto::PositionInfo,
+            // Solana Pool Creation DTOs
+            crate::dtos::solana_dto::CreatePoolRequest,
+            crate::dtos::solana_dto::CreatePoolResponse,
+            crate::dtos::solana_dto::CreatePoolAndSendTransactionResponse,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreatePoolResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreatePoolAndSendTransactionResponse>,
+            // Solana Classic AMM Pool DTOs
+            crate::dtos::solana_dto::CreateClassicAmmPoolRequest,
+            crate::dtos::solana_dto::CreateClassicAmmPoolResponse,
+            crate::dtos::solana_dto::CreateClassicAmmPoolAndSendTransactionResponse,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreateClassicAmmPoolResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreateClassicAmmPoolAndSendTransactionResponse>,
             // Static DTOs
             crate::dtos::static_dto::VersionConfig,
             crate::dtos::static_dto::AutoFeeConfig,
@@ -133,6 +151,8 @@ use utoipa::OpenApi;
         (name = "Solana交换", description = "Solana 代币交换相关接口"),
         (name = "SwapV2兼容接口", description = "SwapV2 兼容接口，支持转账费"),
         (name = "Solana流动性", description = "Solana 流动性仓位管理接口"),
+        (name = "Solana池子创建", description = "Solana CLMM池子创建接口"),
+        (name = "Solana经典AMM", description = "Solana 经典AMM池子创建接口"),
         (name = "系统配置", description = "系统配置相关接口"),
         (name = "代币信息", description = "代币信息相关接口")
     )
