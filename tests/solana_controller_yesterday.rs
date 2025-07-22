@@ -2,9 +2,27 @@ use std::collections::HashMap;
 
 use crate::{
     dtos::solana_dto::{
-        ApiResponse, BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, ErrorResponse, GetUserPositionsRequest,
-        OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse,
-        RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse,
+        ApiResponse,
+        BalanceResponse,
+        CalculateLiquidityRequest,
+        CalculateLiquidityResponse,
+        ComputeSwapV2Request,
+        ErrorResponse,
+        GetUserPositionsRequest,
+        // OpenPosition相关DTO
+        OpenPositionRequest,
+        OpenPositionResponse,
+        PositionInfo,
+        PriceQuoteRequest,
+        PriceQuoteResponse,
+        RaydiumErrorResponse,
+        RaydiumResponse,
+        SwapComputeV2Data,
+        SwapRequest,
+        SwapResponse,
+        TransactionData,
+        TransactionSwapV2Request,
+        UserPositionsResponse,
         WalletInfo,
     },
     extractors::validation_extractor::ValidationExtractor,
@@ -17,7 +35,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 pub struct SolanaController;
 
@@ -36,8 +54,6 @@ impl SolanaController {
             .route("/transaction/swap-base-out", post(transaction_swap_v2_base_out))
             // ============ OpenPosition API路由 ============
             .route("/position/open", post(open_position))
-            // 开仓并发送交易, 用户本地测试使用，本地签名并发送交易
-            .route("/position/open-and-send-transaction", post(open_position_and_send_transaction))
             .route("/position/calculate", post(calculate_liquidity))
             .route("/position/list", get(get_user_positions))
             .route("/position/info", get(get_position_info))
@@ -595,94 +611,7 @@ pub async fn transaction_swap_v2_base_out(
 
 // ============ OpenPosition API处理函数 ============
 
-/// 开仓（创建流动性仓位）
-///
-/// 在指定的池子中创建新的流动性仓位，提供流动性以获取手续费收益。
-///
-/// # 请求体
-///
-/// ```json
-/// {
-///   "pool_address": "池子地址",
-///   "tick_lower_price": 1.2,
-///   "tick_upper_price": 1.8,
-///   "is_base_0": true,
-///   "input_amount": 1000000,
-///   "with_metadata": false,
-///   "max_slippage_percent": 0.5
-/// }
-/// ```
-///
-/// # 响应示例
-///
-/// ```json
-/// {
-///   "signature": "交易签名",
-///   "position_nft_mint": "仓位NFT地址",
-///   "position_key": "仓位键值",
-///   "tick_lower_index": -1000,
-///   "tick_upper_index": 1000,
-///   "liquidity": "123456789",
-///   "amount_0": 1000000,
-///   "amount_1": 500000,
-///   "pool_address": "池子地址",
-///   "status": "Success",
-///   "explorer_url": "https://explorer.solana.com/tx/...",
-///   "timestamp": 1640995200
-/// }
-/// ```
-#[utoipa::path(
-    post,
-    path = "/api/v1/solana/position/open",
-    request_body = OpenPositionRequest,
-    responses(
-        (status = 200, description = "开仓成功", body = OpenPositionResponse),
-        (status = 400, description = "请求参数错误", body = ErrorResponse),
-        (status = 500, description = "服务器内部错误", body = ErrorResponse)
-    ),
-    tag = "Solana流动性"
-)]
-async fn open_position(
-    Extension(services): Extension<Services>,
-    ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>,
-) -> Result<Json<OpenPositionResponse>, (StatusCode, Json<ErrorResponse>)> {
-    info!("🎯 接收到开仓请求");
-    info!("  池子地址: {}", request.pool_address);
-    info!("  用户钱包: {}", request.user_wallet);
-    info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
-    info!("  输入金额: {}", request.input_amount);
-
-    // check if tick_lower_price is less than tick_upper_price
-    if request.tick_lower_price >= request.tick_upper_price {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("TICK_PRICE_ERROR", "tick_lower_price must be less than tick_upper_price")),
-        ));
-    }
-
-    match services.solana.open_position(request).await {
-        Ok(response) => {
-            info!("✅ 开仓交易构建成功: {}", response.transaction_message);
-            Ok(Json(response))
-        }
-        Err(e) => {
-            error!("❌ 开仓失败: {:?}", e);
-
-            // 检查是否是重复仓位错误
-            let error_msg = e.to_string();
-            if error_msg.contains("相同价格范围的仓位已存在") {
-                warn!("🔄 检测到重复仓位创建尝试");
-                let error_response = ErrorResponse::new("POSITION_ALREADY_EXISTS", "相同价格范围的仓位已存在，请检查您的现有仓位或稍后重试");
-                Err((StatusCode::CONFLICT, Json(error_response)))
-            } else {
-                let error_response = ErrorResponse::new("OPEN_POSITION_ERROR", &format!("开仓失败: {}", e));
-                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
-            }
-        }
-    }
-}
-
-/// 开仓并发送交易（创建流动性位置）
+/// 开仓（创建流动性位置）
 ///
 /// 在指定的池子中创建新的流动性位置，提供流动性以获取手续费收益。
 ///
@@ -720,7 +649,7 @@ async fn open_position(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/position/open-and-send-transaction",
+    path = "/api/v1/solana/position/open",
     request_body = OpenPositionRequest,
     responses(
         (status = 200, description = "开仓成功", body = OpenPositionResponse),
@@ -729,15 +658,15 @@ async fn open_position(
     ),
     tag = "Solana流动性"
 )]
-async fn open_position_and_send_transaction(
+async fn open_position(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>,
-) -> Result<Json<OpenPositionAndSendTransactionResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<OpenPositionResponse>, (StatusCode, Json<ErrorResponse>)> {
     info!("🎯 接收到开仓请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
 
-    match services.solana.open_position_and_send_transaction(request).await {
+    match services.solana.open_position(request).await {
         Ok(response) => {
             info!("✅ 开仓成功: {}", response.signature);
             Ok(Json(response))
@@ -825,34 +754,34 @@ async fn get_user_positions(
 
     match services.solana.get_user_positions(request).await {
         Ok(response) => {
-            info!("✅ 获取用户仓位列表成功，共{}个仓位", response.total_count);
+            info!("✅ 获取用户仓位列表成功，共{}个位置", response.total_count);
             Ok(Json(response))
         }
         Err(e) => {
             error!("❌ 获取用户仓位列表失败: {:?}", e);
-            let error_response = ErrorResponse::new("GET_USER_POSITIONS_ERROR", &format!("获取仓位列表失败: {}", e));
+            let error_response = ErrorResponse::new("GET_USER_POSITIONS_ERROR", &format!("获取位置列表失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }
 
-/// 获取仓位详情
+/// 获取位置详情
 ///
-/// 根据仓位键值获取仓位的详细信息。
+/// 根据位置键值获取位置的详细信息。
 ///
 /// # 查询参数
 ///
-/// - `position_key`: 仓位键值
+/// - `position_key`: 位置键值
 #[utoipa::path(
     get,
     path = "/api/v1/solana/position/info",
     params(
-        ("position_key" = String, Query, description = "仓位键值")
+        ("position_key" = String, Query, description = "位置键值")
     ),
     responses(
         (status = 200, description = "查询成功", body = PositionInfo),
         (status = 400, description = "请求参数错误", body = ErrorResponse),
-        (status = 404, description = "仓位不存在", body = ErrorResponse),
+        (status = 404, description = "位置不存在", body = ErrorResponse),
         (status = 500, description = "服务器内部错误", body = ErrorResponse)
     ),
     tag = "Solana流动性"
@@ -875,15 +804,15 @@ async fn get_position_info(
         }
         Err(e) => {
             error!("❌ 获取仓位详情失败: {:?}", e);
-            let error_response = ErrorResponse::new("GET_POSITION_INFO_ERROR", &format!("获取仓位详情失败: {}", e));
+            let error_response = ErrorResponse::new("GET_POSITION_INFO_ERROR", &format!("获取位置详情失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }
 
-/// 检查仓位是否存在
+/// 检查位置是否存在
 ///
-/// 检查指定价格范围的仓位是否已经存在。
+/// 检查指定价格范围的位置是否已经存在。
 ///
 /// # 查询参数
 ///
@@ -945,7 +874,7 @@ async fn check_position_exists(
 
     let wallet_address = params.get("wallet_address").cloned();
 
-    info!("🔍 检查仓位是否存在");
+    info!("🔍 检查位置是否存在");
     info!("  池子: {}", pool_address);
     info!("  Tick范围: {} - {}", tick_lower, tick_upper);
 
@@ -956,15 +885,15 @@ async fn check_position_exists(
     {
         Ok(response) => {
             if response.is_some() {
-                info!("✅ 找到相同范围的仓位");
+                info!("✅ 找到相同范围的位置");
             } else {
-                info!("✅ 没有找到相同范围的仓位");
+                info!("✅ 没有找到相同范围的位置");
             }
             Ok(Json(response))
         }
         Err(e) => {
-            error!("❌ 检查仓位存在性失败: {:?}", e);
-            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", &format!("检查仓位失败: {}", e));
+            error!("❌ 检查位置存在性失败: {:?}", e);
+            let error_response = ErrorResponse::new("CHECK_POSITION_EXISTS_ERROR", &format!("检查位置失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
