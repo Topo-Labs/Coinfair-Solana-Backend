@@ -148,6 +148,7 @@ async fn shutdown_signal() {
     };
 
     #[cfg(not(unix))]
+    #[allow(dead_code)]
     let terminate = async {
         // Windows 系统下，我们只监听 Ctrl+C 信号
         // 这里创建一个永远不会完成的 future
