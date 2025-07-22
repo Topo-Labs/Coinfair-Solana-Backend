@@ -267,6 +267,8 @@ struct VaultAddresses {
 
 #[cfg(test)]
 mod tests {
+    use solana_sdk::signer::Signer;
+
     use super::*;
 
     #[test]

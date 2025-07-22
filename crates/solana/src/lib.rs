@@ -21,7 +21,6 @@ pub use swap_v2_service::{SwapV2AccountsInfo, SwapV2Service, TokenAccountInfo, T
 mod tests {
     use super::*;
     use crate::raydium::RaydiumSwap;
-    use std::env;
 
     #[tokio::test]
     async fn test_raydium_swap_calculation() {
