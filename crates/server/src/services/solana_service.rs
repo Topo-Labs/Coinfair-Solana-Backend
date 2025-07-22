@@ -1842,6 +1842,16 @@ impl SolanaServiceTrait for SolanaService {
         let mint1 = Pubkey::from_str(&request.mint1)?;
         let user_wallet = Pubkey::from_str(&request.user_wallet)?;
 
+        // 从环境配置中获取私钥
+        let private_key = self
+            .app_config
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("私钥未配置，请检查 .env.development 文件中的 PRIVATE_KEY"))?;
+
+        // 使用正确的Base58解码方法
+        let user_keypair = Keypair::from_base58_string(private_key);
+
         // 使用ClassicAmmInstructionBuilder构建指令
         let instructions = ClassicAmmInstructionBuilder::build_initialize_instruction(
             &user_wallet,
@@ -1855,29 +1865,21 @@ impl SolanaServiceTrait for SolanaService {
         // 获取所有相关地址
         let addresses = ClassicAmmInstructionBuilder::get_all_v2_amm_addresses(&mint0, &mint1)?;
 
-        // 创建交易
-        let mut transaction = Transaction::new_with_payer(&instructions, Some(&user_wallet));
-
-        // 获取最新的blockhash
+        // 构建并发送交易
         let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
-        transaction.message.recent_blockhash = recent_blockhash;
+        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
 
-        // 这里需要用户的私钥来签名交易
-        // 注意：在实际应用中，私钥应该由前端用户提供，而不是存储在服务器上
-        // 这里我们返回未签名的交易，让前端处理签名
-        warn!("⚠️ 经典AMM池子创建需要用户私钥签名，当前返回模拟结果");
+        // 发送交易
+        let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
 
-        // 模拟交易签名（实际应用中应该由用户签名）
-        let signature = "模拟交易签名_经典AMM池子创建".to_string();
+        info!("✅ 创建经典AMM池子成功，交易签名: {}", signature);
+
+        // 构建响应
         let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
         let now = chrono::Utc::now().timestamp();
 
-        info!("✅ 经典AMM池子创建交易准备完成");
-        info!("  池子地址: {}", addresses.pool_id);
-        info!("  模拟签名: {}", signature);
-
         Ok(CreateClassicAmmPoolAndSendTransactionResponse {
-            signature,
+            signature: signature.to_string(),
             pool_address: addresses.pool_id.to_string(),
             coin_mint: addresses.coin_mint.to_string(),
             pc_mint: addresses.pc_mint.to_string(),
@@ -1898,7 +1900,7 @@ impl SolanaServiceTrait for SolanaService {
                 request.init_amount_0
             },
             open_time: request.open_time,
-            status: TransactionStatus::Pending,
+            status: TransactionStatus::Finalized,
             explorer_url,
             timestamp: now,
         })
