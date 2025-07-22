@@ -1,8 +1,10 @@
+use anchor_lang::Discriminator;
 use anyhow::Result;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
 use tracing::info;
 
 use super::{calculators::PDACalculator, config::ConfigManager};
+use raydium_amm_v3::instruction;
 
 /// 池子指令构建器 - 统一管理池子相关指令的构建
 pub struct PoolInstructionBuilder;
@@ -78,7 +80,8 @@ impl PoolInstructionBuilder {
     fn build_create_pool_instruction_data(sqrt_price_x64: u128, open_time: u64) -> Result<Vec<u8>> {
         // Raydium CreatePool指令的discriminator
         // 这个值需要根据实际的Raydium程序确定
-        let discriminator: [u8; 8] = [233, 146, 209, 142, 207, 104, 64, 188]; // create_pool指令的discriminator
+        // let discriminator: [u8; 8] = [233, 146, 209, 142, 207, 104, 64, 188]; // create_pool指令的discriminator
+        let discriminator = instruction::CreatePool::DISCRIMINATOR;
 
         let mut data = Vec::new();
         data.extend_from_slice(&discriminator);
