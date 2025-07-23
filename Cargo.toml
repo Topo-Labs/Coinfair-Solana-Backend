@@ -1,18 +1,18 @@
 [workspace]
 members = [
-    "crates/coinfair",
-    "crates/database",
-    "crates/dex",
-    "crates/monitor",
-    "crates/server",
-    "crates/solana",
-    "crates/solana/amm",
-    "crates/solana/client",
-    "crates/solana/cp-swap",
-    "crates/solana/cpmm-client",
-    "crates/telegram",
-    "crates/timer",
-    "crates/utils"
+      "crates/coinfair",
+      "crates/database",
+      "crates/dex",
+      "crates/monitor",
+      "crates/server",
+      "crates/solana",
+      "crates/solana/amm",
+      "crates/solana/client",
+      "crates/solana/cp-swap",
+      "crates/solana/cpmm-client",
+      "crates/telegram",
+      "crates/timer",
+      "crates/utils",
 ]
 resolver = "2"
 
@@ -61,3 +61,22 @@ raydium-amm-v3 = { git = "https://github.com/raydium-io/raydium-clmm", features 
 base64 = "0.21"
 bincode = "1.3.3"
 borsh = "1.3"
+
+# Release profile optimization for all workspace members
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = true
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
+
+# Workspace-level lints configuration to handle Anchor/Solana cfg warnings
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+      'cfg(feature, values("anchor-debug", "custom-heap", "custom-panic", "enable-power", "no-idl"))',
+      'cfg(target_os, values("solana"))',
+] }

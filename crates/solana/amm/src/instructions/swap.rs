@@ -2320,6 +2320,7 @@ mod swap_test {
     mod sqrt_price_limit_optimization_test {
         use super::*;
         use proptest::prelude::*;
+        use rand::Rng;
         use std::{convert::identity, u64};
 
         use proptest::prop_assume;
