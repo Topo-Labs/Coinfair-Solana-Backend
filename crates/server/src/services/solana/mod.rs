@@ -1,0 +1,15 @@
+// Main solana service module
+// This module provides a modular architecture for Solana-related services
+
+pub mod amm_pool;
+pub mod clmm_pool;
+pub mod position;
+pub mod service;
+pub mod shared;
+pub mod swap;
+
+// Re-export the main service and trait for external use
+pub use service::{DynSolanaService, SolanaService, SolanaServiceTrait};
+
+// Re-export commonly used types from shared module
+pub use shared::types::*;

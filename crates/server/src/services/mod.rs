@@ -9,13 +9,14 @@
 
 pub mod refer_service;
 pub mod reward_service;
+pub mod solana;
 pub mod solana_service;
 pub mod user_service;
 
 use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
-    solana_service::{DynSolanaService, SolanaService},
+    solana::{DynSolanaService, SolanaService},
     user_service::{DynUserService, UserService},
 };
 use database::Database;
