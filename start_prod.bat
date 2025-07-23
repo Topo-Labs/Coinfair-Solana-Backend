@@ -10,3 +10,6 @@ set CARGO_ENV=production
 REM 启动程序
 set RUST_LOG=info
 cargo run --bin coinfair --release
+
+REM 查找端口： netstat -ano | findstr ":8000"
+REM kill xxx
