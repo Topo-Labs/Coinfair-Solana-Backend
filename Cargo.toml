@@ -1,5 +1,19 @@
 [workspace]
-members = ["crates/*"]
+members = [
+    "crates/coinfair",
+    "crates/database",
+    "crates/dex",
+    "crates/monitor",
+    "crates/server",
+    "crates/solana",
+    "crates/solana/amm",
+    "crates/solana/client",
+    "crates/solana/cp-swap",
+    "crates/solana/cpmm-client",
+    "crates/telegram",
+    "crates/timer",
+    "crates/utils"
+]
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
