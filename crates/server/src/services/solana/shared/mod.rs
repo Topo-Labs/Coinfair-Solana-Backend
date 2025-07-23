@@ -12,6 +12,7 @@ pub mod helpers;
 pub mod types;
 
 use config::{ClientFactory, ConfigurationManager};
+pub use helpers::{ResponseBuilder, SolanaHelpers, SolanaUtils};
 
 /// SharedContext contains all shared resources and configuration
 /// that are used across different service modules
@@ -31,6 +32,7 @@ impl SharedContext {
     pub fn new() -> Result<Self> {
         let app_config = AppConfig::default();
         let config_manager = ConfigurationManager::default();
+        config_manager.validate_config()?;
 
         // Use ClientFactory to create all clients from environment
         let (rpc_client, api_client, swap_v2_service, swap_v2_builder) = ClientFactory::create_clients_from_env()?;

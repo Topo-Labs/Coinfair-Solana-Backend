@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::services::solana::shared::SharedContext;
-    use crate::services::solana::swap::SwapService;
-    use std::sync::Arc;
+    use crate::services::solana::shared::{SharedContext, ResponseBuilder};
+use crate::services::solana::swap::SwapService;
+use std::sync::Arc;
 
     // Helper function to create a test SwapService
     fn create_test_swap_service() -> SwapService {
@@ -46,9 +46,9 @@ mod tests {
 
     #[test]
     fn test_create_swap_compute_v2_data() {
-        let swap_service = create_test_swap_service();
+        let _swap_service = create_test_swap_service();
 
-        let result = swap_service.create_swap_compute_v2_data(
+        let result = ResponseBuilder::create_swap_compute_v2_data(
             "BaseIn".to_string(),
             "So11111111111111111111111111111111111111112".to_string(),
             "1000000000".to_string(),

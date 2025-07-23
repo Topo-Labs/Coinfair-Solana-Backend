@@ -10,7 +10,7 @@ use crate::dtos::solana_dto::{
 use super::amm_pool::AmmPoolService;
 use super::clmm_pool::ClmmPoolService;
 use super::position::PositionService;
-use super::shared::SharedContext;
+use super::shared::{SharedContext, SolanaHelpers};
 use super::swap::SwapService;
 
 use anyhow::Result;
@@ -175,20 +175,17 @@ impl SolanaServiceTrait for SolanaService {
         self.amm_pool_service.create_classic_amm_pool_and_send_transaction(request).await
     }
 
-    // Basic utility operations - delegate to shared_context or appropriate service
+    // Basic utility operations - delegate to SolanaHelpers
     async fn get_balance(&self) -> Result<BalanceResponse> {
-        // This will be implemented in a later task
-        todo!("get_balance implementation")
+        SolanaHelpers::get_balance(&self.shared_context).await
     }
 
     async fn get_wallet_info(&self) -> Result<WalletInfo> {
-        // This will be implemented in a later task
-        todo!("get_wallet_info implementation")
+        SolanaHelpers::get_wallet_info(&self.shared_context).await
     }
 
     async fn health_check(&self) -> Result<String> {
-        // This will be implemented in a later task
-        todo!("health_check implementation")
+        SolanaHelpers::health_check(&self.shared_context).await
     }
 
     async fn check_position_exists(

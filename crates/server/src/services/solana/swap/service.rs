@@ -3,13 +3,17 @@ use crate::dtos::solana_dto::{
     TransactionSwapV2Request, TransferFeeInfo,
 };
 
-use crate::services::solana::shared::SharedContext;
+use crate::services::solana::shared::{helpers::{ResponseBuilder, SolanaUtils}, SharedContext};
 
-use ::utils::solana::{LogUtils, MathUtils, RoutePlanBuilder, ServiceHelpers, TokenType, TokenUtils};
+use ::utils::solana::{
+    AccountMetaBuilder, ConfigManager, ErrorHandler, LogUtils, MathUtils, RoutePlanBuilder, ServiceHelpers, SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder, TokenType, TokenUtils
+};
 use anyhow::Result;
 use chrono;
 use serde_json;
 use solana_sdk::pubkey::Pubkey;
+use spl_token;
+use spl_token_2022;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -28,6 +32,18 @@ impl SwapService {
     /// Execute token swap
     pub async fn swap_tokens(&self, request: SwapRequest) -> Result<SwapResponse> {
         self.execute_swap(request).await
+    }
+
+    fn detect_mint_program(&self, mint: &Pubkey) -> Result<Pubkey> {
+        let account = self.shared.rpc_client.get_account(mint)?;
+
+        if account.owner == spl_token_2022::id() {
+            Ok(spl_token_2022::id())
+        } else if account.owner == spl_token::id() {
+            Ok(spl_token::id())
+        } else {
+            Err(anyhow::anyhow!("未知的token program: {}", account.owner))
+        }
     }
 
     /// Get price quote for a swap
@@ -132,7 +148,7 @@ impl SwapService {
             }
         };
 
-        let result = self.create_swap_compute_v2_data(
+        let result = ResponseBuilder::create_swap_compute_v2_data(
             "BaseIn".to_string(),
             params.input_mint,
             params.amount,
@@ -235,7 +251,7 @@ impl SwapService {
             }
         };
 
-        let result = self.create_swap_compute_v2_data(
+        let result = ResponseBuilder::create_swap_compute_v2_data(
             "BaseOut".to_string(),
             params.input_mint,
             required_input_amount.to_string(),
@@ -283,91 +299,213 @@ impl SwapService {
             input_amount
         };
 
+        let route_plan = swap_data.route_plan.first().ok_or_else(|| ErrorHandler::create_error("未找到路由计划"))?;
+
+        let pool_id = Pubkey::from_str(&route_plan.pool_id)?;
+        let input_mint = Pubkey::from_str(&swap_data.input_mint)?;
+        let output_mint = Pubkey::from_str(&swap_data.output_mint)?;
+
         LogUtils::log_debug_info(
             "交易参数",
-            &[("输入金额", &actual_amount.to_string()), ("最小输出", &other_amount_threshold.to_string())],
+            &[
+                ("池子ID", &pool_id.to_string()),
+                ("输入金额", &actual_amount.to_string()),
+                ("最小输出", &other_amount_threshold.to_string()),
+            ],
         );
 
-        // 构建SwapV2参数
-        let build_params = solana::SwapV2BuildParams {
-            input_mint: swap_data.input_mint.clone(),
-            output_mint: swap_data.output_mint.clone(),
-            user_wallet,
-            user_input_token_account: None,  // Will be derived automatically
-            user_output_token_account: None, // Will be derived automatically
-            amount: actual_amount,
+        // 获取池子状态
+        let pool_account = self.shared.rpc_client.get_account(&pool_id)?;
+        let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
+
+        let input_token_program = self.detect_mint_program(&input_mint)?;
+        let output_token_program = self.detect_mint_program(&output_mint)?;
+
+        // 计算ATA账户
+        let user_input_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+
+        // 创建ATA账户指令（幂等操作）
+        let mut instructions = Vec::new();
+
+        // 创建输入代币ATA账户（如果不存在）
+        info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
+
+        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &input_mint,
+            &input_token_program,
+        );
+        instructions.push(create_input_ata_ix);
+
+        // 创建输出代币ATA账户（如果不存在）
+        info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
+
+        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &output_mint,
+            &output_token_program,
+        );
+        instructions.push(create_output_ata_ix);
+
+        // 确定vault账户
+        let (input_vault, output_vault, input_vault_mint, output_vault_mint) = service_helpers.build_vault_info(&pool_state, &input_mint);
+
+        // 构建remaining accounts
+        let remaining_accounts = AccountMetaBuilder::create_remaining_accounts(&route_plan.remaining_accounts, true)?;
+
+        let raydium_program_id = ConfigManager::get_raydium_program_id()?;
+
+        // 构建SwapV2指令
+        let ix = UtilsSwapV2InstructionBuilder::build_swap_v2_instruction(
+            &raydium_program_id,
+            &pool_state.amm_config,
+            &pool_id,
+            &user_wallet,
+            &user_input_token_account,
+            &user_output_token_account,
+            &input_vault,
+            &output_vault,
+            &input_vault_mint,
+            &output_vault_mint,
+            &pool_state.observation_key,
+            remaining_accounts,
+            actual_amount,
             other_amount_threshold,
-            sqrt_price_limit_x64: None,
-            is_base_input: true, // This is base-in mode
-            slippage_bps: swap_data.slippage_bps,
-            compute_unit_limit: None,
-        };
+            None,
+            true,
+        )?;
 
-        // 构建交易指令
-        let instruction_result = self.shared.swap_v2_builder.build_swap_v2_instructions(build_params).await?;
+        // 将swap指令添加到指令向量
+        instructions.push(ix);
 
-        // 创建交易 - for now, we'll serialize the instructions directly
-        // This is a simplified approach - in a real implementation, you'd want to create a proper transaction
-        let transaction_data = serde_json::json!({
-            "instructions": instruction_result.instructions.len(),
-            "compute_units": instruction_result.compute_units_used,
-            "expected_fee": instruction_result.expected_fee
-        });
+        // 构建完整交易
+        let result_json = service_helpers.build_transaction_data(instructions, &user_wallet)?;
+        let result = self.create_transaction_data_from_json(result_json)?;
 
-        LogUtils::log_operation_success("swap-v2-base-in交易构建", "交易已成功构建");
+        LogUtils::log_operation_success("swap-v2-base-in交易构建", &format!("交易大小: {} bytes", result.transaction.len()));
 
-        Ok(TransactionData {
-            transaction: transaction_data.to_string(),
-        })
+        Ok(result)
     }
 
     /// Build swap-v2-base-out transaction
     pub async fn build_swap_v2_transaction_base_out(&self, request: TransactionSwapV2Request) -> Result<TransactionData> {
         info!("🔨 构建swap-v2-base-out交易");
         info!("  钱包地址: {}", request.wallet);
+        info!("  交易版本: {}", request.tx_version);
 
         let service_helpers = ServiceHelpers::new(&self.shared.rpc_client);
+        // 从swap_response中提取交换数据
         let swap_data = &request.swap_response.data;
-        let required_input_amount = service_helpers.parse_amount(&swap_data.input_amount)?;
-        let desired_output_amount = service_helpers.parse_amount(&swap_data.output_amount)?;
+        let output_amount = service_helpers.parse_amount(&swap_data.output_amount)?;
         let other_amount_threshold = service_helpers.parse_amount(&swap_data.other_amount_threshold)?;
         let user_wallet = Pubkey::from_str(&request.wallet)?;
 
-        info!("  需要输入: {}", required_input_amount);
-        info!("  期望输出: {}", desired_output_amount);
-        info!("  最大输入阈值: {}", other_amount_threshold);
-
-        // 构建SwapV2参数
-        let build_params = solana::SwapV2BuildParams {
-            input_mint: swap_data.input_mint.clone(),
-            output_mint: swap_data.output_mint.clone(),
-            user_wallet,
-            user_input_token_account: None,  // Will be derived automatically
-            user_output_token_account: None, // Will be derived automatically
-            amount: desired_output_amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64: None,
-            is_base_input: false, // This is base-out mode
-            slippage_bps: swap_data.slippage_bps,
-            compute_unit_limit: None,
+        // 对于base-out，amount_specified通常是期望的输出金额
+        let actual_output_amount = if let Some(ref amount_specified) = swap_data.amount_specified {
+            service_helpers.parse_amount(amount_specified)?
+        } else {
+            output_amount
         };
 
-        // 构建交易指令
-        let instruction_result = self.shared.swap_v2_builder.build_swap_v2_instructions(build_params).await?;
+        // 从route_plan中获取池子信息和remaining accounts
+        let route_plan = swap_data.route_plan.first().ok_or_else(|| anyhow::anyhow!("No route plan found"))?;
 
-        // 创建交易 - for now, we'll serialize the instructions directly
-        // This is a simplified approach - in a real implementation, you'd want to create a proper transaction
-        let transaction_data = serde_json::json!({
-            "instructions": instruction_result.instructions.len(),
-            "compute_units": instruction_result.compute_units_used,
-            "expected_fee": instruction_result.expected_fee
-        });
+        let pool_id = Pubkey::from_str(&route_plan.pool_id)?;
+        let input_mint = Pubkey::from_str(&swap_data.input_mint)?;
+        let output_mint = Pubkey::from_str(&swap_data.output_mint)?;
 
-        info!("✅ swap-v2-base-out交易构建成功");
+        info!("📋 构建交易参数:");
+        info!("  池子ID: {}", pool_id);
+        info!("  期望输出金额: {}", actual_output_amount);
+        info!("  最大输入: {}", other_amount_threshold);
+        info!("  输入代币: {}", input_mint);
+        info!("  输出代币: {}", output_mint);
 
-        Ok(TransactionData {
-            transaction: transaction_data.to_string(),
-        })
+        // 获取池子状态以获取必要的账户信息
+        let pool_account = self.shared.rpc_client.get_account(&pool_id)?;
+        let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
+
+        let input_token_program = self.detect_mint_program(&input_mint)?;
+        let output_token_program = self.detect_mint_program(&output_mint)?;
+        // 计算ATA账户
+        let user_input_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+
+        // 检查并创建ATA账户指令
+        let mut instructions = Vec::new();
+
+        // 创建输入代币ATA账户（如果不存在）
+        info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
+
+        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &input_mint,
+            &input_token_program,
+        );
+        instructions.push(create_input_ata_ix);
+
+        // 创建输出代币ATA账户（如果不存在）
+        info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
+
+        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &user_wallet,
+            &user_wallet,
+            &output_mint,
+            &output_token_program,
+        );
+        instructions.push(create_output_ata_ix);
+
+        // 确定vault账户（基于mint顺序）
+        let (input_vault, output_vault, input_vault_mint, output_vault_mint) = service_helpers.build_vault_info(&pool_state, &input_mint);
+
+        // 构建remaining accounts
+        let remaining_accounts = AccountMetaBuilder::create_remaining_accounts(&route_plan.remaining_accounts, true)?;
+
+        info!("📝 构建SwapV2指令:");
+        info!("  Remaining accounts数量: {}", remaining_accounts.len());
+
+        // 获取Raydium程序ID
+        let raydium_program_id = ConfigManager::get_raydium_program_id()?;
+
+        // 构建SwapV2指令
+        let ix = UtilsSwapV2InstructionBuilder::build_swap_v2_instruction(
+            &raydium_program_id,
+            &pool_state.amm_config,
+            &pool_id,
+            &user_wallet,
+            &user_input_token_account,
+            &user_output_token_account,
+            &input_vault,
+            &output_vault,
+            &input_vault_mint,
+            &output_vault_mint,
+            &pool_state.observation_key,
+            remaining_accounts,
+            actual_output_amount,   // 对于base-out，这是期望的输出金额
+            other_amount_threshold, // 这是最大允许的输入金额
+            None,                   // sqrt_price_limit_x64
+            false,                  // is_base_input = false for base-out
+        )?;
+
+        // 将swap指令添加到指令向量
+        instructions.push(ix);
+
+        // 构建完整交易
+        let result_json = service_helpers.build_transaction_data(instructions, &user_wallet)?;
+        let result = self.create_transaction_data_from_json(result_json)?;
+
+        info!("✅ 交易构建成功");
+        info!("  交易大小: {} bytes", result.transaction.len());
+
+        Ok(result)
     }
 
     // ============ Private Helper Methods ============
@@ -469,39 +607,6 @@ impl SwapService {
         })
     }
 
-    /// Create SwapComputeV2Data response
-    pub fn create_swap_compute_v2_data(
-        &self,
-        swap_type: String,
-        input_mint: String,
-        input_amount: String,
-        output_mint: String,
-        output_amount: u64,
-        other_amount_threshold: u64,
-        slippage_bps: u16,
-        route_plan: Vec<RoutePlan>,
-        transfer_fee_info: Option<TransferFeeInfo>,
-        amount_specified: Option<u64>,
-        epoch: Option<u64>,
-        price_impact_pct: Option<f64>,
-    ) -> SwapComputeV2Data {
-        SwapComputeV2Data {
-            swap_type,
-            input_mint,
-            input_amount,
-            output_mint,
-            output_amount: output_amount.to_string(),
-            other_amount_threshold: other_amount_threshold.to_string(),
-            slippage_bps,
-            price_impact_pct: price_impact_pct.unwrap_or(0.1),
-            referrer_amount: "0".to_string(),
-            route_plan,
-            transfer_fee_info,
-            amount_specified: amount_specified.map(|a| a.to_string()),
-            epoch,
-        }
-    }
-
     /// Create RoutePlan from JSON value
     pub fn create_route_plan_from_json(&self, json_value: serde_json::Value) -> Result<RoutePlan> {
         Ok(RoutePlan {
@@ -518,6 +623,13 @@ impl SwapService {
                 .map(|v| v.as_str().unwrap_or_default().to_string())
                 .collect(),
             last_pool_price_x64: json_value["last_pool_price_x64"].as_str().unwrap_or_default().to_string(),
+        })
+    }
+
+    /// Create TransactionData from JSON value
+    fn create_transaction_data_from_json(&self, json_value: serde_json::Value) -> Result<TransactionData> {
+        Ok(TransactionData {
+            transaction: json_value["transaction"].as_str().unwrap_or_default().to_string(),
         })
     }
 }

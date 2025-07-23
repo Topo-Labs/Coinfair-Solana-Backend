@@ -5,9 +5,9 @@ use crate::dtos::solana_dto::{
     OpenPositionResponse, PositionInfo, TransactionStatus, UserPositionsResponse,
 };
 
-use super::super::shared::SharedContext;
+use super::super::shared::{helpers::SolanaUtils, SharedContext};
 use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtils};
-use anchor_lang::AccountDeserialize;
+
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -44,7 +44,7 @@ impl PositionService {
 
         // 2. 加载池子状态
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
-        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+        let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
         // 3. 使用Position工具进行计算
         let position_utils = PositionUtils::new(&self.shared.rpc_client);
@@ -254,7 +254,7 @@ impl PositionService {
 
         // 2. 加载池子状态
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
-        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+        let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
         // 3. 使用Position工具进行计算
         let position_utils = PositionUtils::new(&self.shared.rpc_client);
@@ -419,7 +419,7 @@ impl PositionService {
 
         // 2. 加载池子状态
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
-        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+        let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
         // 3. 使用Position工具进行计算
         let position_utils = PositionUtils::new(&self.shared.rpc_client);
@@ -498,7 +498,7 @@ impl PositionService {
 
                     // 计算价格
                     let pool_account = self.shared.rpc_client.get_account(&position_state.pool_id)?;
-                    let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+                    let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
                     let tick_lower_price =
                         position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
@@ -546,7 +546,7 @@ impl PositionService {
 
         // 加载池子状态以计算价格
         let pool_account = self.shared.rpc_client.get_account(&position_state.pool_id)?;
-        let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
+        let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
         let tick_lower_price = position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
         let tick_upper_price = position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
@@ -597,12 +597,6 @@ impl PositionService {
     }
 
     // ============ Private Helper Methods ============
-
-    /// Deserialize anchor account
-    fn deserialize_anchor_account<T: AccountDeserialize>(&self, account: &solana_sdk::account::Account) -> Result<T> {
-        let mut data: &[u8] = &account.data;
-        T::try_deserialize(&mut data).map_err(Into::into)
-    }
 
     /// Validate position parameters before processing
     fn validate_position_request(&self, request: &OpenPositionRequest) -> Result<()> {

@@ -67,6 +67,18 @@ impl SwapV2Service {
         }
     }
 
+    fn detect_mint_program(&self, mint: &Pubkey) -> Result<Pubkey> {
+        let account = self.rpc_client.get_account(mint)?;
+
+        if account.owner == spl_token_2022::id() {
+            Ok(spl_token_2022::id())
+        } else if account.owner == spl_token::id() {
+            Ok(spl_token::id())
+        } else {
+            Err(anyhow::anyhow!("未知的token program: {}", account.owner))
+        }
+    }
+
     /// 获取当前epoch
     pub fn get_current_epoch(&self) -> Result<u64> {
         let epoch_info = self.rpc_client.get_epoch_info()?;
@@ -272,9 +284,14 @@ impl SwapV2Service {
         let pool_address = self.calculate_pool_address_pda(&mint0, &mint1, amm_config_key, program_id)?;
         let bitmap_extension_address = self.calculate_bitmap_extension_address(&pool_address, program_id)?;
 
+        let input_token_program = self.detect_mint_program(&input_mint_pubkey)?;
+        let output_token_program = self.detect_mint_program(&output_mint_pubkey)?;
+
         // 3. 计算用户代币账户地址（ATA）
-        let input_token_account = spl_associated_token_account::get_associated_token_address(user_wallet, &input_mint_pubkey);
-        let output_token_account = spl_associated_token_account::get_associated_token_address(user_wallet, &output_mint_pubkey);
+        let input_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(user_wallet, &input_mint_pubkey, &input_token_program);
+        let output_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(user_wallet, &output_mint_pubkey, &output_token_program);
 
         // 4. 批量加载所有账户
         let accounts_to_load = vec![

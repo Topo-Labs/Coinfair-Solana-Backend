@@ -31,10 +31,10 @@ impl ClmmPoolService {
         info!("  开放时间: {}", request.open_time);
 
         // 1. 解析和验证参数
-        let mut mint0 = Pubkey::from_str(&request.mint0)?;
-        let mut mint1 = Pubkey::from_str(&request.mint1)?;
         let mut price = request.price;
-        let user_wallet = Pubkey::from_str(&request.user_wallet)?;
+        let mut mint0 = Pubkey::from_str(&request.mint0).map_err(|_| anyhow::anyhow!("无效的mint0地址"))?;
+        let mut mint1 = Pubkey::from_str(&request.mint1).map_err(|_| anyhow::anyhow!("无效的mint1地址"))?;
+        let user_wallet = Pubkey::from_str(&request.user_wallet).map_err(|_| anyhow::anyhow!("无效的用户钱包地址"))?;
 
         // 2. 确保mint0 < mint1的顺序，如果不是则交换并调整价格
         if mint0 > mint1 {
