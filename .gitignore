@@ -89,9 +89,10 @@ OPEN_POSITION_FINAL_VERIFICATION.md
 test_position_check.rs
 test_pool.rs
 fix_clmm_pool_service.md
-fix_config_management.md
+fix_config_management.md 
 fix_import_dependencies.md
 fix_swap_v2_transaction_build.md
 fix_test_coverage.md
 .codebuddy/*
 CLMM池子元数据存储系统.md
+docs/*

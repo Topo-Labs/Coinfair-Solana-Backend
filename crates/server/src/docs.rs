@@ -51,6 +51,12 @@ use utoipa::OpenApi;
         // Solana Pool Creation endpoints
         crate::api::solana_controller::create_pool,
         crate::api::solana_controller::create_pool_and_send_transaction,
+        // Solana CLMM Pool Query endpoints
+        crate::api::solana_controller::get_pool_by_address,
+        crate::api::solana_controller::get_pools_by_mint,
+        crate::api::solana_controller::get_pools_by_creator,
+        crate::api::solana_controller::query_pools,
+        crate::api::solana_controller::get_pool_statistics,
         // Solana Classic AMM Pool endpoints
         crate::api::solana_controller::create_classic_amm_pool,
         crate::api::solana_controller::create_classic_amm_pool_and_send_transaction,
@@ -70,6 +76,18 @@ use utoipa::OpenApi;
             database::reward::model::RewardItem,
             database::reward::model::RewardItemWithTime,
             database::user::model::User,
+            // CLMM Pool models
+            database::clmm_pool::ClmmPool,
+            database::clmm_pool::TokenInfo,
+            database::clmm_pool::PriceInfo,
+            database::clmm_pool::VaultInfo,
+            database::clmm_pool::ExtensionInfo,
+            database::clmm_pool::TransactionInfo,
+            database::clmm_pool::SyncStatus,
+            database::clmm_pool::PoolStatus,
+            database::clmm_pool::TransactionStatus,
+            database::clmm_pool::PoolStats,
+            database::clmm_pool::PoolQueryParams,
             // DTOs
             crate::dtos::refer_dto::SetRefersDto,
             crate::dtos::reward_dto::SetRewardDto,
@@ -118,6 +136,10 @@ use utoipa::OpenApi;
             crate::dtos::solana_dto::CreatePoolAndSendTransactionResponse,
             crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreatePoolResponse>,
             crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreatePoolAndSendTransactionResponse>,
+            // CLMM Pool Query Response DTOs
+            crate::dtos::solana_dto::ApiResponse<Option<database::clmm_pool::ClmmPool>>,
+            crate::dtos::solana_dto::ApiResponse<Vec<database::clmm_pool::ClmmPool>>,
+            crate::dtos::solana_dto::ApiResponse<database::clmm_pool::PoolStats>,
             // Solana Classic AMM Pool DTOs
             crate::dtos::solana_dto::CreateClassicAmmPoolRequest,
             crate::dtos::solana_dto::CreateClassicAmmPoolResponse,
@@ -151,8 +173,9 @@ use utoipa::OpenApi;
         (name = "Solana交换", description = "Solana 代币交换相关接口"),
         (name = "SwapV2兼容接口", description = "SwapV2 兼容接口，支持转账费"),
         (name = "Solana流动性", description = "Solana 流动性仓位管理接口"),
-        (name = "Solana池子创建", description = "Solana CLMM池子创建接口"),
-        (name = "Solana经典AMM", description = "Solana 经典AMM池子创建接口"),
+        (name = "SolanaCLMM池子创建", description = "Solana CLMM池子创建接口"),
+        (name = "CLMM池子查询", description = "CLMM池子查询和统计接口"),
+        (name = "SolanaCPMM池子创建", description = "Solana 经典AMM池子创建接口"),
         (name = "系统配置", description = "系统配置相关接口"),
         (name = "代币信息", description = "代币信息相关接口")
     )

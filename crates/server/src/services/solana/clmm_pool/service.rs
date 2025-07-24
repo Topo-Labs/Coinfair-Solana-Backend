@@ -3,7 +3,7 @@
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, TransactionStatus};
 
 use super::super::shared::SharedContext;
-use super::storage::{ClmmPoolStorageService, ClmmPoolStorageBuilder};
+use super::storage::{ClmmPoolStorageBuilder, ClmmPoolStorageService};
 use anyhow::Result;
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey, signature::Keypair, transaction::Transaction};
 use spl_token::state::Mint;
@@ -33,7 +33,10 @@ impl ClmmPoolService {
         info!("  Mint1: {}", request.mint1);
         info!("  开放时间: {}", request.open_time);
 
-        // 1. 解析和验证参数
+        // 1. 输入参数验证
+        self.validate_create_pool_request(&request)?;
+
+        // 2. 解析和验证参数
         let mut price = request.price;
         let mut mint0 = Pubkey::from_str(&request.mint0).map_err(|_| anyhow::anyhow!("无效的mint0地址"))?;
         let mut mint1 = Pubkey::from_str(&request.mint1).map_err(|_| anyhow::anyhow!("无效的mint1地址"))?;
@@ -260,7 +263,7 @@ impl ClmmPoolService {
     /// 根据池子地址查询池子信息
     pub async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>> {
         info!("🔍 查询池子信息: {}", pool_address);
-        
+
         match self.storage.get_pool_by_address(pool_address).await {
             Ok(pool) => {
                 if pool.is_some() {
@@ -280,7 +283,7 @@ impl ClmmPoolService {
     /// 根据代币mint地址查询相关池子列表
     pub async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         info!("🔍 查询代币相关池子: {} (限制: {:?})", mint_address, limit);
-        
+
         match self.storage.get_pools_by_mint(mint_address, limit).await {
             Ok(pools) => {
                 info!("✅ 找到 {} 个相关池子", pools.len());
@@ -296,7 +299,7 @@ impl ClmmPoolService {
     /// 根据创建者查询池子列表
     pub async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         info!("🔍 查询创建者池子: {} (限制: {:?})", creator_wallet, limit);
-        
+
         match self.storage.get_pools_by_creator(creator_wallet, limit).await {
             Ok(pools) => {
                 info!("✅ 找到 {} 个创建者池子", pools.len());
@@ -312,7 +315,7 @@ impl ClmmPoolService {
     /// 复杂查询接口
     pub async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         info!("🔍 执行复杂池子查询");
-        
+
         match self.storage.query_pools(params).await {
             Ok(pools) => {
                 info!("✅ 查询完成，找到 {} 个池子", pools.len());
@@ -328,7 +331,7 @@ impl ClmmPoolService {
     /// 获取池子统计信息
     pub async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats> {
         info!("📊 获取池子统计信息");
-        
+
         match self.storage.get_pool_statistics().await {
             Ok(stats) => {
                 info!("✅ 统计信息获取成功 - 总池子: {}, 活跃池子: {}", stats.total_pools, stats.active_pools);
@@ -344,7 +347,7 @@ impl ClmmPoolService {
     /// 初始化存储服务 (包括数据库索引)
     pub async fn init_storage(&self) -> Result<()> {
         info!("🔧 初始化CLMM池子存储服务...");
-        
+
         match self.storage.init_indexes().await {
             Ok(_) => {
                 info!("✅ 存储服务初始化完成");
@@ -355,6 +358,49 @@ impl ClmmPoolService {
                 Err(e.into())
             }
         }
+    }
+
+    /// 验证创建池子请求参数
+    fn validate_create_pool_request(&self, request: &CreatePoolRequest) -> Result<()> {
+        // 验证价格
+        if request.price <= 0.0 {
+            return Err(anyhow::anyhow!("价格必须大于0"));
+        }
+        if request.price.is_infinite() || request.price.is_nan() {
+            return Err(anyhow::anyhow!("价格必须是有效的数值"));
+        }
+        if request.price > 1e18 {
+            return Err(anyhow::anyhow!("价格过大，可能导致计算溢出"));
+        }
+
+        // 验证mint地址格式
+        if request.mint0.len() < 32 || request.mint0.len() > 44 {
+            return Err(anyhow::anyhow!("mint0地址格式不正确"));
+        }
+        if request.mint1.len() < 32 || request.mint1.len() > 44 {
+            return Err(anyhow::anyhow!("mint1地址格式不正确"));
+        }
+        if request.mint0 == request.mint1 {
+            return Err(anyhow::anyhow!("mint0和mint1不能相同"));
+        }
+
+        // 验证用户钱包地址格式
+        if request.user_wallet.len() < 32 || request.user_wallet.len() > 44 {
+            return Err(anyhow::anyhow!("用户钱包地址格式不正确"));
+        }
+
+        // 验证配置索引
+        if request.config_index > 100 {
+            return Err(anyhow::anyhow!("配置索引超出有效范围"));
+        }
+
+        // 验证开放时间
+        let now = chrono::Utc::now().timestamp() as u64;
+        if request.open_time > 0 && request.open_time < now && (now - request.open_time) > 86400 {
+            return Err(anyhow::anyhow!("开放时间不能是过去超过24小时的时间"));
+        }
+
+        Ok(())
     }
 
     /// Calculate sqrt_price_x64 (reusing CLI logic)

@@ -46,6 +46,12 @@ impl SolanaController {
             // ============ Create CLMM Pool API路由 ============
             .route("/pool/create", post(create_pool))
             .route("/pool/create-and-send-transaction", post(create_pool_and_send_transaction))
+            // ============ CLMM Pool Query API路由 ============
+            .route("/pool/info", get(get_pool_by_address))
+            .route("/pool/by-mint", get(get_pools_by_mint))
+            .route("/pool/by-creator", get(get_pools_by_creator))
+            .route("/pool/query", get(query_pools))
+            .route("/pool/statistics", get(get_pool_statistics))
             // ============ Classic AMM Pool API路由 ============
             .route("/pool/create-amm", post(create_classic_amm_pool))
             .route("/pool/create-amm-and-send-transaction", post(create_classic_amm_pool_and_send_transaction))
@@ -1349,6 +1355,323 @@ pub async fn create_classic_amm_pool_and_send_transaction(
                 let error_response = ErrorResponse::new("CREATE_CLASSIC_AMM_POOL_ERROR", &format!("创建经典AMM池子失败: {}", e));
                 Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
             }
+        }
+    }
+}
+// ============ CLMM Pool Query API处理函数 ============
+
+/// 根据池子地址查询池子信息
+///
+/// # 查询参数
+///
+/// - `pool_address`: 池子地址
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "pool_address": "池子地址",
+///     "mint0": { "mint_address": "代币0地址", "decimals": 9 },
+///     "mint1": { "mint_address": "代币1地址", "decimals": 6 },
+///     "price_info": { "initial_price": 100.0, "current_price": 105.0 },
+///     "status": "Active",
+///     "created_at": 1640995200
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pool/info",
+    params(
+        ("pool_address" = String, Query, description = "池子地址")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<Option<database::clmm_pool::ClmmPool>>),
+        (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn get_pool_by_address(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Option<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    let pool_address = params.get("pool_address").ok_or_else(|| {
+        let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少pool_address参数");
+        (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
+    })?;
+
+    info!("🔍 查询池子信息: {}", pool_address);
+
+    match services.solana.get_pool_by_address(pool_address).await {
+        Ok(pool) => {
+            if pool.is_some() {
+                info!("✅ 找到池子信息: {}", pool_address);
+            } else {
+                info!("⚠️ 未找到池子信息: {}", pool_address);
+            }
+            Ok(Json(ApiResponse::success(pool)))
+        }
+        Err(e) => {
+            error!("❌ 查询池子信息失败: {} - {}", pool_address, e);
+            let error_response = ErrorResponse::new("QUERY_POOL_FAILED", &format!("查询池子信息失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+        }
+    }
+}
+
+/// 根据代币mint地址查询相关池子列表
+///
+/// # 查询参数
+///
+/// - `mint_address`: 代币mint地址
+/// - `limit` (可选): 返回结果数量限制，默认50
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "success": true,
+///   "data": [
+///     {
+///       "pool_address": "池子地址1",
+///       "mint0": { "mint_address": "代币0地址" },
+///       "mint1": { "mint_address": "代币1地址" },
+///       "status": "Active"
+///     }
+///   ]
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pool/by-mint",
+    params(
+        ("mint_address" = String, Query, description = "代币mint地址"),
+        ("limit" = Option<i64>, Query, description = "返回结果数量限制")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm_pool::ClmmPool>>),
+        (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn get_pools_by_mint(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    let mint_address = params.get("mint_address").ok_or_else(|| {
+        let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少mint_address参数");
+        (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
+    })?;
+
+    let limit = params.get("limit").and_then(|s| s.parse().ok());
+
+    info!("🔍 查询代币相关池子: {} (限制: {:?})", mint_address, limit);
+
+    match services.solana.get_pools_by_mint(mint_address, limit).await {
+        Ok(pools) => {
+            info!("✅ 找到 {} 个相关池子", pools.len());
+            Ok(Json(ApiResponse::success(pools)))
+        }
+        Err(e) => {
+            error!("❌ 查询代币相关池子失败: {} - {}", mint_address, e);
+            let error_response = ErrorResponse::new("QUERY_POOLS_BY_MINT_FAILED", &format!("查询代币相关池子失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+        }
+    }
+}
+
+/// 根据创建者查询池子列表
+///
+/// # 查询参数
+///
+/// - `creator_wallet`: 创建者钱包地址
+/// - `limit` (可选): 返回结果数量限制，默认50
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "success": true,
+///   "data": [
+///     {
+///       "pool_address": "池子地址1",
+///       "creator_wallet": "创建者地址",
+///       "created_at": 1640995200,
+///       "status": "Active"
+///     }
+///   ]
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pool/by-creator",
+    params(
+        ("creator_wallet" = String, Query, description = "创建者钱包地址"),
+        ("limit" = Option<i64>, Query, description = "返回结果数量限制")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm_pool::ClmmPool>>),
+        (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn get_pools_by_creator(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    let creator_wallet = params.get("creator_wallet").ok_or_else(|| {
+        let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少creator_wallet参数");
+        (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
+    })?;
+
+    let limit = params.get("limit").and_then(|s| s.parse().ok());
+
+    info!("🔍 查询创建者池子: {} (限制: {:?})", creator_wallet, limit);
+
+    match services.solana.get_pools_by_creator(creator_wallet, limit).await {
+        Ok(pools) => {
+            info!("✅ 找到 {} 个创建者池子", pools.len());
+            Ok(Json(ApiResponse::success(pools)))
+        }
+        Err(e) => {
+            error!("❌ 查询创建者池子失败: {} - {}", creator_wallet, e);
+            let error_response = ErrorResponse::new("QUERY_POOLS_BY_CREATOR_FAILED", &format!("查询创建者池子失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+        }
+    }
+}
+
+/// 复杂查询池子接口
+///
+/// 支持多种条件组合查询池子
+///
+/// # 查询参数
+///
+/// - `pool_address` (可选): 池子地址
+/// - `mint_address` (可选): 代币地址
+/// - `creator_wallet` (可选): 创建者钱包
+/// - `status` (可选): 池子状态 (Created, Active, Paused, Closed)
+/// - `min_price` (可选): 最小价格
+/// - `max_price` (可选): 最大价格
+/// - `start_time` (可选): 开始时间戳
+/// - `end_time` (可选): 结束时间戳
+/// - `page` (可选): 页码，默认1
+/// - `limit` (可选): 每页数量，默认50
+/// - `sort_by` (可选): 排序字段
+/// - `sort_order` (可选): 排序顺序 (asc, desc)
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pool/query",
+    params(
+        ("pool_address" = Option<String>, Query, description = "池子地址"),
+        ("mint_address" = Option<String>, Query, description = "代币地址"),
+        ("creator_wallet" = Option<String>, Query, description = "创建者钱包"),
+        ("status" = Option<String>, Query, description = "池子状态"),
+        ("min_price" = Option<f64>, Query, description = "最小价格"),
+        ("max_price" = Option<f64>, Query, description = "最大价格"),
+        ("start_time" = Option<u64>, Query, description = "开始时间戳"),
+        ("end_time" = Option<u64>, Query, description = "结束时间戳"),
+        ("page" = Option<i64>, Query, description = "页码"),
+        ("limit" = Option<i64>, Query, description = "每页数量"),
+        ("sort_by" = Option<String>, Query, description = "排序字段"),
+        ("sort_order" = Option<String>, Query, description = "排序顺序")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm_pool::ClmmPool>>),
+        (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn query_pools(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    info!("🔍 执行复杂池子查询");
+
+    // 构建查询参数
+    let query_params = database::clmm_pool::PoolQueryParams {
+        pool_address: params.get("pool_address").cloned(),
+        mint_address: params.get("mint_address").cloned(),
+        creator_wallet: params.get("creator_wallet").cloned(),
+        status: params.get("status").and_then(|s| match s.as_str() {
+            "Created" => Some(database::clmm_pool::PoolStatus::Created),
+            "Active" => Some(database::clmm_pool::PoolStatus::Active),
+            "Paused" => Some(database::clmm_pool::PoolStatus::Paused),
+            "Closed" => Some(database::clmm_pool::PoolStatus::Closed),
+            _ => None,
+        }),
+        min_price: params.get("min_price").and_then(|s| s.parse().ok()),
+        max_price: params.get("max_price").and_then(|s| s.parse().ok()),
+        start_time: params.get("start_time").and_then(|s| s.parse().ok()),
+        end_time: params.get("end_time").and_then(|s| s.parse().ok()),
+        page: params.get("page").and_then(|s| s.parse().ok()),
+        limit: params.get("limit").and_then(|s| s.parse().ok()),
+        sort_by: params.get("sort_by").cloned(),
+        sort_order: params.get("sort_order").cloned(),
+    };
+
+    match services.solana.query_pools(&query_params).await {
+        Ok(pools) => {
+            info!("✅ 查询完成，找到 {} 个池子", pools.len());
+            Ok(Json(ApiResponse::success(pools)))
+        }
+        Err(e) => {
+            error!("❌ 复杂查询失败: {}", e);
+            let error_response = ErrorResponse::new("QUERY_POOLS_FAILED", &format!("复杂查询失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+        }
+    }
+}
+
+/// 获取池子统计信息
+///
+/// 返回系统中池子的统计数据
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "success": true,
+///   "data": {
+///     "total_pools": 1250,
+///     "active_pools": 1100,
+///     "created_pools": 50,
+///     "paused_pools": 80,
+///     "closed_pools": 20,
+///     "total_volume": 1500000.0,
+///     "total_liquidity": 2500000.0
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pool/statistics",
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<database::clmm_pool::PoolStats>),
+        (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn get_pool_statistics(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<database::clmm_pool::PoolStats>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    info!("📊 获取池子统计信息");
+
+    match services.solana.get_pool_statistics().await {
+        Ok(stats) => {
+            info!("✅ 统计信息获取成功 - 总池子: {}, 活跃池子: {}", stats.total_pools, stats.active_pools);
+            Ok(Json(ApiResponse::success(stats)))
+        }
+        Err(e) => {
+            error!("❌ 获取统计信息失败: {}", e);
+            let error_response = ErrorResponse::new("GET_POOL_STATISTICS_FAILED", &format!("获取统计信息失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
         }
     }
 }

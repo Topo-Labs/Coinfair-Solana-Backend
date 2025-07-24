@@ -97,6 +97,13 @@ pub trait SolanaServiceTrait {
     async fn create_pool(&self, request: CreatePoolRequest) -> Result<CreatePoolResponse>;
     async fn create_pool_and_send_transaction(&self, request: CreatePoolRequest) -> Result<CreatePoolAndSendTransactionResponse>;
 
+    // CLMM Pool query operations
+    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>>;
+    async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats>;
+
     // AMM Pool operations
     async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse>;
     async fn create_classic_amm_pool_and_send_transaction(
@@ -161,6 +168,27 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn create_pool_and_send_transaction(&self, request: CreatePoolRequest) -> Result<CreatePoolAndSendTransactionResponse> {
         self.clmm_pool_service.create_pool_and_send_transaction(request).await
+    }
+
+    // CLMM Pool query operations - delegate to clmm_pool_service
+    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>> {
+        self.clmm_pool_service.get_pool_by_address(pool_address).await
+    }
+
+    async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        self.clmm_pool_service.get_pools_by_mint(mint_address, limit).await
+    }
+
+    async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        self.clmm_pool_service.get_pools_by_creator(creator_wallet, limit).await
+    }
+
+    async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        self.clmm_pool_service.query_pools(params).await
+    }
+
+    async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats> {
+        self.clmm_pool_service.get_pool_statistics().await
     }
 
     // AMM Pool operations - delegate to amm_pool_service

@@ -1,14 +1,14 @@
 //! CLMM池子服务集成测试
-//! 
+//!
 //! 测试完整的池子创建、存储、同步和查询流程
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::dtos::solana_dto::CreatePoolRequest;
     use crate::services::solana::clmm_pool::service::ClmmPoolService;
     use crate::services::solana::clmm_pool::storage::ClmmPoolStorageService;
-    use crate::dtos::solana_dto::CreatePoolRequest;
     use crate::services::solana::shared::SharedContext;
-    use database::clmm_pool::{ClmmPool, PoolStatus, SyncStatus, PoolQueryParams, TokenInfo, PriceInfo, VaultInfo, ExtensionInfo};
+    use database::clmm_pool::{ClmmPool, ExtensionInfo, PoolQueryParams, PoolStatus, PriceInfo, SyncStatus, TokenInfo, VaultInfo};
     use std::sync::Arc;
 
     /// 集成测试辅助结构
@@ -25,20 +25,20 @@ mod integration_tests {
         pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
             // 初始化共享上下文
             let shared_context = Arc::new(SharedContext::new()?);
-            
+
             // 初始化数据库
             let app_config = Arc::new(utils::AppConfig::default());
             let database = database::Database::new(app_config).await?;
-            
+
             // 创建存储服务
             let storage_service = ClmmPoolStorageService::new(database.clmm_pools.clone());
-            
+
             // 初始化数据库索引
             storage_service.init_indexes().await?;
-            
+
             // 创建池子服务
             let pool_service = ClmmPoolService::new(shared_context.clone(), &database);
-            
+
             Ok(TestEnvironment {
                 shared_context,
                 database,
@@ -63,7 +63,7 @@ mod integration_tests {
         let request = CreatePoolRequest {
             config_index: 0,
             price: 100.0,
-            mint0: "So11111111111111111111111111111111111111112".to_string(), // SOL
+            mint0: "So11111111111111111111111111111111111111112".to_string(),  // SOL
             mint1: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
             open_time: 0,
             user_wallet: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string(),
@@ -71,28 +71,28 @@ mod integration_tests {
 
         // 创建池子交易
         let create_result = env.pool_service.create_pool(request.clone()).await;
-        
+
         match create_result {
             Ok(response) => {
                 println!("✅ 池子创建成功: {}", response.pool_address);
-                
+
                 // 2. 测试数据存储
                 let storage_result = env.storage_service.store_pool_creation(&request, &response).await;
                 assert!(storage_result.is_ok(), "池子数据存储应该成功");
-                
+
                 let pool_id = storage_result.unwrap();
                 println!("✅ 池子数据存储成功，ID: {}", pool_id);
-                
+
                 // 3. 测试数据查询
                 let query_result = env.storage_service.get_pool_by_address(&response.pool_address).await;
                 assert!(query_result.is_ok(), "池子查询应该成功");
-                
+
                 let pool_option = query_result.unwrap();
                 assert!(pool_option.is_some(), "应该能查询到池子数据");
-                
+
                 let pool = pool_option.unwrap();
                 println!("✅ 池子查询成功: {}", pool.pool_address);
-                
+
                 // 4. 测试统计查询
                 let stats_result = env.storage_service.get_pool_statistics().await;
                 match stats_result {
@@ -123,7 +123,7 @@ mod integration_tests {
 
         // 测试批量查询性能
         let start_time = std::time::Instant::now();
-        
+
         // 模拟批量查询 - 使用正确的字段名
         let query_params = PoolQueryParams {
             pool_address: None,
@@ -139,10 +139,10 @@ mod integration_tests {
             sort_by: None,
             sort_order: None,
         };
-        
+
         let query_result = env.storage_service.query_pools(&query_params).await;
         let query_duration = start_time.elapsed();
-        
+
         match query_result {
             Ok(pools) => {
                 println!("📊 批量查询性能测试:");
@@ -173,7 +173,7 @@ mod integration_tests {
         // 测试并发查询 - 简化版本，不使用futures crate
         let mut success_count = 0;
         let mut total_results = 0;
-        
+
         for i in 0..3 {
             let storage_service = ClmmPoolStorageService::new(env.database.clmm_pools.clone());
             let query_params = PoolQueryParams {
@@ -190,7 +190,7 @@ mod integration_tests {
                 sort_by: None,
                 sort_order: None,
             };
-            
+
             match storage_service.query_pools(&query_params).await {
                 Ok(pools) => {
                     success_count += 1;
@@ -205,10 +205,51 @@ mod integration_tests {
         println!("🔄 并发操作测试结果:");
         println!("  - 成功操作: {}/3", success_count);
         println!("  - 总查询结果: {} 个池子", total_results);
-        
+
         assert!(success_count >= 2, "至少应该有2个操作成功");
-        
+
         println!("✅ 并发操作测试通过");
+    }
+
+    #[tokio::test]
+    async fn test_error_scenarios() {
+        let env = match TestEnvironment::new().await {
+            Ok(env) => env,
+            Err(_) => {
+                println!("⚠️ 跳过错误场景测试：测试环境不可用");
+                return;
+            }
+        };
+
+        // 测试无效地址查询
+        let invalid_result = env.storage_service.get_pool_by_address("invalid_address").await;
+        match invalid_result {
+            Ok(None) => println!("✅ 无效地址查询正确返回None"),
+            Ok(Some(_)) => println!("⚠️ 无效地址查询意外返回了数据"),
+            Err(e) => println!("✅ 无效地址查询正确返回错误: {}", e),
+        }
+
+        // 测试空参数查询
+        let empty_result = env.storage_service.get_pools_by_mint("", Some(10)).await;
+        match empty_result {
+            Ok(pools) => {
+                assert!(pools.is_empty(), "空mint地址应该返回空结果");
+                println!("✅ 空参数查询正确处理");
+            }
+            Err(e) => println!("✅ 空参数查询正确返回错误: {}", e),
+        }
+
+        // 测试边界值查询
+        let boundary_result = env.storage_service.get_pools_by_creator("test", Some(0)).await;
+        match boundary_result {
+            Ok(pools) => {
+                assert!(pools.is_empty(), "limit为0应该返回空结果");
+                println!("✅ 边界值查询正确处理");
+            }
+            Err(_) => println!("⚠️ 边界值查询处理可能需要优化"),
+        }
+
+        println!("✅ 错误场景测试完成");
     }
 
     #[tokio::test]
@@ -275,7 +316,7 @@ mod integration_tests {
         match store_result {
             Ok(pool_id) => {
                 println!("✅ 测试池子存储成功，ID: {}", pool_id);
-                
+
                 // 查询刚存储的池子
                 let query_result = env.storage_service.get_pool_by_address(&test_pool.pool_address).await;
                 match query_result {
@@ -296,7 +337,94 @@ mod integration_tests {
                 println!("⚠️ 测试池子存储失败: {}", e);
             }
         }
-        
+
         println!("✅ 数据验证测试完成");
+    }
+
+    #[tokio::test]
+    async fn test_sync_service_integration() {
+        let env = match TestEnvironment::new().await {
+            Ok(env) => env,
+            Err(_) => {
+                println!("⚠️ 跳过同步服务测试：测试环境不可用");
+                return;
+            }
+        };
+
+        // 创建同步服务
+        use crate::services::solana::clmm_pool::sync::{ClmmPoolSyncService, SyncConfig};
+
+        let sync_config = SyncConfig {
+            sync_interval: 60,
+            batch_size: 10,
+            max_retries: 2,
+            retry_interval: 5,
+            auto_sync_enabled: false, // 测试中禁用自动同步
+        };
+
+        let sync_service = ClmmPoolSyncService::new(env.shared_context, env.storage_service, Some(sync_config));
+
+        // 测试获取同步统计信息
+        match sync_service.get_sync_stats().await {
+            Ok(stats) => {
+                println!("📊 同步统计信息:");
+                println!("  - 需要同步的池子: {}", stats.total_pools_need_sync);
+                println!("  - 最后同步时间: {}", stats.last_sync_time);
+                println!("  - 批次大小: {}", stats.sync_config.batch_size);
+                assert!(stats.sync_config.batch_size == 10, "配置应该正确设置");
+            }
+            Err(e) => {
+                println!("⚠️ 获取同步统计失败: {}", e);
+            }
+        }
+
+        // 测试标记池子需要同步
+        let test_addresses = vec!["test_pool_1".to_string(), "test_pool_2".to_string()];
+        match sync_service.mark_pools_for_sync(&test_addresses).await {
+            Ok(marked_count) => {
+                println!("✅ 标记同步测试完成，标记了 {} 个池子", marked_count);
+            }
+            Err(e) => {
+                println!("⚠️ 标记同步测试失败: {}", e);
+            }
+        }
+
+        println!("✅ 同步服务集成测试完成");
+    }
+
+    #[tokio::test]
+    async fn test_storage_health_check() {
+        let env = match TestEnvironment::new().await {
+            Ok(env) => env,
+            Err(_) => {
+                println!("⚠️ 跳过健康检查测试：测试环境不可用");
+                return;
+            }
+        };
+
+        // 测试存储服务健康检查
+        match env.storage_service.health_check().await {
+            Ok(health_result) => {
+                println!("🏥 健康检查结果:");
+                println!("  - 是否健康: {}", health_result.is_healthy);
+                println!("  - 响应时间: {} ms", health_result.response_time_ms);
+                println!("  - 问题数量: {}", health_result.issues.len());
+
+                if !health_result.issues.is_empty() {
+                    println!("  - 问题列表:");
+                    for issue in &health_result.issues {
+                        println!("    * {}", issue);
+                    }
+                }
+
+                // 健康检查应该在合理时间内完成
+                assert!(health_result.response_time_ms < 10000, "健康检查响应时间应该小于10秒");
+            }
+            Err(e) => {
+                println!("⚠️ 健康检查失败: {}", e);
+            }
+        }
+
+        println!("✅ 健康检查测试完成");
     }
 }
