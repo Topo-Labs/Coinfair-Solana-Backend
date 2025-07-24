@@ -86,6 +86,23 @@ impl Coinfair {
                 .expect("🔴 Failed to start server");
         });
 
+        // 启动CLMM池子自动同步服务
+        let services_for_sync = self.services.clone();
+        set.spawn(async move {
+            loop {
+                info!("🔄 启动CLMM池子同步服务...");
+                match services_for_sync.solana.start_clmm_pool_sync().await {
+                    Ok(_) => {
+                        info!("✅ CLMM池子同步服务正常退出，重启中...");
+                    }
+                    Err(e) => {
+                        info!("❌ CLMM池子同步服务异常: {:?}，2秒后重启...", e);
+                    }
+                }
+                sleep(Duration::from_secs(2)).await;
+            }
+        });
+
         tokio::select! {
             _ = async {
                 while let Some(_) = set.join_next().await {

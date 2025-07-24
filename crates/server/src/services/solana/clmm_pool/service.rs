@@ -4,6 +4,7 @@ use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRe
 
 use super::super::shared::SharedContext;
 use super::storage::{ClmmPoolStorageBuilder, ClmmPoolStorageService};
+use super::sync::{ClmmPoolSyncService, ClmmPoolSyncBuilder};
 use anyhow::Result;
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey, signature::Keypair, transaction::Transaction};
 use spl_token::state::Mint;
@@ -15,13 +16,16 @@ use tracing::info;
 pub struct ClmmPoolService {
     shared: Arc<SharedContext>,
     storage: ClmmPoolStorageService,
+    sync_service: ClmmPoolSyncService,
 }
 
 impl ClmmPoolService {
     /// Create a new ClmmPoolService with shared context and database
     pub fn new(shared: Arc<SharedContext>, database: &database::Database) -> Self {
         let storage = ClmmPoolStorageBuilder::from_database(database);
-        Self { shared, storage }
+        let sync_storage = ClmmPoolStorageBuilder::from_database(database);
+        let sync_service = ClmmPoolSyncBuilder::from_context_and_storage(shared.clone(), sync_storage, None);
+        Self { shared, storage, sync_service }
     }
 
     /// Create CLMM pool transaction (unsigned)
@@ -435,5 +439,10 @@ impl ClmmPoolService {
 
         let price_with_decimals = price * multipler(decimals_1) / multipler(decimals_0);
         price_to_x64(price_with_decimals.sqrt())
+    }
+
+    /// 启动自动同步服务
+    pub async fn start_auto_sync(&self) -> Result<()> {
+        self.sync_service.start_auto_sync().await.map_err(|e| anyhow::anyhow!("同步服务启动失败: {}", e))
     }
 }

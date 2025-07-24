@@ -32,9 +32,9 @@ pub struct SyncConfig {
 impl Default for SyncConfig {
     fn default() -> Self {
         Self {
-            sync_interval: std::env::var("CLMM_SYNC_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(300), // 5分钟
-            batch_size: std::env::var("CLMM_SYNC_BATCH_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(50),   // 每批次50个池子
-            max_retries: std::env::var("CLMM_SYNC_MAX_RETRIES").ok().and_then(|v| v.parse().ok()).unwrap_or(3),  // 最多重试3次
+            sync_interval: std::env::var("CLMM_SYNC_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(5), // 1分钟
+            batch_size: std::env::var("CLMM_SYNC_BATCH_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(50), // 每批次50个池子
+            max_retries: std::env::var("CLMM_SYNC_MAX_RETRIES").ok().and_then(|v| v.parse().ok()).unwrap_or(3), // 最多重试3次
             retry_interval: std::env::var("CLMM_SYNC_RETRY_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(30), // 重试间隔30秒
             auto_sync_enabled: std::env::var("CLMM_AUTO_SYNC_ENABLED").ok().and_then(|v| v.parse().ok()).unwrap_or(true),
         }
@@ -101,7 +101,7 @@ impl ClmmPoolSyncService {
                     if synced_count > 0 {
                         info!("✅ 批次同步完成，同步了 {} 个池子", synced_count);
                     } else {
-                        debug!("🔄 没有需要同步的池子");
+                        info!("🔄 没有需要同步的池子");
                     }
                 }
                 Err(e) => {
@@ -117,9 +117,8 @@ impl ClmmPoolSyncService {
 
         // 获取需要同步的池子列表
         let pools_to_sync = self.storage.get_pools_need_sync(Some(self.config.batch_size)).await?;
-
         if pools_to_sync.is_empty() {
-            debug!("没有需要同步的池子");
+            info!("✅ 没有需要同步的池子");
             return Ok(0);
         }
 
@@ -147,10 +146,10 @@ impl ClmmPoolSyncService {
             match self.sync_single_pool_with_cache(&pool, &mint_info_cache).await {
                 Ok(true) => {
                     synced_count += 1;
-                    debug!("✅ 池子同步成功: {}", pool.pool_address);
+                    info!("✅ 池子同步成功: {}", pool.pool_address);
                 }
                 Ok(false) => {
-                    debug!("⚠️ 池子无需更新: {}", pool.pool_address);
+                    info!("⚠️ 池子无需更新: {}", pool.pool_address);
                 }
                 Err(e) => {
                     error!("❌ 池子同步失败: {} - {}", pool.pool_address, e);
@@ -185,13 +184,13 @@ impl ClmmPoolSyncService {
             match self.sync_single_pool(&pool).await {
                 Ok(true) => {
                     synced_count += 1;
-                    debug!("✅ 池子同步成功: {}", pool.pool_address);
+                    info!("✅ 池子同步成功: {}", pool.pool_address);
                 }
                 Ok(false) => {
-                    debug!("⚠️ 池子无需更新: {}", pool.pool_address);
+                    info!("⚠️ 池子无需更新: {}", pool.pool_address);
                 }
                 Err(e) => {
-                    error!("❌ 池子同步失败: {} - {}", pool.pool_address, e);
+                    info!("❌ 池子同步失败: {} - {}", pool.pool_address, e);
 
                     // 标记同步失败
                     if let Err(mark_err) = self.storage.mark_sync_failed(&pool.pool_address, &e.to_string()).await {

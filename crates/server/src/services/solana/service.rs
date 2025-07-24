@@ -111,6 +111,9 @@ pub trait SolanaServiceTrait {
         &self,
         request: CreateClassicAmmPoolRequest,
     ) -> Result<CreateClassicAmmPoolAndSendTransactionResponse>;
+    
+    // CLMM Pool sync operations
+    async fn start_clmm_pool_sync(&self) -> Result<()>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -231,5 +234,10 @@ impl SolanaServiceTrait for SolanaService {
         self.position_service
             .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
             .await
+    }
+
+    // CLMM Pool sync operations - delegate to clmm_pool_service
+    async fn start_clmm_pool_sync(&self) -> Result<()> {
+        self.clmm_pool_service.start_auto_sync().await
     }
 }
