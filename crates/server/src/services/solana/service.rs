@@ -30,27 +30,26 @@ pub struct SolanaService {
 }
 
 impl SolanaService {
-    /// Create a new SolanaService with default configuration
+    /// Create a new SolanaService with default configuration (deprecated - use with_database instead)
     pub fn new() -> Result<Self> {
+        // 这个方法已弃用，因为需要数据库实例
+        Err(anyhow::anyhow!("请使用 with_database 方法创建 SolanaService"))
+    }
+
+    /// Create a new SolanaService with custom configuration (deprecated - use with_database instead)
+    pub fn with_config(_app_config: ::utils::AppConfig) -> Result<Self> {
+        // 这个方法已弃用，因为需要数据库实例
+        Err(anyhow::anyhow!("请使用 with_database 方法创建 SolanaService"))
+    }
+
+    /// Create a new SolanaService with database integration
+    pub fn with_database(database: database::Database) -> Result<Self> {
         let shared_context = Arc::new(SharedContext::new()?);
 
         Ok(Self {
             swap_service: SwapService::new(shared_context.clone()),
             position_service: PositionService::new(shared_context.clone()),
-            clmm_pool_service: ClmmPoolService::new(shared_context.clone()),
-            amm_pool_service: AmmPoolService::new(shared_context.clone()),
-            shared_context,
-        })
-    }
-
-    /// Create a new SolanaService with custom configuration
-    pub fn with_config(app_config: ::utils::AppConfig) -> Result<Self> {
-        let shared_context = Arc::new(SharedContext::with_config(app_config)?);
-
-        Ok(Self {
-            swap_service: SwapService::new(shared_context.clone()),
-            position_service: PositionService::new(shared_context.clone()),
-            clmm_pool_service: ClmmPoolService::new(shared_context.clone()),
+            clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database),
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
             shared_context,
         })
@@ -59,7 +58,8 @@ impl SolanaService {
 
 impl Default for SolanaService {
     fn default() -> Self {
-        Self::new().expect("Failed to create default SolanaService")
+        // 默认实现已弃用，应该使用 with_database 方法
+        panic!("SolanaService::default() 已弃用，请使用 SolanaService::with_database() 方法")
     }
 }
 

@@ -42,11 +42,19 @@ impl Services {
             Err(e) => {
                 tracing::warn!("Failed to initialize from environment: {}, using default config", e);
 
-                let repository = Arc::new(db);
+                let repository = Arc::new(db.clone());
                 let user = Arc::new(UserService::new(repository.clone())) as DynUserService;
                 let refer = Arc::new(ReferService::new(repository.clone())) as DynReferService;
                 let reward = Arc::new(RewardService::new(repository.clone())) as DynRewardService;
-                let solana = Arc::new(SolanaService::default()) as DynSolanaService;
+                
+                // 创建带数据库的SolanaService
+                let solana = match SolanaService::with_database(db) {
+                    Ok(service) => Arc::new(service) as DynSolanaService,
+                    Err(e) => {
+                        tracing::warn!("Failed to create SolanaService with database: {}, using default", e);
+                        Arc::new(SolanaService::default()) as DynSolanaService
+                    }
+                };
 
                 info!("🧠 Services initialized with default configuration");
 
@@ -57,12 +65,14 @@ impl Services {
 
     /// 从环境变量创建Services (生产环境推荐)
     pub fn from_env(db: Database) -> Result<Self, Box<dyn std::error::Error>> {
-        let repository = Arc::new(db);
+        let repository = Arc::new(db.clone());
 
         let user = Arc::new(UserService::new(repository.clone())) as DynUserService;
         let refer = Arc::new(ReferService::new(repository.clone())) as DynReferService;
         let reward = Arc::new(RewardService::new(repository.clone())) as DynRewardService;
-        let solana = Arc::new(SolanaService::default()) as DynSolanaService;
+        
+        // 创建带数据库的SolanaService
+        let solana = Arc::new(SolanaService::with_database(db)?) as DynSolanaService;
 
         info!("🧠 initializing services from environment...");
 

@@ -91,9 +91,9 @@ mod create_pool_tests {
         assert!(Pubkey::from_str(&request.user_wallet).is_ok());
     }
 
-    #[test]
-    fn test_clmm_pool_service_creation() {
-        // Test that ClmmPoolService can be created with SharedContext
+    #[tokio::test]
+    async fn test_clmm_pool_service_creation() {
+        // Test that ClmmPoolService can be created with SharedContext and Database
         // This is a basic smoke test to ensure the service structure is correct
         let shared_context = match SharedContext::new() {
             Ok(ctx) => Arc::new(ctx),
@@ -103,7 +103,17 @@ mod create_pool_tests {
             }
         };
 
-        let _service = ClmmPoolService::new(shared_context);
+        // 创建测试用的数据库实例
+        let app_config = Arc::new(utils::AppConfig::default());
+        let database = match database::Database::new(app_config).await {
+            Ok(db) => db,
+            Err(_) => {
+                // Skip test if Database can't be created (e.g., missing MongoDB connection)
+                return;
+            }
+        };
+
+        let _service = ClmmPoolService::new(shared_context, &database);
         // If we get here without panicking, the service was created successfully
     }
 }

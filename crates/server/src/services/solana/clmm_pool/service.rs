@@ -3,6 +3,7 @@
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, TransactionStatus};
 
 use super::super::shared::SharedContext;
+use super::storage::{ClmmPoolStorageService, ClmmPoolStorageBuilder};
 use anyhow::Result;
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey, signature::Keypair, transaction::Transaction};
 use spl_token::state::Mint;
@@ -13,12 +14,14 @@ use tracing::info;
 /// ClmmPoolService handles CLMM pool creation operations
 pub struct ClmmPoolService {
     shared: Arc<SharedContext>,
+    storage: ClmmPoolStorageService,
 }
 
 impl ClmmPoolService {
-    /// Create a new ClmmPoolService with shared context
-    pub fn new(shared: Arc<SharedContext>) -> Self {
-        Self { shared }
+    /// Create a new ClmmPoolService with shared context and database
+    pub fn new(shared: Arc<SharedContext>, database: &database::Database) -> Self {
+        let storage = ClmmPoolStorageBuilder::from_database(database);
+        Self { shared, storage }
     }
 
     /// Create CLMM pool transaction (unsigned)
@@ -115,7 +118,7 @@ impl ClmmPoolService {
 
         let now = chrono::Utc::now().timestamp();
 
-        Ok(CreatePoolResponse {
+        let response = CreatePoolResponse {
             transaction: transaction_base64,
             transaction_message,
             pool_address: pool_addresses.pool.to_string(),
@@ -128,10 +131,23 @@ impl ClmmPoolService {
             sqrt_price_x64: sqrt_price_x64.to_string(),
             initial_tick: tick,
             timestamp: now,
-        })
+        };
+
+        // 11. 存储池子元数据到数据库
+        match self.storage.store_pool_creation(&request, &response).await {
+            Ok(pool_id) => {
+                info!("💾 池子元数据存储成功，ID: {}", pool_id);
+            }
+            Err(e) => {
+                // 存储失败不影响交易构建，只记录错误
+                tracing::error!("❌ 池子元数据存储失败: {}", e);
+            }
+        }
+
+        Ok(response)
     }
 
-    /// Create CLMM pool and send transaction (signed)
+    /// Create CLMM pool and send transaction (signed just for local testing purposes, will not be used in production)
     pub async fn create_pool_and_send_transaction(&self, request: CreatePoolRequest) -> Result<CreatePoolAndSendTransactionResponse> {
         info!("🏗️ 开始创建池子并发送交易");
         info!("  配置索引: {}", request.config_index);
@@ -211,7 +227,7 @@ impl ClmmPoolService {
         let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
         let now = chrono::Utc::now().timestamp();
 
-        Ok(CreatePoolAndSendTransactionResponse {
+        let response = CreatePoolAndSendTransactionResponse {
             signature: signature.to_string(),
             pool_address: pool_addresses.pool.to_string(),
             amm_config_address: pool_addresses.amm_config.to_string(),
@@ -223,9 +239,122 @@ impl ClmmPoolService {
             sqrt_price_x64: sqrt_price_x64.to_string(),
             initial_tick: tick,
             status: TransactionStatus::Finalized,
-            explorer_url,
+            explorer_url: explorer_url.clone(),
             timestamp: now,
-        })
+        };
+
+        // 12. 存储池子元数据和交易信息到数据库
+        match self.storage.store_pool_creation_with_transaction(&request, &response).await {
+            Ok(pool_id) => {
+                info!("💾 池子元数据和交易信息存储成功，ID: {}", pool_id);
+            }
+            Err(e) => {
+                // 存储失败不影响交易执行，只记录错误
+                tracing::error!("❌ 池子元数据存储失败: {}", e);
+            }
+        }
+
+        Ok(response)
+    }
+
+    /// 根据池子地址查询池子信息
+    pub async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>> {
+        info!("🔍 查询池子信息: {}", pool_address);
+        
+        match self.storage.get_pool_by_address(pool_address).await {
+            Ok(pool) => {
+                if pool.is_some() {
+                    info!("✅ 找到池子信息: {}", pool_address);
+                } else {
+                    info!("⚠️ 未找到池子信息: {}", pool_address);
+                }
+                Ok(pool)
+            }
+            Err(e) => {
+                tracing::error!("❌ 查询池子信息失败: {} - {}", pool_address, e);
+                Err(e.into())
+            }
+        }
+    }
+
+    /// 根据代币mint地址查询相关池子列表
+    pub async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        info!("🔍 查询代币相关池子: {} (限制: {:?})", mint_address, limit);
+        
+        match self.storage.get_pools_by_mint(mint_address, limit).await {
+            Ok(pools) => {
+                info!("✅ 找到 {} 个相关池子", pools.len());
+                Ok(pools)
+            }
+            Err(e) => {
+                tracing::error!("❌ 查询代币相关池子失败: {} - {}", mint_address, e);
+                Err(e.into())
+            }
+        }
+    }
+
+    /// 根据创建者查询池子列表
+    pub async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        info!("🔍 查询创建者池子: {} (限制: {:?})", creator_wallet, limit);
+        
+        match self.storage.get_pools_by_creator(creator_wallet, limit).await {
+            Ok(pools) => {
+                info!("✅ 找到 {} 个创建者池子", pools.len());
+                Ok(pools)
+            }
+            Err(e) => {
+                tracing::error!("❌ 查询创建者池子失败: {} - {}", creator_wallet, e);
+                Err(e.into())
+            }
+        }
+    }
+
+    /// 复杂查询接口
+    pub async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        info!("🔍 执行复杂池子查询");
+        
+        match self.storage.query_pools(params).await {
+            Ok(pools) => {
+                info!("✅ 查询完成，找到 {} 个池子", pools.len());
+                Ok(pools)
+            }
+            Err(e) => {
+                tracing::error!("❌ 复杂查询失败: {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    /// 获取池子统计信息
+    pub async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats> {
+        info!("📊 获取池子统计信息");
+        
+        match self.storage.get_pool_statistics().await {
+            Ok(stats) => {
+                info!("✅ 统计信息获取成功 - 总池子: {}, 活跃池子: {}", stats.total_pools, stats.active_pools);
+                Ok(stats)
+            }
+            Err(e) => {
+                tracing::error!("❌ 获取统计信息失败: {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    /// 初始化存储服务 (包括数据库索引)
+    pub async fn init_storage(&self) -> Result<()> {
+        info!("🔧 初始化CLMM池子存储服务...");
+        
+        match self.storage.init_indexes().await {
+            Ok(_) => {
+                info!("✅ 存储服务初始化完成");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("❌ 存储服务初始化失败: {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     /// Calculate sqrt_price_x64 (reusing CLI logic)
