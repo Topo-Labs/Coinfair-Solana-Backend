@@ -18,6 +18,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
+use database::clmm_pool::model::{PoolListRequest, PoolListResponse};
 use tracing::{error, info, warn};
 
 pub struct SolanaController;
@@ -52,6 +53,7 @@ impl SolanaController {
             .route("/pool/by-creator", get(get_pools_by_creator))
             .route("/pool/query", get(query_pools))
             .route("/pool/statistics", get(get_pool_statistics))
+            .route("/pools/info/list", get(get_pool_list))
             // ============ Classic AMM Pool API路由 ============
             .route("/pool/create-amm", post(create_classic_amm_pool))
             .route("/pool/create-amm-and-send-transaction", post(create_classic_amm_pool_and_send_transaction))
@@ -890,6 +892,105 @@ async fn get_position_info(
             error!("❌ 获取仓位详情失败: {:?}", e);
             let error_response = ErrorResponse::new("GET_POSITION_INFO_ERROR", &format!("获取仓位详情失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 获取池子列表
+///
+/// 支持按池子类型过滤、排序和分页的池子列表查询接口。
+/// 默认行为返回所有池子，按创建时间降序排列。
+///
+/// # 查询参数
+///
+/// - `poolType` (可选): 按池子类型过滤 ("concentrated" 或 "standard")
+/// - `poolSortField` (可选): 排序字段 ("default", "created_at", "price", "open_time")
+/// - `sortType` (可选): 排序方向 ("asc" 或 "desc", 默认: "desc")
+/// - `pageSize` (可选): 每页数量 (1-100, 默认: 20)
+/// - `page` (可选): 页码 (从1开始, 默认: 1)
+/// - `creatorWallet` (可选): 按创建者钱包地址过滤
+/// - `mintAddress` (可选): 按代币mint地址过滤
+/// - `status` (可选): 按池子状态过滤
+///
+/// # 示例请求
+///
+/// - `/api/v1/solana/pools/info/list` - 获取所有池子，默认排序
+/// - `/api/v1/solana/pools/info/list?poolType=concentrated&pageSize=50&page=1` - 获取集中流动性池子
+/// - `/api/v1/solana/pools/info/list?poolSortField=price&sortType=asc` - 按价格升序排序
+///
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pools/info/list",
+    params(PoolListRequest),
+    responses(
+        (status = 200, description = "池子列表查询成功", body = ApiResponse<PoolListResponse>),
+        (status = 400, description = "请求参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "内部服务器错误", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "Pool Management"
+)]
+pub async fn get_pool_list(
+    Extension(services): Extension<Services>,
+    Query(params): Query<PoolListRequest>,
+) -> Result<Json<ApiResponse<PoolListResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    info!("📋 接收到池子列表查询请求");
+    info!("  池子类型: {:?}", params.pool_type);
+    info!("  排序字段: {:?}", params.pool_sort_field);
+    info!("  排序方向: {:?}", params.sort_type);
+    info!("  页码: {}, 页大小: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+
+    // 验证池子类型参数
+    if let Some(ref pool_type_str) = params.pool_type {
+        if let Err(_) = pool_type_str.parse::<database::clmm_pool::model::PoolType>() {
+            let error_response = ErrorResponse::new(
+                "INVALID_POOL_TYPE",
+                &format!("Invalid pool type: {}. Must be 'concentrated' or 'standard'", pool_type_str),
+            );
+            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+        }
+    }
+
+    // 验证排序字段
+    let valid_sort_fields = ["default", "created_at", "price", "open_time"];
+    if let Some(ref sort_field) = params.pool_sort_field {
+        if !valid_sort_fields.contains(&sort_field.as_str()) {
+            let error_response = ErrorResponse::new(
+                "INVALID_SORT_FIELD",
+                &format!("Invalid sort field: {}. Must be one of: {:?}", sort_field, valid_sort_fields),
+            );
+            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+        }
+    }
+
+    // 验证排序方向
+    if let Some(ref sort_type) = params.sort_type {
+        if !["asc", "desc"].contains(&sort_type.as_str()) {
+            let error_response = ErrorResponse::new("INVALID_SORT_TYPE", "Invalid sort type. Must be 'asc' or 'desc'");
+            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+        }
+    }
+
+    // 验证状态参数
+    if let Some(ref status_str) = params.status {
+        let valid_statuses = ["Created", "Pending", "Active", "Paused", "Closed"];
+        if !valid_statuses.contains(&status_str.as_str()) {
+            let error_response = ErrorResponse::new(
+                "INVALID_STATUS",
+                &format!("Invalid status: {}. Must be one of: {:?}", status_str, valid_statuses),
+            );
+            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+        }
+    }
+
+    match services.solana.query_pools_with_pagination(&params).await {
+        Ok(response) => {
+            info!("✅ 池子列表查询成功，返回{}个池子", response.pools.len());
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => {
+            error!("❌ 池子列表查询失败: {:?}", e);
+            let error_response = ErrorResponse::new("POOL_LIST_QUERY_FAILED", &format!("池子列表查询失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
         }
     }
 }

@@ -103,6 +103,7 @@ pub trait SolanaServiceTrait {
     async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>>;
     async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>>;
     async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats>;
+    async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse>;
 
     // AMM Pool operations
     async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse>;
@@ -189,6 +190,10 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats> {
         self.clmm_pool_service.get_pool_statistics().await
+    }
+
+    async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse> {
+        self.clmm_pool_service.query_pools_with_pagination(params).await
     }
 
     // AMM Pool operations - delegate to amm_pool_service

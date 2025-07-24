@@ -57,6 +57,7 @@ use utoipa::OpenApi;
         crate::api::solana_controller::get_pools_by_creator,
         crate::api::solana_controller::query_pools,
         crate::api::solana_controller::get_pool_statistics,
+        crate::api::solana_controller::get_pool_list,
         // Solana Classic AMM Pool endpoints
         crate::api::solana_controller::create_classic_amm_pool,
         crate::api::solana_controller::create_classic_amm_pool_and_send_transaction,
@@ -140,6 +141,14 @@ use utoipa::OpenApi;
             crate::dtos::solana_dto::ApiResponse<Option<database::clmm_pool::ClmmPool>>,
             crate::dtos::solana_dto::ApiResponse<Vec<database::clmm_pool::ClmmPool>>,
             crate::dtos::solana_dto::ApiResponse<database::clmm_pool::PoolStats>,
+            // Pool List DTOs
+            database::clmm_pool::model::PoolListRequest,
+            database::clmm_pool::model::PoolListResponse,
+            database::clmm_pool::model::PaginationMeta,
+            database::clmm_pool::model::FilterSummary,
+            database::clmm_pool::model::TypeCount,
+            database::clmm_pool::model::PoolType,
+            crate::dtos::solana_dto::ApiResponse<database::clmm_pool::model::PoolListResponse>,
             // Solana Classic AMM Pool DTOs
             crate::dtos::solana_dto::CreateClassicAmmPoolRequest,
             crate::dtos::solana_dto::CreateClassicAmmPoolResponse,

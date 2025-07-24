@@ -344,6 +344,29 @@ impl ClmmPoolService {
         }
     }
 
+    /// 分页查询池子列表
+    pub async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm_pool::model::PoolListResponse> {
+        info!("📋 执行分页池子查询");
+        info!("  池子类型: {:?}", params.pool_type);
+        info!("  排序字段: {:?}", params.pool_sort_field);
+        info!("  排序方向: {:?}", params.sort_type);
+        info!("  页码: {}, 页大小: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+
+        match self.storage.query_pools_with_pagination(params).await {
+            Ok(response) => {
+                info!("✅ 分页查询完成，返回{}个池子", response.pools.len());
+                Ok(response)
+            }
+            Err(e) => {
+                tracing::error!("❌ 分页查询失败: {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
     /// 初始化存储服务 (包括数据库索引)
     pub async fn init_storage(&self) -> Result<()> {
         info!("🔧 初始化CLMM池子存储服务...");

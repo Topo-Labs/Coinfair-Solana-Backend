@@ -309,6 +309,8 @@ mod integration_tests {
                 needs_sync: false,
                 sync_error: None,
             },
+
+            pool_type: database::clmm_pool::model::PoolType::Concentrated,
         };
 
         // 测试数据存储和查询

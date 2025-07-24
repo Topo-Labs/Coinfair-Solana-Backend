@@ -138,6 +138,8 @@ impl ClmmPoolStorageService {
                 needs_sync: true, // 新创建的池子需要同步链上数据
                 sync_error: None,
             },
+
+            pool_type: database::clmm_pool::model::PoolType::Concentrated,
         };
 
         let pool_id = self.repository.create_pool(&pool).await?;
@@ -230,6 +232,8 @@ impl ClmmPoolStorageService {
                 needs_sync: true, // 需要同步完整的链上数据
                 sync_error: None,
             },
+
+            pool_type: database::clmm_pool::model::PoolType::Concentrated,
         };
 
         let pool_id = self.repository.create_pool(&pool).await?;
@@ -339,6 +343,14 @@ impl ClmmPoolStorageService {
     /// 复杂查询接口
     pub async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> AppResult<Vec<ClmmPool>> {
         self.repository.query_pools(params).await
+    }
+
+    /// 分页查询池子列表
+    pub async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> AppResult<database::clmm_pool::model::PoolListResponse> {
+        self.repository.query_pools_with_pagination(params).await
     }
 
     /// 更新同步状态
