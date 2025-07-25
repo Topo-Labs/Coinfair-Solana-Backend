@@ -4,7 +4,8 @@ use crate::{
     dtos::solana_dto::{
         ApiResponse, BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request,
         CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse,
-        CreatePoolRequest, CreatePoolResponse, ErrorResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse,
+        CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, 
+        DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse,
         IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest,
         OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, SwapRequest,
         SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
@@ -48,6 +49,9 @@ impl SolanaController {
             // ============ IncreaseLiquidity API路由 ============
             .route("/position/increase-liquidity", post(increase_liquidity))
             .route("/position/increase-liquidity-and-send-transaction", post(increase_liquidity_and_send_transaction))
+            // ============ DecreaseLiquidity API路由 ============
+            .route("/position/decrease-liquidity", post(decrease_liquidity))
+            .route("/position/decrease-liquidity-and-send-transaction", post(decrease_liquidity_and_send_transaction))
             // ============ Create CLMM Pool API路由 ============
             .route("/pool/create", post(create_pool))
             .route("/pool/create-and-send-transaction", post(create_pool_and_send_transaction))
@@ -1985,6 +1989,189 @@ async fn increase_liquidity_and_send_transaction(
                 Err((StatusCode::BAD_REQUEST, Json(error_response)))
             } else {
                 let error_response = ErrorResponse::new("INCREASE_LIQUIDITY_ERROR", &format!("增加流动性失败: {}", e));
+                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+            }
+        }
+    }
+}
+
+// ============ DecreaseLiquidity API处理函数 ============
+
+/// 减少流动性（构建交易）
+///
+/// 减少现有流动性仓位的流动性数量，可以部分或全部减少。
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "pool_address": "池子地址",
+///   "user_wallet": "用户钱包地址",
+///   "tick_lower_index": -1000,
+///   "tick_upper_index": 1000,
+///   "liquidity": "123456789", // 可选，如果为空则减少全部流动性
+///   "max_slippage_percent": 0.5,
+///   "simulate": false
+/// }
+/// ```
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "transaction": "Base64编码的未签名交易数据",
+///   "transaction_message": "减少流动性 - 池子: abc12345, 仓位: def67890, 减少流动性: 123456789",
+///   "position_key": "现有仓位键值",
+///   "liquidity_removed": "123456789",
+///   "amount_0_min": 950000,
+///   "amount_1_min": 475000,
+///   "amount_0_expected": 1000000,
+///   "amount_1_expected": 500000,
+///   "tick_lower_index": -1000,
+///   "tick_upper_index": 1000,
+///   "pool_address": "池子地址",
+///   "will_close_position": false,
+///   "timestamp": 1640995200
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/position/decrease-liquidity",
+    request_body = DecreaseLiquidityRequest,
+    responses(
+        (status = 200, description = "减少流动性交易构建成功", body = DecreaseLiquidityResponse),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 404, description = "未找到匹配的仓位", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn decrease_liquidity(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<DecreaseLiquidityRequest>,
+) -> Result<Json<DecreaseLiquidityResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("🔧 接收到减少流动性请求");
+    info!("  池子地址: {}", request.pool_address);
+    info!("  用户钱包: {}", request.user_wallet);
+    info!("  Tick范围: {} - {}", request.tick_lower_index, request.tick_upper_index);
+    info!("  减少流动性: {:?}", request.liquidity);
+
+    // 验证tick范围
+    if request.tick_lower_index >= request.tick_upper_index {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引")),
+        ));
+    }
+
+    match services.solana.decrease_liquidity(request).await {
+        Ok(response) => {
+            info!("✅ 减少流动性交易构建成功: {}", response.transaction_message);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 减少流动性失败: {:?}", e);
+
+            // 检查是否是未找到匹配仓位的错误
+            let error_msg = e.to_string();
+            if error_msg.contains("未找到匹配的仓位") {
+                warn!("🔄 检测到未找到匹配仓位的错误");
+                let error_response = ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的仓位。请检查tick索引范围和池子地址。");
+                Err((StatusCode::NOT_FOUND, Json(error_response)))
+            } else {
+                let error_response = ErrorResponse::new("DECREASE_LIQUIDITY_ERROR", &format!("减少流动性失败: {}", e));
+                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+            }
+        }
+    }
+}
+
+/// 减少流动性并发送交易
+///
+/// 减少现有流动性仓位的流动性数量，并立即发送交易到区块链。
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "pool_address": "池子地址",
+///   "user_wallet": "用户钱包地址", 
+///   "tick_lower_index": -1000,
+///   "tick_upper_index": 1000,
+///   "liquidity": "123456789", // 可选，如果为空则减少全部流动性
+///   "max_slippage_percent": 0.5,
+///   "simulate": false
+/// }
+/// ```
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "signature": "交易签名",
+///   "position_key": "仓位键值",
+///   "liquidity_removed": "123456789",
+///   "amount_0_actual": 1000000,
+///   "amount_1_actual": 500000,
+///   "tick_lower_index": -1000,
+///   "tick_upper_index": 1000,
+///   "pool_address": "池子地址",
+///   "position_closed": false,
+///   "status": "Finalized",
+///   "explorer_url": "https://explorer.solana.com/tx/...",
+///   "timestamp": 1640995200
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/position/decrease-liquidity-and-send-transaction",
+    request_body = DecreaseLiquidityRequest,
+    responses(
+        (status = 200, description = "减少流动性成功", body = DecreaseLiquidityAndSendTransactionResponse),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 404, description = "未找到匹配的仓位", body = ErrorResponse),
+        (status = 500, description = "服务器内部错误", body = ErrorResponse)
+    ),
+    tag = "Solana流动性"
+)]
+async fn decrease_liquidity_and_send_transaction(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<DecreaseLiquidityRequest>,
+) -> Result<Json<DecreaseLiquidityAndSendTransactionResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("🚀 接收到减少流动性并发送交易请求");
+    info!("  池子地址: {}", request.pool_address);
+    info!("  用户钱包: {}", request.user_wallet);
+    info!("  Tick范围: {} - {}", request.tick_lower_index, request.tick_upper_index);
+    info!("  减少流动性: {:?}", request.liquidity);
+
+    // 验证tick范围
+    if request.tick_lower_index >= request.tick_upper_index {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引")),
+        ));
+    }
+
+    match services.solana.decrease_liquidity_and_send_transaction(request).await {
+        Ok(response) => {
+            info!("✅ 减少流动性成功: {}", response.signature);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 减少流动性并发送交易失败: {:?}", e);
+
+            // 检查是否是未找到匹配仓位的错误
+            let error_msg = e.to_string();
+            if error_msg.contains("未找到匹配的仓位") {
+                warn!("🔄 检测到未找到匹配仓位的错误");
+                let error_response = ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的仓位。请检查tick索引范围和池子地址。");
+                Err((StatusCode::NOT_FOUND, Json(error_response)))
+            } else if error_msg.contains("AccountOwnedByWrongProgram") {
+                warn!("🔧 检测到Token Program不匹配错误，NFT可能使用Token-2022");
+                let error_response = ErrorResponse::new("TOKEN_PROGRAM_MISMATCH", "NFT账户使用了Token-2022程序，这个错误已在新版本中修复。请联系技术支持。");
+                Err((StatusCode::BAD_REQUEST, Json(error_response)))
+            } else {
+                let error_response = ErrorResponse::new("DECREASE_LIQUIDITY_ERROR", &format!("减少流动性失败: {}", e));
                 Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
             }
         }

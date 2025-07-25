@@ -3,6 +3,7 @@
 use crate::dtos::solana_dto::{
     BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse,
     CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
     GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse, NewPoolListResponse, 
     OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
     PriceQuoteResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
@@ -97,6 +98,10 @@ pub trait SolanaServiceTrait {
     // IncreaseLiquidity operations
     async fn increase_liquidity(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityResponse>;
     async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse>;
+    
+    // DecreaseLiquidity operations
+    async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse>;
+    async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse>;
 
     // CLMM Pool operations
     async fn create_pool(&self, request: CreatePoolRequest) -> Result<CreatePoolResponse>;
@@ -264,6 +269,15 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
         self.position_service.increase_liquidity_and_send_transaction(request).await
+    }
+
+    // DecreaseLiquidity operations - delegate to position_service
+    async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse> {
+        self.position_service.decrease_liquidity(request).await
+    }
+
+    async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
+        self.position_service.decrease_liquidity_and_send_transaction(request).await
     }
 
     // CLMM Pool sync operations - delegate to clmm_pool_service

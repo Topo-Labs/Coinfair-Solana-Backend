@@ -1,7 +1,8 @@
 // PositionService handles all position management operations
 
 use crate::dtos::solana_dto::{
-    CalculateLiquidityRequest, CalculateLiquidityResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse,
+    CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, 
+    DecreaseLiquidityResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse,
     IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
     PositionInfo, TransactionStatus, UserPositionsResponse,
 };
@@ -666,5 +667,17 @@ impl PositionService {
     /// 增加流动性并发送交易 - 委托给LiquidityService
     pub async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
         self.liquidity_service.increase_liquidity_and_send_transaction(request).await
+    }
+
+    // ============ DecreaseLiquidity Methods (Delegated to LiquidityService) ============
+
+    /// 减少流动性（构建交易）- 委托给LiquidityService
+    pub async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse> {
+        self.liquidity_service.decrease_liquidity(request).await
+    }
+
+    /// 减少流动性并发送交易 - 委托给LiquidityService
+    pub async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
+        self.liquidity_service.decrease_liquidity_and_send_transaction(request).await
     }
 }
