@@ -182,8 +182,10 @@ impl<'a> PositionUtils<'a> {
                                 info!("  🎯 找到匹配的仓位！");
                                 return Ok(Some(ExistingPosition {
                                     nft_mint: nft_info.nft_mint,
+                                    nft_token_account: nft_info.nft_account,
                                     position_key: nft_info.position_pda,
                                     liquidity: position_state.liquidity,
+                                    nft_token_program: nft_info.token_program, // 添加Token Program信息
                                 }));
                             } else {
                                 info!("  ⏭️ 仓位不匹配，继续搜索");
@@ -253,7 +255,7 @@ impl<'a> PositionUtils<'a> {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
 
         for token_account_info in token_accounts {
-            info!("  检查Token账户 {}", token_account_info.pubkey);
+            // info!("  检查Token账户 {}", token_account_info.pubkey);
             if let UiAccountData::Json(parsed_account) = token_account_info.account.data {
                 if parsed_account.program == "spl-token" || parsed_account.program == "spl-token-2022" {
                     if let Ok(TokenAccountType::Account(ui_token_account)) = serde_json::from_value(parsed_account.parsed) {
@@ -285,6 +287,7 @@ impl<'a> PositionUtils<'a> {
                                 nft_mint: token,
                                 nft_account: nft_account_pubkey,
                                 position_pda,
+                                token_program: *token_program, // 记录Token Program信息
                             });
                         }
                     }
@@ -366,14 +369,17 @@ pub struct PositionNftInfo {
     pub nft_mint: Pubkey,
     pub nft_account: Pubkey,
     pub position_pda: Pubkey,
+    pub token_program: Pubkey, // 添加Token Program信息
 }
 
 /// 已存在的仓位信息
 #[derive(Debug, Clone)]
 pub struct ExistingPosition {
     pub nft_mint: Pubkey,
+    pub nft_token_account: Pubkey,
     pub position_key: Pubkey,
     pub liquidity: u128,
+    pub nft_token_program: Pubkey, // 添加Token Program信息
 }
 
 /// 简化的PersonalPositionState结构体（用于反序列化）

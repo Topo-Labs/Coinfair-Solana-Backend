@@ -231,4 +231,116 @@ impl PositionInstructionBuilder {
         info!("🎯 完整交易构建完成，共{}个指令", instructions.len());
         Ok(instructions)
     }
+
+    /// 构建IncreaseLiquidityV2指令（支持Token-2022 NFT）
+    pub fn build_increase_liquidity_instructions(
+        pool_address: &Pubkey,
+        pool_state: &raydium_amm_v3::states::PoolState,
+        user_wallet: &Pubkey,
+        nft_mint: &Pubkey,
+        nft_token_account: &Pubkey,
+        user_token_account_0: &Pubkey,
+        user_token_account_1: &Pubkey,
+        tick_lower_index: i32,
+        tick_upper_index: i32,
+        tick_array_lower_start_index: i32,
+        tick_array_upper_start_index: i32,
+        liquidity: u128,
+        amount_0_max: u64,
+        amount_1_max: u64,
+        remaining_accounts: Vec<AccountMeta>,
+    ) -> Result<Vec<Instruction>> {
+        info!("🔨 构建IncreaseLiquidityV2指令（支持Token-2022）");
+
+        let raydium_program_id = ConfigManager::get_raydium_program_id()?;
+        let mut instructions = Vec::new();
+
+        // 1. 计算所有需要的PDA地址
+        let (protocol_position, _) = Pubkey::find_program_address(
+            &[
+                POSITION_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_lower_index.to_be_bytes(),
+                &tick_upper_index.to_be_bytes(),
+            ],
+            &raydium_program_id,
+        );
+
+        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
+
+        let (tick_array_lower, _) = Pubkey::find_program_address(
+            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_lower_start_index.to_be_bytes()],
+            &raydium_program_id,
+        );
+
+        let (tick_array_upper, _) = Pubkey::find_program_address(
+            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_upper_start_index.to_be_bytes()],
+            &raydium_program_id,
+        );
+
+        // 2. 构建账户列表（严格按照IncreaseLiquidityV2结构的顺序）
+        let mut accounts = vec![
+            AccountMeta::new(*user_wallet, true),                                 // 1. nft_owner (signer)
+            AccountMeta::new_readonly(*nft_token_account, false),                 // 2. nft_account
+            AccountMeta::new(*pool_address, false),                               // 3. pool_state
+            AccountMeta::new(protocol_position, false),                           // 4. protocol_position
+            AccountMeta::new(personal_position, false),                           // 5. personal_position
+            AccountMeta::new(tick_array_lower, false),                            // 6. tick_array_lower
+            AccountMeta::new(tick_array_upper, false),                            // 7. tick_array_upper
+            AccountMeta::new(*user_token_account_0, false),                       // 8. token_account_0
+            AccountMeta::new(*user_token_account_1, false),                       // 9. token_account_1
+            AccountMeta::new(pool_state.token_vault_0, false),                    // 10. token_vault_0
+            AccountMeta::new(pool_state.token_vault_1, false),                    // 11. token_vault_1
+            AccountMeta::new_readonly(spl_token::id(), false),                    // 12. token_program
+            AccountMeta::new_readonly(spl_token_2022::id(), false),               // 13. token_program_2022
+            AccountMeta::new_readonly(pool_state.token_mint_0, false),            // 14. vault_0_mint
+            AccountMeta::new_readonly(pool_state.token_mint_1, false),            // 15. vault_1_mint
+        ];
+
+        // 添加remaining accounts
+        accounts.extend(remaining_accounts);
+
+        // 3. 构建指令数据
+        let instruction_data = Self::build_increase_liquidity_instruction_data(
+            liquidity,
+            amount_0_max,
+            amount_1_max,
+        )?;
+
+        // 4. 创建IncreaseLiquidityV2指令（支持Token-2022）
+        let increase_liquidity_instruction = Instruction {
+            program_id: raydium_program_id,
+            accounts,
+            data: instruction_data,
+        };
+
+        instructions.push(increase_liquidity_instruction);
+
+        info!("✅ IncreaseLiquidityV2指令构建完成（支持Token-2022）");
+        Ok(instructions)
+    }
+
+    /// 构建IncreaseLiquidityV2指令数据（支持Token-2022）
+    fn build_increase_liquidity_instruction_data(
+        liquidity: u128,
+        amount_0_max: u64,
+        amount_1_max: u64,
+    ) -> Result<Vec<u8>> {
+        let mut data = Vec::new();
+
+        // 计算正确的discriminator - 使用IncreaseLiquidityV2指令
+        // Anchor使用 sha256("global:increase_liquidity_v2") 的前8字节
+        use solana_sdk::hash::hash;
+        let discriminator = hash(b"global:increase_liquidity_v2").to_bytes();
+        data.extend_from_slice(&discriminator[..8]);
+
+        // 参数序列化（按照Anchor的格式）
+        data.extend_from_slice(&liquidity.to_le_bytes());
+        data.extend_from_slice(&amount_0_max.to_le_bytes());
+        data.extend_from_slice(&amount_1_max.to_le_bytes());
+        // base_flag: Option<bool> = None，使用0表示None
+        data.push(0);
+
+        Ok(data)
+    }
 }
