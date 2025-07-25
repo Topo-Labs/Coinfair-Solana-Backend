@@ -3,6 +3,7 @@
 
 pub mod amm_pool;
 pub mod clmm_pool;
+pub mod liquidity;
 pub mod position;
 pub mod service;
 pub mod shared;
