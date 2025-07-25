@@ -18,6 +18,11 @@ impl ClmmPoolRepository {
         Self { collection }
     }
 
+    /// 获取集合引用（用于直接数据库操作）
+    pub fn get_collection(&self) -> &Collection<ClmmPool> {
+        &self.collection
+    }
+
     /// 初始化数据库索引
     pub async fn init_indexes(&self) -> AppResult<()> {
         info!("🔧 初始化CLMM池子数据库索引...");

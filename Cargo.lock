@@ -1710,7 +1710,7 @@ dependencies = [
  "configparser",
  "hex",
  "rand 0.7.3",
- "raydium-cp-swap",
+ "raydium-cp-swap 0.1.0",
  "regex",
  "serde",
  "serde_json",
@@ -5552,6 +5552,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "raydium-cp-swap"
+version = "0.2.0"
+source = "git+https://github.com/raydium-io/raydium-cp-swap#0011e63ab98c3bce705560652dfd33b21a1ba228"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "arrayref",
+ "bytemuck",
+ "solana-security-txt",
+ "spl-math",
+ "spl-token-2022 7.0.0",
+ "uint 0.10.0",
+]
+
+[[package]]
 name = "rayon"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6461,15 +6476,18 @@ dependencies = [
  "database",
  "dotenvy",
  "ethers",
+ "futures",
  "lazy_static",
  "mongodb",
  "num-traits",
  "pbkdf2 0.12.2",
  "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-cp-swap 0.2.0",
  "reqwest",
  "serde",
  "serde_json",
  "solana",
+ "solana-account-decoder",
  "solana-client",
  "solana-sdk",
  "spl-associated-token-account 6.0.0",

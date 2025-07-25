@@ -3,7 +3,7 @@
 use crate::dtos::solana_dto::{
     BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse,
     CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
-    GetUserPositionsRequest, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
+    GetUserPositionsRequest, NewPoolListResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
     PriceQuoteResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
 };
 
@@ -104,6 +104,9 @@ pub trait SolanaServiceTrait {
     async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>>;
     async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats>;
     async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse>;
+    
+    // New method for the expected response format
+    async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse>;
 
     // AMM Pool operations
     async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse>;
@@ -197,6 +200,19 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse> {
         self.clmm_pool_service.query_pools_with_pagination(params).await
+    }
+    
+    async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse> {
+        use crate::services::data_transform::DataTransformService;
+        
+        // 先获取传统格式的响应
+        let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
+        
+        // 使用数据转换服务转换为新格式
+        let mut transform_service = DataTransformService::new()?;
+        let new_response = transform_service.transform_pool_list_response(old_response, params).await?;
+        
+        Ok(new_response)
     }
 
     // AMM Pool operations - delegate to amm_pool_service

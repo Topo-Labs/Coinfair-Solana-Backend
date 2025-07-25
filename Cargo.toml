@@ -56,6 +56,11 @@ raydium-amm-v3 = { git = "https://github.com/raydium-io/raydium-clmm", features 
       "no-entrypoint",
       "client",
 ] }
+raydium-cp-swap = { git = "https://github.com/raydium-io/raydium-cp-swap", features = [
+      "no-entrypoint",
+      "client",
+] }
+
 # Note: Raydium V2 AMM program ID will be used directly without external dependency
 # as we'll be calling the program instructions directly using Solana SDK
 base64 = "0.21"

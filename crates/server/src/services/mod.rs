@@ -12,6 +12,8 @@ pub mod reward_service;
 pub mod solana;
 pub mod solana_service;
 pub mod user_service;
+pub mod metaplex_service;
+pub mod data_transform;
 
 use crate::services::{
     refer_service::{DynReferService, ReferService},

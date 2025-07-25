@@ -8,7 +8,6 @@ use super::{
     config::ConfigManager,
 };
 use raydium_amm_v3::instruction;
-
 /// 池子指令构建器 - 统一管理池子相关指令的构建
 pub struct PoolInstructionBuilder;
 

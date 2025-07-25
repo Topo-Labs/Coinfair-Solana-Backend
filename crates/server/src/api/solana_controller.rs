@@ -18,7 +18,7 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
-use database::clmm_pool::model::{PoolListRequest, PoolListResponse};
+use database::clmm_pool::model::PoolListRequest;
 use tracing::{error, info, warn};
 
 pub struct SolanaController;
@@ -932,7 +932,7 @@ async fn get_position_info(
 pub async fn get_pool_list(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
-) -> Result<Json<ApiResponse<PoolListResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<Json<crate::dtos::solana_dto::NewPoolListResponse>, (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>)> {
     info!("📋 接收到池子列表查询请求");
     info!("  池子类型: {:?}", params.pool_type);
     info!("  排序字段: {:?}", params.pool_sort_field);
@@ -942,11 +942,16 @@ pub async fn get_pool_list(
     // 验证池子类型参数
     if let Some(ref pool_type_str) = params.pool_type {
         if let Err(_) = pool_type_str.parse::<database::clmm_pool::model::PoolType>() {
-            let error_response = ErrorResponse::new(
-                "INVALID_POOL_TYPE",
-                &format!("Invalid pool type: {}. Must be 'concentrated' or 'standard'", pool_type_str),
-            );
-            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
         }
     }
 
@@ -954,19 +959,32 @@ pub async fn get_pool_list(
     let valid_sort_fields = ["default", "created_at", "price", "open_time"];
     if let Some(ref sort_field) = params.pool_sort_field {
         if !valid_sort_fields.contains(&sort_field.as_str()) {
-            let error_response = ErrorResponse::new(
-                "INVALID_SORT_FIELD",
-                &format!("Invalid sort field: {}. Must be one of: {:?}", sort_field, valid_sort_fields),
-            );
-            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
         }
     }
 
     // 验证排序方向
     if let Some(ref sort_type) = params.sort_type {
         if !["asc", "desc"].contains(&sort_type.as_str()) {
-            let error_response = ErrorResponse::new("INVALID_SORT_TYPE", "Invalid sort type. Must be 'asc' or 'desc'");
-            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
         }
     }
 
@@ -974,23 +992,36 @@ pub async fn get_pool_list(
     if let Some(ref status_str) = params.status {
         let valid_statuses = ["Created", "Pending", "Active", "Paused", "Closed"];
         if !valid_statuses.contains(&status_str.as_str()) {
-            let error_response = ErrorResponse::new(
-                "INVALID_STATUS",
-                &format!("Invalid status: {}. Must be one of: {:?}", status_str, valid_statuses),
-            );
-            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
         }
     }
 
-    match services.solana.query_pools_with_pagination(&params).await {
+    match services.solana.query_pools_with_new_format(&params).await {
         Ok(response) => {
-            info!("✅ 池子列表查询成功，返回{}个池子", response.pools.len());
-            Ok(Json(ApiResponse::success(response)))
+            info!("✅ 池子列表查询成功，返回{}个池子", response.data.data.len());
+            Ok(Json(response))
         }
         Err(e) => {
             error!("❌ 池子列表查询失败: {:?}", e);
-            let error_response = ErrorResponse::new("POOL_LIST_QUERY_FAILED", &format!("池子列表查询失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }

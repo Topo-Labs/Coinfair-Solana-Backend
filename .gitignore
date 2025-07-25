@@ -96,3 +96,5 @@ fix_test_coverage.md
 .codebuddy/*
 CLMM池子元数据存储系统.md
 docs/*
+current_pool_info_list_response.json
+expected_pool_info_list_response.json

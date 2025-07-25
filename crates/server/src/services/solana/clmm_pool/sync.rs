@@ -4,6 +4,7 @@
 
 use super::super::shared::SharedContext;
 use super::storage::ClmmPoolStorageService;
+use crate::services::metaplex_service::MetaplexService;
 use database::clmm_pool::{ClmmPool, SyncStatus};
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey};
 use spl_token::state::Mint;
@@ -32,8 +33,8 @@ pub struct SyncConfig {
 impl Default for SyncConfig {
     fn default() -> Self {
         Self {
-            sync_interval: std::env::var("CLMM_SYNC_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(5), // 1分钟
-            batch_size: std::env::var("CLMM_SYNC_BATCH_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(50), // 每批次50个池子
+            sync_interval: std::env::var("CLMM_SYNC_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(10), // 1分钟
+            batch_size: std::env::var("CLMM_SYNC_BATCH_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(50),  // 每批次50个池子
             max_retries: std::env::var("CLMM_SYNC_MAX_RETRIES").ok().and_then(|v| v.parse().ok()).unwrap_or(3), // 最多重试3次
             retry_interval: std::env::var("CLMM_SYNC_RETRY_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(30), // 重试间隔30秒
             auto_sync_enabled: std::env::var("CLMM_AUTO_SYNC_ENABLED").ok().and_then(|v| v.parse().ok()).unwrap_or(true),
@@ -70,15 +71,19 @@ pub struct ClmmPoolSyncService {
     shared: Arc<SharedContext>,
     storage: ClmmPoolStorageService,
     config: SyncConfig,
+    metaplex_service: tokio::sync::Mutex<MetaplexService>,
 }
 
 impl ClmmPoolSyncService {
     /// 创建新的同步服务实例
     pub fn new(shared: Arc<SharedContext>, storage: ClmmPoolStorageService, config: Option<SyncConfig>) -> Self {
+        let metaplex_service = MetaplexService::new(None).expect("Failed to create MetaplexService");
+
         Self {
             shared,
             storage,
             config: config.unwrap_or_default(),
+            metaplex_service: tokio::sync::Mutex::new(metaplex_service),
         }
     }
 
@@ -138,6 +143,23 @@ impl ClmmPoolSyncService {
                 return self.sync_pools_batch_fallback(pools_to_sync).await;
             }
         };
+
+        // 🔄 批量同步代币元数据
+        let unique_mint_addresses: Vec<String> = mint_addresses.iter().map(|s| s.to_string()).collect();
+        let unique_mints: std::collections::HashSet<String> = unique_mint_addresses.into_iter().collect();
+        let mint_list: Vec<String> = unique_mints.into_iter().collect();
+
+        info!("📦 开始同步 {} 个代币的元数据", mint_list.len());
+        match self.sync_token_metadata_batch(&mint_list).await {
+            Ok(updated_count) => {
+                if updated_count > 0 {
+                    info!("✅ 成功同步了 {} 个代币的元数据", updated_count);
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 批量同步代币元数据失败: {}", e);
+            }
+        }
 
         let mut synced_count = 0u64;
         let mut failed_pools = Vec::new();
@@ -242,6 +264,53 @@ impl ClmmPoolSyncService {
 
         debug!("📦 批量获取了 {} 个mint信息", cache.len());
         Ok(cache)
+    }
+
+    /// 批量同步代币元数据到数据库
+    async fn sync_token_metadata_batch(&self, mint_addresses: &[String]) -> AppResult<u64> {
+        if mint_addresses.is_empty() {
+            return Ok(0);
+        }
+
+        info!("🔄 开始批量同步 {} 个代币的元数据", mint_addresses.len());
+
+        // 批量获取代币元数据
+        let metadata_map = {
+            let mut metaplex_service = self.metaplex_service.lock().await;
+            match metaplex_service.get_tokens_metadata(mint_addresses).await {
+                Ok(map) => map,
+                Err(e) => {
+                    warn!("⚠️ 批量获取代币元数据失败: {}", e);
+                    return Ok(0);
+                }
+            }
+        };
+
+        let mut updated_count = 0u64;
+
+        // 逐个更新数据库中的代币信息
+        for (mint_address, metadata) in metadata_map {
+            match self.storage.update_token_metadata(&mint_address, &metadata).await {
+                Ok(true) => {
+                    updated_count += 1;
+                    debug!("✅ 代币元数据已更新: {} - {}", mint_address, metadata.symbol.as_deref().unwrap_or("Unknown"));
+                }
+                Ok(false) => {
+                    debug!("ℹ️ 代币元数据无需更新: {}", mint_address);
+                }
+                Err(e) => {
+                    warn!("⚠️ 更新代币元数据失败: {} - {}", mint_address, e);
+                }
+            }
+
+            // 避免过于频繁的数据库写入
+            if updated_count % 10 == 0 {
+                sleep(Duration::from_millis(10)).await;
+            }
+        }
+
+        info!("📦 批量同步代币元数据完成，更新了 {} 个代币", updated_count);
+        Ok(updated_count)
     }
 
     /// 使用缓存同步单个池子以减少RPC调用

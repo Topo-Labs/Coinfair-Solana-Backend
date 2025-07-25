@@ -1184,7 +1184,243 @@ impl Default for PoolListRequest {
     }
 }
 
-/// 池子列表响应
+/// 新的池子列表响应格式（匹配期望格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NewPoolListResponse {
+    /// 请求ID
+    pub id: String,
+    
+    /// 请求是否成功
+    pub success: bool,
+    
+    /// 响应数据
+    pub data: PoolListData,
+}
+
+/// 池子列表数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolListData {
+    /// 池子总数
+    pub count: u64,
+    
+    /// 池子详细信息列表
+    pub data: Vec<PoolInfo>,
+    
+    /// 是否有下一页
+    #[serde(rename = "hasNextPage")]
+    pub has_next_page: bool,
+}
+
+/// 池子信息（新格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolInfo {
+    /// 池子类型
+    #[serde(rename = "type")]
+    pub pool_type: String,
+    
+    /// 程序ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+    
+    /// 池子ID（地址）
+    pub id: String,
+    
+    /// 代币A信息
+    #[serde(rename = "mintA")]
+    pub mint_a: ExtendedMintInfo,
+    
+    /// 代币B信息
+    #[serde(rename = "mintB")]
+    pub mint_b: ExtendedMintInfo,
+    
+    /// 默认奖励池信息
+    #[serde(rename = "rewardDefaultPoolInfos")]
+    pub reward_default_pool_infos: String,
+    
+    /// 默认奖励信息
+    #[serde(rename = "rewardDefaultInfos")]
+    pub reward_default_infos: Vec<RewardInfo>,
+    
+    /// 当前价格
+    pub price: f64,
+    
+    /// 代币A数量
+    #[serde(rename = "mintAmountA")]
+    pub mint_amount_a: f64,
+    
+    /// 代币B数量
+    #[serde(rename = "mintAmountB")]
+    pub mint_amount_b: f64,
+    
+    /// 手续费率
+    #[serde(rename = "feeRate")]
+    pub fee_rate: f64,
+    
+    /// 开放时间
+    #[serde(rename = "openTime")]
+    pub open_time: String,
+    
+    /// 总价值锁定
+    pub tvl: f64,
+    
+    /// 日统计
+    pub day: Option<PeriodStats>,
+    
+    /// 周统计
+    pub week: Option<PeriodStats>,
+    
+    /// 月统计
+    pub month: Option<PeriodStats>,
+    
+    /// 池子类型标签
+    pub pooltype: Vec<String>,
+    
+    /// 即将开始的农场数量
+    #[serde(rename = "farmUpcomingCount")]
+    pub farm_upcoming_count: u32,
+    
+    /// 进行中的农场数量
+    #[serde(rename = "farmOngoingCount")]
+    pub farm_ongoing_count: u32,
+    
+    /// 已结束的农场数量
+    #[serde(rename = "farmFinishedCount")]
+    pub farm_finished_count: u32,
+    
+    /// 配置信息
+    pub config: Option<PoolConfigInfo>,
+    
+    /// 燃烧百分比
+    #[serde(rename = "burnPercent")]
+    pub burn_percent: f64,
+    
+    /// 启动迁移池
+    #[serde(rename = "launchMigratePool")]
+    pub launch_migrate_pool: bool,
+}
+
+/// 扩展的mint信息（新格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ExtendedMintInfo {
+    /// 链ID
+    #[serde(rename = "chainId")]
+    pub chain_id: u32,
+    
+    /// 代币地址
+    pub address: String,
+    
+    /// 程序ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+    
+    /// Logo URI
+    #[serde(rename = "logoURI")]
+    pub logo_uri: Option<String>,
+    
+    /// 代币符号
+    pub symbol: Option<String>,
+    
+    /// 代币名称
+    pub name: Option<String>,
+    
+    /// 精度
+    pub decimals: u8,
+    
+    /// 标签
+    pub tags: Vec<String>,
+    
+    /// 扩展信息
+    pub extensions: serde_json::Value,
+}
+
+/// 奖励信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardInfo {
+    /// 奖励代币信息
+    pub mint: ExtendedMintInfo,
+    
+    /// 每秒奖励
+    #[serde(rename = "perSecond")]
+    pub per_second: String,
+    
+    /// 开始时间
+    #[serde(rename = "startTime")]
+    pub start_time: String,
+    
+    /// 结束时间
+    #[serde(rename = "endTime")]
+    pub end_time: String,
+}
+
+/// 周期统计信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PeriodStats {
+    /// 交易量
+    pub volume: f64,
+    
+    /// 报价交易量
+    #[serde(rename = "volumeQuote")]
+    pub volume_quote: f64,
+    
+    /// 手续费交易量
+    #[serde(rename = "volumeFee")]
+    pub volume_fee: f64,
+    
+    /// 年化收益率
+    pub apr: f64,
+    
+    /// 手续费年化收益率
+    #[serde(rename = "feeApr")]
+    pub fee_apr: f64,
+    
+    /// 最低价格
+    #[serde(rename = "priceMin")]
+    pub price_min: f64,
+    
+    /// 最高价格
+    #[serde(rename = "priceMax")]
+    pub price_max: f64,
+    
+    /// 奖励年化收益率
+    #[serde(rename = "rewardApr")]
+    pub reward_apr: Vec<f64>,
+}
+
+/// 池子配置信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolConfigInfo {
+    /// 配置ID
+    pub id: String,
+    
+    /// 配置索引
+    pub index: u32,
+    
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u32,
+    
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u32,
+    
+    /// Tick间距
+    #[serde(rename = "tickSpacing")]
+    pub tick_spacing: u32,
+    
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u32,
+    
+    /// 默认范围
+    #[serde(rename = "defaultRange")]
+    pub default_range: f64,
+    
+    /// 默认范围点
+    #[serde(rename = "defaultRangePoint")]
+    pub default_range_point: Vec<f64>,
+}
+
+/// 旧版池子列表响应（保持向后兼容）
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PoolListResponse {
     /// 池子列表

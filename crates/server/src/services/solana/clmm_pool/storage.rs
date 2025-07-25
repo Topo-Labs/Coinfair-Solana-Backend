@@ -3,11 +3,12 @@
 //! 负责将池子创建后的元数据存储到MongoDB数据库中
 
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
+use crate::services::metaplex_service::TokenMetadata;
 use database::clmm_pool::{
     ClmmPool, ClmmPoolRepository, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo,
 };
 use mongodb::Collection;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use utils::AppResult;
 
 /// CLMM池子存储服务
@@ -401,6 +402,76 @@ impl ClmmPoolStorageService {
 
         info!("✅ 批量更新完成，成功更新 {} 个池子", success_count);
         Ok(success_count)
+    }
+
+    /// 更新代币元数据信息
+    pub async fn update_token_metadata(&self, mint_address: &str, metadata: &TokenMetadata) -> AppResult<bool> {
+        use mongodb::bson::{doc, Document};
+
+        let mut total_updated = 0u64;
+
+        // 准备更新字段
+        let mut mint_update_fields = Document::new();
+        if let Some(symbol) = &metadata.symbol {
+            mint_update_fields.insert("symbol", symbol);
+        }
+        if let Some(name) = &metadata.name {
+            mint_update_fields.insert("name", name);
+        }
+
+        if mint_update_fields.is_empty() {
+            return Ok(false);
+        }
+
+        // 更新mint0字段
+        let filter_mint0 = doc! {
+            "mint0.mint_address": mint_address
+        };
+        let mut update_mint0_doc = Document::new();
+        for (key, value) in &mint_update_fields {
+            update_mint0_doc.insert(format!("mint0.{}", key), value);
+        }
+        let update_mint0 = doc! {
+            "$set": update_mint0_doc
+        };
+
+        match self.repository.get_collection().update_many(filter_mint0, update_mint0, None).await {
+            Ok(result) => {
+                total_updated += result.modified_count;
+                if result.modified_count > 0 {
+                    debug!("✅ 更新了 {} 个池子的mint0元数据: {}", result.modified_count, mint_address);
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 更新mint0元数据失败: {} - {}", mint_address, e);
+            }
+        }
+
+        // 更新mint1字段
+        let filter_mint1 = doc! {
+            "mint1.mint_address": mint_address
+        };
+        let mut update_mint1_doc = Document::new();
+        for (key, value) in &mint_update_fields {
+            update_mint1_doc.insert(format!("mint1.{}", key), value);
+        }
+        let update_mint1 = doc! {
+            "$set": update_mint1_doc
+        };
+
+        match self.repository.get_collection().update_many(filter_mint1, update_mint1, None).await {
+            Ok(result) => {
+                total_updated += result.modified_count;
+                if result.modified_count > 0 {
+                    debug!("✅ 更新了 {} 个池子的mint1元数据: {}", result.modified_count, mint_address);
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 更新mint1元数据失败: {} - {}", mint_address, e);
+            }
+        }
+
+        Ok(total_updated > 0)
     }
 }
 
