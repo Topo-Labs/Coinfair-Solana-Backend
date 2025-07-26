@@ -325,11 +325,7 @@ impl DataTransformService {
         let default_range = self.calculate_default_range(tick_spacing, &pool.pool_type);
 
         // 根据池子的价格波动性和tick间距生成智能的范围点
-        let default_range_point = self.generate_range_points(
-            tick_spacing,
-            &pool.pool_type,
-            pool.price_info.current_price.unwrap_or(pool.price_info.initial_price),
-        );
+        let default_range_point = self.generate_range_points(tick_spacing, &pool.pool_type, pool.price_info.current_price.unwrap_or(pool.price_info.initial_price));
 
         PoolConfigInfo {
             id: pool.amm_config_address.clone(),
@@ -566,7 +562,7 @@ impl DataTransformService {
 mod tests {
     use super::*;
     use database::clmm_pool::model::{ExtensionInfo, PoolStatus, PoolType, PriceInfo, SyncStatus, TokenInfo, VaultInfo};
-
+    #[allow(dead_code)]
     fn create_test_pool() -> ClmmPool {
         ClmmPool {
             id: None,
