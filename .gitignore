@@ -70,7 +70,7 @@ perf.data*
 
 # 其他
 .fleet/
-.direnv 
+.direnv
 enhanced_swap_analysis.js
 mcp_swap_analysis.js
 swap_analysis.js
@@ -89,7 +89,7 @@ OPEN_POSITION_FINAL_VERIFICATION.md
 test_position_check.rs
 test_pool.rs
 fix_clmm_pool_service.md
-fix_config_management.md 
+fix_config_management.md
 fix_import_dependencies.md
 fix_swap_v2_transaction_build.md
 fix_test_coverage.md
@@ -98,3 +98,4 @@ CLMM池子元数据存储系统.md
 docs/*
 current_pool_info_list_response.json
 expected_pool_info_list_response.json
+api_documentation_check.md

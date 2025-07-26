@@ -92,6 +92,15 @@ pub async fn get_rewards_by_day(Extension(services): Extension<Services>, Path(d
 }
 
 /// 获取今日奖励列表
+/// 获取今日奖励
+#[utoipa::path(
+    get,
+    path = "/api/v1/rewards_by_today",
+    tag = "reward",
+    responses(
+        (status = 200, description = "成功返回今日奖励列表", body = Vec<RewardItem>)
+    )
+)]
 pub async fn get_rewards_by_today(Extension(services): Extension<Services>) -> AppResult<Json<Vec<RewardItem>>> {
     let today = Utc::now().date_naive().to_string();
 
@@ -191,6 +200,7 @@ impl RewardController {
             .route("/rewards", post(set_rewards))
             .route("/reward/:address", get(get_reward)) // api 查询某个buyer所触发的奖励
             .route("/rewards_by_day/:day", get(get_rewards_by_day))
+            .route("/rewards_by_today", get(get_rewards_by_today))
             .route("/all_rewards", get(get_all_rewards)) // api 查询所有待发放的奖励
             .route("/set_all_rewards", get(set_all_rewards)) //Test
             .route("/rank_rewards", get(get_rank_rewards)) // api 查询奖励榜单

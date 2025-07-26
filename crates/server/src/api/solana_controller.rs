@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     dtos::solana_dto::{
-        ApiResponse, BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request,
-        CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse,
-        CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, 
-        DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse,
-        IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest,
-        OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, SwapRequest,
-        SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
+        ApiResponse, BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse,
+        CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
+        DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest,
+        IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest,
+        OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, SwapRequest, SwapResponse,
+        TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
@@ -159,9 +158,7 @@ pub async fn swap_tokens(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_balance(
-    Extension(services): Extension<Services>,
-) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_balance(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 查询账户余额");
 
     match services.solana.get_balance().await {
@@ -263,18 +260,12 @@ pub async fn get_price_quote(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_wallet_info(
-    Extension(services): Extension<Services>,
-) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_wallet_info(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔍 查询钱包信息");
 
     match services.solana.get_wallet_info().await {
         Ok(wallet_info) => {
-            info!(
-                "✅ 钱包信息查询成功: {} ({})",
-                wallet_info.address,
-                if wallet_info.connected { "已连接" } else { "未连接" }
-            );
+            info!("✅ 钱包信息查询成功: {} ({})", wallet_info.address, if wallet_info.connected { "已连接" } else { "未连接" });
             Ok(Json(ApiResponse::success(wallet_info)))
         }
         Err(e) => {
@@ -322,14 +313,14 @@ pub async fn health_check(Extension(services): Extension<Services>) -> Result<Js
 
 // ============ SwapV2 API兼容接口（支持转账费） ============
 
-/// 计算swap-v2-base-in交换数据
+/// 计算swap-base-in交换数据
 ///
 /// 基于固定输入金额计算输出金额和交换详情，支持转账费计算（SwapV2 API兼容）
 ///
 /// # 查询参数
 ///
 /// - inputMint: 输入代币mint地址
-/// - outputMint: 输出代币mint地址  
+/// - outputMint: 输出代币mint地址
 /// - amount: 输入金额（字符串形式的最小单位）
 /// - slippageBps: 滑点容忍度（基点）
 /// - limitPrice: 限价（可选）
@@ -367,7 +358,7 @@ pub async fn health_check(Extension(services): Extension<Services>) -> Result<Js
 /// ```
 #[utoipa::path(
     get,
-    path = "/api/v1/solana/compute/swap-v2-base-in",
+    path = "/api/v1/solana/compute/swap-base-in",
     params(
         ("inputMint" = String, Query, description = "输入代币mint地址"),
         ("outputMint" = String, Query, description = "输出代币mint地址"),
@@ -389,31 +380,31 @@ pub async fn compute_swap_v2_base_in(
     Query(params): Query<ComputeSwapV2Request>,
 ) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
     info!(
-        "📊 计算swap-v2-base-in: {} {} -> {} (转账费: {:?})",
+        "📊 计算swap-base-in: {} {} -> {} (转账费: {:?})",
         params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee
     );
 
     match services.solana.compute_swap_v2_base_in(params).await {
         Ok(compute_data) => {
-            info!("✅ swap-v2-base-in计算成功");
+            info!("✅ swap-base-in计算成功");
             Ok(Json(RaydiumResponse::success(compute_data)))
         }
         Err(e) => {
-            error!("❌ swap-v2-base-in计算失败: {:?}", e);
+            error!("❌ swap-base-in计算失败: {:?}", e);
             let error_response = RaydiumErrorResponse::new(&format!("计算失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }
 
-/// 计算swap-v2-base-out交换数据
+/// 计算swap-base-out交换数据
 ///
 /// 基于固定输出金额计算所需输入金额和交换详情，支持转账费计算（SwapV2 API兼容）
 ///
 /// # 查询参数
 ///
 /// - inputMint: 输入代币mint地址
-/// - outputMint: 输出代币mint地址  
+/// - outputMint: 输出代币mint地址
 /// - amount: 期望输出金额（字符串形式的最小单位）
 /// - slippageBps: 滑点容忍度（基点）
 /// - limitPrice: 限价（可选）
@@ -451,7 +442,7 @@ pub async fn compute_swap_v2_base_in(
 /// ```
 #[utoipa::path(
     get,
-    path = "/api/v1/solana/compute/swap-v2-base-out",
+    path = "/api/v1/solana/compute/swap-base-out",
     params(
         ("inputMint" = String, Query, description = "输入代币mint地址"),
         ("outputMint" = String, Query, description = "输出代币mint地址"),
@@ -473,24 +464,24 @@ pub async fn compute_swap_v2_base_out(
     Query(params): Query<ComputeSwapV2Request>,
 ) -> Result<Json<RaydiumResponse<SwapComputeV2Data>>, (StatusCode, Json<RaydiumErrorResponse>)> {
     info!(
-        "📊 计算swap-v2-base-out: {} {} -> {} (转账费: {:?})",
+        "📊 计算swap-base-out: {} {} -> {} (转账费: {:?})",
         params.amount, params.input_mint, params.output_mint, params.enable_transfer_fee
     );
 
     match services.solana.compute_swap_v2_base_out(params).await {
         Ok(compute_data) => {
-            info!("✅ swap-v2-base-out计算成功");
+            info!("✅ swap-base-out计算成功");
             Ok(Json(RaydiumResponse::success(compute_data)))
         }
         Err(e) => {
-            error!("❌ swap-v2-base-out计算失败: {:?}", e);
+            error!("❌ swap-base-out计算失败: {:?}", e);
             let error_response = RaydiumErrorResponse::new(&format!("计算失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }
 
-/// 构建swap-v2-base-in交易
+/// 构建swap-base-in交易
 ///
 /// 使用compute-v2接口的结果构建可执行的交易数据，支持转账费（SwapV2 API兼容）
 ///
@@ -525,7 +516,7 @@ pub async fn compute_swap_v2_base_out(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/transaction/swap-v2-base-in",
+    path = "/api/v1/solana/transaction/swap-base-in",
     request_body = TransactionSwapV2Request,
     responses(
         (status = 200, description = "交易构建成功", body = RaydiumResponse<Vec<TransactionData>>),
@@ -538,22 +529,22 @@ pub async fn transaction_swap_v2_base_in(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<TransactionSwapV2Request>,
 ) -> Result<Json<RaydiumResponse<Vec<TransactionData>>>, (StatusCode, Json<RaydiumErrorResponse>)> {
-    info!("🔨 构建swap-v2-base-in交易，钱包: {}", request.wallet);
+    info!("🔨 构建swap-base-in交易，钱包: {}", request.wallet);
 
     match services.solana.build_swap_v2_transaction_base_in(request).await {
         Ok(transaction_data) => {
-            info!("✅ swap-v2-base-in交易构建成功");
+            info!("✅ swap-base-in交易构建成功");
             Ok(Json(RaydiumResponse::success(vec![transaction_data])))
         }
         Err(e) => {
-            error!("❌ swap-v2-base-in交易构建失败: {:?}", e);
+            error!("❌ swap-base-in交易构建失败: {:?}", e);
             let error_response = RaydiumErrorResponse::new(&format!("交易构建失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }
 
-/// 构建swap-v2-base-out交易
+/// 构建swap-base-out交易
 ///
 /// 使用compute-v2接口的结果构建可执行的交易数据，支持转账费（SwapV2 API兼容）
 ///
@@ -588,7 +579,7 @@ pub async fn transaction_swap_v2_base_in(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/transaction/swap-v2-base-out",
+    path = "/api/v1/solana/transaction/swap-base-out",
     request_body = TransactionSwapV2Request,
     responses(
         (status = 200, description = "交易构建成功", body = RaydiumResponse<Vec<TransactionData>>),
@@ -601,15 +592,15 @@ pub async fn transaction_swap_v2_base_out(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<TransactionSwapV2Request>,
 ) -> Result<Json<RaydiumResponse<Vec<TransactionData>>>, (StatusCode, Json<RaydiumErrorResponse>)> {
-    info!("🔨 构建swap-v2-base-out交易，钱包: {}", request.wallet);
+    info!("🔨 构建swap-base-out交易，钱包: {}", request.wallet);
 
     match services.solana.build_swap_v2_transaction_base_out(request).await {
         Ok(transaction_data) => {
-            info!("✅ swap-v2-base-out交易构建成功");
+            info!("✅ swap-base-out交易构建成功");
             Ok(Json(RaydiumResponse::success(vec![transaction_data])))
         }
         Err(e) => {
-            error!("❌ swap-v2-base-out交易构建失败: {:?}", e);
+            error!("❌ swap-base-out交易构建失败: {:?}", e);
             let error_response = RaydiumErrorResponse::new(&format!("交易构建失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
@@ -665,6 +656,7 @@ pub async fn transaction_swap_v2_base_out(
     ),
     tag = "Solana流动性"
 )]
+
 async fn open_position(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>,
@@ -752,6 +744,7 @@ async fn open_position(
     ),
     tag = "Solana流动性"
 )]
+
 async fn open_position_and_send_transaction(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<OpenPositionRequest>,
@@ -799,6 +792,7 @@ async fn open_position_and_send_transaction(
     ),
     tag = "Solana流动性"
 )]
+
 async fn calculate_liquidity(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CalculateLiquidityRequest>,
@@ -1060,6 +1054,7 @@ pub async fn get_pool_list(
     ),
     tag = "Solana流动性"
 )]
+
 async fn check_position_exists(
     Extension(services): Extension<Services>,
     Query(params): Query<std::collections::HashMap<String, String>>,
@@ -1102,11 +1097,7 @@ async fn check_position_exists(
     info!("  池子: {}", pool_address);
     info!("  Tick范围: {} - {}", tick_lower, tick_upper);
 
-    match services
-        .solana
-        .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
-        .await
-    {
+    match services.solana.check_position_exists(pool_address, tick_lower, tick_upper, wallet_address).await {
         Ok(response) => {
             if response.is_some() {
                 info!("✅ 找到相同范围的仓位");
@@ -1174,6 +1165,7 @@ async fn check_position_exists(
     ),
     tag = "Solana池子管理"
 )]
+
 async fn create_pool(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CreatePoolRequest>,
@@ -1188,10 +1180,7 @@ async fn create_pool(
 
     // 验证价格范围
     if request.price <= 0.0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0"))),
-        ));
+        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0")))));
     }
 
     // 验证mint地址不能相同
@@ -1268,6 +1257,7 @@ async fn create_pool(
     ),
     tag = "Solana池子管理"
 )]
+
 async fn create_pool_and_send_transaction(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CreatePoolRequest>,
@@ -1280,10 +1270,7 @@ async fn create_pool_and_send_transaction(
 
     // 验证价格范围
     if request.price <= 0.0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0"))),
-        ));
+        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0")))));
     }
 
     // 验证mint地址不能相同
@@ -1534,6 +1521,7 @@ pub async fn create_classic_amm_pool_and_send_transaction(
     ),
     tag = "CLMM池子查询"
 )]
+
 pub async fn get_pool_by_address(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
@@ -1598,6 +1586,7 @@ pub async fn get_pool_by_address(
     ),
     tag = "CLMM池子查询"
 )]
+
 pub async fn get_pools_by_mint(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
@@ -1660,6 +1649,7 @@ pub async fn get_pools_by_mint(
     ),
     tag = "CLMM池子查询"
 )]
+
 pub async fn get_pools_by_creator(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
@@ -1728,6 +1718,7 @@ pub async fn get_pools_by_creator(
     ),
     tag = "CLMM池子查询"
 )]
+
 pub async fn query_pools(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
@@ -1798,6 +1789,7 @@ pub async fn query_pools(
     ),
     tag = "CLMM池子查询"
 )]
+
 pub async fn get_pool_statistics(
     Extension(services): Extension<Services>,
 ) -> Result<Json<ApiResponse<database::clmm_pool::PoolStats>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
@@ -1864,6 +1856,7 @@ pub async fn get_pool_statistics(
     ),
     tag = "Solana流动性"
 )]
+
 async fn increase_liquidity(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<IncreaseLiquidityRequest>,
@@ -1876,10 +1869,7 @@ async fn increase_liquidity(
 
     // 验证价格范围
     if request.tick_lower_price >= request.tick_upper_price {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格")),
-        ));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格"))));
     }
 
     match services.solana.increase_liquidity(request).await {
@@ -1951,6 +1941,7 @@ async fn increase_liquidity(
     ),
     tag = "Solana流动性"
 )]
+
 async fn increase_liquidity_and_send_transaction(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<IncreaseLiquidityRequest>,
@@ -1963,10 +1954,7 @@ async fn increase_liquidity_and_send_transaction(
 
     // 验证价格范围
     if request.tick_lower_price >= request.tick_upper_price {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格")),
-        ));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格"))));
     }
 
     match services.solana.increase_liquidity_and_send_transaction(request).await {
@@ -2046,6 +2034,7 @@ async fn increase_liquidity_and_send_transaction(
     ),
     tag = "Solana流动性"
 )]
+
 async fn decrease_liquidity(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<DecreaseLiquidityRequest>,
@@ -2058,10 +2047,7 @@ async fn decrease_liquidity(
 
     // 验证tick范围
     if request.tick_lower_index >= request.tick_upper_index {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引")),
-        ));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引"))));
     }
 
     match services.solana.decrease_liquidity(request).await {
@@ -2095,7 +2081,7 @@ async fn decrease_liquidity(
 /// ```json
 /// {
 ///   "pool_address": "池子地址",
-///   "user_wallet": "用户钱包地址", 
+///   "user_wallet": "用户钱包地址",
 ///   "tick_lower_index": -1000,
 ///   "tick_upper_index": 1000,
 ///   "liquidity": "123456789", // 可选，如果为空则减少全部流动性
@@ -2134,6 +2120,7 @@ async fn decrease_liquidity(
     ),
     tag = "Solana流动性"
 )]
+
 async fn decrease_liquidity_and_send_transaction(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<DecreaseLiquidityRequest>,
@@ -2146,10 +2133,7 @@ async fn decrease_liquidity_and_send_transaction(
 
     // 验证tick范围
     if request.tick_lower_index >= request.tick_upper_index {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引")),
-        ));
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引"))));
     }
 
     match services.solana.decrease_liquidity_and_send_transaction(request).await {

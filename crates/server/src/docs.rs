@@ -23,6 +23,7 @@ use utoipa::OpenApi;
         crate::api::reward_controller::set_rewards,
         crate::api::reward_controller::get_reward,
         crate::api::reward_controller::get_rewards_by_day,
+        crate::api::reward_controller::get_rewards_by_today,
         crate::api::reward_controller::get_all_rewards,
         crate::api::reward_controller::set_all_rewards,
         crate::api::reward_controller::get_rank_rewards,
@@ -44,6 +45,7 @@ use utoipa::OpenApi;
         crate::api::solana_controller::transaction_swap_v2_base_out,
         // Solana OpenPosition endpoints
         crate::api::solana_controller::open_position,
+        crate::api::solana_controller::open_position_and_send_transaction,
         crate::api::solana_controller::calculate_liquidity,
         crate::api::solana_controller::get_user_positions,
         crate::api::solana_controller::get_position_info,
@@ -61,6 +63,11 @@ use utoipa::OpenApi;
         // Solana Classic AMM Pool endpoints
         crate::api::solana_controller::create_classic_amm_pool,
         crate::api::solana_controller::create_classic_amm_pool_and_send_transaction,
+        // Solana Liquidity Management endpoints
+        crate::api::solana_controller::increase_liquidity,
+        crate::api::solana_controller::increase_liquidity_and_send_transaction,
+        crate::api::solana_controller::decrease_liquidity,
+        crate::api::solana_controller::decrease_liquidity_and_send_transaction,
         // Static endpoints
         crate::api::static_controller::get_version,
         crate::api::static_controller::get_auto_fee,
@@ -155,6 +162,21 @@ use utoipa::OpenApi;
             crate::dtos::solana_dto::CreateClassicAmmPoolAndSendTransactionResponse,
             crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreateClassicAmmPoolResponse>,
             crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::CreateClassicAmmPoolAndSendTransactionResponse>,
+            // Solana Liquidity Management DTOs
+            crate::dtos::solana_dto::IncreaseLiquidityRequest,
+            crate::dtos::solana_dto::IncreaseLiquidityResponse,
+            crate::dtos::solana_dto::IncreaseLiquidityAndSendTransactionResponse,
+            crate::dtos::solana_dto::DecreaseLiquidityRequest,
+            crate::dtos::solana_dto::DecreaseLiquidityResponse,
+            crate::dtos::solana_dto::DecreaseLiquidityAndSendTransactionResponse,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::IncreaseLiquidityResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::IncreaseLiquidityAndSendTransactionResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::DecreaseLiquidityResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::DecreaseLiquidityAndSendTransactionResponse>,
+            // Pool List DTOs
+            crate::dtos::solana_dto::NewPoolListResponse,
+            crate::dtos::solana_dto::PoolListData,
+            crate::dtos::solana_dto::PoolInfo,
             // Static DTOs
             crate::dtos::static_dto::VersionConfig,
             crate::dtos::static_dto::AutoFeeConfig,
