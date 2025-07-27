@@ -333,6 +333,57 @@ pub struct ClmmConfig {
 /// CLMM配置响应类型
 pub type ClmmConfigResponse = Vec<ClmmConfig>;
 
+/// 保存CLMM配置请求
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, validator::Validate)]
+pub struct SaveClmmConfigRequest {
+    /// 索引
+    #[validate(range(min = 0, max = 100000))]
+    pub index: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    #[validate(range(min = 0, max = 1000000))]
+    pub protocol_fee_rate: u64,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    #[validate(range(min = 0, max = 100000))]
+    pub trade_fee_rate: u64,
+
+    /// tick间距
+    #[serde(rename = "tickSpacing")]
+    #[validate(range(min = 1, max = 1000))]
+    pub tick_spacing: u32,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    #[validate(range(min = 0, max = 1000000))]
+    pub fund_fee_rate: u64,
+
+    /// 默认范围
+    #[serde(rename = "defaultRange")]
+    #[validate(range(min = 0.001, max = 1.0))]
+    pub default_range: f64,
+
+    /// 默认范围点
+    #[serde(rename = "defaultRangePoint")]
+    #[validate(length(min = 1, max = 10))]
+    pub default_range_point: Vec<f64>,
+}
+
+/// 保存CLMM配置响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SaveClmmConfigResponse {
+    /// 配置ID
+    pub id: String,
+
+    /// 是否为新创建的配置
+    pub created: bool,
+
+    /// 消息
+    pub message: String,
+}
+
 impl ClmmConfig {
     /// 创建默认的CLMM配置数据
     pub fn default_configs() -> Vec<ClmmConfig> {

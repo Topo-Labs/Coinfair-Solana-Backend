@@ -11,6 +11,7 @@ use crate::dtos::solana_dto::{
 
 use super::amm_pool::AmmPoolService;
 use super::clmm_pool::ClmmPoolService;
+use super::config::{ClmmConfigService, ClmmConfigServiceTrait};
 use super::position::PositionService;
 use super::shared::{SharedContext, SolanaHelpers};
 use super::swap::SwapService;
@@ -29,6 +30,7 @@ pub struct SolanaService {
     position_service: PositionService,
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
+    config_service: ClmmConfigService,
 }
 
 impl SolanaService {
@@ -53,6 +55,10 @@ impl SolanaService {
             position_service: PositionService::new(shared_context.clone()),
             clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database),
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
+            config_service: ClmmConfigService::new(
+                Arc::new(database),
+                shared_context.rpc_client.clone(),
+            ),
             shared_context,
         })
     }
@@ -127,6 +133,12 @@ pub trait SolanaServiceTrait {
     
     // CLMM Pool sync operations
     async fn start_clmm_pool_sync(&self) -> Result<()>;
+    
+    // CLMM Config operations
+    async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse>;
+    async fn sync_clmm_configs_from_chain(&self) -> Result<u64>;
+    async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String>;
+    async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -283,5 +295,22 @@ impl SolanaServiceTrait for SolanaService {
     // CLMM Pool sync operations - delegate to clmm_pool_service
     async fn start_clmm_pool_sync(&self) -> Result<()> {
         self.clmm_pool_service.start_auto_sync().await
+    }
+    
+    // CLMM Config operations - delegate to config_service
+    async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse> {
+        self.config_service.get_clmm_configs().await
+    }
+    
+    async fn sync_clmm_configs_from_chain(&self) -> Result<u64> {
+        self.config_service.sync_clmm_configs_from_chain().await
+    }
+    
+    async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String> {
+        self.config_service.save_clmm_config(config).await
+    }
+    
+    async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
+        self.config_service.save_clmm_config_from_request(request).await
     }
 }

@@ -24,12 +24,16 @@ use reward::model::Reward;
 pub mod clmm_pool;
 use clmm_pool::model::ClmmPool;
 
+pub mod clmm_config;
+use clmm_config::model::ClmmConfigModel;
+
 #[derive(Clone, Debug)]
 pub struct Database {
     pub refers: Collection<Refer>,
     pub users: Collection<User>,
     pub rewards: Collection<Reward>,
     pub clmm_pools: Collection<ClmmPool>,
+    pub clmm_configs: Collection<ClmmConfigModel>,
 }
 
 impl Database {
@@ -51,9 +55,10 @@ impl Database {
         let users = db.collection("User");
         let rewards = db.collection("Reward");
         let clmm_pools = db.collection("ClmmPool");
+        let clmm_configs = db.collection("ClmmConfig");
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
-        Ok(Database { refers, users, rewards, clmm_pools })
+        Ok(Database { refers, users, rewards, clmm_pools, clmm_configs })
     }
 }

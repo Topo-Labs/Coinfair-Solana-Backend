@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
 use crate::{
-    dtos::solana_dto::{
-        ApiResponse, BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse,
-        CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
-        DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest,
-        IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest,
-        OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, SwapRequest, SwapResponse,
-        TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
+    dtos::{
+        solana_dto::{
+            ApiResponse, BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse,
+            CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
+            DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest,
+            IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest,
+            OpenPositionResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, SwapRequest, SwapResponse,
+            TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
+        },
+        static_dto,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
@@ -64,6 +67,9 @@ impl SolanaController {
             // ============ Classic AMM Pool API路由 ============
             .route("/pool/create-amm", post(create_classic_amm_pool))
             .route("/pool/create-amm-and-send-transaction", post(create_classic_amm_pool_and_send_transaction))
+            // ============ CLMM Config API路由 ============
+            .route("/pool/clmm-config", get(get_clmm_configs))
+            .route("/pool/clmm-config/save", post(save_clmm_config))
     }
 }
 
@@ -1983,6 +1989,64 @@ async fn increase_liquidity_and_send_transaction(
     }
 }
 
+// ============ CLMM Config API处理函数 ============
+
+/// 获取CLMM配置列表
+///
+/// 查询CLMM池创建时使用的配置参数。这个接口会先从本地MongoDB数据库查询，
+/// 如果没有数据，会从链上获取配置并保存到数据库中。
+///
+/// # 响应示例
+///
+/// ```json
+/// [
+///   {
+///     "id": "7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqHAoBN",
+///     "index": 0,
+///     "protocolFeeRate": 120000,
+///     "tradeFeeRate": 25,
+///     "tickSpacing": 10,
+///     "fundFeeRate": 40000,
+///     "defaultRange": 0.1,
+///     "defaultRangePoint": [0.01, 0.05, 0.1, 0.2, 0.5]
+///   },
+///   {
+///     "id": "D4k8kHZuDNtyMcxm4WqvCvEQMvN7hfPANHWJdQBCPWzA",
+///     "index": 1,
+///     "protocolFeeRate": 120000,
+///     "tradeFeeRate": 100,
+///     "tickSpacing": 60,
+///     "fundFeeRate": 40000,
+///     "defaultRange": 0.1,
+///     "defaultRangePoint": [0.01, 0.05, 0.1, 0.2, 0.5]
+///   }
+/// ]
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pool/clmm-config",
+    responses(
+        (status = 200, description = "CLMM配置获取成功", body = Vec<static_dto::ClmmConfig>),
+        (status = 500, description = "内部服务器错误", body = ErrorResponse)
+    ),
+    tag = "CLMM配置管理"
+)]
+pub async fn get_clmm_configs(Extension(services): Extension<Services>) -> Result<Json<static_dto::ClmmConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("🔧 获取CLMM配置列表");
+
+    match services.solana.get_clmm_configs().await {
+        Ok(configs) => {
+            info!("✅ CLMM配置获取成功，共{}个配置", configs.len());
+            Ok(Json(configs))
+        }
+        Err(e) => {
+            error!("❌ 获取CLMM配置失败: {:?}", e);
+            let error_response = ErrorResponse::new("GET_CLMM_CONFIGS_FAILED", &format!("获取CLMM配置失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
 // ============ DecreaseLiquidity API处理函数 ============
 
 /// 减少流动性（构建交易）
@@ -2158,6 +2222,63 @@ async fn decrease_liquidity_and_send_transaction(
                 let error_response = ErrorResponse::new("DECREASE_LIQUIDITY_ERROR", &format!("减少流动性失败: {}", e));
                 Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
             }
+        }
+    }
+}
+
+/// 保存CLMM配置
+///
+/// 保存新的CLMM配置到数据库，用于UI创建新的AMM配置。
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "index": 20,
+///   "protocolFeeRate": 120000,
+///   "tradeFeeRate": 5000,
+///   "tickSpacing": 60,
+///   "fundFeeRate": 40000,
+///   "defaultRange": 0.1,
+///   "defaultRangePoint": [0.01, 0.05, 0.1, 0.2, 0.5]
+/// }
+/// ```
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "temp_config_20",
+///   "created": true,
+///   "message": "成功创建新的CLMM配置，索引: 20"
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/pool/clmm-config/save",
+    request_body = static_dto::SaveClmmConfigRequest,
+    responses(
+        (status = 200, description = "CLMM配置保存成功", body = static_dto::SaveClmmConfigResponse),
+        (status = 400, description = "请求参数错误", body = ErrorResponse),
+        (status = 500, description = "内部服务器错误", body = ErrorResponse)
+    ),
+    tag = "CLMM配置管理"
+)]
+pub async fn save_clmm_config(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<static_dto::SaveClmmConfigRequest>,
+) -> Result<Json<static_dto::SaveClmmConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!("💾 保存CLMM配置，索引: {}", request.index);
+
+    match services.solana.save_clmm_config_from_request(request).await {
+        Ok(response) => {
+            info!("✅ CLMM配置保存成功: {}", response.message);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 保存CLMM配置失败: {:?}", e);
+            let error_response = ErrorResponse::new("SAVE_CLMM_CONFIG_FAILED", &format!("保存CLMM配置失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }
 }
