@@ -397,11 +397,46 @@ impl ClmmPoolRepository {
             filter.insert("creator_wallet", creator_wallet);
         }
 
-        // 代币mint地址过滤
+        // 代币mint地址过滤 (兼容原有的单代币查询)
         if let Some(mint_address) = &params.mint_address {
             filter.insert(
                 "$or",
                 vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }],
+            );
+        }
+
+        // 双代币精确查询过滤 (mint1 和 mint2)
+        if let Some(mint1) = &params.mint1 {
+            if let Some(mint2) = &params.mint2 {
+                // 需要同时匹配两个代币，但考虑到池子中mint的顺序可能会自动排序
+                // 所以我们需要检查两种可能的组合
+                filter.insert(
+                    "$or",
+                    vec![
+                        // mint1为mint0, mint2为mint1
+                        doc! {
+                            "mint0.mint_address": mint1,
+                            "mint1.mint_address": mint2
+                        },
+                        // mint1为mint1, mint2为mint0 (交换顺序)
+                        doc! {
+                            "mint0.mint_address": mint2,
+                            "mint1.mint_address": mint1
+                        }
+                    ],
+                );
+            } else {
+                // 只有mint1，按单代币逻辑查询
+                filter.insert(
+                    "$or",
+                    vec![doc! { "mint0.mint_address": mint1 }, doc! { "mint1.mint_address": mint1 }],
+                );
+            }
+        } else if let Some(mint2) = &params.mint2 {
+            // 只有mint2，按单代币逻辑查询
+            filter.insert(
+                "$or",
+                vec![doc! { "mint0.mint_address": mint2 }, doc! { "mint1.mint_address": mint2 }],
             );
         }
 

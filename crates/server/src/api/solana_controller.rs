@@ -64,6 +64,7 @@ impl SolanaController {
             .route("/pool/query", get(query_pools))
             .route("/pool/statistics", get(get_pool_statistics))
             .route("/pools/info/list", get(get_pool_list))
+            .route("/pools/info/mint", get(get_pools_by_mint_pair))
             // ============ Classic AMM Pool API路由 ============
             .route("/pool/create-amm", post(create_classic_amm_pool))
             .route("/pool/create-amm-and-send-transaction", post(create_classic_amm_pool_and_send_transaction))
@@ -2278,6 +2279,194 @@ pub async fn save_clmm_config(
         Err(e) => {
             error!("❌ 保存CLMM配置失败: {:?}", e);
             let error_response = ErrorResponse::new("SAVE_CLMM_CONFIG_FAILED", &format!("保存CLMM配置失败: {}", e));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 根据代币对查询池子列表
+///
+/// 支持按mint1和mint2双代币对查询池子，返回数据格式与/api/v1/solana/pools/info/list接口一致。
+/// 用于在创建CLMM池子时选择代币对后查询代币对信息。
+///
+/// # 查询参数
+///
+/// - `mint1` (必需): 第一个代币mint地址
+/// - `mint2` (必需): 第二个代币mint地址
+/// - `poolType` (可选): 按池子类型过滤 ("concentrated" 或 "standard")
+/// - `poolSortField` (可选): 排序字段 ("default", "created_at", "price", "open_time")
+/// - `sortType` (可选): 排序方向 ("asc" 或 "desc", 默认: "desc")
+/// - `pageSize` (可选): 每页数量 (1-100, 默认: 20)
+/// - `page` (可选): 页码 (从1开始, 默认: 1)
+///
+/// # 示例请求
+///
+/// `/api/v1/pools/info/mint?mint1=5pbcULDGXotRZjJvmoiqj3qYaHJeDYAWpsaT58j6Ao56&mint2=CKgtJw9y47qAgxRHBdgjABY7DP4u6bLHXM1G68anWwJm&poolType=concentrated&pageSize=100&page=1`
+///
+#[utoipa::path(
+    get,
+    path = "/api/v1/pools/info/mint",
+    params(
+        ("mint1" = String, Query, description = "第一个代币mint地址"),
+        ("mint2" = String, Query, description = "第二个代币mint地址"),
+        ("poolType" = Option<String>, Query, description = "池子类型过滤"),
+        ("poolSortField" = Option<String>, Query, description = "排序字段"),
+        ("sortType" = Option<String>, Query, description = "排序方向"),
+        ("pageSize" = Option<u64>, Query, description = "每页数量"),
+        ("page" = Option<u64>, Query, description = "页码")
+    ),
+    responses(
+        (status = 200, description = "代币对池子查询成功", body = crate::dtos::solana_dto::NewPoolListResponse),
+        (status = 400, description = "请求参数错误", body = crate::dtos::solana_dto::NewPoolListResponse),
+        (status = 500, description = "内部服务器错误", body = crate::dtos::solana_dto::NewPoolListResponse)
+    ),
+    tag = "Pool Management"
+)]
+pub async fn get_pools_by_mint_pair(
+    Extension(services): Extension<Services>,
+    Query(params): Query<PoolListRequest>,
+) -> Result<Json<crate::dtos::solana_dto::NewPoolListResponse>, (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>)> {
+    info!("🔍 接收到代币对池子查询请求");
+    info!("  Mint1: {:?}", params.mint1);
+    info!("  Mint2: {:?}", params.mint2);
+    info!("  池子类型: {:?}", params.pool_type);
+    info!("  排序字段: {:?}", params.pool_sort_field);
+    info!("  排序方向: {:?}", params.sort_type);
+    info!("  页码: {}, 页大小: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+
+    // 验证必需参数
+    let mint1 = params.mint1.clone().ok_or_else(|| {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: crate::dtos::solana_dto::PoolListData {
+                count: 0,
+                data: vec![],
+                has_next_page: false,
+            },
+        };
+        (StatusCode::BAD_REQUEST, Json(error_response))
+    })?;
+
+    let mint2 = params.mint2.clone().ok_or_else(|| {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: crate::dtos::solana_dto::PoolListData {
+                count: 0,
+                data: vec![],
+                has_next_page: false,
+            },
+        };
+        (StatusCode::BAD_REQUEST, Json(error_response))
+    })?;
+
+    // 验证mint地址格式
+    if mint1.len() < 32 || mint1.len() > 44 {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: crate::dtos::solana_dto::PoolListData {
+                count: 0,
+                data: vec![],
+                has_next_page: false,
+            },
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    if mint2.len() < 32 || mint2.len() > 44 {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: crate::dtos::solana_dto::PoolListData {
+                count: 0,
+                data: vec![],
+                has_next_page: false,
+            },
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 验证两个mint不能相同
+    if mint1 == mint2 {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: crate::dtos::solana_dto::PoolListData {
+                count: 0,
+                data: vec![],
+                has_next_page: false,
+            },
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 验证池子类型参数
+    if let Some(ref pool_type_str) = params.pool_type {
+        if let Err(_) = pool_type_str.parse::<database::clmm_pool::model::PoolType>() {
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    }
+
+    // 验证排序字段
+    let valid_sort_fields = ["default", "created_at", "price", "open_time"];
+    if let Some(ref sort_field) = params.pool_sort_field {
+        if !valid_sort_fields.contains(&sort_field.as_str()) {
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    }
+
+    // 验证排序方向
+    if let Some(ref sort_type) = params.sort_type {
+        if !["asc", "desc"].contains(&sort_type.as_str()) {
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    }
+
+    match services.solana.query_pools_with_new_format(&params).await {
+        Ok(response) => {
+            info!("✅ 代币对池子查询成功，返回{}个池子", response.data.data.len());
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 代币对池子查询失败: {:?}", e);
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: crate::dtos::solana_dto::PoolListData {
+                    count: 0,
+                    data: vec![],
+                    has_next_page: false,
+                },
+            };
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }
     }

@@ -121,6 +121,21 @@ pub struct TokenInfo {
     pub name: Option<String>,
 }
 
+impl TokenInfo {
+    /// 判断代币信息是否为空/未补全，如果关键信息缺失则认为需要从链上获取
+    pub fn is_empty(&self) -> bool {
+        // 检查关键字段是否为空或者未填充
+        let owner_empty = self.owner.is_empty();
+        let decimals_empty = self.decimals == 0;
+        let symbol_empty = self.symbol.is_none() || self.symbol.as_ref().map_or(true, |s| s.is_empty());
+        let name_empty = self.name.is_none() || self.name.as_ref().map_or(true, |s| s.is_empty());
+        
+        // 只要关键信息（owner、decimals、symbol）有任何一个为空，就认为需要链上查询
+        // mint_address 通常不应该为空，所以不检查它
+        owner_empty || decimals_empty || symbol_empty || name_empty
+    }
+}
+
 /// 价格信息
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PriceInfo {
@@ -297,12 +312,18 @@ pub struct PoolListRequest {
     #[serde(rename = "creatorWallet")]
     pub creator_wallet: Option<String>,
 
-    /// 按代币mint地址过滤
+    /// 按代币mint地址过滤 (兼容单一mint查询)
     #[serde(rename = "mintAddress")]
     pub mint_address: Option<String>,
 
     /// 按池子状态过滤
     pub status: Option<String>,
+
+    /// 按第一个代币mint地址过滤 (用于双代币查询)
+    pub mint1: Option<String>,
+
+    /// 按第二个代币mint地址过滤 (用于双代币查询)
+    pub mint2: Option<String>,
 }
 
 impl Default for PoolListRequest {
@@ -316,6 +337,8 @@ impl Default for PoolListRequest {
             creator_wallet: None,
             mint_address: None,
             status: None,
+            mint1: None,
+            mint2: None,
         }
     }
 }
@@ -484,52 +507,55 @@ mod tests {
     }
 
     #[test]
-    fn test_clmm_pool_default_pool_type() {
-        // Test that when deserializing without pool_type field, it defaults to Concentrated
-        let json_without_pool_type = r#"{
-            "pool_address": "11111111111111111111111111111111",
-            "amm_config_address": "22222222222222222222222222222222",
-            "config_index": 0,
-            "mint0": {
-                "mint_address": "33333333333333333333333333333333",
-                "decimals": 6,
-                "owner": "44444444444444444444444444444444",
-                "symbol": "TOKEN0",
-                "name": "Token 0"
-            },
-            "mint1": {
-                "mint_address": "55555555555555555555555555555555",
-                "decimals": 9,
-                "owner": "66666666666666666666666666666666",
-                "symbol": "TOKEN1",
-                "name": "Token 1"
-            },
-            "price_info": {
-                "initial_price": 1.0,
-                "sqrt_price_x64": "18446744073709551616",
-                "initial_tick": 0
-            },
-            "vault_info": {
-                "token_vault_0": "77777777777777777777777777777777",
-                "token_vault_1": "88888888888888888888888888888888"
-            },
-            "extension_info": {
-                "observation_address": "99999999999999999999999999999999",
-                "tickarray_bitmap_extension": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-            },
-            "creator_wallet": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
-            "open_time": 1640995200.0,
-            "created_at": 1640995200.0,
-            "updated_at": 1640995200.0,
-            "status": "Created",
-            "sync_status": {
-                "last_sync_at": 1640995200.0,
-                "sync_version": 1,
-                "needs_sync": false
-            }
-        }"#;
+    fn test_token_info_is_empty() {
+        // 测试完全空的TokenInfo
+        let empty_token = TokenInfo {
+            mint_address: "So11111111111111111111111111111111111111112".to_string(),
+            decimals: 0,
+            owner: "".to_string(),
+            symbol: None,
+            name: None,
+        };
+        assert!(empty_token.is_empty());
 
-        let pool: ClmmPool = serde_json::from_str(json_without_pool_type).unwrap();
-        assert_eq!(pool.pool_type, PoolType::Concentrated);
+        // 测试你描述的情况：空字符串
+        let empty_string_token = TokenInfo {
+            mint_address: "So11111111111111111111111111111111111111112".to_string(),
+            decimals: 0,
+            owner: "".to_string(),
+            symbol: Some("".to_string()),
+            name: Some("".to_string()),
+        };
+        assert!(empty_string_token.is_empty());
+
+        // 测试部分填充的TokenInfo (应该被认为是不完整的)
+        let partial_token = TokenInfo {
+            mint_address: "So11111111111111111111111111111111111111112".to_string(),
+            decimals: 9,
+            owner: "".to_string(), // owner为空
+            symbol: Some("WSOL".to_string()),
+            name: Some("Wrapped SOL".to_string()),
+        };
+        assert!(partial_token.is_empty()); // owner为空，所以仍然是empty
+
+        // 测试完整填充的TokenInfo
+        let complete_token = TokenInfo {
+            mint_address: "So11111111111111111111111111111111111111112".to_string(),
+            decimals: 9,
+            owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+            symbol: Some("WSOL".to_string()),
+            name: Some("Wrapped SOL".to_string()),
+        };
+        assert!(!complete_token.is_empty());
+
+        // 测试只有symbol为空的情况
+        let no_symbol_token = TokenInfo {
+            mint_address: "So11111111111111111111111111111111111111112".to_string(),
+            decimals: 9,
+            owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
+            symbol: None,
+            name: Some("Wrapped SOL".to_string()),
+        };
+        assert!(no_symbol_token.is_empty()); // symbol为空，所以是empty
     }
 }

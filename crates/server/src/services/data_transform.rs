@@ -28,15 +28,39 @@ impl DataTransformService {
     pub async fn transform_pool_list_response(&mut self, old_response: PoolListResponse, _request: &PoolListRequest) -> Result<NewPoolListResponse> {
         info!("🔄 开始转换池子列表响应格式");
 
-        // 收集所有需要获取元数据的mint地址
+        // 收集需要获取元数据的mint地址（只收集代币信息为空的）
         let mut mint_addresses = Vec::new();
+        let mut empty_token_count = 0;
+        let mut filled_token_count = 0;
+
         for pool in &old_response.pools {
-            mint_addresses.push(pool.mint0.mint_address.clone());
-            mint_addresses.push(pool.mint1.mint_address.clone());
+            // 检查mint0信息是否为空
+            if pool.mint0.is_empty() {
+                mint_addresses.push(pool.mint0.mint_address.clone());
+                empty_token_count += 1;
+            } else {
+                filled_token_count += 1;
+            }
+            
+            // 检查mint1信息是否为空
+            if pool.mint1.is_empty() {
+                mint_addresses.push(pool.mint1.mint_address.clone());
+                empty_token_count += 1;
+            } else {
+                filled_token_count += 1;
+            }
         }
 
-        // 批量获取mint元数据
-        let metadata_map = self.metaplex_service.get_tokens_metadata(&mint_addresses).await?;
+        info!("📊 代币信息统计: {} 个需要从链上获取, {} 个使用本地缓存", empty_token_count, filled_token_count);
+
+        // 批量获取需要的mint元数据（只获取缺失的）
+        let metadata_map = if !mint_addresses.is_empty() {
+            info!("🔗 从链上获取 {} 个代币的元数据", mint_addresses.len());
+            self.metaplex_service.get_tokens_metadata(&mint_addresses).await?
+        } else {
+            info!("✅ 所有代币信息已缓存，跳过链上查询");
+            HashMap::new()
+        };
 
         // 转换池子数据
         let mut pool_infos = Vec::new();
@@ -64,11 +88,11 @@ impl DataTransformService {
     async fn transform_pool_to_pool_info(&self, pool: ClmmPool, metadata_map: &HashMap<String, TokenMetadata>) -> Result<PoolInfo> {
         debug!("🔄 转换池子信息: {}", pool.pool_address);
 
-        // 获取mint A的元数据
-        let mint_a = self.create_extended_mint_info(&pool.mint0.mint_address, pool.mint0.decimals, &pool.mint0.owner, metadata_map)?;
+        // 获取mint A的元数据 - 智能使用本地或链上数据
+        let mint_a = self.create_extended_mint_info_smart(&pool.mint0, metadata_map)?;
 
-        // 获取mint B的元数据
-        let mint_b = self.create_extended_mint_info(&pool.mint1.mint_address, pool.mint1.decimals, &pool.mint1.owner, metadata_map)?;
+        // 获取mint B的元数据 - 智能使用本地或链上数据
+        let mint_b = self.create_extended_mint_info_smart(&pool.mint1, metadata_map)?;
 
         // 创建池子配置信息（动态生成，基于池子实际配置）
         let config = Some(self.create_pool_config_info(&pool));
@@ -106,6 +130,37 @@ impl DataTransformService {
         Ok(pool_info)
     }
 
+    /// 创建扩展的mint信息（智能版本）- 优先使用本地缓存数据
+    fn create_extended_mint_info_smart(&self, token_info: &database::clmm_pool::model::TokenInfo, metadata_map: &HashMap<String, TokenMetadata>) -> Result<ExtendedMintInfo> {
+        let mint_address = &token_info.mint_address;
+        
+        if token_info.is_empty() {
+            // 代币信息为空，使用链上获取的元数据
+            debug!("🔗 使用链上数据构建mint信息: {}", mint_address);
+            self.create_extended_mint_info(mint_address, token_info.decimals, &token_info.owner, metadata_map)
+        } else {
+            // 代币信息已缓存，使用本地数据，并结合链上元数据进行增强
+            debug!("📋 使用本地缓存构建mint信息: {}", mint_address);
+            let chain_metadata = metadata_map.get(mint_address);
+            
+            let mint_info = ExtendedMintInfo {
+                chain_id: self.get_chain_id(),
+                address: mint_address.clone(),
+                program_id: token_info.owner.clone(),
+                // 优先使用本地缓存的symbol和name，如果为空则使用链上数据
+                logo_uri: chain_metadata.and_then(|m| m.logo_uri.clone()),
+                symbol: token_info.symbol.clone().or_else(|| chain_metadata.and_then(|m| m.symbol.clone())),
+                name: token_info.name.clone().or_else(|| chain_metadata.and_then(|m| m.name.clone())),
+                decimals: token_info.decimals,
+                // 结合本地和链上数据增强标签
+                tags: self.enhance_mint_tags_with_local_data(chain_metadata, mint_address, token_info),
+                extensions: self.create_mint_extensions_with_local_data(mint_address, chain_metadata, token_info),
+            };
+            
+            Ok(mint_info)
+        }
+    }
+
     /// 创建扩展的mint信息（智能版本）
     fn create_extended_mint_info(&self, mint_address: &str, decimals: u8, owner: &str, metadata_map: &HashMap<String, TokenMetadata>) -> Result<ExtendedMintInfo> {
         let metadata = metadata_map.get(mint_address);
@@ -134,7 +189,137 @@ impl DataTransformService {
         }
     }
 
-    /// 增强mint标签
+    /// 增强mint标签（结合本地数据版本）
+    fn enhance_mint_tags_with_local_data(&self, chain_metadata: Option<&TokenMetadata>, mint_address: &str, token_info: &database::clmm_pool::model::TokenInfo) -> Vec<String> {
+        let mut tags = chain_metadata.map(|m| m.tags.clone()).unwrap_or_default();
+
+        // 根据小数位数添加标签
+        match token_info.decimals {
+            0..=2 => tags.push("low-precision".to_string()),
+            3..=6 => tags.push("standard-precision".to_string()),
+            7..=9 => tags.push("high-precision".to_string()),
+            _ => tags.push("ultra-precision".to_string()),
+        }
+
+        // 检查是否为知名代币
+        if self.is_well_known_token(mint_address) {
+            tags.push("verified".to_string());
+            tags.push("blue-chip".to_string());
+        }
+
+        // 检查是否为稳定币（优先使用本地symbol）
+        let symbol_to_check = token_info.symbol.as_ref().or_else(|| chain_metadata.and_then(|m| m.symbol.as_ref()));
+        if self.is_stablecoin_by_symbol(mint_address, symbol_to_check) {
+            tags.push("stablecoin".to_string());
+        }
+
+        // 检查是否为封装代币（优先使用本地symbol）
+        if self.is_wrapped_token_by_symbol(mint_address, symbol_to_check) {
+            tags.push("wrapped".to_string());
+        }
+
+        // 如果有本地缓存的symbol，添加verified标签
+        if token_info.symbol.is_some() && !token_info.symbol.as_ref().unwrap().is_empty() {
+            tags.push("cached".to_string());
+        }
+
+        tags
+    }
+
+    /// 创建mint扩展信息（结合本地数据版本）
+    fn create_mint_extensions_with_local_data(&self, mint_address: &str, chain_metadata: Option<&TokenMetadata>, token_info: &database::clmm_pool::model::TokenInfo) -> serde_json::Value {
+        let mut extensions = serde_json::Map::new();
+
+        // 添加数据来源信息
+        extensions.insert("data_source".to_string(), serde_json::Value::String(if token_info.is_empty() { "onchain".to_string() } else { "cached".to_string() }));
+
+        // 添加代币类型信息（优先使用本地数据）
+        let symbol_to_check = token_info.symbol.as_ref().or_else(|| chain_metadata.and_then(|m| m.symbol.as_ref()));
+        extensions.insert("type".to_string(), serde_json::Value::String(self.classify_token_type_by_symbol(mint_address, symbol_to_check)));
+
+        // 添加安全等级（本地缓存的数据通常更安全）
+        let security_level = if !token_info.is_empty() {
+            "high".to_string() // 本地缓存的数据认为是高安全等级
+        } else {
+            self.assess_security_level(mint_address, chain_metadata)
+        };
+        extensions.insert("security_level".to_string(), serde_json::Value::String(security_level));
+
+        // 添加流动性等级估算
+        extensions.insert("liquidity_tier".to_string(), serde_json::Value::String(self.estimate_liquidity_tier(mint_address)));
+
+        // 如果有本地名称和符号，添加到扩展信息中
+        if let Some(symbol) = &token_info.symbol {
+            if !symbol.is_empty() {
+                extensions.insert("cached_symbol".to_string(), serde_json::Value::String(symbol.clone()));
+            }
+        }
+        if let Some(name) = &token_info.name {
+            if !name.is_empty() {
+                extensions.insert("cached_name".to_string(), serde_json::Value::String(name.clone()));
+            }
+        }
+
+        // 如果有链上元数据，添加额外信息
+        if let Some(meta) = chain_metadata {
+            if let Some(description) = &meta.description {
+                extensions.insert("description".to_string(), serde_json::Value::String(description.clone()));
+            }
+
+            if let Some(external_url) = &meta.external_url {
+                extensions.insert("website".to_string(), serde_json::Value::String(external_url.clone()));
+            }
+        }
+
+        serde_json::Value::Object(extensions)
+    }
+
+    /// 根据符号判断是否为稳定币
+    fn is_stablecoin_by_symbol(&self, mint_address: &str, symbol: Option<&String>) -> bool {
+        // 检查地址
+        if matches!(
+            mint_address,
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" |  // USDC
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" // USDT
+        ) {
+            return true;
+        }
+
+        // 检查符号
+        if let Some(symbol_str) = symbol {
+            return matches!(symbol_str.as_str(), "USDC" | "USDT" | "DAI" | "BUSD" | "FRAX");
+        }
+
+        false
+    }
+
+    /// 根据符号判断是否为封装代币
+    fn is_wrapped_token_by_symbol(&self, mint_address: &str, symbol: Option<&String>) -> bool {
+        // 检查WSOL
+        if mint_address == "So11111111111111111111111111111111111111112" {
+            return true;
+        }
+
+        // 检查符号是否以W开头
+        if let Some(symbol_str) = symbol {
+            return symbol_str.starts_with('W') && symbol_str.len() > 1;
+        }
+
+        false
+    }
+
+    /// 根据符号分类代币类型
+    fn classify_token_type_by_symbol(&self, mint_address: &str, symbol: Option<&String>) -> String {
+        if self.is_stablecoin_by_symbol(mint_address, symbol) {
+            "stablecoin".to_string()
+        } else if self.is_wrapped_token_by_symbol(mint_address, symbol) {
+            "wrapped".to_string()
+        } else if self.is_well_known_token(mint_address) {
+            "blue-chip".to_string()
+        } else {
+            "token".to_string()
+        }
+    }
     fn enhance_mint_tags(&self, metadata: Option<&TokenMetadata>, mint_address: &str, decimals: u8) -> Vec<String> {
         let mut tags = metadata.map(|m| m.tags.clone()).unwrap_or_default();
 

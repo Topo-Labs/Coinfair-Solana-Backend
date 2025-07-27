@@ -99,3 +99,4 @@ docs/*
 current_pool_info_list_response.json
 expected_pool_info_list_response.json
 api_documentation_check.md
+test_pools_mint_api.sh
