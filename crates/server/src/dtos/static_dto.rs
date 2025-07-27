@@ -295,3 +295,228 @@ pub struct InfoResponse {
     /// 总锁定价值
     pub tvl: f64,
 }
+
+/// CLMM配置项
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ClmmConfig {
+    /// 配置ID
+    pub id: String,
+
+    /// 索引
+    pub index: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u64,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u64,
+
+    /// tick间距
+    #[serde(rename = "tickSpacing")]
+    pub tick_spacing: u32,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u64,
+
+    /// 默认范围
+    #[serde(rename = "defaultRange")]
+    pub default_range: f64,
+
+    /// 默认范围点
+    #[serde(rename = "defaultRangePoint")]
+    pub default_range_point: Vec<f64>,
+}
+
+/// CLMM配置响应类型
+pub type ClmmConfigResponse = Vec<ClmmConfig>;
+
+impl ClmmConfig {
+    /// 创建默认的CLMM配置数据
+    pub fn default_configs() -> Vec<ClmmConfig> {
+        vec![
+            ClmmConfig {
+                id: "9iFER3bpjf1PTTCQCfTRu17EJgvsxo9pVyA9QWwEuX4x".to_string(),
+                index: 4,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 100,
+                tick_spacing: 1,
+                fund_fee_rate: 40000,
+                default_range: 0.001,
+                default_range_point: vec![0.001, 0.003, 0.005, 0.008, 0.01],
+            },
+            ClmmConfig {
+                id: "EdPxg8QaeFSrTYqdWJn6Kezwy9McWncTYueD9eMGCuzR".to_string(),
+                index: 6,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 200,
+                tick_spacing: 1,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "9EeWRCL8CJnikDFCDzG8rtmBs5KQR1jEYKCR5rRZ2NEi".to_string(),
+                index: 7,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 300,
+                tick_spacing: 1,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "3h2e43PunVA5K34vwKCLHWhZF4aZpyaC9RmxvshGAQpL".to_string(),
+                index: 8,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 400,
+                tick_spacing: 1,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "3XCQJQryqpDvvZBfGxR7CLAw5dpGJ9aa7kt1jRLdyxuZ".to_string(),
+                index: 5,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 500,
+                tick_spacing: 1,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "DrdecJVzkaRsf1TQu1g7iFncaokikVTHqpzPjenjRySY".to_string(),
+                index: 10,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 1000,
+                tick_spacing: 10,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "J8u7HvA1g1p2CdhBFdsnTxDzGkekRpdw4GrL9MKU2D3U".to_string(),
+                index: 11,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 1500,
+                tick_spacing: 10,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "RPxHtdN5V7ajwkoG6NnwSBAeaX5k9giY37dpp98xTjD".to_string(),
+                index: 12,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 1600,
+                tick_spacing: 10,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "9WjDVMHWCirG9jkchbetHTnSzdXbAPnD9bsoGRcz1xUw".to_string(),
+                index: 13,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 1800,
+                tick_spacing: 10,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "FMrUDGjEe1izXPbn8SZPNjMfB5JvvhVq5ymmpZDebB5R".to_string(),
+                index: 14,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 2000,
+                tick_spacing: 10,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "E64NGkDLLCdQ2yFNPcavaKptrEgmiQaNykUuLC1Qgwyp".to_string(),
+                index: 1,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 2500,
+                tick_spacing: 60,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "Y6YhgJbt9FRk3JVjwdZtsioVCJwCKhy1hum8HMDYyB1".to_string(),
+                index: 15,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 4000,
+                tick_spacing: 60,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "47Nq74YtwjVeTQF6KFKRKU4cY1Vd5AXBHpYRkubkDLZi".to_string(),
+                index: 16,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 6000,
+                tick_spacing: 60,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "DQeN7dZyQvXKT7YwmgqyuC7AYFkwMoP7RwtucsDEdfYZ".to_string(),
+                index: 17,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 8000,
+                tick_spacing: 60,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "A1BBtTYJd4i3xU8D6Tc2FzU6ZN4oXZWXKZnCxwbHXr8x".to_string(),
+                index: 3,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 10000,
+                tick_spacing: 120,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "Gex2NJRS3jVLPfbzSFM5d5DRsNoL5ynnwT1TXoDEhanz".to_string(),
+                index: 9,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 20000,
+                tick_spacing: 120,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "CDpiwv9eLsRvvuzZEJ8CBtK14wdvkSnkub4vmGtzzdK8".to_string(),
+                index: 18,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 30000,
+                tick_spacing: 120,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+            ClmmConfig {
+                id: "6tBc3ABLaYTTWu94DiRD5PWi92HML34UpAQ8pPTYgudw".to_string(),
+                index: 19,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 40000,
+                tick_spacing: 120,
+                fund_fee_rate: 40000,
+                default_range: 0.1,
+                default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+            },
+        ]
+    }
+}

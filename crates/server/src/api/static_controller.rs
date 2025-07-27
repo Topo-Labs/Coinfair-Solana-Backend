@@ -1,4 +1,6 @@
-use crate::dtos::static_dto::{ApiResponse, AutoFeeConfig, ChainTimeConfig, InfoResponse, MintListResponse, MintPriceResponse, PriceData, RpcConfig, VersionConfig};
+use crate::dtos::static_dto::{
+    ApiResponse, AutoFeeConfig, ChainTimeConfig, ClmmConfig, ClmmConfigResponse, InfoResponse, MintListResponse, MintPriceResponse, PriceData, RpcConfig, VersionConfig,
+};
 use axum::{extract::Query, routing::get, Json, Router};
 use serde::Deserialize;
 use tracing::info;
@@ -15,6 +17,7 @@ impl StaticController {
             .route("/mint/list", get(get_mint_list))
             .route("/mint/price", get(get_mint_price))
             .route("/info", get(get_info))
+            .route("/clmm-config", get(get_clmm_config))
     }
 }
 
@@ -283,4 +286,44 @@ pub async fn get_info() -> Json<ApiResponse<InfoResponse>> {
     };
 
     Json(ApiResponse::success(info_response))
+}
+
+/// 获取CLMM配置
+///
+/// 返回系统的CLMM（集中流动性做市商）配置信息
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "61678e4c-9bf8-4924-99c8-0accc723bf5d",
+///   "success": true,
+///   "data": [
+///     {
+///       "id": "9iFER3bpjf1PTTCQCfTRu17EJgvsxo9pVyA9QWwEuX4x",
+///       "index": 4,
+///       "protocolFeeRate": 120000,
+///       "tradeFeeRate": 100,
+///       "tickSpacing": 1,
+///       "fundFeeRate": 40000,
+///       "defaultRange": 0.001,
+///       "defaultRangePoint": [0.001, 0.003, 0.005, 0.008, 0.01]
+///     }
+///   ]
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/main/clmm-config",
+    responses(
+        (status = 200, description = "CLMM配置获取成功", body = ApiResponse<ClmmConfigResponse>)
+    ),
+    tag = "系统配置"
+)]
+pub async fn get_clmm_config() -> Json<ApiResponse<ClmmConfigResponse>> {
+    info!("⚙️ 获取CLMM配置");
+
+    let clmm_configs = ClmmConfig::default_configs();
+
+    Json(ApiResponse::success(clmm_configs))
 }

@@ -3,7 +3,7 @@
 //!
 //! 负责将数据库模型转换为新的API响应格式
 
-use crate::dtos::solana_dto::{ExtendedMintInfo, NewPoolListResponse, PoolConfigInfo, PoolInfo, PoolListData};
+use crate::dtos::solana_dto::{ExtendedMintInfo, NewPoolListResponse, PeriodStats, PoolConfigInfo, PoolInfo, PoolListData};
 use crate::services::metaplex_service::{MetaplexService, TokenMetadata};
 use anyhow::Result;
 use database::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
@@ -89,10 +89,10 @@ impl DataTransformService {
             mint_amount_b: 0.0, // 暂时为空，需要从链上获取
             fee_rate: self.calculate_fee_rate(pool.config_index),
             open_time: pool.open_time.to_string(),
-            tvl: 0.0,    // 暂时为空，需要计算
-            day: None,   // 暂时为空，需要从交易数据汇聚
-            week: None,  // 暂时为空，需要从交易数据汇聚
-            month: None, // 暂时为空，需要从交易数据汇聚
+            tvl: 0.0,                            // 暂时为空，需要计算
+            day: Some(PeriodStats::default()),   // 暂时为空，需要从交易数据汇聚
+            week: Some(PeriodStats::default()),  // 暂时为空，需要从交易数据汇聚
+            month: Some(PeriodStats::default()), // 暂时为空，需要从交易数据汇聚
             pooltype: self.get_pool_tags(&pool),
             farm_upcoming_count: 0,
             farm_ongoing_count: 0,

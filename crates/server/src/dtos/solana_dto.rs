@@ -1460,7 +1460,7 @@ pub struct RewardInfo {
 }
 
 /// 周期统计信息
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
 pub struct PeriodStats {
     /// 交易量
     pub volume: f64,
