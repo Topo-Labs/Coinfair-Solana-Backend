@@ -1,4 +1,4 @@
-use crate::dtos::static_dto::{ApiResponse, AutoFeeConfig, ChainTimeConfig, MintListResponse, MintPriceResponse, PriceData, RpcConfig, VersionConfig};
+use crate::dtos::static_dto::{ApiResponse, AutoFeeConfig, ChainTimeConfig, InfoResponse, MintListResponse, MintPriceResponse, PriceData, RpcConfig, VersionConfig};
 use axum::{extract::Query, routing::get, Json, Router};
 use serde::Deserialize;
 use tracing::info;
@@ -14,6 +14,7 @@ impl StaticController {
             .route("/chain-time", get(get_chain_time))
             .route("/mint/list", get(get_mint_list))
             .route("/mint/price", get(get_mint_price))
+            .route("/info", get(get_info))
     }
 }
 
@@ -247,4 +248,39 @@ pub async fn get_mint_price(Query(params): Query<MintPriceQuery>) -> Json<ApiRes
     let response = MintPriceResponse { data: price_data };
 
     Json(ApiResponse::success(response))
+}
+
+/// 获取系统信息
+///
+/// 返回系统的24小时交易量和总锁定价值信息
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "3add9ed4-83a3-47c7-b10c-95ea7108b19a",
+///   "success": true,
+///   "data": {
+///     "volume24": 1033122375.6490445,
+///     "tvl": 2767700750.290236
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/main/info",
+    responses(
+        (status = 200, description = "系统信息获取成功", body = ApiResponse<InfoResponse>)
+    ),
+    tag = "系统配置"
+)]
+pub async fn get_info() -> Json<ApiResponse<InfoResponse>> {
+    info!("📊 获取系统信息");
+
+    let info_response = InfoResponse {
+        volume24: 1033122375.6490445,
+        tvl: 2767700750.290236,
+    };
+
+    Json(ApiResponse::success(info_response))
 }
