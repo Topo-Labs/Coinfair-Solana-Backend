@@ -2,7 +2,7 @@ use crate::{router::AppRouter, services::Services};
 use anyhow::Context;
 use axum::serve;
 use database::Database;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
 use tracing::info;
 use utils::{logger::Logger, AppConfig};
@@ -30,7 +30,7 @@ impl ApplicationServer {
 
         info!("🟢 server:referring_reward has launched on {local_addr} 🚀");
 
-        serve(tcp_listener, router)
+        serve(tcp_listener, router.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(Self::shutdown_signal())
             .await
             .context("🔴 Failed to start server")?;

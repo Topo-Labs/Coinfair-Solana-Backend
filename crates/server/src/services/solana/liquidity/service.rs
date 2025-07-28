@@ -1,8 +1,8 @@
 // LiquidityService handles all liquidity management operations
 
 use crate::dtos::solana_dto::{
-    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, IncreaseLiquidityAndSendTransactionResponse,
-    IncreaseLiquidityRequest, IncreaseLiquidityResponse, TransactionStatus,
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest,
+    IncreaseLiquidityResponse, TransactionStatus,
 };
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
@@ -82,13 +82,8 @@ impl LiquidityService {
             request.is_base_0,
         )?;
 
-        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(
-            pool_state.tick_current,
-            pool_state.sqrt_price_x64,
-            tick_lower_adjusted,
-            tick_upper_adjusted,
-            liquidity,
-        )?;
+        let (amount_0, amount_1) =
+            position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
 
         // 7. 应用滑点保护
         let slippage = if request.max_slippage_percent == 0.5 {
@@ -100,20 +95,14 @@ impl LiquidityService {
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1, slippage, false);
 
         // 8. 计算转账费用（支持Token-2022）
-        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_inverse_fee(
-            &pool_state.token_mint_0,
-            &pool_state.token_mint_1,
-            amount_0_with_slippage,
-            amount_1_with_slippage,
-        )?;
+        let (transfer_fee_0, transfer_fee_1) =
+            self.shared
+                .swap_v2_service
+                .get_pool_mints_inverse_fee(&pool_state.token_mint_0, &pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
 
         // 9. 计算包含转账费的最大金额
-        let amount_0_max = amount_0_with_slippage
-            .checked_add(transfer_fee_0.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
-        let amount_1_max = amount_1_with_slippage
-            .checked_add(transfer_fee_1.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_0_max = amount_0_with_slippage.checked_add(transfer_fee_0.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_1_max = amount_1_with_slippage.checked_add(transfer_fee_1.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
 
         info!("  新增流动性: {}", liquidity);
         info!("  Token0最大消耗: {}", amount_0_max);
@@ -130,8 +119,7 @@ impl LiquidityService {
         let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
 
         // 12. 获取用户的代币账户（使用现有NFT的Token Program）
-        let user_token_account_0 =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
         let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
             &user_wallet,
             &pool_state.token_mint_1,
@@ -262,35 +250,20 @@ impl LiquidityService {
             request.is_base_0,
         )?;
 
-        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(
-            pool_state.tick_current,
-            pool_state.sqrt_price_x64,
-            tick_lower_adjusted,
-            tick_upper_adjusted,
-            liquidity,
-        )?;
+        let (amount_0, amount_1) =
+            position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
 
-        let slippage = if request.max_slippage_percent == 0.5 {
-            5.0
-        } else {
-            request.max_slippage_percent
-        };
+        let slippage = if request.max_slippage_percent == 0.5 { 5.0 } else { request.max_slippage_percent };
         let amount_0_with_slippage = position_utils.apply_slippage(amount_0, slippage, false);
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1, slippage, false);
 
-        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_inverse_fee(
-            &pool_state.token_mint_0,
-            &pool_state.token_mint_1,
-            amount_0_with_slippage,
-            amount_1_with_slippage,
-        )?;
+        let (transfer_fee_0, transfer_fee_1) =
+            self.shared
+                .swap_v2_service
+                .get_pool_mints_inverse_fee(&pool_state.token_mint_0, &pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
 
-        let amount_0_max = amount_0_with_slippage
-            .checked_add(transfer_fee_0.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
-        let amount_1_max = amount_1_with_slippage
-            .checked_add(transfer_fee_1.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_0_max = amount_0_with_slippage.checked_add(transfer_fee_0.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_1_max = amount_1_with_slippage.checked_add(transfer_fee_1.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
 
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
@@ -300,8 +273,7 @@ impl LiquidityService {
         let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
         let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
 
-        let user_token_account_0 =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
         let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
             &user_wallet,
             &pool_state.token_mint_1,
@@ -440,20 +412,30 @@ impl LiquidityService {
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage, false);
 
         // 8. 计算转账费
-        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_transfer_fee(
-            &pool_state.token_mint_0,
-            &pool_state.token_mint_1,
-            amount_0_with_slippage,
-            amount_1_with_slippage,
-        )?;
+        let (transfer_fee_0, transfer_fee_1) =
+            self.shared
+                .swap_v2_service
+                .get_pool_mints_transfer_fee(&pool_state.token_mint_0, &pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
 
         // 9. 计算最小输出金额（减去转账费）
-        let amount_0_min = amount_0_with_slippage
-            .checked_sub(transfer_fee_0.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?;
-        let amount_1_min = amount_1_with_slippage
-            .checked_sub(transfer_fee_1.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?;
+        info!("transfer_fee_0: {:?}", transfer_fee_0);
+        info!("transfer_fee_1: {:?}", transfer_fee_1);
+        info!("amount_0_with_slippage: {:?}", amount_0_with_slippage);
+        info!("amount_1_with_slippage: {:?}", amount_1_with_slippage);
+        let amount_0_min = if amount_0_with_slippage > 0 {
+            amount_0_with_slippage
+                .checked_sub(transfer_fee_0.transfer_fee)
+                .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?
+        } else {
+            amount_0_with_slippage
+        };
+        let amount_1_min = if amount_1_with_slippage > 0 {
+            amount_1_with_slippage
+                .checked_sub(transfer_fee_1.transfer_fee)
+                .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?
+        } else {
+            amount_1_with_slippage
+        };
 
         // 10. 构建remaining accounts（包含奖励账户）
         let mut remaining_accounts = Vec::new();
@@ -461,25 +443,54 @@ impl LiquidityService {
         let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
-        // 添加奖励相关账户
+        // 添加奖励相关账户（与CLI版本保持100%一致）
+        //
+        // 重要说明：智能合约验证逻辑分析
+        // 1. decrease_liquidity.rs:275-285 调用 collect_rewards 函数
+        // 2. need_reward_mint 参数 = token_program_2022.is_some() ? true : false
+        // 3. 我们需要检查池子的代币是否需要Token-2022程序
+        // 4. 如果任何一个代币是Token-2022，则 need_reward_mint = true
+        // 5. 智能合约验证：remaining_accounts.len() == valid_reward_count * reward_group_account_num
+        //
+        // CLI版本构建（main.rs:1147-1153）：
+        // - reward_info.token_vault (第1个账户)
+        // - get_associated_token_address(&user, &reward_mint) (第2个账户)
+        // - reward_info.token_mint (第3个账户，仅当need_reward_mint=true时)
+
+        // 检查池子的代币是否需要Token-2022程序
+        // let token_0_account = self.shared.rpc_client.get_account(&pool_state.token_mint_0)?;
+        // let token_1_account = self.shared.rpc_client.get_account(&pool_state.token_mint_1)?;
+        // let need_reward_mint = token_0_account.owner == spl_token_2022::id() || token_1_account.owner == spl_token_2022::id();
+
+        // info!(
+        //     "🔍 Token programs detected - mint_0: {}, mint_1: {}, need_reward_mint: {}",
+        //     if token_0_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
+        //     if token_1_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
+        //     need_reward_mint
+        // );
+
         for reward_info in &pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
+                // 第1个账户：reward token vault
                 remaining_accounts.push(AccountMeta::new(reward_info.token_vault, false));
+                // 第2个账户：user reward token account
                 let user_reward_token = spl_associated_token_account::get_associated_token_address(&user_wallet, &reward_info.token_mint);
                 remaining_accounts.push(AccountMeta::new(user_reward_token, false));
-                remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
+                // 第3个账户：reward mint（仅当need_reward_mint=true时添加）
+                // if need_reward_mint {
+                //     remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
+                // }
             }
         }
+        info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
         // 11. 计算tick array索引
         let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_lower_index, pool_state.tick_spacing);
         let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_upper_index, pool_state.tick_spacing);
 
         // 12. 构建用户代币账户地址
-        let user_token_account_0 =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
-        let user_token_account_1 =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_1, &transfer_fee_1.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
+        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_1, &transfer_fee_1.owner);
 
         // 13. 构建指令
         let mut instructions = PositionInstructionBuilder::build_decrease_liquidity_instructions(
@@ -610,41 +621,97 @@ impl LiquidityService {
         let amount_0_with_slippage = position_utils.apply_slippage(amount_0_expected, slippage, false);
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage, false);
 
-        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_transfer_fee(
-            &pool_state.token_mint_0,
-            &pool_state.token_mint_1,
-            amount_0_with_slippage,
-            amount_1_with_slippage,
-        )?;
-
-        let amount_0_min = amount_0_with_slippage
-            .checked_sub(transfer_fee_0.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?;
-        let amount_1_min = amount_1_with_slippage
-            .checked_sub(transfer_fee_1.transfer_fee)
-            .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?;
+        let (transfer_fee_0, transfer_fee_1) =
+            self.shared
+                .swap_v2_service
+                .get_pool_mints_transfer_fee(&pool_state.token_mint_0, &pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
+        info!("transfer_fee_0: {:?}", transfer_fee_0);
+        info!("transfer_fee_1: {:?}", transfer_fee_1);
+        info!("amount_0_with_slippage: {:?}", amount_0_with_slippage);
+        info!("amount_1_with_slippage: {:?}", amount_1_with_slippage);
+        let amount_0_min = if amount_0_with_slippage > 0 {
+            amount_0_with_slippage
+                .checked_sub(transfer_fee_0.transfer_fee)
+                .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?
+        } else {
+            amount_0_with_slippage
+        };
+        let amount_1_min = if amount_1_with_slippage > 0 {
+            amount_1_with_slippage
+                .checked_sub(transfer_fee_1.transfer_fee)
+                .ok_or_else(|| anyhow::anyhow!("转账费超过预期获得金额"))?
+        } else {
+            amount_1_with_slippage
+        };
 
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
+        // 添加奖励相关账户（与CLI版本保持100%一致）
+        //
+        // 重要说明：智能合约验证逻辑分析
+        // 1. decrease_liquidity.rs:275-285 调用 collect_rewards 函数
+        // 2. need_reward_mint 参数 = token_program_2022.is_some() ? true : false
+        // 3. 我们需要检查池子的代币是否需要Token-2022程序
+        // 4. 如果任何一个代币是Token-2022，则 need_reward_mint = true
+        // 5. 智能合约验证：remaining_accounts.len() == valid_reward_count * reward_group_account_num
+        //
+        // CLI版本构建（main.rs:1147-1153）：
+        // - reward_info.token_vault (第1个账户)
+        // - get_associated_token_address(&user, &reward_mint) (第2个账户)
+        // - reward_info.token_mint (第3个账户，仅当need_reward_mint=true时)
+
+        // 检查池子的代币是否需要Token-2022程序
+        // let token_0_account = self.shared.rpc_client.get_account(&pool_state.token_mint_0)?;
+        // let token_1_account = self.shared.rpc_client.get_account(&pool_state.token_mint_1)?;
+        // let need_reward_mint = token_0_account.owner == spl_token_2022::id() || token_1_account.owner == spl_token_2022::id();
+
+        // info!(
+        //     "🔍 Token programs detected - mint_0: {}, mint_1: {}, need_reward_mint: {}",
+        //     if token_0_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
+        //     if token_1_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
+        //     need_reward_mint
+        // );
+
         for reward_info in &pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
+                // 第1个账户：reward token vault
                 remaining_accounts.push(AccountMeta::new(reward_info.token_vault, false));
+                // 第2个账户：user reward token account
                 let user_reward_token = spl_associated_token_account::get_associated_token_address(&user_wallet, &reward_info.token_mint);
                 remaining_accounts.push(AccountMeta::new(user_reward_token, false));
-                remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
+                // 第3个账户：reward mint（need_reward_mint=true时必须包含）
+                // if need_reward_mint {
+                //     remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
+                // }
             }
         }
+        info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
         let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_lower_index, pool_state.tick_spacing);
         let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_upper_index, pool_state.tick_spacing);
 
-        let user_token_account_0 =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
-        let user_token_account_1 =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_1, &transfer_fee_1.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
+        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_1, &transfer_fee_1.owner);
+
+        // 打印所有构建指令需要的账户，排查问题
+        info!("pool_address: {:?}", pool_address);
+        info!("pool_state: {:?}", pool_state);
+        info!("user_wallet: {:?}", user_wallet);
+        info!("existing_position.nft_mint: {:?}", existing_position.nft_mint);
+        info!("existing_position.nft_token_account: {:?}", existing_position.nft_token_account);
+        info!("user_token_account_0: {:?}", user_token_account_0);
+        info!("user_token_account_1: {:?}", user_token_account_1);
+        info!("request.tick_lower_index: {:?}", request.tick_lower_index);
+        info!("request.tick_upper_index: {:?}", request.tick_upper_index);
+        info!("tick_array_lower_start_index: {:?}", tick_array_lower_start_index);
+        info!("tick_array_upper_start_index: {:?}", tick_array_upper_start_index);
+        info!("liquidity_to_remove: {:?}", liquidity_to_remove);
+        info!("amount_0_min: {:?}", amount_0_min);
+        info!("amount_1_min: {:?}", amount_1_min);
+        info!("remaining_accounts: {:?}", remaining_accounts);
 
         let mut instructions = PositionInstructionBuilder::build_decrease_liquidity_instructions(
             &pool_address,
@@ -710,11 +777,7 @@ impl LiquidityService {
             tick_upper_index: request.tick_upper_index,
             pool_address: request.pool_address,
             position_closed: will_close_position,
-            status: if request.simulate {
-                TransactionStatus::Simulated
-            } else {
-                TransactionStatus::Finalized
-            },
+            status: if request.simulate { TransactionStatus::Simulated } else { TransactionStatus::Finalized },
             explorer_url,
             timestamp: now,
         })

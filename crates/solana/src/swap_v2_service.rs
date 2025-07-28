@@ -288,10 +288,8 @@ impl SwapV2Service {
         let output_token_program = self.detect_mint_program(&output_mint_pubkey)?;
 
         // 3. 计算用户代币账户地址（ATA）
-        let input_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(user_wallet, &input_mint_pubkey, &input_token_program);
-        let output_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(user_wallet, &output_mint_pubkey, &output_token_program);
+        let input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(user_wallet, &input_mint_pubkey, &input_token_program);
+        let output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(user_wallet, &output_mint_pubkey, &output_token_program);
 
         // 4. 批量加载所有账户
         let accounts_to_load = vec![
@@ -454,13 +452,7 @@ impl SwapV2Service {
     }
 
     /// 批量计算pool mints的inverse transfer fee（对应CLI的get_pool_mints_inverse_fee）
-    pub fn get_pool_mints_inverse_fee(
-        &self,
-        mint0: &Pubkey,
-        mint1: &Pubkey,
-        post_amount0: u64,
-        post_amount1: u64,
-    ) -> Result<(TransferFeeResult, TransferFeeResult)> {
+    pub fn get_pool_mints_inverse_fee(&self, mint0: &Pubkey, mint1: &Pubkey, post_amount0: u64, post_amount1: u64) -> Result<(TransferFeeResult, TransferFeeResult)> {
         info!("📊 批量计算inverse transfer fee: mint0={}, mint1={}", mint0, mint1);
 
         // 批量加载两个mint账户
@@ -501,14 +493,15 @@ impl SwapV2Service {
         // Token-2022程序处理
         if account.owner == spl_token_2022::id() {
             let mint_data = StateWithExtensions::<Mint>::unpack(&account.data)?;
-
-            if let Ok(transfer_fee_config) = mint_data.get_extension::<TransferFeeConfig>() {
+            let transfer_fee_config = mint_data.get_extension::<TransferFeeConfig>();
+            info!("transfer_fee_config: {:?}", transfer_fee_config);
+            if let Ok(transfer_fee_config) = transfer_fee_config {
                 let transfer_fee = transfer_fee_config
                     .calculate_epoch_fee(epoch, amount)
                     .ok_or_else(|| anyhow::anyhow!("Transfer fee calculation failed for {}", mint))?;
                 Ok(transfer_fee)
             } else {
-                Ok(0)
+                Ok(1)
             }
         } else {
             Ok(0)

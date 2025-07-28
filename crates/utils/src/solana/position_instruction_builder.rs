@@ -401,6 +401,24 @@ impl PositionInstructionBuilder {
             &raydium_program_id,
         );
 
+        // 打印指令构建需要的账户
+        info!("user_wallet: {:?}", user_wallet);
+        info!("nft_token_account: {:?}", nft_token_account);
+        info!("personal_position: {:?}", personal_position);
+        info!("pool_address: {:?}", pool_address);
+        info!("protocol_position: {:?}", protocol_position);
+        info!("pool_state.token_vault_0: {:?}", pool_state.token_vault_0);
+        info!("pool_state.token_vault_1: {:?}", pool_state.token_vault_1);
+        info!("tick_array_lower: {:?}", tick_array_lower);
+        info!("tick_array_upper: {:?}", tick_array_upper);
+        info!("user_token_account_0: {:?}", user_token_account_0);
+        info!("user_token_account_1: {:?}", user_token_account_1);
+        info!("token_program: {:?}", spl_token::id());
+        info!("token_program_2022: {:?}", spl_token_2022::id());
+        info!("memo_program: {:?}", spl_memo::id());
+        info!("pool_state.token_mint_0: {:?}", pool_state.token_mint_0);
+        info!("pool_state.token_mint_1: {:?}", pool_state.token_mint_1);
+
         // 2. 构建账户列表
         let mut accounts = vec![
             AccountMeta::new(*user_wallet, true), // nft_owner

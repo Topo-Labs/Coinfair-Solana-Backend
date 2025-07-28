@@ -69,11 +69,13 @@ use utoipa::OpenApi;
         crate::api::solana_controller::decrease_liquidity,
         crate::api::solana_controller::decrease_liquidity_and_send_transaction,
         // Static endpoints
-        crate::api::static_controller::get_version,
-        crate::api::static_controller::get_auto_fee,
-        crate::api::static_controller::get_rpcs,
-        crate::api::static_controller::get_chain_time,
-        crate::api::static_controller::get_mint_list,
+        crate::api::solana_controller::get_version,
+        crate::api::solana_controller::get_auto_fee,
+        crate::api::solana_controller::get_rpcs,
+        crate::api::solana_controller::get_chain_time,
+        crate::api::solana_controller::get_mint_list,
+        crate::api::solana_controller::get_info,
+        crate::api::solana_controller::get_clmm_config,
         crate::api::static_controller::get_mint_price,
     ),
     components(

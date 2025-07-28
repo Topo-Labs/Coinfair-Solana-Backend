@@ -1,8 +1,9 @@
 use super::services::Services;
-use crate::{api, docs};
+use crate::{api, docs, middleware};
 use axum::{
     error_handling::HandleErrorLayer,
     http::{Method, StatusCode},
+    middleware as axum_middleware,
     response::IntoResponse,
     routing::get,
     BoxError, Extension, Json, Router,
@@ -44,6 +45,8 @@ impl AppRouter {
             .nest("/api/v1", api::app())
             // API 文档说明页面
             .route("/api-docs", get(api_docs_info))
+            // 添加IP日志中间件
+            .layer(axum_middleware::from_fn(middleware::simple_ip_logger))
             .layer(cors)
             .layer(
                 ServiceBuilder::new()

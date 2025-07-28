@@ -130,6 +130,8 @@ pub struct TokenInfo {
     /// 代币地址
     pub address: String,
 
+    pub program_id: String,
+
     /// 代币名称
     pub name: String,
 
@@ -176,6 +178,7 @@ impl Default for MintListResponse {
             mint_list: vec![
                 TokenInfo {
                     address: "CKgtJw9y47qAgxRHBdgjABY7DP4u6bLHXM1G68anWwJm".to_string(),
+                    program_id: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),
                     name: "JM-M1".to_string(),
                     symbol: "JM-M1".to_string(),
                     decimals: 6,
@@ -191,6 +194,7 @@ impl Default for MintListResponse {
                 },
                 TokenInfo {
                     address: "5pbcULDGXotRZjJvmoiqj3qYaHJeDYAWpsaT58j6Ao56".to_string(),
+                    program_id: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),
                     name: "56-M0".to_string(),
                     symbol: "56-M0".to_string(),
                     decimals: 6,
@@ -206,6 +210,7 @@ impl Default for MintListResponse {
                 },
                 TokenInfo {
                     address: "9C57seuQ3B6yNTmxwU4TdxmCwHEQWq8SMQUn6MYKXxUU".to_string(),
+                    program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
                     name: "cftest1".to_string(),
                     symbol: "CFT1".to_string(),
                     decimals: 9,
@@ -221,6 +226,7 @@ impl Default for MintListResponse {
                 },
                 TokenInfo {
                     address: "4W4WpXG85nsZEGBdFJsnAR1BgFhR688BgHUqmvwnjgNE".to_string(),
+                    program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
                     name: "cftest2".to_string(),
                     symbol: "CFT2".to_string(),
                     decimals: 9,
@@ -236,6 +242,7 @@ impl Default for MintListResponse {
                 },
                 TokenInfo {
                     address: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU".to_string(),
+                    program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
                     name: "USD Coin".to_string(),
                     symbol: "USDC".to_string(),
                     decimals: 6,
@@ -251,6 +258,7 @@ impl Default for MintListResponse {
                 },
                 TokenInfo {
                     address: "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz".to_string(),
+                    program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
                     name: "FAIR".to_string(),
                     symbol: "FAIR".to_string(),
                     decimals: 9,
