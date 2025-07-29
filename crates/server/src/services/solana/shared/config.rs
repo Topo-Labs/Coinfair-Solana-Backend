@@ -1,8 +1,8 @@
 use super::types::constants::{DEFAULT_RAYDIUM_PROGRAM_ID, USDC_MINT_STANDARD};
 use ::utils::AppConfig;
 use anyhow::Result;
-use solana::raydium_api::RaydiumApiClient;
-use solana::{RaydiumSwap, SolanaClient, SwapConfig, SwapV2InstructionBuilder, SwapV2Service};
+use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SolanaClient, SwapConfig, SwapV2Service};
+use ::utils::solana::swap_services::SwapV2InstructionBuilder;
 use solana_client::rpc_client::RpcClient;
 use std::sync::Arc;
 use tracing::info;

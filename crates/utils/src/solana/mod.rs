@@ -11,6 +11,9 @@ pub mod response;
 pub mod service_helpers;
 pub mod swap_calculator;
 pub mod utils;
+pub mod solana_client;
+pub mod raydium_api;
+pub mod swap_services;
 
 pub use account_loader::*;
 pub use builders::*;
@@ -25,3 +28,7 @@ pub use response::*;
 pub use service_helpers::*;
 pub use swap_calculator::*;
 pub use utils::*;
+pub use solana_client::*;
+pub use raydium_api::*;
+// 使用具体的导入避免冲突
+pub use swap_services::{RaydiumSwap, SwapV2Service, SwapEstimateResult, TransferFeeResult, MintInfo};

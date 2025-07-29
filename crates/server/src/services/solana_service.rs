@@ -6,7 +6,8 @@ use crate::dtos::solana_dto::{
     UserPositionsResponse, WalletInfo,
 };
 
-use ::utils::solana::{ServiceHelpers, SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder};
+use ::utils::solana::{ServiceHelpers};
+use ::utils::solana::builders::SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder;
 use anchor_lang::AccountDeserialize;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -17,8 +18,6 @@ use ::utils::solana::{PositionInstructionBuilder, PositionUtils};
 use ::utils::{solana::*, AppConfig};
 use anyhow::Result;
 use async_trait::async_trait;
-use solana::raydium_api::RaydiumApiClient;
-use solana::{RaydiumSwap, SolanaClient, SwapConfig, SwapV2InstructionBuilder, SwapV2Service};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{instruction::AccountMeta, program_pack::Pack, pubkey::Pubkey, signature::Keypair, signer::Signer};
 use spl_token;

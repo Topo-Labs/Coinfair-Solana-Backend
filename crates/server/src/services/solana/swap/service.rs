@@ -6,8 +6,9 @@ use crate::dtos::solana_dto::{
 use crate::services::solana::shared::{helpers::{ResponseBuilder, SolanaUtils}, SharedContext};
 
 use ::utils::solana::{
-    AccountMetaBuilder, ConfigManager, ErrorHandler, LogUtils, MathUtils, RoutePlanBuilder, ServiceHelpers, SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder, TokenType, TokenUtils
+    AccountMetaBuilder, ConfigManager, ErrorHandler, LogUtils, MathUtils, RoutePlanBuilder, ServiceHelpers, TokenType, TokenUtils
 };
+use ::utils::solana::builders::SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder;
 use anyhow::Result;
 use chrono;
 use serde_json;

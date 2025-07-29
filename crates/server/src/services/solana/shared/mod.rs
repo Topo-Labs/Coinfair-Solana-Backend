@@ -1,7 +1,7 @@
 use ::utils::AppConfig;
 use anyhow::Result;
-use solana::raydium_api::RaydiumApiClient;
-use solana::{RaydiumSwap, SwapConfig, SwapV2InstructionBuilder, SwapV2Service};
+use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SwapConfig, SwapV2Service};
+use ::utils::solana::swap_services::SwapV2InstructionBuilder;
 use solana_client::rpc_client::RpcClient;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -88,7 +88,7 @@ impl SharedContext {
             tracing::info!("Initializing Raydium swap service...");
 
             // Create SolanaClient
-            let client = solana::SolanaClient::new(&self.swap_config)?;
+            let client = ::utils::solana::SolanaClient::new(&self.swap_config)?;
 
             // Create RaydiumSwap instance
             match RaydiumSwap::new(client, &self.swap_config) {
