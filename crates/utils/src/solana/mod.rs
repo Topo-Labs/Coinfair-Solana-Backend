@@ -15,6 +15,13 @@ pub mod solana_client;
 pub mod raydium_api;
 pub mod swap_services;
 
+#[cfg(test)]
+mod discriminator_tests;
+#[cfg(test)]
+mod test_discriminator_consistency;
+#[cfg(test)]
+mod verify_discriminators;
+
 pub use account_loader::*;
 pub use builders::*;
 pub use calculators::*;
