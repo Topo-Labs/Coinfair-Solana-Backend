@@ -22,7 +22,6 @@ use solana::{RaydiumSwap, SolanaClient, SwapConfig, SwapV2InstructionBuilder, Sw
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{instruction::AccountMeta, program_pack::Pack, pubkey::Pubkey, signature::Keypair, signer::Signer};
 use spl_token;
-use spl_token_2022;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -181,19 +180,6 @@ impl SolanaService {
     /// 创建服务助手
     fn create_service_helpers(&self) -> ServiceHelpers {
         ServiceHelpers::new(&self.rpc_client)
-    }
-
-    /// 检测mint的token program类型
-    fn detect_mint_program(&self, mint: &Pubkey) -> Result<Pubkey> {
-        let account = self.rpc_client.get_account(mint)?;
-
-        if account.owner == spl_token_2022::id() {
-            Ok(spl_token_2022::id())
-        } else if account.owner == spl_token::id() {
-            Ok(spl_token::id())
-        } else {
-            Err(anyhow::anyhow!("未知的token program: {}", account.owner))
-        }
     }
 
     /// 从 serde_json::Value 创建 RoutePlan
@@ -785,8 +771,8 @@ impl SolanaServiceTrait for SolanaService {
         let pool_account = self.rpc_client.get_account(&pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
 
-        let input_token_program = self.detect_mint_program(&input_mint)?;
-        let output_token_program = self.detect_mint_program(&output_mint)?;
+        let input_token_program = TokenUtils::detect_mint_program(&self.rpc_client, &input_mint)?;
+        let output_token_program = TokenUtils::detect_mint_program(&self.rpc_client, &output_mint)?;
 
         // 计算ATA账户
         let user_input_token_account =
@@ -896,8 +882,8 @@ impl SolanaServiceTrait for SolanaService {
         let pool_account = self.rpc_client.get_account(&pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(&pool_account)?;
 
-        let input_token_program = self.detect_mint_program(&input_mint)?;
-        let output_token_program = self.detect_mint_program(&output_mint)?;
+        let input_token_program = TokenUtils::detect_mint_program(&self.rpc_client, &input_mint)?;
+        let output_token_program = TokenUtils::detect_mint_program(&self.rpc_client, &output_mint)?;
         // 计算ATA账户
         let user_input_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
@@ -1096,7 +1082,7 @@ impl SolanaServiceTrait for SolanaService {
         // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引
@@ -1285,7 +1271,7 @@ impl SolanaServiceTrait for SolanaService {
         // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引

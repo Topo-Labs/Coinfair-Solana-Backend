@@ -15,6 +15,7 @@ use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, t
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{info, warn};
+use utils::TokenUtils;
 
 /// LiquidityService handles all liquidity management operations
 pub struct LiquidityService {
@@ -111,7 +112,7 @@ impl LiquidityService {
         // 10. 构建remaining accounts
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引
@@ -267,7 +268,7 @@ impl LiquidityService {
 
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
@@ -440,48 +441,49 @@ impl LiquidityService {
         // 10. 构建remaining accounts（包含奖励账户）
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 添加奖励相关账户（与CLI版本保持100%一致）
         //
         // 重要说明：智能合约验证逻辑分析
         // 1. decrease_liquidity.rs:275-285 调用 collect_rewards 函数
-        // 2. need_reward_mint 参数 = token_program_2022.is_some() ? true : false
-        // 3. 我们需要检查池子的代币是否需要Token-2022程序
-        // 4. 如果任何一个代币是Token-2022，则 need_reward_mint = true
-        // 5. 智能合约验证：remaining_accounts.len() == valid_reward_count * reward_group_account_num
-        //
-        // CLI版本构建（main.rs:1147-1153）：
+        // 2. 在 DecreaseLiquidityV2 指令中，token_program_2022 总是传递 Some(...)
+        // 3. 因此 need_reward_mint 在 V2 版本中始终为 true
+        // 4. CLI版本总是添加3个账户：vault + user_account + mint
+        // 5. 智能合约验证：remaining_accounts.len() == valid_reward_count * 3
+
+        // CLI版本的奖励账户构建（main.rs:1147-1153）：
         // - reward_info.token_vault (第1个账户)
-        // - get_associated_token_address(&user, &reward_mint) (第2个账户)
-        // - reward_info.token_mint (第3个账户，仅当need_reward_mint=true时)
+        // - get_associated_token_address(&user, &reward_mint) (第2个账户)  
+        // - reward_info.token_mint (第3个账户，V2版本中总是添加)
 
-        // 检查池子的代币是否需要Token-2022程序
-        // let token_0_account = self.shared.rpc_client.get_account(&pool_state.token_mint_0)?;
-        // let token_1_account = self.shared.rpc_client.get_account(&pool_state.token_mint_1)?;
-        // let need_reward_mint = token_0_account.owner == spl_token_2022::id() || token_1_account.owner == spl_token_2022::id();
-
-        // info!(
-        //     "🔍 Token programs detected - mint_0: {}, mint_1: {}, need_reward_mint: {}",
-        //     if token_0_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
-        //     if token_1_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
-        //     need_reward_mint
-        // );
+        // 验证奖励账户数量逻辑
+        let mut valid_reward_count = 0;
+        let reward_group_account_num = 3; // V2版本中始终为3个账户
 
         for reward_info in &pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
+                valid_reward_count += 1;
                 // 第1个账户：reward token vault
                 remaining_accounts.push(AccountMeta::new(reward_info.token_vault, false));
                 // 第2个账户：user reward token account
-                let user_reward_token = spl_associated_token_account::get_associated_token_address(&user_wallet, &reward_info.token_mint);
+                let user_reward_token = spl_associated_token_account::get_associated_token_address_with_program_id(
+                    &user_wallet,
+                    &reward_info.token_mint,
+                    &TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?,
+                );
                 remaining_accounts.push(AccountMeta::new(user_reward_token, false));
-                // 第3个账户：reward mint（仅当need_reward_mint=true时添加）
-                // if need_reward_mint {
-                //     remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
-                // }
+                // 第3个账户：reward mint（V2版本中总是添加）
+                remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
             }
         }
+        
+        let expected_remaining_accounts = valid_reward_count * reward_group_account_num + 1; // +1 for tickarray_bitmap_extension
+        info!(
+            "🔧 奖励账户验证 - valid_reward_count: {}, reward_group_account_num: {}, expected_total: {}, actual: {}",
+            valid_reward_count, reward_group_account_num, expected_remaining_accounts, remaining_accounts.len()
+        );
         info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
         // 11. 计算tick array索引
@@ -493,7 +495,21 @@ impl LiquidityService {
         let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_1, &transfer_fee_1.owner);
 
         // 13. 构建指令
-        let mut instructions = PositionInstructionBuilder::build_decrease_liquidity_instructions(
+        let mut instructions = Vec::new();
+
+        // 确保所有有效奖励代币的用户ATA账户存在（仅在构建交易时需要）
+        for reward_info in &pool_state.reward_infos {
+            if reward_info.token_mint != Pubkey::default() {
+                let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?;
+                let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &reward_info.token_mint, &reward_token_program);
+                info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
+                let create_reward_ata_ix =
+                    spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &reward_info.token_mint, &reward_token_program);
+                instructions.push(create_reward_ata_ix);
+            }
+        }
+
+        let decrease_liquidity_instructions = PositionInstructionBuilder::build_decrease_liquidity_instructions(
             &pool_address,
             &pool_state,
             &user_wallet,
@@ -510,6 +526,7 @@ impl LiquidityService {
             amount_1_min,
             remaining_accounts,
         )?;
+        instructions.extend(decrease_liquidity_instructions);
 
         // 14. 如果减少全部流动性，还要关闭仓位
         let will_close_position = liquidity_to_remove == existing_position.liquidity;
@@ -646,48 +663,49 @@ impl LiquidityService {
 
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 添加奖励相关账户（与CLI版本保持100%一致）
         //
         // 重要说明：智能合约验证逻辑分析
         // 1. decrease_liquidity.rs:275-285 调用 collect_rewards 函数
-        // 2. need_reward_mint 参数 = token_program_2022.is_some() ? true : false
-        // 3. 我们需要检查池子的代币是否需要Token-2022程序
-        // 4. 如果任何一个代币是Token-2022，则 need_reward_mint = true
-        // 5. 智能合约验证：remaining_accounts.len() == valid_reward_count * reward_group_account_num
-        //
-        // CLI版本构建（main.rs:1147-1153）：
+        // 2. 在 DecreaseLiquidityV2 指令中，token_program_2022 总是传递 Some(...)
+        // 3. 因此 need_reward_mint 在 V2 版本中始终为 true
+        // 4. CLI版本总是添加3个账户：vault + user_account + mint
+        // 5. 智能合约验证：remaining_accounts.len() == valid_reward_count * 3
+
+        // CLI版本的奖励账户构建（main.rs:1147-1153）：
         // - reward_info.token_vault (第1个账户)
         // - get_associated_token_address(&user, &reward_mint) (第2个账户)
-        // - reward_info.token_mint (第3个账户，仅当need_reward_mint=true时)
+        // - reward_info.token_mint (第3个账户，V2版本中总是添加)
 
-        // 检查池子的代币是否需要Token-2022程序
-        // let token_0_account = self.shared.rpc_client.get_account(&pool_state.token_mint_0)?;
-        // let token_1_account = self.shared.rpc_client.get_account(&pool_state.token_mint_1)?;
-        // let need_reward_mint = token_0_account.owner == spl_token_2022::id() || token_1_account.owner == spl_token_2022::id();
-
-        // info!(
-        //     "🔍 Token programs detected - mint_0: {}, mint_1: {}, need_reward_mint: {}",
-        //     if token_0_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
-        //     if token_1_account.owner == spl_token_2022::id() { "Token-2022" } else { "SPL Token" },
-        //     need_reward_mint
-        // );
-
+        // 验证奖励账户数量逻辑
+        let mut valid_reward_count = 0;
+        let reward_group_account_num = 3; // V2版本中始终为3个账户
+        
         for reward_info in &pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
+                valid_reward_count += 1;
                 // 第1个账户：reward token vault
                 remaining_accounts.push(AccountMeta::new(reward_info.token_vault, false));
                 // 第2个账户：user reward token account
-                let user_reward_token = spl_associated_token_account::get_associated_token_address(&user_wallet, &reward_info.token_mint);
+                let user_reward_token = spl_associated_token_account::get_associated_token_address_with_program_id(
+                    &user_wallet,
+                    &reward_info.token_mint,
+                    &TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?,
+                );
                 remaining_accounts.push(AccountMeta::new(user_reward_token, false));
-                // 第3个账户：reward mint（need_reward_mint=true时必须包含）
-                // if need_reward_mint {
-                //     remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
-                // }
+                // 第3个账户：reward mint（V2版本中总是添加）
+                remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
             }
         }
+        
+        let expected_remaining_accounts = valid_reward_count * reward_group_account_num + 1; // +1 for tickarray_bitmap_extension
+        info!(
+            "🔧 奖励账户验证 - valid_reward_count: {}, reward_group_account_num: {}, expected_total: {}, actual: {}",
+            valid_reward_count, reward_group_account_num, expected_remaining_accounts, remaining_accounts.len()
+        );
         info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
         let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_lower_index, pool_state.tick_spacing);
@@ -713,7 +731,21 @@ impl LiquidityService {
         info!("amount_1_min: {:?}", amount_1_min);
         info!("remaining_accounts: {:?}", remaining_accounts);
 
-        let mut instructions = PositionInstructionBuilder::build_decrease_liquidity_instructions(
+        let mut instructions = Vec::new();
+
+        // 确保所有有效奖励代币的用户ATA账户存在
+        for reward_info in &pool_state.reward_infos {
+            if reward_info.token_mint != Pubkey::default() {
+                let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?;
+                let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &reward_info.token_mint, &reward_token_program);
+                info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
+                let create_reward_ata_ix =
+                    spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &reward_info.token_mint, &reward_token_program);
+                instructions.push(create_reward_ata_ix);
+            }
+        }
+
+        let decrease_liquidity_instructions = PositionInstructionBuilder::build_decrease_liquidity_instructions(
             &pool_address,
             &pool_state,
             &user_wallet,
@@ -730,6 +762,7 @@ impl LiquidityService {
             amount_1_min,
             remaining_accounts,
         )?;
+        instructions.extend(decrease_liquidity_instructions);
 
         let will_close_position = liquidity_to_remove == existing_position.liquidity;
         if will_close_position {

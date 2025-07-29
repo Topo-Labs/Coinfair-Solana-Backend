@@ -156,7 +156,7 @@ impl PositionService {
         // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引
@@ -347,7 +347,7 @@ impl PositionService {
         // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引
@@ -635,7 +635,7 @@ impl PositionService {
     fn _build_remaining_accounts(&self, pool_address: &Pubkey) -> Result<Vec<AccountMeta>> {
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
         Ok(remaining_accounts)
     }

@@ -20,6 +20,12 @@ impl ConfigManager {
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 
+    /// 获取Raydium V3 AMM程序ID (CLMM)
+    pub fn get_raydium_v3_program_id() -> Result<Pubkey> {
+        let program_id_str = std::env::var("RAYDIUM_V3_PROGRAM").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
+        Pubkey::from_str(&program_id_str).map_err(Into::into)
+    }
+
     /// 获取AMM配置索引
     pub fn get_amm_config_index() -> u16 {
         std::env::var("AMM_CONFIG_INDEX")

@@ -1,4 +1,8 @@
+use anyhow::Result;
+use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
+use spl_token;
+use spl_token_2022;
 use tracing::{info, warn};
 
 use super::constants;
@@ -45,6 +49,20 @@ impl TokenUtils {
             TokenType::Sol => 9,
             TokenType::Usdc => 6,
             TokenType::Other => 6, // 默认精度
+        }
+    }
+
+    /// 检测mint的token program类型
+    /// 返回对应的token program ID
+    pub fn detect_mint_program(rpc_client: &RpcClient, mint: &Pubkey) -> Result<Pubkey> {
+        let account = rpc_client.get_account(mint)?;
+
+        if account.owner == spl_token_2022::id() {
+            Ok(spl_token_2022::id())
+        } else if account.owner == spl_token::id() {
+            Ok(spl_token::id())
+        } else {
+            Err(anyhow::anyhow!("未知的token program: {}", account.owner))
         }
     }
 

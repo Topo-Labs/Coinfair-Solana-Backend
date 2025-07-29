@@ -12,8 +12,6 @@ use anyhow::Result;
 use chrono;
 use serde_json;
 use solana_sdk::pubkey::Pubkey;
-use spl_token;
-use spl_token_2022;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{info, warn};
@@ -32,18 +30,6 @@ impl SwapService {
     /// Execute token swap
     pub async fn swap_tokens(&self, request: SwapRequest) -> Result<SwapResponse> {
         self.execute_swap(request).await
-    }
-
-    fn detect_mint_program(&self, mint: &Pubkey) -> Result<Pubkey> {
-        let account = self.shared.rpc_client.get_account(mint)?;
-
-        if account.owner == spl_token_2022::id() {
-            Ok(spl_token_2022::id())
-        } else if account.owner == spl_token::id() {
-            Ok(spl_token::id())
-        } else {
-            Err(anyhow::anyhow!("未知的token program: {}", account.owner))
-        }
     }
 
     /// Get price quote for a swap
@@ -318,8 +304,8 @@ impl SwapService {
         let pool_account = self.shared.rpc_client.get_account(&pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        let input_token_program = self.detect_mint_program(&input_mint)?;
-        let output_token_program = self.detect_mint_program(&output_mint)?;
+        let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint)?;
+        let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint)?;
 
         // 计算ATA账户
         let user_input_token_account =
@@ -430,8 +416,8 @@ impl SwapService {
         let pool_account = self.shared.rpc_client.get_account(&pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        let input_token_program = self.detect_mint_program(&input_mint)?;
-        let output_token_program = self.detect_mint_program(&output_mint)?;
+        let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint)?;
+        let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint)?;
         // 计算ATA账户
         let user_input_token_account =
             spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
