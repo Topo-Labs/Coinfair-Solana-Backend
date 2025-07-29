@@ -32,50 +32,54 @@ use utoipa::OpenApi;
         // User endpoints
         crate::api::user_controller::user,
         crate::api::user_controller::mock_users,
-        // Solana endpoints
-        crate::api::solana_controller::swap_tokens,
-        crate::api::solana_controller::get_balance,
-        crate::api::solana_controller::get_price_quote,
-        crate::api::solana_controller::get_wallet_info,
-        crate::api::solana_controller::health_check,
+        // Solana Swap endpoints
+        crate::api::solana::swap_controller::swap_tokens,
+        crate::api::solana::swap_controller::get_balance,
+        crate::api::solana::swap_controller::get_price_quote,
+        crate::api::solana::swap_controller::get_wallet_info,
+        crate::api::solana::swap_controller::health_check,
         // Solana SwapV2 endpoints
-        crate::api::solana_controller::compute_swap_v2_base_in,
-        crate::api::solana_controller::compute_swap_v2_base_out,
-        crate::api::solana_controller::transaction_swap_v2_base_in,
-        crate::api::solana_controller::transaction_swap_v2_base_out,
-        // Solana OpenPosition endpoints
-        crate::api::solana_controller::open_position,
-        crate::api::solana_controller::open_position_and_send_transaction,
-        crate::api::solana_controller::calculate_liquidity,
-        crate::api::solana_controller::get_user_positions,
-        crate::api::solana_controller::get_position_info,
-        crate::api::solana_controller::check_position_exists,
-        // Solana Pool Creation endpoints
-        crate::api::solana_controller::create_pool,
-        crate::api::solana_controller::create_pool_and_send_transaction,
+        crate::api::solana::swap_v2_controller::compute_swap_v2_base_in,
+        crate::api::solana::swap_v2_controller::compute_swap_v2_base_out,
+        crate::api::solana::swap_v2_controller::transaction_swap_v2_base_in,
+        crate::api::solana::swap_v2_controller::transaction_swap_v2_base_out,
+        // Solana Position endpoints
+        crate::api::solana::position_controller::open_position,
+        crate::api::solana::position_controller::open_position_and_send_transaction,
+        crate::api::solana::position_controller::calculate_liquidity,
+        crate::api::solana::position_controller::get_user_positions,
+        crate::api::solana::position_controller::get_position_info,
+        crate::api::solana::position_controller::check_position_exists,
+        crate::api::solana::position_controller::increase_liquidity,
+        crate::api::solana::position_controller::increase_liquidity_and_send_transaction,
+        crate::api::solana::position_controller::decrease_liquidity,
+        crate::api::solana::position_controller::decrease_liquidity_and_send_transaction,
+        // Solana CLMM Pool Creation endpoints
+        crate::api::solana::clmm_pool_create::create_pool,
+        crate::api::solana::clmm_pool_create::create_pool_and_send_transaction,
         // Solana CLMM Pool Query endpoints
-        crate::api::solana_controller::get_pool_by_address,
-        crate::api::solana_controller::get_pools_by_mint,
-        crate::api::solana_controller::get_pools_by_creator,
-        crate::api::solana_controller::query_pools,
-        crate::api::solana_controller::get_pool_statistics,
-        crate::api::solana_controller::get_pool_list,
+        crate::api::solana::clmm_pool_query::get_pool_by_address,
+        crate::api::solana::clmm_pool_query::get_pools_by_mint,
+        crate::api::solana::clmm_pool_query::get_pools_by_creator,
+        crate::api::solana::clmm_pool_query::query_pools,
+        crate::api::solana::clmm_pool_query::get_pool_statistics,
+        crate::api::solana::clmm_pool_query::get_pool_list,
+        crate::api::solana::clmm_pool_query::get_pools_by_mint_pair,
         // Solana Classic AMM Pool endpoints
-        crate::api::solana_controller::create_classic_amm_pool,
-        crate::api::solana_controller::create_classic_amm_pool_and_send_transaction,
-        // Solana Liquidity Management endpoints
-        crate::api::solana_controller::increase_liquidity,
-        crate::api::solana_controller::increase_liquidity_and_send_transaction,
-        crate::api::solana_controller::decrease_liquidity,
-        crate::api::solana_controller::decrease_liquidity_and_send_transaction,
-        // Static endpoints
-        crate::api::solana_controller::get_version,
-        crate::api::solana_controller::get_auto_fee,
-        crate::api::solana_controller::get_rpcs,
-        crate::api::solana_controller::get_chain_time,
-        crate::api::solana_controller::get_mint_list,
-        crate::api::solana_controller::get_info,
-        crate::api::solana_controller::get_clmm_config,
+        crate::api::solana::cpmm_pool_create::create_classic_amm_pool,
+        crate::api::solana::cpmm_pool_create::create_classic_amm_pool_and_send_transaction,
+        // Solana Static Configuration endpoints
+        crate::api::solana::static_config_controller::get_version,
+        crate::api::solana::static_config_controller::get_auto_fee,
+        crate::api::solana::static_config_controller::get_rpcs,
+        crate::api::solana::static_config_controller::get_chain_time,
+        crate::api::solana::static_config_controller::get_mint_list,
+        crate::api::solana::static_config_controller::get_info,
+        crate::api::solana::static_config_controller::get_clmm_config,
+        // CLMM Configuration endpoints
+        crate::api::solana::clmm_config_controller::get_clmm_configs,
+        crate::api::solana::clmm_config_controller::save_clmm_config,
+        // Static Price endpoint
         crate::api::static_controller::get_mint_price,
     ),
     components(
@@ -196,6 +200,10 @@ use utoipa::OpenApi;
             crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::ChainTimeConfig>,
             crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::MintListResponse>,
             crate::dtos::static_dto::ApiResponse<crate::dtos::static_dto::MintPriceResponse>,
+            // CLMM Config DTOs
+            crate::dtos::static_dto::ClmmConfig,
+            crate::dtos::static_dto::SaveClmmConfigRequest,
+            crate::dtos::static_dto::SaveClmmConfigResponse,
         )
     ),
     tags(
@@ -206,11 +214,12 @@ use utoipa::OpenApi;
         (name = "Solana交换", description = "Solana 代币交换相关接口"),
         (name = "SwapV2兼容接口", description = "SwapV2 兼容接口，支持转账费"),
         (name = "Solana流动性", description = "Solana 流动性仓位管理接口"),
-        (name = "SolanaCLMM池子创建", description = "Solana CLMM池子创建接口"),
+        (name = "Solana池子管理", description = "Solana CLMM池子创建接口"),
         (name = "CLMM池子查询", description = "CLMM池子查询和统计接口"),
-        (name = "SolanaCPMM池子创建", description = "Solana 经典AMM池子创建接口"),
+        (name = "Solana经典AMM", description = "Solana 经典AMM池子创建接口"),
         (name = "系统配置", description = "系统配置相关接口"),
-        (name = "代币信息", description = "代币信息相关接口")
+        (name = "代币信息", description = "代币信息相关接口"),
+        (name = "CLMM配置管理", description = "CLMM配置管理相关接口")
     )
 )]
 pub struct ApiDoc;
