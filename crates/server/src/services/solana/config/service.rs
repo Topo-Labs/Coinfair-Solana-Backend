@@ -38,6 +38,25 @@ impl ClmmConfigService {
     fn get_repository(&self) -> ClmmConfigRepository {
         ClmmConfigRepository::new(self.database.clmm_configs.clone())
     }
+
+    /// 计算CLMM配置的真实PDA地址
+    /// 这个方法确保所有配置ID计算保持一致
+    fn calculate_config_pda(&self, index: u16) -> Result<String> {
+        info!("🔍 计算CLMM配置PDA，索引: {}", index);
+        
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()
+            .map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+            
+        let (config_pda, bump) = utils::solana::calculators::PDACalculator::calculate_amm_config_pda(
+            &raydium_program_id, 
+            index
+        );
+        
+        let config_id = config_pda.to_string();
+        info!("✅ 索引{}的配置PDA: {} (bump: {})", index, config_id, bump);
+        
+        Ok(config_id)
+    }
 }
 
 #[async_trait]
@@ -127,14 +146,13 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
 
         info!("📋 将同步索引: {:?}", amm_config_indexes);
 
-        // 获取Raydium程序ID
-        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()?;
-
         // 计算所有AMM配置PDA
         let mut pda_addresses = Vec::new();
         for &index in &amm_config_indexes {
-            let (pda, _bump) = utils::solana::calculators::PDACalculator::calculate_amm_config_pda(&raydium_program_id, index);
-            pda_addresses.push(pda);
+            let config_id = self.calculate_config_pda(index)?;
+            let config_pda = config_id.parse::<solana_sdk::pubkey::Pubkey>()
+                .map_err(|e| anyhow::anyhow!("解析配置PDA失败: {}", e))?;
+            pda_addresses.push(config_pda);
         }
         info!("📋 计算所有AMM配置PDA: {:?}", pda_addresses);
         // 使用account_loader批量获取账户
@@ -151,9 +169,10 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
                     Ok(amm_config) => {
                         info!("✅ 成功解析AMM配置索引{}: {:?}", index, amm_config);
 
-                        // 创建配置模型
+                        // 创建配置模型 - 使用统一计算的配置ID
+                        let config_id = self.calculate_config_pda(index)?;
                         let config_model = database::clmm_config::ClmmConfigModel::new(
-                            pda_addresses[i].to_string(),
+                            config_id,
                             index as u32,
                             amm_config.protocol_fee_rate as u64,
                             amm_config.trade_fee_rate as u64,
@@ -226,13 +245,12 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         let existing_config = repository.get_config_by_index(request.index).await?;
         let is_new_config = existing_config.is_none();
 
-        // 生成配置ID (如果是新配置，生成一个临时ID，实际应该从链上获取)
+        // 生成真实的配置ID (从链上计算PDA)
         let config_id = if let Some(existing) = &existing_config {
             existing.config_id.clone()
         } else {
-            // 对于新配置，我们生成一个基于索引的临时ID
-            // 在实际应用中，这个ID应该从区块链上计算得出
-            format!("temp_config_{}", request.index)
+            // 使用统一的PDA计算方法
+            self.calculate_config_pda(request.index as u16)?
         };
 
         // 创建数据库模型
@@ -269,5 +287,75 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
                 Err(e)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use database::Database;
+    use utils::config::AppConfig;
+
+    async fn create_test_service() -> ClmmConfigService {
+        // 创建一个简单的测试配置，避免解析命令行参数
+        let config = Arc::new(AppConfig {
+            cargo_env: utils::config::CargoEnv::Development,
+            app_host: "0.0.0.0".to_string(),
+            app_port: 8000,
+            mongo_uri: "mongodb://localhost:27017".to_string(),
+            mongo_db: "test_db".to_string(),
+            rpc_url: "https://api.devnet.solana.com".to_string(),
+            private_key: None,
+            raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            amm_config_index: 0,
+            rust_log: "info".to_string(),
+        });
+        let database = Arc::new(Database::new(config).await.unwrap());
+        let rpc_client = Arc::new(solana_client::rpc_client::RpcClient::new("https://api.devnet.solana.com".to_string()));
+        ClmmConfigService::new(database, rpc_client)
+    }
+
+    #[tokio::test]
+    async fn test_calculate_config_pda() {
+        let service = create_test_service().await;
+
+        // 测试PDA计算
+        let index = 0;
+        let result = service.calculate_config_pda(index);
+        
+        assert!(result.is_ok());
+        let config_id = result.unwrap();
+        
+        // 验证配置ID不为空且是有效的Pubkey字符串格式
+        assert!(!config_id.is_empty());
+        assert!(config_id.parse::<solana_sdk::pubkey::Pubkey>().is_ok());
+    }
+
+    #[tokio::test] 
+    async fn test_pda_consistency() {
+        let service = create_test_service().await;
+
+        let index = 1;
+        
+        // 多次计算同一索引的PDA，结果应该一致
+        let config_id1 = service.calculate_config_pda(index).unwrap();
+        let config_id2 = service.calculate_config_pda(index).unwrap();
+        
+        assert_eq!(config_id1, config_id2);
+    }
+
+    #[tokio::test]
+    async fn test_different_indexes_different_pdas() {
+        let service = create_test_service().await;
+
+        // 不同索引应该产生不同的PDA
+        let config_id0 = service.calculate_config_pda(0).unwrap();
+        let config_id1 = service.calculate_config_pda(1).unwrap();
+        let config_id2 = service.calculate_config_pda(2).unwrap();
+        
+        assert_ne!(config_id0, config_id1);
+        assert_ne!(config_id1, config_id2);
+        assert_ne!(config_id0, config_id2);
     }
 }
