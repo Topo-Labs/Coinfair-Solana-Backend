@@ -12,9 +12,7 @@ pub struct ClmmConfigController;
 
 impl ClmmConfigController {
     pub fn routes() -> Router {
-        Router::new()
-            .route("/clmm-config", get(get_clmm_configs))
-            .route("/clmm-config/save", post(save_clmm_config))
+        Router::new().route("/", get(get_clmm_configs)).route("/save", post(save_clmm_config))
     }
 }
 

@@ -7,7 +7,7 @@ pub struct StaticController;
 
 impl StaticController {
     pub fn app() -> Router {
-        Router::new().route("/mint/price", get(get_mint_price))
+        Router::new().route("/price", get(get_mint_price))
     }
 }
 
