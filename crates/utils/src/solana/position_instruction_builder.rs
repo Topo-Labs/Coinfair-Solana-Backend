@@ -137,7 +137,7 @@ impl PositionInstructionBuilder {
         let mut data = Vec::new();
 
         // 使用预定义的discriminator常量
-        let discriminator = instruction::OpenPositionV2::DISCRIMINATOR;
+        let discriminator = instruction::OpenPositionWithToken22Nft::DISCRIMINATOR;
         data.extend_from_slice(&discriminator);
 
         // 参数序列化（按照Anchor的格式）
@@ -280,32 +280,28 @@ impl PositionInstructionBuilder {
 
         // 2. 构建账户列表（严格按照IncreaseLiquidityV2结构的顺序）
         let mut accounts = vec![
-            AccountMeta::new(*user_wallet, true),                                 // 1. nft_owner (signer)
-            AccountMeta::new_readonly(*nft_token_account, false),                 // 2. nft_account
-            AccountMeta::new(*pool_address, false),                               // 3. pool_state
-            AccountMeta::new(protocol_position, false),                           // 4. protocol_position
-            AccountMeta::new(personal_position, false),                           // 5. personal_position
-            AccountMeta::new(tick_array_lower, false),                            // 6. tick_array_lower
-            AccountMeta::new(tick_array_upper, false),                            // 7. tick_array_upper
-            AccountMeta::new(*user_token_account_0, false),                       // 8. token_account_0
-            AccountMeta::new(*user_token_account_1, false),                       // 9. token_account_1
-            AccountMeta::new(pool_state.token_vault_0, false),                    // 10. token_vault_0
-            AccountMeta::new(pool_state.token_vault_1, false),                    // 11. token_vault_1
-            AccountMeta::new_readonly(spl_token::id(), false),                    // 12. token_program
-            AccountMeta::new_readonly(spl_token_2022::id(), false),               // 13. token_program_2022
-            AccountMeta::new_readonly(pool_state.token_mint_0, false),            // 14. vault_0_mint
-            AccountMeta::new_readonly(pool_state.token_mint_1, false),            // 15. vault_1_mint
+            AccountMeta::new(*user_wallet, true),                      // 1. nft_owner (signer)
+            AccountMeta::new_readonly(*nft_token_account, false),      // 2. nft_account
+            AccountMeta::new(*pool_address, false),                    // 3. pool_state
+            AccountMeta::new(protocol_position, false),                // 4. protocol_position
+            AccountMeta::new(personal_position, false),                // 5. personal_position
+            AccountMeta::new(tick_array_lower, false),                 // 6. tick_array_lower
+            AccountMeta::new(tick_array_upper, false),                 // 7. tick_array_upper
+            AccountMeta::new(*user_token_account_0, false),            // 8. token_account_0
+            AccountMeta::new(*user_token_account_1, false),            // 9. token_account_1
+            AccountMeta::new(pool_state.token_vault_0, false),         // 10. token_vault_0
+            AccountMeta::new(pool_state.token_vault_1, false),         // 11. token_vault_1
+            AccountMeta::new_readonly(spl_token::id(), false),         // 12. token_program
+            AccountMeta::new_readonly(spl_token_2022::id(), false),    // 13. token_program_2022
+            AccountMeta::new_readonly(pool_state.token_mint_0, false), // 14. vault_0_mint
+            AccountMeta::new_readonly(pool_state.token_mint_1, false), // 15. vault_1_mint
         ];
 
         // 添加remaining accounts
         accounts.extend(remaining_accounts);
 
         // 3. 构建指令数据
-        let instruction_data = Self::build_increase_liquidity_instruction_data(
-            liquidity,
-            amount_0_max,
-            amount_1_max,
-        )?;
+        let instruction_data = Self::build_increase_liquidity_instruction_data(liquidity, amount_0_max, amount_1_max)?;
 
         // 4. 创建IncreaseLiquidityV2指令（支持Token-2022）
         let increase_liquidity_instruction = Instruction {
@@ -321,11 +317,7 @@ impl PositionInstructionBuilder {
     }
 
     /// 构建IncreaseLiquidityV2指令数据（支持Token-2022）
-    fn build_increase_liquidity_instruction_data(
-        liquidity: u128,
-        amount_0_max: u64,
-        amount_1_max: u64,
-    ) -> Result<Vec<u8>> {
+    fn build_increase_liquidity_instruction_data(liquidity: u128, amount_0_max: u64, amount_1_max: u64) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
         // 使用预定义的discriminator常量 - IncreaseLiquidityV2指令
@@ -366,10 +358,7 @@ impl PositionInstructionBuilder {
         let mut instructions = Vec::new();
 
         // 1. 计算所有需要的PDA地址
-        let (personal_position, _) = Pubkey::find_program_address(
-            &[POSITION_SEED.as_bytes(), nft_mint.as_ref()],
-            &raydium_program_id,
-        );
+        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
 
         let (protocol_position, _) = Pubkey::find_program_address(
             &[
@@ -382,20 +371,12 @@ impl PositionInstructionBuilder {
         );
 
         let (tick_array_lower, _) = Pubkey::find_program_address(
-            &[
-                TICK_ARRAY_SEED.as_bytes(),
-                pool_address.as_ref(),
-                &tick_array_lower_start_index.to_be_bytes(),
-            ],
+            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_lower_start_index.to_be_bytes()],
             &raydium_program_id,
         );
 
         let (tick_array_upper, _) = Pubkey::find_program_address(
-            &[
-                TICK_ARRAY_SEED.as_bytes(),
-                pool_address.as_ref(),
-                &tick_array_upper_start_index.to_be_bytes(),
-            ],
+            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_upper_start_index.to_be_bytes()],
             &raydium_program_id,
         );
 
@@ -419,20 +400,20 @@ impl PositionInstructionBuilder {
 
         // 2. 构建账户列表
         let mut accounts = vec![
-            AccountMeta::new(*user_wallet, true), // nft_owner
-            AccountMeta::new(*nft_token_account, false), // nft_account
-            AccountMeta::new(personal_position, false), // personal_position
-            AccountMeta::new(*pool_address, false), // pool_state
-            AccountMeta::new(protocol_position, false), // protocol_position
-            AccountMeta::new(pool_state.token_vault_0, false), // token_vault_0
-            AccountMeta::new(pool_state.token_vault_1, false), // token_vault_1
-            AccountMeta::new(tick_array_lower, false), // tick_array_lower
-            AccountMeta::new(tick_array_upper, false), // tick_array_upper
-            AccountMeta::new(*user_token_account_0, false), // recipient_token_account_0
-            AccountMeta::new(*user_token_account_1, false), // recipient_token_account_1
-            AccountMeta::new_readonly(spl_token::id(), false), // token_program
-            AccountMeta::new_readonly(spl_token_2022::id(), false), // token_program_2022
-            AccountMeta::new_readonly(spl_memo::id(), false), // memo_program
+            AccountMeta::new(*user_wallet, true),                      // nft_owner
+            AccountMeta::new(*nft_token_account, false),               // nft_account
+            AccountMeta::new(personal_position, false),                // personal_position
+            AccountMeta::new(*pool_address, false),                    // pool_state
+            AccountMeta::new(protocol_position, false),                // protocol_position
+            AccountMeta::new(pool_state.token_vault_0, false),         // token_vault_0
+            AccountMeta::new(pool_state.token_vault_1, false),         // token_vault_1
+            AccountMeta::new(tick_array_lower, false),                 // tick_array_lower
+            AccountMeta::new(tick_array_upper, false),                 // tick_array_upper
+            AccountMeta::new(*user_token_account_0, false),            // recipient_token_account_0
+            AccountMeta::new(*user_token_account_1, false),            // recipient_token_account_1
+            AccountMeta::new_readonly(spl_token::id(), false),         // token_program
+            AccountMeta::new_readonly(spl_token_2022::id(), false),    // token_program_2022
+            AccountMeta::new_readonly(spl_memo::id(), false),          // memo_program
             AccountMeta::new_readonly(pool_state.token_mint_0, false), // vault_0_mint
             AccountMeta::new_readonly(pool_state.token_mint_1, false), // vault_1_mint
         ];
@@ -441,11 +422,7 @@ impl PositionInstructionBuilder {
         accounts.extend(remaining_accounts);
 
         // 3. 构建指令数据
-        let instruction_data = Self::build_decrease_liquidity_instruction_data(
-            liquidity,
-            amount_0_min,
-            amount_1_min,
-        )?;
+        let instruction_data = Self::build_decrease_liquidity_instruction_data(liquidity, amount_0_min, amount_1_min)?;
 
         // 4. 创建DecreaseLiquidityV2指令
         let decrease_liquidity_instruction = Instruction {
@@ -461,11 +438,7 @@ impl PositionInstructionBuilder {
     }
 
     /// 构建DecreaseLiquidityV2指令数据
-    fn build_decrease_liquidity_instruction_data(
-        liquidity: u128,
-        amount_0_min: u64,
-        amount_1_min: u64,
-    ) -> Result<Vec<u8>> {
+    fn build_decrease_liquidity_instruction_data(liquidity: u128, amount_0_min: u64, amount_1_min: u64) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
         // 使用预定义的discriminator常量 - DecreaseLiquidityV2指令
@@ -481,31 +454,23 @@ impl PositionInstructionBuilder {
     }
 
     /// 构建ClosePosition指令
-    pub fn build_close_position_instructions(
-        nft_mint: &Pubkey,
-        nft_token_account: &Pubkey,
-        nft_token_program: &Pubkey,
-        user_wallet: &Pubkey,
-    ) -> Result<Vec<Instruction>> {
+    pub fn build_close_position_instructions(nft_mint: &Pubkey, nft_token_account: &Pubkey, nft_token_program: &Pubkey, user_wallet: &Pubkey) -> Result<Vec<Instruction>> {
         info!("🔨 构建ClosePosition指令");
 
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let mut instructions = Vec::new();
 
         // 1. 计算personal position PDA
-        let (personal_position, _) = Pubkey::find_program_address(
-            &[POSITION_SEED.as_bytes(), nft_mint.as_ref()],
-            &raydium_program_id,
-        );
+        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
 
         // 2. 构建账户列表
         let accounts = vec![
-            AccountMeta::new(*user_wallet, true), // nft_owner
-            AccountMeta::new(*nft_mint, false), // position_nft_mint
-            AccountMeta::new(*nft_token_account, false), // position_nft_account
-            AccountMeta::new(personal_position, false), // personal_position
+            AccountMeta::new(*user_wallet, true),                   // nft_owner
+            AccountMeta::new(*nft_mint, false),                     // position_nft_mint
+            AccountMeta::new(*nft_token_account, false),            // position_nft_account
+            AccountMeta::new(personal_position, false),             // personal_position
             AccountMeta::new_readonly(system_program::id(), false), // system_program
-            AccountMeta::new_readonly(*nft_token_program, false), // token_program
+            AccountMeta::new_readonly(*nft_token_program, false),   // token_program
         ];
 
         // 3. 构建指令数据
