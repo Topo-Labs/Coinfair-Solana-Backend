@@ -2,6 +2,7 @@ pub mod clmm_config_controller;
 pub mod clmm_pool_create;
 pub mod clmm_pool_query;
 pub mod cpmm_pool_create;
+pub mod liquidity_line_controller;
 pub mod position_controller;
 pub mod static_config_controller;
 pub mod swap_controller;
@@ -35,6 +36,8 @@ impl SolanaController {
                     .route("/mint", axum::routing::get(clmm_pool_query::get_pools_by_mint_pair))
                     .route("/ids", axum::routing::get(clmm_pool_query::get_pools_by_ids)),
             )
+            // pools/line路由 - 流动性线图
+            .nest("/pools/line", liquidity_line_controller::LiquidityLineController::routes())
             // CLMM配置路由
             .nest("/main/clmm-config", Router::new().merge(clmm_config_controller::ClmmConfigController::routes()))
             // 静态配置路由

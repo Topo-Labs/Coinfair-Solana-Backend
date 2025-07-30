@@ -11,6 +11,7 @@ use crate::dtos::solana_dto::{
 use super::amm_pool::AmmPoolService;
 use super::clmm_pool::ClmmPoolService;
 use super::config::{ClmmConfigService, ClmmConfigServiceTrait};
+use super::liquidity_line::LiquidityLineService;
 use super::position::PositionService;
 use super::shared::{SharedContext, SolanaHelpers};
 use super::swap::SwapService;
@@ -30,6 +31,7 @@ pub struct SolanaService {
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
     config_service: ClmmConfigService,
+    liquidity_line_service: LiquidityLineService,
 }
 
 impl SolanaService {
@@ -54,7 +56,8 @@ impl SolanaService {
             position_service: PositionService::with_database(shared_context.clone(), Arc::new(database.clone())),
             clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database),
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
-            config_service: ClmmConfigService::new(Arc::new(database), shared_context.rpc_client.clone()),
+            config_service: ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()),
+            liquidity_line_service: LiquidityLineService::new(shared_context.rpc_client.clone(), Arc::new(database)),
             shared_context,
         })
     }
@@ -128,6 +131,9 @@ pub trait SolanaServiceTrait {
     async fn sync_clmm_configs_from_chain(&self) -> Result<u64>;
     async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String>;
     async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse>;
+    
+    // Liquidity line operations
+    async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -303,5 +309,10 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
         self.config_service.save_clmm_config_from_request(request).await
+    }
+    
+    // Liquidity line operations - delegate to liquidity_line_service
+    async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData> {
+        self.liquidity_line_service.get_pool_liquidity_line(request).await
     }
 }
