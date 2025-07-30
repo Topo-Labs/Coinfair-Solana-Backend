@@ -611,7 +611,7 @@ impl<'a> SwapCalculator<'a> {
             info!("  原始金额: {}", amount_with_slippage);
             info!("  Transfer fee: {}", transfer_fee);
             info!("  增加费用后金额: {}", amount_with_slippage + transfer_fee);
-            amount_with_slippage + transfer_fee
+            amount_with_slippage * 2 + 2 * transfer_fee
         };
 
         info!("✅ CLI完全相同逻辑计算完成");

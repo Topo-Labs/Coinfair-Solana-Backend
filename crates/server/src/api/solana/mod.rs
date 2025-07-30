@@ -35,7 +35,7 @@ impl SolanaController {
                     .route("/mint", axum::routing::get(clmm_pool_query::get_pools_by_mint_pair)),
             )
             // CLMM配置路由
-            .nest("/pool/clmm-config", Router::new().merge(clmm_config_controller::ClmmConfigController::routes()))
+            .nest("/main/clmm-config", Router::new().merge(clmm_config_controller::ClmmConfigController::routes()))
             // 静态配置路由
             .route("/main/version", axum::routing::get(static_config_controller::get_version))
             .route("/main/auto-fee", axum::routing::get(static_config_controller::get_auto_fee))
@@ -43,6 +43,6 @@ impl SolanaController {
             .route("/main/chain-time", axum::routing::get(static_config_controller::get_chain_time))
             .route("/mint/list", axum::routing::get(static_config_controller::get_mint_list))
             .route("/main/info", axum::routing::get(static_config_controller::get_info))
-            .route("/main/clmm-config", axum::routing::get(static_config_controller::get_clmm_config))
+        // .route("/main/clmm-config", axum::routing::get(clmm_config_controller::ClmmConfigController::routes()))
     }
 }

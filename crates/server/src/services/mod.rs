@@ -7,13 +7,13 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+pub mod data_transform;
+pub mod metaplex_service;
+pub mod position_storage;
 pub mod refer_service;
 pub mod reward_service;
 pub mod solana;
-pub mod position_storage;
 // pub mod solana_service;
-pub mod data_transform;
-pub mod metaplex_service;
 pub mod user_service;
 
 use crate::services::{
@@ -22,7 +22,7 @@ use crate::services::{
     solana::{DynSolanaService, SolanaService},
     user_service::{DynUserService, UserService},
 };
-use database::{clmm_pool::PoolTypeMigration, Database, position::repository::PositionRepositoryTrait};
+use database::{clmm_pool::PoolTypeMigration, position::repository::PositionRepositoryTrait, Database};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -118,7 +118,7 @@ impl Services {
 
         // 2. 初始化CLMM池子存储服务索引
         self.init_clmm_pool_indexes().await?;
-        
+
         // 3. 初始化Position存储服务索引
         self.init_position_indexes().await?;
 
@@ -212,7 +212,7 @@ impl Services {
 
         Ok(())
     }
-    
+
     /// 初始化Position存储服务索引
     async fn init_position_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔧 初始化Position数据库索引...");

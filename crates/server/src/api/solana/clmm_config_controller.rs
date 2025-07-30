@@ -1,4 +1,4 @@
-use crate::{dtos::solana_dto::ErrorResponse, extractors::validation_extractor::ValidationExtractor, services::Services};
+use crate::{dtos::solana_dto::ErrorResponse, dtos::static_dto::ApiResponse, extractors::validation_extractor::ValidationExtractor, services::Services};
 use axum::{
     extract::Extension,
     http::StatusCode,
@@ -24,7 +24,9 @@ impl ClmmConfigController {
 ///
 /// ```json
 /// {
-///   "configs": [
+///   "id": "c8b629e0-68a2-4409-9773-a4914545dbce",
+///   "success": true,
+///   "data": [
 ///     {
 ///       "id": "config_0",
 ///       "index": 0,
@@ -54,18 +56,20 @@ impl ClmmConfigController {
     get,
     path = "/api/v1/solana/pool/clmm-config",
     responses(
-        (status = 200, description = "CLMM配置获取成功", body = static_dto::ClmmConfigResponse),
+        (status = 200, description = "CLMM配置获取成功", body = ApiResponse<static_dto::ClmmConfigResponse>),
         (status = 500, description = "内部服务器错误", body = ErrorResponse)
     ),
     tag = "CLMM配置管理"
 )]
-pub async fn get_clmm_configs(Extension(services): Extension<Services>) -> Result<Json<crate::dtos::static_dto::ClmmConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
+pub async fn get_clmm_configs(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<crate::dtos::static_dto::ClmmConfigResponse>>, (StatusCode, Json<ErrorResponse>)> {
     info!("🔧 获取CLMM配置列表");
 
     match services.solana.get_clmm_configs().await {
         Ok(configs) => {
             info!("✅ CLMM配置获取成功，共{}个配置", configs.len());
-            Ok(Json(configs))
+            Ok(Json(ApiResponse::success(configs)))
         }
         Err(e) => {
             error!("❌ 获取CLMM配置失败: {:?}", e);
@@ -97,9 +101,13 @@ pub async fn get_clmm_configs(Extension(services): Extension<Services>) -> Resul
 ///
 /// ```json
 /// {
-///   "id": "temp_config_20",
-///   "created": true,
-///   "message": "成功创建新的CLMM配置，索引: 20"
+///   "id": "c8b629e0-68a2-4409-9773-a4914545dbce",
+///   "success": true,
+///   "data": {
+///     "id": "temp_config_20",
+///     "created": true,
+///     "message": "成功创建新的CLMM配置，索引: 20"
+///   }
 /// }
 /// ```
 #[utoipa::path(
@@ -107,7 +115,7 @@ pub async fn get_clmm_configs(Extension(services): Extension<Services>) -> Resul
     path = "/api/v1/solana/pool/clmm-config/save",
     request_body = static_dto::SaveClmmConfigRequest,
     responses(
-        (status = 200, description = "CLMM配置保存成功", body = static_dto::SaveClmmConfigResponse),
+        (status = 200, description = "CLMM配置保存成功", body = ApiResponse<static_dto::SaveClmmConfigResponse>),
         (status = 400, description = "请求参数错误", body = ErrorResponse),
         (status = 500, description = "内部服务器错误", body = ErrorResponse)
     ),
@@ -116,13 +124,13 @@ pub async fn get_clmm_configs(Extension(services): Extension<Services>) -> Resul
 pub async fn save_clmm_config(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<crate::dtos::static_dto::SaveClmmConfigRequest>,
-) -> Result<Json<crate::dtos::static_dto::SaveClmmConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ApiResponse<crate::dtos::static_dto::SaveClmmConfigResponse>>, (StatusCode, Json<ErrorResponse>)> {
     info!("💾 保存CLMM配置，索引: {}", request.index);
 
     match services.solana.save_clmm_config_from_request(request).await {
         Ok(response) => {
             info!("✅ CLMM配置保存成功: {}", response.message);
-            Ok(Json(response))
+            Ok(Json(ApiResponse::success(response)))
         }
         Err(e) => {
             error!("❌ 保存CLMM配置失败: {:?}", e);

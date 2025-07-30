@@ -242,35 +242,28 @@ impl ErrorResponse {
 /// API成功响应包装器
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ApiResponse<T> {
+    pub id :String,
     /// 是否成功
     pub success: bool,
 
     /// 响应数据
     pub data: Option<T>,
-
-    /// 错误信息
-    pub error: Option<ErrorResponse>,
-
-    /// 时间戳
-    pub timestamp: i64,
 }
 
 impl<T> ApiResponse<T> {
     pub fn success(data: T) -> Self {
         Self {
+            id: Uuid::new_v4().to_string(),
             success: true,
             data: Some(data),
-            error: None,
-            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
     pub fn error(error: ErrorResponse) -> Self {
         Self {
+            id: Uuid::new_v4().to_string(),
             success: false,
             data: None,
-            error: Some(error),
-            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 }

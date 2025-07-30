@@ -3,12 +3,13 @@ use crate::dtos::solana_dto::{
     TransactionSwapV2Request, TransferFeeInfo,
 };
 
-use crate::services::solana::shared::{helpers::{ResponseBuilder, SolanaUtils}, SharedContext};
-
-use ::utils::solana::{
-    AccountMetaBuilder, ConfigManager, ErrorHandler, LogUtils, MathUtils, RoutePlanBuilder, ServiceHelpers, TokenType, TokenUtils
+use crate::services::solana::shared::{
+    helpers::{ResponseBuilder, SolanaUtils},
+    SharedContext,
 };
+
 use ::utils::solana::builders::SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder;
+use ::utils::solana::{AccountMetaBuilder, ConfigManager, ErrorHandler, LogUtils, MathUtils, RoutePlanBuilder, ServiceHelpers, TokenType, TokenUtils};
 use anyhow::Result;
 use chrono;
 use serde_json;
@@ -45,11 +46,7 @@ impl SwapService {
             .await?;
 
         // 计算价格
-        let price = if request.amount > 0 {
-            estimated_output as f64 / request.amount as f64
-        } else {
-            0.0
-        };
+        let price = if request.amount > 0 { estimated_output as f64 / request.amount as f64 } else { 0.0 };
 
         // 简化的价格影响计算
         let price_impact_percent = 0.5; // 假设0.5%的价格影响
@@ -158,10 +155,7 @@ impl SwapService {
                 ("原始金额", &input_amount.to_string()),
                 (
                     "转账费",
-                    &transfer_fee_info
-                        .as_ref()
-                        .map(|f| f.input_transfer_fee.to_string())
-                        .unwrap_or_else(|| "0".to_string()),
+                    &transfer_fee_info.as_ref().map(|f| f.input_transfer_fee.to_string()).unwrap_or_else(|| "0".to_string()),
                 ),
             ],
         );
@@ -309,10 +303,8 @@ impl SwapService {
         let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint)?;
 
         // 计算ATA账户
-        let user_input_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
-        let user_output_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+        let user_input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
 
         // 创建ATA账户指令（幂等操作）
         let mut instructions = Vec::new();
@@ -320,23 +312,15 @@ impl SwapService {
         // 创建输入代币ATA账户（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
 
-        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            &user_wallet,
-            &user_wallet,
-            &input_mint,
-            &input_token_program,
-        );
+        let create_input_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
         instructions.push(create_input_ata_ix);
 
         // 创建输出代币ATA账户（如果不存在）
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
 
-        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            &user_wallet,
-            &user_wallet,
-            &output_mint,
-            &output_token_program,
-        );
+        let create_output_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
         instructions.push(create_output_ata_ix);
 
         // 确定vault账户
@@ -420,10 +404,8 @@ impl SwapService {
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint)?;
         let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint)?;
         // 计算ATA账户
-        let user_input_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
-        let user_output_token_account =
-            spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
+        let user_input_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &input_mint, &input_token_program);
+        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &output_mint, &output_token_program);
 
         // 检查并创建ATA账户指令
         let mut instructions = Vec::new();
@@ -431,23 +413,15 @@ impl SwapService {
         // 创建输入代币ATA账户（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token_account);
 
-        let create_input_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            &user_wallet,
-            &user_wallet,
-            &input_mint,
-            &input_token_program,
-        );
+        let create_input_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &input_mint, &input_token_program);
         instructions.push(create_input_ata_ix);
 
         // 创建输出代币ATA账户（如果不存在）
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token_account);
 
-        let create_output_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            &user_wallet,
-            &user_wallet,
-            &output_mint,
-            &output_token_program,
-        );
+        let create_output_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &output_mint, &output_token_program);
         instructions.push(create_output_ata_ix);
 
         // 确定vault账户（基于mint顺序）
@@ -566,13 +540,7 @@ impl SwapService {
             let raydium = raydium_guard.as_ref().unwrap();
 
             raydium
-                .swap_tokens(
-                    &request.from_token,
-                    &request.to_token,
-                    &request.pool_address,
-                    request.amount,
-                    request.minimum_amount_out,
-                )
+                .swap_tokens(&request.from_token, &request.to_token, &request.pool_address, request.amount, request.minimum_amount_out)
                 .await?
         };
 

@@ -47,7 +47,7 @@ impl TransferFeeCalculator {
             };
             Ok(fee)
         } else {
-            Ok(0)
+            Ok(MAX_FEE_BASIS_POINTS as u64 * 2)
         }
     }
 }
@@ -57,10 +57,7 @@ pub struct PDACalculator;
 impl PDACalculator {
     /// 计算AMM配置PDA
     pub fn calculate_amm_config_pda(raydium_program_id: &Pubkey, amm_config_index: u16) -> (Pubkey, u8) {
-        info!(
-            "计算AMM配置PDA: raydium_program_id: {:?}, amm_config_index: {:?}",
-            raydium_program_id, amm_config_index
-        );
+        info!("计算AMM配置PDA: raydium_program_id: {:?}, amm_config_index: {:?}", raydium_program_id, amm_config_index);
         Pubkey::find_program_address(&["amm_config".as_bytes(), &amm_config_index.to_be_bytes()], raydium_program_id)
     }
 
@@ -71,12 +68,7 @@ impl PDACalculator {
             raydium_program_id, amm_config_key, mint0, mint1
         );
         Pubkey::find_program_address(
-            &[
-                "pool".as_bytes(),
-                amm_config_key.to_bytes().as_ref(),
-                mint0.to_bytes().as_ref(),
-                mint1.to_bytes().as_ref(),
-            ],
+            &["pool".as_bytes(), amm_config_key.to_bytes().as_ref(), mint0.to_bytes().as_ref(), mint1.to_bytes().as_ref()],
             raydium_program_id,
         )
     }
@@ -88,10 +80,7 @@ impl PDACalculator {
 
     /// 计算tick array PDA
     pub fn calculate_tick_array_pda(raydium_program_id: &Pubkey, pool_pubkey: &Pubkey, tick_index: i32) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &["tick_array".as_bytes(), pool_pubkey.as_ref(), tick_index.to_be_bytes().as_ref()],
-            raydium_program_id,
-        )
+        Pubkey::find_program_address(&["tick_array".as_bytes(), pool_pubkey.as_ref(), tick_index.to_be_bytes().as_ref()], raydium_program_id)
     }
 
     /// 计算observation PDA
@@ -113,11 +102,7 @@ impl PDACalculator {
 
         // Raydium V2 AMM uses "amm_associated_seed" as the seed for pool PDA
         // The order of mints matters - typically sorted by pubkey bytes
-        let (mint_a, mint_b) = if mint0.to_bytes() < mint1.to_bytes() {
-            (mint0, mint1)
-        } else {
-            (mint1, mint0)
-        };
+        let (mint_a, mint_b) = if mint0.to_bytes() < mint1.to_bytes() { (mint0, mint1) } else { (mint1, mint0) };
 
         Pubkey::find_program_address(&["amm_associated_seed".as_bytes(), mint_a.as_ref(), mint_b.as_ref()], program_id)
     }
@@ -250,14 +235,7 @@ impl V2AmmParameterCalculator {
     ///
     /// # Returns
     /// * `Result<V2InitializeParams>` - 包含所有初始化参数的结构体
-    pub fn calculate_initialize_params(
-        program_id: &Pubkey,
-        mint0: &Pubkey,
-        mint1: &Pubkey,
-        init_amount_0: u64,
-        init_amount_1: u64,
-        open_time: u64,
-    ) -> Result<V2InitializeParams> {
+    pub fn calculate_initialize_params(program_id: &Pubkey, mint0: &Pubkey, mint1: &Pubkey, init_amount_0: u64, init_amount_1: u64, open_time: u64) -> Result<V2InitializeParams> {
         info!(
             "计算V2 AMM初始化参数: program_id: {:?}, mint0: {:?}, mint1: {:?}, amounts: ({}, {}), open_time: {}",
             program_id, mint0, mint1, init_amount_0, init_amount_1, open_time
@@ -560,15 +538,7 @@ mod tests {
         let (withdraw_queue, _) = PDACalculator::calculate_v2_withdraw_queue_pda(&program_id, &pool_id);
 
         // Verify all PDAs are different from each other
-        let pdas = vec![
-            pool_id,
-            coin_token_account,
-            pc_token_account,
-            lp_mint,
-            open_orders,
-            target_orders,
-            withdraw_queue,
-        ];
+        let pdas = vec![pool_id, coin_token_account, pc_token_account, lp_mint, open_orders, target_orders, withdraw_queue];
 
         for (i, pda1) in pdas.iter().enumerate() {
             for (j, pda2) in pdas.iter().enumerate() {
