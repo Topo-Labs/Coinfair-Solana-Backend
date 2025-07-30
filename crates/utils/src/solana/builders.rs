@@ -1,6 +1,8 @@
+use anchor_lang::Discriminator;
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use raydium_amm_v3::instruction;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -137,8 +139,8 @@ impl SwapV2InstructionBuilder {
 
         LogUtils::log_operation_start("SwapV2指令构建", &format!("金额: {}", amount));
 
-        // SwapV2指令的discriminator
-        let discriminator: [u8; 8] = [0x2B, 0x04, 0xED, 0x0B, 0x1A, 0xC9, 0x1E, 0x62];
+        // 使用预定义的discriminator常量 - SwapV2指令
+        let discriminator = instruction::SwapV2::DISCRIMINATOR;
 
         #[derive(BorshSerialize)]
         struct SwapV2Args {

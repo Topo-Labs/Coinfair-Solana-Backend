@@ -7,7 +7,8 @@ use super::{
     calculators::{PDACalculator, V2AmmParameterCalculator},
     config::ConfigManager,
 };
-use raydium_amm_v3::instruction;
+use raydium_amm_v3::instruction; // For CLMM (V3)
+use raydium_cp_swap::instruction as cp_instruction; // For Classic AMM (V2)
 /// 池子指令构建器 - 统一管理池子相关指令的构建
 pub struct PoolInstructionBuilder;
 
@@ -242,10 +243,8 @@ impl ClassicAmmInstructionBuilder {
     /// # Returns
     /// * `Result<Vec<u8>>` - 序列化的指令数据
     fn build_initialize_instruction_data(nonce: u8, open_time: u64, init_pc_amount: u64, init_coin_amount: u64) -> Result<Vec<u8>> {
-        // V2 AMM Initialize指令的discriminator
-        // 对于Raydium V2 AMM，Initialize指令通常使用特定的discriminator
-        // 这里使用一个通用的discriminator，实际使用时可能需要根据具体的程序调整
-        let discriminator: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237]; // initialize指令的discriminator
+        // 使用预定义的discriminator常量 - V2 AMM Initialize指令
+        let discriminator = cp_instruction::Initialize::DISCRIMINATOR;
 
         let mut data = Vec::new();
         data.extend_from_slice(&discriminator);
@@ -368,8 +367,8 @@ mod tests {
         assert_eq!(data.len(), 8 + 1 + 8 + 8 + 8); // discriminator + nonce + open_time + init_pc_amount + init_coin_amount
 
         // Verify discriminator
-        let expected_discriminator: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237];
-        assert_eq!(&data[0..8], &expected_discriminator);
+        let expected_discriminator = cp_instruction::Initialize::DISCRIMINATOR;
+        assert_eq!(&data[0..8], expected_discriminator);
 
         // Verify nonce
         assert_eq!(data[8], nonce);
@@ -401,8 +400,8 @@ mod tests {
         assert_eq!(data.len(), 33);
 
         // Verify all values are zero except discriminator
-        let expected_discriminator: [u8; 8] = [175, 175, 109, 31, 13, 152, 155, 237];
-        assert_eq!(&data[0..8], &expected_discriminator);
+        let expected_discriminator = cp_instruction::Initialize::DISCRIMINATOR;
+        assert_eq!(&data[0..8], expected_discriminator);
         assert_eq!(data[8], 0); // nonce
 
         // All other bytes should be zero

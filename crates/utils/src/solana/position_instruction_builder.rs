@@ -1,4 +1,6 @@
+use anchor_lang::Discriminator;
 use anyhow::Result;
+use raydium_amm_v3::instruction;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -134,11 +136,9 @@ impl PositionInstructionBuilder {
     ) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
-        // 计算正确的discriminator
-        // Anchor使用 sha256("global:open_position_with_token22_nft") 的前8字节
-        use solana_sdk::hash::hash;
-        let discriminator = hash(b"global:open_position_with_token22_nft").to_bytes();
-        data.extend_from_slice(&discriminator[..8]);
+        // 使用预定义的discriminator常量
+        let discriminator = instruction::OpenPositionV2::DISCRIMINATOR;
+        data.extend_from_slice(&discriminator);
 
         // 参数序列化（按照Anchor的格式）
         data.extend_from_slice(&tick_lower_index.to_le_bytes());
@@ -328,11 +328,9 @@ impl PositionInstructionBuilder {
     ) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
-        // 计算正确的discriminator - 使用IncreaseLiquidityV2指令
-        // Anchor使用 sha256("global:increase_liquidity_v2") 的前8字节
-        use solana_sdk::hash::hash;
-        let discriminator = hash(b"global:increase_liquidity_v2").to_bytes();
-        data.extend_from_slice(&discriminator[..8]);
+        // 使用预定义的discriminator常量 - IncreaseLiquidityV2指令
+        let discriminator = instruction::IncreaseLiquidityV2::DISCRIMINATOR;
+        data.extend_from_slice(&discriminator);
 
         // 参数序列化（按照Anchor的格式）
         data.extend_from_slice(&liquidity.to_le_bytes());
@@ -470,11 +468,9 @@ impl PositionInstructionBuilder {
     ) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
-        // 计算正确的discriminator - 使用DecreaseLiquidityV2指令
-        // Anchor使用 sha256("global:decrease_liquidity_v2") 的前8字节
-        use solana_sdk::hash::hash;
-        let discriminator = hash(b"global:decrease_liquidity_v2").to_bytes();
-        data.extend_from_slice(&discriminator[..8]);
+        // 使用预定义的discriminator常量 - DecreaseLiquidityV2指令
+        let discriminator = instruction::DecreaseLiquidityV2::DISCRIMINATOR;
+        data.extend_from_slice(&discriminator);
 
         // 参数序列化（按照Anchor的格式）
         data.extend_from_slice(&liquidity.to_le_bytes());
@@ -532,11 +528,9 @@ impl PositionInstructionBuilder {
     fn build_close_position_instruction_data() -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
-        // 计算正确的discriminator - 使用ClosePosition指令
-        // Anchor使用 sha256("global:close_position") 的前8字节
-        use solana_sdk::hash::hash;
-        let discriminator = hash(b"global:close_position").to_bytes();
-        data.extend_from_slice(&discriminator[..8]);
+        // 使用预定义的discriminator常量 - ClosePosition指令
+        let discriminator = instruction::ClosePosition::DISCRIMINATOR;
+        data.extend_from_slice(&discriminator);
 
         // ClosePosition指令没有额外参数
 

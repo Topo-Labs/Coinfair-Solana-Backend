@@ -10474,6 +10474,7 @@ dependencies = [
  "mongodb",
  "mpl-token-metadata",
  "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-cp-swap 0.2.0",
  "reqwest",
  "rust-argon2",
  "rust_decimal",
