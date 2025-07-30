@@ -52,7 +52,7 @@ impl SolanaService {
 
         Ok(Self {
             swap_service: SwapService::new(shared_context.clone()),
-            position_service: PositionService::new(shared_context.clone()),
+            position_service: PositionService::with_database(shared_context.clone(), Arc::new(database.clone())),
             clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database),
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
             config_service: ClmmConfigService::new(

@@ -39,6 +39,13 @@ impl PositionInstructionBuilder {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let mut instructions = Vec::new();
 
+        // NFT ATA账户（由Raydium指令自动创建，这里只计算地址）
+        let nft_ata_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
+            user_wallet,
+            nft_mint,
+            &spl_token_2022::id(), // 始终使用Token-2022
+        );
+
         // 1. 计算所有需要的PDA地址
         let (protocol_position, _) = Pubkey::find_program_address(
             &[
@@ -60,13 +67,6 @@ impl PositionInstructionBuilder {
         let (tick_array_upper, _) = Pubkey::find_program_address(
             &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_upper_start_index.to_be_bytes()],
             &raydium_program_id,
-        );
-
-        // NFT ATA账户（始终使用Token-2022）
-        let nft_ata_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
-            user_wallet,
-            nft_mint,
-            &spl_token_2022::id(), // 始终使用Token-2022
         );
 
         // 2. 构建账户列表（严格按照CLI版本的顺序）

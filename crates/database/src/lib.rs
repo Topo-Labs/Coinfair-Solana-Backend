@@ -27,6 +27,9 @@ use clmm_pool::model::ClmmPool;
 pub mod clmm_config;
 use clmm_config::model::ClmmConfigModel;
 
+pub mod position;
+use position::{model::Position, repository::PositionRepositoryTrait};
+
 #[derive(Clone, Debug)]
 pub struct Database {
     pub refers: Collection<Refer>,
@@ -34,6 +37,7 @@ pub struct Database {
     pub rewards: Collection<Reward>,
     pub clmm_pools: Collection<ClmmPool>,
     pub clmm_configs: Collection<ClmmConfigModel>,
+    pub positions: Collection<Position>,
 }
 
 impl Database {
@@ -56,9 +60,10 @@ impl Database {
         let rewards = db.collection("Reward");
         let clmm_pools = db.collection("ClmmPool");
         let clmm_configs = db.collection("ClmmConfig");
+        let positions = db.collection("Position");
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
-        Ok(Database { refers, users, rewards, clmm_pools, clmm_configs })
+        Ok(Database { refers, users, rewards, clmm_pools, clmm_configs, positions })
     }
 }

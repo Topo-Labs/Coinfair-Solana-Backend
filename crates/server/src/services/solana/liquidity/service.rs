@@ -6,6 +6,7 @@ use crate::dtos::solana_dto::{
 };
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
+use crate::services::position_storage::PositionStorageService;
 use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtils};
 
 use anyhow::Result;
@@ -20,12 +21,21 @@ use utils::TokenUtils;
 /// LiquidityService handles all liquidity management operations
 pub struct LiquidityService {
     shared: Arc<SharedContext>,
+    position_storage_service: PositionStorageService,
 }
 
 impl LiquidityService {
     /// Create a new LiquidityService with shared context
     pub fn new(shared: Arc<SharedContext>) -> Self {
-        Self { shared }
+        // TODO: 暂时使用占位符，直到 SharedContext 包含数据库实例
+        let position_storage_service = PositionStorageService::placeholder();
+        Self { shared, position_storage_service }
+    }
+    
+    /// Create a new LiquidityService with database
+    pub fn with_database(shared: Arc<SharedContext>, db: Arc<database::Database>) -> Self {
+        let position_storage_service = PositionStorageService::new(db);
+        Self { shared, position_storage_service }
     }
 
     /// 增加流动性（构建交易）
@@ -167,7 +177,7 @@ impl LiquidityService {
 
         let now = chrono::Utc::now().timestamp();
 
-        Ok(IncreaseLiquidityResponse {
+        let response = IncreaseLiquidityResponse {
             transaction: transaction_base64,
             transaction_message,
             position_key: existing_position.position_key.to_string(),
@@ -176,9 +186,21 @@ impl LiquidityService {
             amount_1: amount_1_max,
             tick_lower_index: tick_lower_adjusted,
             tick_upper_index: tick_upper_adjusted,
-            pool_address: request.pool_address,
+            pool_address: request.pool_address.clone(),
             timestamp: now,
-        })
+        };
+        
+        // 异步保存增加流动性信息到数据库（不阻塞主流程）
+        let storage_service = self.position_storage_service.clone();
+        let request_clone = request.clone();
+        let response_clone = response.clone();
+        tokio::spawn(async move {
+            if let Err(e) = storage_service.update_increase_liquidity(&request_clone, &response_clone, None).await {
+                tracing::warn!("保存增加流动性信息到数据库失败: {}", e);
+            }
+        });
+
+        Ok(response)
     }
 
     /// 增加流动性并发送交易
@@ -312,7 +334,7 @@ impl LiquidityService {
         let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
         let now = chrono::Utc::now().timestamp();
 
-        Ok(IncreaseLiquidityAndSendTransactionResponse {
+        let response = IncreaseLiquidityAndSendTransactionResponse {
             signature: signature.to_string(),
             position_key: existing_position.position_key.to_string(),
             liquidity_added: liquidity.to_string(),
@@ -320,11 +342,23 @@ impl LiquidityService {
             amount_1: amount_1_max,
             tick_lower_index: tick_lower_adjusted,
             tick_upper_index: tick_upper_adjusted,
-            pool_address: request.pool_address,
+            pool_address: request.pool_address.clone(),
             status: TransactionStatus::Finalized,
             explorer_url,
             timestamp: now,
-        })
+        };
+        
+        // 异步保存增加流动性交易信息到数据库（不阻塞主流程）
+        let storage_service = self.position_storage_service.clone();
+        let request_clone = request.clone();
+        let response_clone = response.clone();
+        tokio::spawn(async move {
+            if let Err(e) = storage_service.update_increase_liquidity_with_transaction(&request_clone, &response_clone).await {
+                tracing::warn!("保存增加流动性交易信息到数据库失败: {}", e);
+            }
+        });
+
+        Ok(response)
     }
 
     /// 验证增加流动性请求参数
@@ -555,7 +589,7 @@ impl LiquidityService {
 
         let now = chrono::Utc::now().timestamp();
 
-        Ok(DecreaseLiquidityResponse {
+        let response = DecreaseLiquidityResponse {
             transaction: transaction_base64,
             transaction_message,
             position_key: existing_position.position_key.to_string(),
@@ -566,10 +600,22 @@ impl LiquidityService {
             amount_1_expected,
             tick_lower_index: request.tick_lower_index,
             tick_upper_index: request.tick_upper_index,
-            pool_address: request.pool_address,
+            pool_address: request.pool_address.clone(),
             will_close_position,
             timestamp: now,
-        })
+        };
+        
+        // 异步保存减少流动性信息到数据库（不阻塞主流程）
+        let storage_service = self.position_storage_service.clone();
+        let request_clone = request.clone();
+        let response_clone = response.clone();
+        tokio::spawn(async move {
+            if let Err(e) = storage_service.update_decrease_liquidity(&request_clone, &response_clone, None).await {
+                tracing::warn!("保存减少流动性信息到数据库失败: {}", e);
+            }
+        });
+
+        Ok(response)
     }
 
     /// 减少流动性并发送交易
@@ -800,7 +846,7 @@ impl LiquidityService {
         };
         let now = chrono::Utc::now().timestamp();
 
-        Ok(DecreaseLiquidityAndSendTransactionResponse {
+        let response = DecreaseLiquidityAndSendTransactionResponse {
             signature,
             position_key: existing_position.position_key.to_string(),
             liquidity_removed: liquidity_to_remove.to_string(),
@@ -808,12 +854,24 @@ impl LiquidityService {
             amount_1_actual: amount_1_expected,
             tick_lower_index: request.tick_lower_index,
             tick_upper_index: request.tick_upper_index,
-            pool_address: request.pool_address,
+            pool_address: request.pool_address.clone(),
             position_closed: will_close_position,
             status: if request.simulate { TransactionStatus::Simulated } else { TransactionStatus::Finalized },
             explorer_url,
             timestamp: now,
-        })
+        };
+        
+        // 异步保存减少流动性交易信息到数据库（不阻塞主流程）
+        let storage_service = self.position_storage_service.clone();
+        let request_clone = request.clone();
+        let response_clone = response.clone();
+        tokio::spawn(async move {
+            if let Err(e) = storage_service.update_decrease_liquidity_with_transaction(&request_clone, &response_clone).await {
+                tracing::warn!("保存减少流动性交易信息到数据库失败: {}", e);
+            }
+        });
+
+        Ok(response)
     }
 
     /// 验证减少流动性请求参数

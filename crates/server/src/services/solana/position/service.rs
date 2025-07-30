@@ -8,6 +8,7 @@ use crate::dtos::solana_dto::{
 };
 
 use super::super::liquidity::LiquidityService;
+use crate::services::position_storage::PositionStorageService;
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
 use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtils};
@@ -24,13 +25,24 @@ use tracing::info;
 pub struct PositionService {
     shared: Arc<SharedContext>,
     liquidity_service: LiquidityService,
+    position_storage_service: PositionStorageService,
 }
 
 impl PositionService {
     /// Create a new PositionService with shared context
     pub fn new(shared: Arc<SharedContext>) -> Self {
         let liquidity_service = LiquidityService::new(shared.clone());
-        Self { shared, liquidity_service }
+        // TODO: 这里需要传入数据库实例，暂时使用占位符
+        // 实际使用时需要在创建 PositionService 时传入数据库
+        let position_storage_service = PositionStorageService::placeholder();
+        Self { shared, liquidity_service, position_storage_service }
+    }
+    
+    /// Create a new PositionService with database
+    pub fn with_database(shared: Arc<SharedContext>, db: Arc<database::Database>) -> Self {
+        let liquidity_service = LiquidityService::with_database(shared.clone(), db.clone());
+        let position_storage_service = PositionStorageService::new(db);
+        Self { shared, liquidity_service, position_storage_service }
     }
 
     /// Position management operations
@@ -137,6 +149,7 @@ impl PositionService {
         )?;
 
         info!("  转账费用 - Token0: {}, Token1: {}", transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee);
+        info!("  Token Program - Token0: {}, Token1: {}", transfer_fee_0.owner, transfer_fee_1.owner);
 
         // 8. 计算包含转账费的最大金额
         let amount_0_max = amount_0_with_slippage
@@ -219,7 +232,7 @@ impl PositionService {
 
         let now = chrono::Utc::now().timestamp();
 
-        Ok(OpenPositionResponse {
+        let response = OpenPositionResponse {
             transaction: transaction_base64,
             transaction_message,
             position_nft_mint: nft_mint.pubkey().to_string(),
@@ -229,9 +242,21 @@ impl PositionService {
             liquidity: liquidity.to_string(),
             amount_0: amount_0_max,
             amount_1: amount_1_max,
-            pool_address: request.pool_address,
+            pool_address: request.pool_address.clone(),
             timestamp: now,
-        })
+        };
+
+        // 异步保存开仓信息到数据库（不阻塞主流程）
+        let storage_service = self.position_storage_service.clone();
+        let request_clone = request.clone();
+        let response_clone = response.clone();
+        tokio::spawn(async move {
+            if let Err(e) = storage_service.save_open_position(&request_clone, &response_clone, None).await {
+                tracing::warn!("保存开仓信息到数据库失败: {}", e);
+            }
+        });
+
+        Ok(response)
     }
 
     pub async fn open_position_and_send_transaction(&self, request: OpenPositionRequest) -> Result<OpenPositionAndSendTransactionResponse> {
@@ -328,6 +353,7 @@ impl PositionService {
         )?;
 
         info!("  转账费用 - Token0: {}, Token1: {}", transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee);
+        info!("  Token Program - Token0: {}, Token1: {}", transfer_fee_0.owner, transfer_fee_1.owner);
 
         // 8. 计算包含转账费的最大金额
         let amount_0_max = amount_0_with_slippage
@@ -401,7 +427,7 @@ impl PositionService {
         let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
         let now = chrono::Utc::now().timestamp();
 
-        Ok(OpenPositionAndSendTransactionResponse {
+        let response = OpenPositionAndSendTransactionResponse {
             signature: signature.to_string(),
             position_nft_mint: nft_mint.pubkey().to_string(),
             position_key: position_key.to_string(),
@@ -410,11 +436,23 @@ impl PositionService {
             liquidity: liquidity.to_string(),
             amount_0: amount_0_max,
             amount_1: amount_1_max,
-            pool_address: request.pool_address,
+            pool_address: request.pool_address.clone(),
             status: TransactionStatus::Finalized,
             explorer_url,
             timestamp: now,
-        })
+        };
+
+        // 异步保存开仓交易信息到数据库（不阻塞主流程）
+        let storage_service = self.position_storage_service.clone();
+        let request_clone = request.clone();
+        let response_clone = response.clone();
+        tokio::spawn(async move {
+            if let Err(e) = storage_service.save_open_position_with_transaction(&request_clone, &response_clone).await {
+                tracing::warn!("保存开仓交易信息到数据库失败: {}", e);
+            }
+        });
+
+        Ok(response)
     }
 
     pub async fn calculate_liquidity(&self, request: CalculateLiquidityRequest) -> Result<CalculateLiquidityResponse> {

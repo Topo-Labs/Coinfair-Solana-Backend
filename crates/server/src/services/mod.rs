@@ -10,6 +10,7 @@
 pub mod refer_service;
 pub mod reward_service;
 pub mod solana;
+pub mod position_storage;
 // pub mod solana_service;
 pub mod data_transform;
 pub mod metaplex_service;
@@ -21,7 +22,7 @@ use crate::services::{
     solana::{DynSolanaService, SolanaService},
     user_service::{DynUserService, UserService},
 };
-use database::{clmm_pool::PoolTypeMigration, Database};
+use database::{clmm_pool::PoolTypeMigration, Database, position::repository::PositionRepositoryTrait};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -117,8 +118,11 @@ impl Services {
 
         // 2. 初始化CLMM池子存储服务索引
         self.init_clmm_pool_indexes().await?;
+        
+        // 3. 初始化Position存储服务索引
+        self.init_position_indexes().await?;
 
-        // 3. 应用默认分页配置
+        // 4. 应用默认分页配置
         self.apply_default_pagination_config().await?;
 
         info!("✅ 数据库服务初始化完成");
@@ -203,6 +207,24 @@ impl Services {
             Err(e) => {
                 error!("❌ CLMM池子数据库索引初始化失败: {}", e);
                 return Err(format!("索引初始化失败: {}", e).into());
+            }
+        }
+
+        Ok(())
+    }
+    
+    /// 初始化Position存储服务索引
+    async fn init_position_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("🔧 初始化Position数据库索引...");
+
+        // 使用Database实例直接调用init_indexes方法
+        match self.database.as_ref().init_indexes().await {
+            Ok(_) => {
+                info!("✅ Position数据库索引初始化完成");
+            }
+            Err(e) => {
+                error!("❌ Position数据库索引初始化失败: {}", e);
+                return Err(format!("Position索引初始化失败: {}", e).into());
             }
         }
 
