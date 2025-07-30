@@ -118,21 +118,24 @@ impl SwapV2Service {
         amount0: u64,
         amount1: u64,
     ) -> anyhow::Result<(TransferFeeResult, TransferFeeResult)> {
-        // 简化实现：使用mint的token program作为owner
-        let token_program = if mint0.to_string().contains("2022") || mint1.to_string().contains("2022") {
-            spl_token_2022::id() // Token-2022 program
-        } else {
-            spl_token::id() // 标准Token program
-        };
+        // 创建RPC客户端来获取实际的mint账户信息
+        let rpc_client = solana_client::rpc_client::RpcClient::new(&self.rpc_url);
+        
+        // 批量加载两个mint账户以获取实际的owner
+        let load_accounts = vec![*mint0, *mint1];
+        let accounts = rpc_client.get_multiple_accounts(&load_accounts)?;
+        
+        let mint0_account = accounts[0].as_ref().ok_or_else(|| anyhow::anyhow!("Failed to load mint0 account"))?;
+        let mint1_account = accounts[1].as_ref().ok_or_else(|| anyhow::anyhow!("Failed to load mint1 account"))?;
         
         Ok((
             TransferFeeResult {
-                transfer_fee: amount0 / 1000,
-                owner: token_program,
+                transfer_fee: amount0 / 1000, // 简化的手续费计算
+                owner: mint0_account.owner,   // 使用实际的mint账户owner
             },
             TransferFeeResult {
-                transfer_fee: amount1 / 1000,
-                owner: token_program,
+                transfer_fee: amount1 / 1000, // 简化的手续费计算
+                owner: mint1_account.owner,   // 使用实际的mint账户owner
             },
         ))
     }
