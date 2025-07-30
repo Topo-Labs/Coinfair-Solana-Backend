@@ -259,7 +259,7 @@ impl<T> ApiResponse<T> {
         }
     }
 
-    pub fn error(error: ErrorResponse) -> Self {
+    pub fn error(_error: ErrorResponse) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             success: false,
@@ -1297,6 +1297,20 @@ pub struct NewPoolListResponse {
     pub data: PoolListData,
 }
 
+/// 新的池子列表响应格式（匹配期望格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NewPoolListResponse2 {
+    /// 请求ID
+    pub id: String,
+    
+    /// 请求是否成功
+    pub success: bool,
+    
+    /// 响应数据
+    // pub data: PoolListData2,
+    pub data: Vec<PoolInfo>,
+}
+
 /// 池子列表数据
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PoolListData {
@@ -1311,6 +1325,12 @@ pub struct PoolListData {
     pub has_next_page: bool,
 }
 
+/// 池子列表数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolListData2 {
+    /// 池子详细信息列表
+    pub data: Vec<PoolInfo>,
+}
 /// 池子信息（新格式）
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PoolInfo {

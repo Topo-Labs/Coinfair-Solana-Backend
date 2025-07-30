@@ -137,10 +137,7 @@ impl ClmmPoolRepository {
         }
 
         if let Some(mint_address) = &params.mint_address {
-            filter.insert(
-                "$or",
-                vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }],
-            );
+            filter.insert("$or", vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }]);
         }
 
         if let Some(creator_wallet) = &params.creator_wallet {
@@ -265,10 +262,7 @@ impl ClmmPoolRepository {
     /// 获取需要同步的池子列表
     pub async fn get_pools_need_sync(&self, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
         let filter = doc! { "sync_status.needs_sync": true };
-        let options = FindOptions::builder()
-            .limit(limit.unwrap_or(100))
-            .sort(doc! { "sync_status.last_sync_at": 1 })
-            .build();
+        let options = FindOptions::builder().limit(limit.unwrap_or(100)).sort(doc! { "sync_status.last_sync_at": 1 }).build();
 
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
@@ -399,10 +393,7 @@ impl ClmmPoolRepository {
 
         // 代币mint地址过滤 (兼容原有的单代币查询)
         if let Some(mint_address) = &params.mint_address {
-            filter.insert(
-                "$or",
-                vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }],
-            );
+            filter.insert("$or", vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }]);
         }
 
         // 双代币精确查询过滤 (mint1 和 mint2)
@@ -422,22 +413,16 @@ impl ClmmPoolRepository {
                         doc! {
                             "mint0.mint_address": mint2,
                             "mint1.mint_address": mint1
-                        }
+                        },
                     ],
                 );
             } else {
                 // 只有mint1，按单代币逻辑查询
-                filter.insert(
-                    "$or",
-                    vec![doc! { "mint0.mint_address": mint1 }, doc! { "mint1.mint_address": mint1 }],
-                );
+                filter.insert("$or", vec![doc! { "mint0.mint_address": mint1 }, doc! { "mint1.mint_address": mint1 }]);
             }
         } else if let Some(mint2) = &params.mint2 {
             // 只有mint2，按单代币逻辑查询
-            filter.insert(
-                "$or",
-                vec![doc! { "mint0.mint_address": mint2 }, doc! { "mint1.mint_address": mint2 }],
-            );
+            filter.insert("$or", vec![doc! { "mint0.mint_address": mint2 }, doc! { "mint1.mint_address": mint2 }]);
         }
 
         // 状态过滤
@@ -452,6 +437,15 @@ impl ClmmPoolRepository {
                 _ => return Err(utils::AppError::BadRequest(format!("Invalid status: {}", status_str))),
             };
             filter.insert("status", mongodb::bson::to_bson(&status)?);
+        }
+
+        // 多个池子地址查询过滤 (按逗号分隔的地址列表)
+        if let Some(ids_str) = &params.ids {
+            let pool_addresses: Vec<String> = ids_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+
+            if !pool_addresses.is_empty() {
+                filter.insert("pool_address", doc! { "$in": pool_addresses });
+            }
         }
 
         // 获取总数用于分页
@@ -830,10 +824,7 @@ mod tests {
         let result = repository.query_pools_with_pagination(&params).await.unwrap();
 
         assert_eq!(result.pools.len(), 1);
-        assert!(
-            result.pools[0].mint0.mint_address == "mint0111111111111111111111111111111"
-                || result.pools[0].mint1.mint_address == "mint0111111111111111111111111111111"
-        );
+        assert!(result.pools[0].mint0.mint_address == "mint0111111111111111111111111111111" || result.pools[0].mint1.mint_address == "mint0111111111111111111111111111111");
 
         // Cleanup
         db.drop(None).await.unwrap();
@@ -951,21 +942,9 @@ mod tests {
 
         // If we have type counts, verify them
         if !result.filters.type_counts.is_empty() {
-            let concentrated_count = result
-                .filters
-                .type_counts
-                .iter()
-                .find(|tc| tc.pool_type == "concentrated")
-                .map(|tc| tc.count)
-                .unwrap_or(0);
+            let concentrated_count = result.filters.type_counts.iter().find(|tc| tc.pool_type == "concentrated").map(|tc| tc.count).unwrap_or(0);
 
-            let standard_count = result
-                .filters
-                .type_counts
-                .iter()
-                .find(|tc| tc.pool_type == "standard")
-                .map(|tc| tc.count)
-                .unwrap_or(0);
+            let standard_count = result.filters.type_counts.iter().find(|tc| tc.pool_type == "standard").map(|tc| tc.count).unwrap_or(0);
 
             // At least verify that we have some counts
             assert!(concentrated_count > 0 || standard_count > 0);

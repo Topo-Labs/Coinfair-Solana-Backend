@@ -466,6 +466,144 @@ pub async fn get_pool_list(
     }
 }
 
+/// 根据多个池子地址获取池子列表
+///
+/// 返回指定池子地址列表的详细信息。
+///
+/// # 查询参数
+///
+/// - `ids`: 多个池子地址，用逗号分隔
+/// - `type` (可选): 池子类型，值为 `raydium` 或 `all`
+/// - `page` (可选): 页码，默认1
+/// - `limit` (可选): 每页数量，默认20
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "uuid",
+///   "success": true,
+///   "data": {
+///     "count": 3,
+///     "data": [
+///       {
+///         "pool_address": "EWsjgXuVrcAESbAyBo6Q2JCuuAdotBhp8g7Qhvf8GNek",
+///         "mint0": "So11111111111111111111111111111111111111112",
+///         "mint1": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+///         "mint0_symbol": "SOL",
+///         "mint1_symbol": "USDC",
+///         "current_price": 100.5,
+///         "tvl": 1000000.0,
+///         "volume_24h": 50000.0,
+///         "status": "Active"
+///       }
+///     ],
+///     "has_next_page": false
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pools/info/ids",
+    params(
+        ("ids" = String, Query, description = "多个池子地址，用逗号分隔"),
+        ("type" = Option<String>, Query, description = "池子类型"),
+        ("page" = Option<u32>, Query, description = "页码"),
+        ("limit" = Option<u32>, Query, description = "每页数量")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = crate::dtos::solana_dto::NewPoolListResponse),
+        (status = 400, description = "参数错误", body = crate::dtos::solana_dto::NewPoolListResponse),
+        (status = 500, description = "查询失败", body = crate::dtos::solana_dto::NewPoolListResponse)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn get_pools_by_ids(
+    Extension(services): Extension<Services>,
+    Query(params): Query<PoolListRequest>,
+) -> Result<Json<crate::dtos::solana_dto::NewPoolListResponse2>, (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse2>)> {
+    info!("🔍 接收到根据IDs查询池子列表请求");
+    if let Some(ref ids) = params.ids {
+        let ids_count = ids.split(',').filter(|s| !s.trim().is_empty()).count();
+        info!("  池子地址数量: {}", ids_count);
+        info!("  IDs: {}", ids);
+    }
+    if let Some(ref pool_type) = params.pool_type {
+        info!("  类型: {}", pool_type);
+    }
+    info!("  页码: {}, 限制: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+
+    // 验证必需参数
+    let ids = params.ids.clone().ok_or_else(|| {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        (StatusCode::BAD_REQUEST, Json(error_response))
+    })?;
+
+    // 验证 ids 参数格式
+    if ids.trim().is_empty() {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 验证池子地址格式
+    let pool_addresses: Vec<&str> = ids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+
+    if pool_addresses.is_empty() {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 限制一次查询的池子数量，防止过大查询
+    if pool_addresses.len() > 100 {
+        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 验证每个地址的格式（基本长度检查）
+    for addr in &pool_addresses {
+        if addr.len() < 32 || addr.len() > 44 {
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: vec![],
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    }
+
+    match services.solana.query_pools_with_new_format2(&params).await {
+        Ok(response) => {
+            info!("✅ 根据IDs查询池子成功，返回{}个池子", response.data.len());
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 根据IDs查询池子失败: {:?}", e);
+            let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: vec![],
+            };
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
 /// 根据代币对获取池子列表
 ///
 /// 返回包含指定代币对的所有池子信息。

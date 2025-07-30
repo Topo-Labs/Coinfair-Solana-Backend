@@ -3,11 +3,13 @@
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, TransactionStatus};
 
 use super::super::shared::SharedContext;
+use super::chain_loader::ChainPoolLoader;
 use super::storage::{ClmmPoolStorageBuilder, ClmmPoolStorageService};
-use super::sync::{ClmmPoolSyncService, ClmmPoolSyncBuilder};
+use super::sync::{ClmmPoolSyncBuilder, ClmmPoolSyncService};
 use anyhow::Result;
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey, signature::Keypair, transaction::Transaction};
 use spl_token::state::Mint;
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
@@ -17,6 +19,7 @@ pub struct ClmmPoolService {
     shared: Arc<SharedContext>,
     storage: ClmmPoolStorageService,
     sync_service: ClmmPoolSyncService,
+    chain_loader: ChainPoolLoader,
 }
 
 impl ClmmPoolService {
@@ -25,7 +28,13 @@ impl ClmmPoolService {
         let storage = ClmmPoolStorageBuilder::from_database(database);
         let sync_storage = ClmmPoolStorageBuilder::from_database(database);
         let sync_service = ClmmPoolSyncBuilder::from_context_and_storage(shared.clone(), sync_storage, None);
-        Self { shared, storage, sync_service }
+        let chain_loader = ChainPoolLoader::new(shared.clone());
+        Self {
+            shared,
+            storage,
+            sync_service,
+            chain_loader,
+        }
     }
 
     /// Create CLMM pool transaction (unsigned)
@@ -348,20 +357,66 @@ impl ClmmPoolService {
         }
     }
 
-    /// 分页查询池子列表
-    pub async fn query_pools_with_pagination(
-        &self,
-        params: &database::clmm_pool::model::PoolListRequest,
-    ) -> Result<database::clmm_pool::model::PoolListResponse> {
+    /// 分页查询池子列表，支持链上数据fallback
+    pub async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse> {
         info!("📋 执行分页池子查询");
         info!("  池子类型: {:?}", params.pool_type);
         info!("  排序字段: {:?}", params.pool_sort_field);
         info!("  排序方向: {:?}", params.sort_type);
         info!("  页码: {}, 页大小: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
 
+        // 1. 先从数据库查询
         match self.storage.query_pools_with_pagination(params).await {
             Ok(response) => {
-                info!("✅ 分页查询完成，返回{}个池子", response.pools.len());
+                info!("✅ 数据库查询完成，返回{}个池子", response.pools.len());
+
+                // 2. 如果是按IDs查询且结果不完整，尝试从链上补充
+                if let Some(ids_str) = &params.ids {
+                    let requested_ids: Vec<String> = ids_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+
+                    let found_ids: HashSet<String> = response.pools.iter().map(|p| p.pool_address.clone()).collect();
+
+                    let missing_ids: Vec<String> = requested_ids.into_iter().filter(|id| !found_ids.contains(id)).collect();
+
+                    if !missing_ids.is_empty() {
+                        info!("🔗 发现{}个池子未在数据库中，尝试从链上获取", missing_ids.len());
+
+                        // 3. 尝试从链上加载缺失的池子
+                        match self.load_and_save_pools_from_chain(&missing_ids).await {
+                            Ok(chain_pools) => {
+                                if !chain_pools.is_empty() {
+                                    info!("✅ 从链上成功获取{}个池子", chain_pools.len());
+
+                                    // 4. 合并数据库结果和链上结果
+                                    let chain_pools_count = chain_pools.len();
+                                    let mut combined_pools = response.pools;
+                                    combined_pools.extend(chain_pools);
+
+                                    // 5. 重新构建响应
+                                    let updated_response = database::clmm_pool::model::PoolListResponse {
+                                        pools: combined_pools,
+                                        pagination: database::clmm_pool::model::PaginationMeta {
+                                            current_page: response.pagination.current_page,
+                                            page_size: response.pagination.page_size,
+                                            total_count: response.pagination.total_count + chain_pools_count as u64,
+                                            total_pages: response.pagination.total_pages,
+                                            has_next: response.pagination.has_next,
+                                            has_prev: response.pagination.has_prev,
+                                        },
+                                        filters: response.filters,
+                                    };
+
+                                    return Ok(updated_response);
+                                }
+                            }
+                            Err(e) => {
+                                // 链上查询失败不影响已有结果
+                                tracing::warn!("⚠️ 链上池子加载失败: {}", e);
+                            }
+                        }
+                    }
+                }
+
                 Ok(response)
             }
             Err(e) => {
@@ -369,6 +424,40 @@ impl ClmmPoolService {
                 Err(e.into())
             }
         }
+    }
+
+    /// 从链上加载池子并异步保存到数据库
+    async fn load_and_save_pools_from_chain(&self, pool_addresses: &[String]) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
+        info!("🔗 开始从链上加载{}个池子", pool_addresses.len());
+
+        // 1. 从链上加载池子信息
+        let chain_pools = self.chain_loader.load_pools_from_chain(pool_addresses).await?;
+
+        if chain_pools.is_empty() {
+            return Ok(vec![]);
+        }
+
+        info!("✅ 从链上成功加载{}个池子", chain_pools.len());
+
+        // 2. 异步保存到数据库 (不阻塞返回)
+        let pools_to_save = chain_pools.clone();
+        let collection = self.storage.get_collection().clone();
+
+        tokio::spawn(async move {
+            let storage = ClmmPoolStorageService::new(collection);
+            for pool in pools_to_save {
+                match storage.store_pool(&pool).await {
+                    Ok(pool_id) => {
+                        info!("💾 池子异步保存成功: {} -> ID: {}", pool.pool_address, pool_id);
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ 池子异步保存失败 {}: {}", pool.pool_address, e);
+                    }
+                }
+            }
+        });
+
+        Ok(chain_pools)
     }
 
     /// 初始化存储服务 (包括数据库索引)

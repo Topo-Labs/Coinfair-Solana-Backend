@@ -4,9 +4,7 @@
 
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
 use crate::services::metaplex_service::TokenMetadata;
-use database::clmm_pool::{
-    ClmmPool, ClmmPoolRepository, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo,
-};
+use database::clmm_pool::{ClmmPool, ClmmPoolRepository, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo};
 use mongodb::Collection;
 use tracing::{debug, error, info, warn};
 use utils::AppResult;
@@ -21,6 +19,11 @@ impl ClmmPoolStorageService {
     pub fn new(collection: Collection<ClmmPool>) -> Self {
         let repository = ClmmPoolRepository::new(collection);
         Self { repository }
+    }
+
+    /// 获取底层的 MongoDB collection
+    pub fn get_collection(&self) -> &Collection<ClmmPool> {
+        self.repository.get_collection()
     }
 
     /// 初始化数据库索引
@@ -150,11 +153,7 @@ impl ClmmPoolStorageService {
     }
 
     /// 存储池子创建并发送交易的响应数据
-    pub async fn store_pool_creation_with_transaction(
-        &self,
-        request: &CreatePoolRequest,
-        response: &CreatePoolAndSendTransactionResponse,
-    ) -> AppResult<String> {
+    pub async fn store_pool_creation_with_transaction(&self, request: &CreatePoolRequest, response: &CreatePoolAndSendTransactionResponse) -> AppResult<String> {
         info!("💾 存储池子创建和交易数据: {}", response.pool_address);
 
         let now = chrono::Utc::now().timestamp() as u64;
@@ -347,10 +346,7 @@ impl ClmmPoolStorageService {
     }
 
     /// 分页查询池子列表
-    pub async fn query_pools_with_pagination(
-        &self,
-        params: &database::clmm_pool::model::PoolListRequest,
-    ) -> AppResult<database::clmm_pool::model::PoolListResponse> {
+    pub async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> AppResult<database::clmm_pool::model::PoolListResponse> {
         self.repository.query_pools_with_pagination(params).await
     }
 
@@ -372,10 +368,7 @@ impl ClmmPoolStorageService {
     }
 
     /// 批量更新池子链上数据
-    pub async fn batch_update_pool_onchain_data(
-        &self,
-        updates: &[(String, Option<(u8, String)>, Option<(u8, String)>, Option<f64>, Option<i32>)],
-    ) -> AppResult<u64> {
+    pub async fn batch_update_pool_onchain_data(&self, updates: &[(String, Option<(u8, String)>, Option<(u8, String)>, Option<f64>, Option<i32>)]) -> AppResult<u64> {
         if updates.is_empty() {
             return Ok(0);
         }

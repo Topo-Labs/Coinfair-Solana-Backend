@@ -32,7 +32,8 @@ impl SolanaController {
                 "/pools/info",
                 Router::new()
                     .route("/list", axum::routing::get(clmm_pool_query::get_pool_list))
-                    .route("/mint", axum::routing::get(clmm_pool_query::get_pools_by_mint_pair)),
+                    .route("/mint", axum::routing::get(clmm_pool_query::get_pools_by_mint_pair))
+                    .route("/ids", axum::routing::get(clmm_pool_query::get_pools_by_ids)),
             )
             // CLMM配置路由
             .nest("/main/clmm-config", Router::new().merge(clmm_config_controller::ClmmConfigController::routes()))

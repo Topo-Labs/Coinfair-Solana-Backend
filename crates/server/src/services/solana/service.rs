@@ -1,11 +1,10 @@
 // Main SolanaService coordinator that delegates to specialized services
 
 use crate::dtos::solana_dto::{
-    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse,
-    CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
-    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
-    GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse, NewPoolListResponse, 
-    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
+    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
+    CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse,
+    DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+    NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
     PriceQuoteResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
 };
 
@@ -55,10 +54,7 @@ impl SolanaService {
             position_service: PositionService::with_database(shared_context.clone(), Arc::new(database.clone())),
             clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database),
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
-            config_service: ClmmConfigService::new(
-                Arc::new(database),
-                shared_context.rpc_client.clone(),
-            ),
+            config_service: ClmmConfigService::new(Arc::new(database), shared_context.rpc_client.clone()),
             shared_context,
         })
     }
@@ -93,18 +89,12 @@ pub trait SolanaServiceTrait {
     async fn calculate_liquidity(&self, request: CalculateLiquidityRequest) -> Result<CalculateLiquidityResponse>;
     async fn get_user_positions(&self, request: GetUserPositionsRequest) -> Result<UserPositionsResponse>;
     async fn get_position_info(&self, position_key: String) -> Result<PositionInfo>;
-    async fn check_position_exists(
-        &self,
-        pool_address: String,
-        tick_lower: i32,
-        tick_upper: i32,
-        wallet_address: Option<String>,
-    ) -> Result<Option<PositionInfo>>;
-    
+    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<PositionInfo>>;
+
     // IncreaseLiquidity operations
     async fn increase_liquidity(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityResponse>;
     async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse>;
-    
+
     // DecreaseLiquidity operations
     async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse>;
     async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse>;
@@ -120,20 +110,19 @@ pub trait SolanaServiceTrait {
     async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>>;
     async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats>;
     async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse>;
-    
+
     // New method for the expected response format
     async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse>;
 
+    async fn query_pools_with_new_format2(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse2>;
+
     // AMM Pool operations
     async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse>;
-    async fn create_classic_amm_pool_and_send_transaction(
-        &self,
-        request: CreateClassicAmmPoolRequest,
-    ) -> Result<CreateClassicAmmPoolAndSendTransactionResponse>;
-    
+    async fn create_classic_amm_pool_and_send_transaction(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolAndSendTransactionResponse>;
+
     // CLMM Pool sync operations
     async fn start_clmm_pool_sync(&self) -> Result<()>;
-    
+
     // CLMM Config operations
     async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse>;
     async fn sync_clmm_configs_from_chain(&self) -> Result<u64>;
@@ -223,17 +212,30 @@ impl SolanaServiceTrait for SolanaService {
     async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse> {
         self.clmm_pool_service.query_pools_with_pagination(params).await
     }
-    
+
     async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse> {
         use crate::services::data_transform::DataTransformService;
-        
+
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
-        
+
         // 使用数据转换服务转换为新格式
         let mut transform_service = DataTransformService::new()?;
         let new_response = transform_service.transform_pool_list_response(old_response, params).await?;
-        
+
+        Ok(new_response)
+    }
+
+    async fn query_pools_with_new_format2(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse2> {
+        use crate::services::data_transform::DataTransformService;
+
+        // 先获取传统格式的响应
+        let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
+
+        // 使用数据转换服务转换为新格式
+        let mut transform_service = DataTransformService::new()?;
+        let new_response = transform_service.transform_pool_list_response2(old_response, params).await?;
+
         Ok(new_response)
     }
 
@@ -242,10 +244,7 @@ impl SolanaServiceTrait for SolanaService {
         self.amm_pool_service.create_classic_amm_pool(request).await
     }
 
-    async fn create_classic_amm_pool_and_send_transaction(
-        &self,
-        request: CreateClassicAmmPoolRequest,
-    ) -> Result<CreateClassicAmmPoolAndSendTransactionResponse> {
+    async fn create_classic_amm_pool_and_send_transaction(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolAndSendTransactionResponse> {
         self.amm_pool_service.create_classic_amm_pool_and_send_transaction(request).await
     }
 
@@ -262,16 +261,8 @@ impl SolanaServiceTrait for SolanaService {
         SolanaHelpers::health_check(&self.shared_context).await
     }
 
-    async fn check_position_exists(
-        &self,
-        pool_address: String,
-        tick_lower: i32,
-        tick_upper: i32,
-        wallet_address: Option<String>,
-    ) -> Result<Option<PositionInfo>> {
-        self.position_service
-            .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
-            .await
+    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<PositionInfo>> {
+        self.position_service.check_position_exists(pool_address, tick_lower, tick_upper, wallet_address).await
     }
 
     // IncreaseLiquidity operations - delegate to position_service
@@ -296,20 +287,20 @@ impl SolanaServiceTrait for SolanaService {
     async fn start_clmm_pool_sync(&self) -> Result<()> {
         self.clmm_pool_service.start_auto_sync().await
     }
-    
+
     // CLMM Config operations - delegate to config_service
     async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse> {
         self.config_service.get_clmm_configs().await
     }
-    
+
     async fn sync_clmm_configs_from_chain(&self) -> Result<u64> {
         self.config_service.sync_clmm_configs_from_chain().await
     }
-    
+
     async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String> {
         self.config_service.save_clmm_config(config).await
     }
-    
+
     async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
         self.config_service.save_clmm_config_from_request(request).await
     }

@@ -283,7 +283,7 @@ impl SwapV2Service {
     }
 
     /// 从已加载的账户计算transfer fee（内部辅助方法）
-    fn calculate_transfer_fee_from_account(&self, mint: &Pubkey, account: &Account, epoch: u64, amount: u64) -> Result<u64> {
+    fn _calculate_transfer_fee_from_account(&self, mint: &Pubkey, account: &Account, epoch: u64, amount: u64) -> Result<u64> {
         // 如果是标准Token程序，没有transfer fee
         if account.owner == spl_token::id() {
             return Ok(0);

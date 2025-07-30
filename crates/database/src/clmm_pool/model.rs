@@ -129,7 +129,7 @@ impl TokenInfo {
         let decimals_empty = self.decimals == 0;
         let symbol_empty = self.symbol.is_none() || self.symbol.as_ref().map_or(true, |s| s.is_empty());
         let name_empty = self.name.is_none() || self.name.as_ref().map_or(true, |s| s.is_empty());
-        
+
         // 只要关键信息（owner、decimals、symbol）有任何一个为空，就认为需要链上查询
         // mint_address 通常不应该为空，所以不检查它
         owner_empty || decimals_empty || symbol_empty || name_empty
@@ -324,6 +324,9 @@ pub struct PoolListRequest {
 
     /// 按第二个代币mint地址过滤 (用于双代币查询)
     pub mint2: Option<String>,
+
+    /// 按多个池子地址查询 (用逗号分隔的地址列表)
+    pub ids: Option<String>,
 }
 
 impl Default for PoolListRequest {
@@ -339,6 +342,7 @@ impl Default for PoolListRequest {
             status: None,
             mint1: None,
             mint2: None,
+            ids: None,
         }
     }
 }

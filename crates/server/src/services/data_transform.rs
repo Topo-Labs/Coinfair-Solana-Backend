@@ -3,7 +3,7 @@
 //!
 //! 负责将数据库模型转换为新的API响应格式
 
-use crate::dtos::solana_dto::{ExtendedMintInfo, NewPoolListResponse, PeriodStats, PoolConfigInfo, PoolInfo, PoolListData};
+use crate::dtos::solana_dto::{ExtendedMintInfo, NewPoolListResponse, NewPoolListResponse2, PeriodStats, PoolConfigInfo, PoolInfo, PoolListData};
 use crate::services::metaplex_service::{MetaplexService, TokenMetadata};
 use anyhow::Result;
 use database::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
@@ -41,7 +41,7 @@ impl DataTransformService {
             } else {
                 filled_token_count += 1;
             }
-            
+
             // 检查mint1信息是否为空
             if pool.mint1.is_empty() {
                 mint_addresses.push(pool.mint1.mint_address.clone());
@@ -81,6 +81,62 @@ impl DataTransformService {
         };
 
         info!("✅ 池子列表响应格式转换完成，共 {} 个池子", response.data.data.len());
+        Ok(response)
+    }
+
+    /// 将传统的池子列表响应转换为新格式
+    pub async fn transform_pool_list_response2(&mut self, old_response: PoolListResponse, _request: &PoolListRequest) -> Result<NewPoolListResponse2> {
+        info!("🔄 开始转换池子列表响应格式");
+
+        // 收集需要获取元数据的mint地址（只收集代币信息为空的）
+        let mut mint_addresses = Vec::new();
+        let mut empty_token_count = 0;
+        let mut filled_token_count = 0;
+
+        for pool in &old_response.pools {
+            // 检查mint0信息是否为空
+            if pool.mint0.is_empty() {
+                mint_addresses.push(pool.mint0.mint_address.clone());
+                empty_token_count += 1;
+            } else {
+                filled_token_count += 1;
+            }
+
+            // 检查mint1信息是否为空
+            if pool.mint1.is_empty() {
+                mint_addresses.push(pool.mint1.mint_address.clone());
+                empty_token_count += 1;
+            } else {
+                filled_token_count += 1;
+            }
+        }
+
+        info!("📊 代币信息统计: {} 个需要从链上获取, {} 个使用本地缓存", empty_token_count, filled_token_count);
+
+        // 批量获取需要的mint元数据（只获取缺失的）
+        let metadata_map = if !mint_addresses.is_empty() {
+            info!("🔗 从链上获取 {} 个代币的元数据", mint_addresses.len());
+            self.metaplex_service.get_tokens_metadata(&mint_addresses).await?
+        } else {
+            info!("✅ 所有代币信息已缓存，跳过链上查询");
+            HashMap::new()
+        };
+
+        // 转换池子数据
+        let mut pool_infos = Vec::new();
+        for pool in old_response.pools {
+            let pool_info = self.transform_pool_to_pool_info(pool, &metadata_map).await?;
+            pool_infos.push(pool_info);
+        }
+
+        // 构建新的响应格式
+        let response = NewPoolListResponse2 {
+            id: Uuid::new_v4().to_string(),
+            success: true,
+            data: pool_infos,
+        };
+
+        info!("✅ 池子列表响应格式转换完成，共 {} 个池子", response.data.len());
         Ok(response)
     }
 
@@ -133,7 +189,7 @@ impl DataTransformService {
     /// 创建扩展的mint信息（智能版本）- 优先使用本地缓存数据
     fn create_extended_mint_info_smart(&self, token_info: &database::clmm_pool::model::TokenInfo, metadata_map: &HashMap<String, TokenMetadata>) -> Result<ExtendedMintInfo> {
         let mint_address = &token_info.mint_address;
-        
+
         if token_info.is_empty() {
             // 代币信息为空，使用链上获取的元数据
             debug!("🔗 使用链上数据构建mint信息: {}", mint_address);
@@ -142,7 +198,7 @@ impl DataTransformService {
             // 代币信息已缓存，使用本地数据，并结合链上元数据进行增强
             debug!("📋 使用本地缓存构建mint信息: {}", mint_address);
             let chain_metadata = metadata_map.get(mint_address);
-            
+
             let mint_info = ExtendedMintInfo {
                 chain_id: self.get_chain_id(),
                 address: mint_address.clone(),
@@ -156,7 +212,7 @@ impl DataTransformService {
                 tags: self.enhance_mint_tags_with_local_data(chain_metadata, mint_address, token_info),
                 extensions: self.create_mint_extensions_with_local_data(mint_address, chain_metadata, token_info),
             };
-            
+
             Ok(mint_info)
         }
     }
@@ -227,15 +283,26 @@ impl DataTransformService {
     }
 
     /// 创建mint扩展信息（结合本地数据版本）
-    fn create_mint_extensions_with_local_data(&self, mint_address: &str, chain_metadata: Option<&TokenMetadata>, token_info: &database::clmm_pool::model::TokenInfo) -> serde_json::Value {
+    fn create_mint_extensions_with_local_data(
+        &self,
+        mint_address: &str,
+        chain_metadata: Option<&TokenMetadata>,
+        token_info: &database::clmm_pool::model::TokenInfo,
+    ) -> serde_json::Value {
         let mut extensions = serde_json::Map::new();
 
         // 添加数据来源信息
-        extensions.insert("data_source".to_string(), serde_json::Value::String(if token_info.is_empty() { "onchain".to_string() } else { "cached".to_string() }));
+        extensions.insert(
+            "data_source".to_string(),
+            serde_json::Value::String(if token_info.is_empty() { "onchain".to_string() } else { "cached".to_string() }),
+        );
 
         // 添加代币类型信息（优先使用本地数据）
         let symbol_to_check = token_info.symbol.as_ref().or_else(|| chain_metadata.and_then(|m| m.symbol.as_ref()));
-        extensions.insert("type".to_string(), serde_json::Value::String(self.classify_token_type_by_symbol(mint_address, symbol_to_check)));
+        extensions.insert(
+            "type".to_string(),
+            serde_json::Value::String(self.classify_token_type_by_symbol(mint_address, symbol_to_check)),
+        );
 
         // 添加安全等级（本地缓存的数据通常更安全）
         let security_level = if !token_info.is_empty() {
