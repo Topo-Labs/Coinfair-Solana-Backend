@@ -106,6 +106,15 @@ pub struct ClmmPool {
     pub pool_type: PoolType,
 }
 
+/// 代币属性
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq)]
+pub struct TokenAttribute {
+    /// 属性名
+    pub trait_type: String,
+    /// 属性值
+    pub value: String,
+}
+
 /// 代币信息
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TokenInfo {
@@ -119,6 +128,16 @@ pub struct TokenInfo {
     pub symbol: Option<String>,
     /// 代币名称 (可选)
     pub name: Option<String>,
+    /// Logo URI (可选)
+    pub log_uri: Option<String>,
+    /// 描述 (可选)
+    pub description: Option<String>,
+    /// 外部链接 (可选)
+    pub external_url: Option<String>,
+    /// 标签 (可选)
+    pub tags: Option<Vec<String>>,
+    /// 属性 (可选)
+    pub attributes: Option<Vec<TokenAttribute>>,
 }
 
 impl TokenInfo {
@@ -130,9 +149,17 @@ impl TokenInfo {
         let symbol_empty = self.symbol.is_none() || self.symbol.as_ref().map_or(true, |s| s.is_empty());
         let name_empty = self.name.is_none() || self.name.as_ref().map_or(true, |s| s.is_empty());
 
-        // 只要关键信息（owner、decimals、symbol）有任何一个为空，就认为需要链上查询
-        // mint_address 通常不应该为空，所以不检查它
-        owner_empty || decimals_empty || symbol_empty || name_empty
+        // 检查元数据字段是否为空
+        let log_uri_empty = self.log_uri.is_none() || self.log_uri.as_ref().map_or(true, |s| s.is_empty());
+        let description_empty = self.description.is_none() || self.description.as_ref().map_or(true, |s| s.is_empty());
+        let external_url_empty = self.external_url.is_none() || self.external_url.as_ref().map_or(true, |s| s.is_empty());
+        let tags_empty = self.tags.is_none() || self.tags.as_ref().map_or(true, |tags| tags.is_empty());
+        let attributes_empty = self.attributes.is_none() || self.attributes.as_ref().map_or(true, |attrs| attrs.is_empty());
+
+        // 关键信息（owner、decimals、symbol、name）有任何一个为空，就认为需要链上查询
+        // 元数据信息为空也认为需要同步，但不是必须的关键信息
+        owner_empty || decimals_empty || symbol_empty || name_empty || 
+        (log_uri_empty && description_empty && external_url_empty && tags_empty && attributes_empty)
     }
 }
 
@@ -469,6 +496,11 @@ mod tests {
                 owner: "44444444444444444444444444444444".to_string(),
                 symbol: Some("TOKEN0".to_string()),
                 name: Some("Token 0".to_string()),
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
             mint1: TokenInfo {
                 mint_address: "55555555555555555555555555555555".to_string(),
@@ -476,6 +508,11 @@ mod tests {
                 owner: "66666666666666666666666666666666".to_string(),
                 symbol: Some("TOKEN1".to_string()),
                 name: Some("Token 1".to_string()),
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
             price_info: PriceInfo {
                 initial_price: 1.0,
@@ -519,6 +556,11 @@ mod tests {
             owner: "".to_string(),
             symbol: None,
             name: None,
+            log_uri: None,
+            description: None,
+            external_url: None,
+            tags: None,
+            attributes: None,
         };
         assert!(empty_token.is_empty());
 
@@ -529,6 +571,11 @@ mod tests {
             owner: "".to_string(),
             symbol: Some("".to_string()),
             name: Some("".to_string()),
+            log_uri: None,
+            description: None,
+            external_url: None,
+            tags: None,
+            attributes: None,
         };
         assert!(empty_string_token.is_empty());
 
@@ -539,6 +586,11 @@ mod tests {
             owner: "".to_string(), // owner为空
             symbol: Some("WSOL".to_string()),
             name: Some("Wrapped SOL".to_string()),
+            log_uri: None,
+            description: None,
+            external_url: None,
+            tags: None,
+            attributes: None,
         };
         assert!(partial_token.is_empty()); // owner为空，所以仍然是empty
 
@@ -549,6 +601,14 @@ mod tests {
             owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
             symbol: Some("WSOL".to_string()),
             name: Some("Wrapped SOL".to_string()),
+            log_uri: Some("https://example.com/logo.png".to_string()),
+            description: Some("Wrapped Solana".to_string()),
+            external_url: Some("https://solana.com".to_string()),
+            tags: Some(vec!["defi".to_string()]),
+            attributes: Some(vec![TokenAttribute {
+                trait_type: "type".to_string(),
+                value: "wrapped".to_string(),
+            }]),
         };
         assert!(!complete_token.is_empty());
 
@@ -559,6 +619,11 @@ mod tests {
             owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
             symbol: None,
             name: Some("Wrapped SOL".to_string()),
+            log_uri: None,
+            description: None,
+            external_url: None,
+            tags: None,
+            attributes: None,
         };
         assert!(no_symbol_token.is_empty()); // symbol为空，所以是empty
     }

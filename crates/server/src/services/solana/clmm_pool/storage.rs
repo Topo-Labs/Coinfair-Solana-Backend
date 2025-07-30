@@ -101,6 +101,11 @@ impl ClmmPoolStorageService {
                 owner: String::new(), // 需要从链上获取
                 symbol: None,
                 name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
 
             mint1: TokenInfo {
@@ -109,6 +114,11 @@ impl ClmmPoolStorageService {
                 owner: String::new(), // 需要从链上获取
                 symbol: None,
                 name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
 
             price_info: PriceInfo {
@@ -191,6 +201,11 @@ impl ClmmPoolStorageService {
                 owner: String::new(), // 需要从链上获取
                 symbol: None,
                 name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
 
             mint1: TokenInfo {
@@ -199,6 +214,11 @@ impl ClmmPoolStorageService {
                 owner: String::new(), // 需要从链上获取
                 symbol: None,
                 name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
 
             price_info: PriceInfo {
@@ -405,14 +425,47 @@ impl ClmmPoolStorageService {
 
         // 准备更新字段
         let mut mint_update_fields = Document::new();
+        
+        // 基础字段
         if let Some(symbol) = &metadata.symbol {
             mint_update_fields.insert("symbol", symbol);
         }
         if let Some(name) = &metadata.name {
             mint_update_fields.insert("name", name);
         }
+        
+        // 新增的元数据字段
+        if let Some(log_uri) = &metadata.logo_uri {
+            mint_update_fields.insert("log_uri", log_uri);
+        }
+        if let Some(description) = &metadata.description {
+            mint_update_fields.insert("description", description);
+        }
+        if let Some(external_url) = &metadata.external_url {
+            mint_update_fields.insert("external_url", external_url);
+        }
+        
+        // 处理 tags 数组字段
+        if !metadata.tags.is_empty() {
+            mint_update_fields.insert("tags", &metadata.tags);
+        }
+        
+        // 处理 attributes 数组字段
+        if let Some(attributes) = &metadata.attributes {
+            if !attributes.is_empty() {
+                // 将 TokenAttribute 转换为 BSON 文档
+                let attr_docs: Vec<Document> = attributes.iter().map(|attr| {
+                    doc! {
+                        "trait_type": &attr.trait_type,
+                        "value": &attr.value
+                    }
+                }).collect();
+                mint_update_fields.insert("attributes", attr_docs);
+            }
+        }
 
         if mint_update_fields.is_empty() {
+            info!("⚠️ 没有可更新的元数据字段: {}", mint_address);
             return Ok(false);
         }
 
@@ -462,6 +515,10 @@ impl ClmmPoolStorageService {
             Err(e) => {
                 warn!("⚠️ 更新mint1元数据失败: {} - {}", mint_address, e);
             }
+        }
+
+        if total_updated > 0 {
+            info!("🔄 代币元数据更新完成: {} (更新了 {} 个池子)", mint_address, total_updated);
         }
 
         Ok(total_updated > 0)

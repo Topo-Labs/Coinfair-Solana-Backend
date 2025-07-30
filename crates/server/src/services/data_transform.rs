@@ -238,11 +238,8 @@ impl DataTransformService {
 
     /// 获取链ID（根据环境动态判断）
     fn get_chain_id(&self) -> u32 {
-        match std::env::var("CARGO_ENV").unwrap_or_default().as_str() {
-            "Development" => 103, // Solana devnet
-            "Test" => 102,        // Solana testnet
-            _ => 101,             // Solana mainnet (默认)
-        }
+        use utils::SolanaChainId;
+        SolanaChainId::from_env().chain_id()
     }
 
     /// 增强mint标签（结合本地数据版本）
@@ -827,6 +824,11 @@ mod tests {
                 owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
                 symbol: Some("WSOL".to_string()),
                 name: Some("Wrapped SOL".to_string()),
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
             mint1: TokenInfo {
                 mint_address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
@@ -834,6 +836,11 @@ mod tests {
                 owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
                 symbol: Some("USDC".to_string()),
                 name: Some("USD Coin".to_string()),
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
             price_info: PriceInfo {
                 initial_price: 100.0,

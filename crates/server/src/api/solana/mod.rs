@@ -36,6 +36,12 @@ impl SolanaController {
                     .route("/mint", axum::routing::get(clmm_pool_query::get_pools_by_mint_pair))
                     .route("/ids", axum::routing::get(clmm_pool_query::get_pools_by_ids)),
             )
+            // pools/key路由 - 池子密钥信息
+            .nest(
+                "/pools/key",
+                Router::new()
+                    .route("/ids", axum::routing::get(clmm_pool_query::get_pools_key_by_ids)),
+            )
             // pools/line路由 - 流动性线图
             .nest("/pools/line", liquidity_line_controller::LiquidityLineController::routes())
             // CLMM配置路由

@@ -24,6 +24,7 @@ impl ClmmPoolQueryController {
             .route("/by-creator", get(get_pools_by_creator))
             .route("/query", get(query_pools))
             .route("/statistics", get(get_pool_statistics))
+            .route("/key/ids", get(get_pools_key_by_ids))
     }
 }
 
@@ -761,6 +762,167 @@ pub async fn get_pools_by_mint_pair(
                     data: vec![],
                     has_next_page: false,
                 },
+            };
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 根据多个池子ID获取池子密钥信息
+///
+/// 返回指定池子ID列表的完整Raydium密钥信息，包含程序ID、代币信息、金库、配置等。
+///
+/// # 查询参数
+///
+/// - `ids`: 多个池子地址，用逗号分隔
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "uuid",
+///   "success": true,
+///   "data": [
+///     {
+///       "programId": "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+///       "id": "EWsjgXuVrcAESbAyBo6Q2JCuuAdotBhp8g7Qhvf8GNek",
+///       "mintA": {
+///         "chainId": 101,
+///         "address": "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz",
+///         "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+///         "logoURI": "https://img-v1.raydium.io/icon/CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz.png",
+///         "symbol": "FAIR",
+///         "name": "Coinfair's Coin",
+///         "decimals": 9,
+///         "tags": ["hasFreeze"],
+///         "extensions": {}
+///       },
+///       "mintB": {
+///         "chainId": 101,
+///         "address": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+///         "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+///         "logoURI": "https://img-v1.raydium.io/icon/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB.png",
+///         "symbol": "USDT",
+///         "name": "USDT",
+///         "decimals": 6,
+///         "tags": ["hasFreeze"],
+///         "extensions": {}
+///       },
+///       "lookupTableAccount": "GSZngJkhWZsKFdXax7AGGaXSemifVnsv5ZaMyzzQVSMt",
+///       "openTime": "0",
+///       "vault": {
+///         "A": "4C3rJaRkP5WMdNtFKeGKeYWndTUrYCrboHTJEComysaw",
+///         "B": "GYGAw7n5vwyNM9ykLhQBvxF1FEu81AVgdNAPFZ25HKjw"
+///       },
+///       "config": {
+///         "id": "E64NGkDLLCdQ2yFNPcavaKptrEgmiQaNykUuLC1Qgwyp",
+///         "index": 1,
+///         "protocolFeeRate": 120000,
+///         "tradeFeeRate": 2500,
+///         "tickSpacing": 60,
+///         "fundFeeRate": 40000,
+///         "defaultRange": 0.1,
+///         "defaultRangePoint": [0.01, 0.05, 0.1, 0.2, 0.5]
+///       },
+///       "rewardInfos": [],
+///       "observationId": "9EofKmSNgY6s3bb1DgS5DaqXLZXUK6dK7oRJRBRPjh76",
+///       "exBitmapAccount": "3HJ1hfiLFjM1Lvt2eD3P4whttuxV2ihKnVADqVPDuX5g"
+///     },
+///     null
+///   ]
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/pools/key/ids",
+    params(
+        ("ids" = String, Query, description = "多个池子地址，用逗号分隔")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = crate::dtos::solana_dto::PoolKeyResponse),
+        (status = 400, description = "参数错误", body = crate::dtos::solana_dto::PoolKeyResponse),
+        (status = 500, description = "查询失败", body = crate::dtos::solana_dto::PoolKeyResponse)
+    ),
+    tag = "CLMM池子查询"
+)]
+pub async fn get_pools_key_by_ids(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<crate::dtos::solana_dto::PoolKeyResponse>, (StatusCode, Json<crate::dtos::solana_dto::PoolKeyResponse>)> {
+    info!("🔍 接收到池子密钥查询请求");
+    
+    // 验证必需参数
+    let ids = params.get("ids").ok_or_else(|| {
+        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        (StatusCode::BAD_REQUEST, Json(error_response))
+    })?;
+
+    // 验证 ids 参数格式
+    if ids.trim().is_empty() {
+        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 解析池子地址
+    let pool_addresses: Vec<String> = ids
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if pool_addresses.is_empty() {
+        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 限制一次查询的池子数量，防止过大查询
+    if pool_addresses.len() > 100 {
+        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+            id: uuid::Uuid::new_v4().to_string(),
+            success: false,
+            data: vec![],
+        };
+        return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+    }
+
+    // 验证每个地址的格式（基本长度检查）
+    for addr in &pool_addresses {
+        if addr.len() < 32 || addr.len() > 44 {
+            let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: vec![],
+            };
+            return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+        }
+    }
+
+    info!("  池子地址数量: {}", pool_addresses.len());
+    info!("  IDs: {:?}", pool_addresses);
+
+    match services.solana.get_pools_key_by_ids(pool_addresses).await {
+        Ok(response) => {
+            info!("✅ 池子密钥查询成功，返回{}个结果", response.data.len());
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ 池子密钥查询失败: {:?}", e);
+            let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+                id: uuid::Uuid::new_v4().to_string(),
+                success: false,
+                data: vec![],
             };
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
         }

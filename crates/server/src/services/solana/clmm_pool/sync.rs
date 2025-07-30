@@ -130,10 +130,7 @@ impl ClmmPoolSyncService {
         info!("📋 找到 {} 个需要同步的池子", pools_to_sync.len());
 
         // 批量获取mint信息以减少RPC调用
-        let mint_addresses: Vec<_> = pools_to_sync
-            .iter()
-            .flat_map(|pool| vec![&pool.mint0.mint_address, &pool.mint1.mint_address])
-            .collect();
+        let mint_addresses: Vec<_> = pools_to_sync.iter().flat_map(|pool| vec![&pool.mint0.mint_address, &pool.mint1.mint_address]).collect();
 
         let mint_info_cache = match self.batch_fetch_mint_info(&mint_addresses).await {
             Ok(cache) => cache,

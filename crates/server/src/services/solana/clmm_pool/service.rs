@@ -1,11 +1,13 @@
 // ClmmPoolService handles CLMM pool creation operations
 
-use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, TransactionStatus};
+use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, PoolKeyResponse, TransactionStatus};
 
+use super::super::config::ClmmConfigService;
 use super::super::shared::SharedContext;
 use super::chain_loader::ChainPoolLoader;
 use super::storage::{ClmmPoolStorageBuilder, ClmmPoolStorageService};
 use super::sync::{ClmmPoolSyncBuilder, ClmmPoolSyncService};
+use crate::dtos::solana_dto::{PoolConfig, PoolKeyInfo, PoolRewardInfo, RaydiumMintInfo, VaultAddresses};
 use anyhow::Result;
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey, signature::Keypair, transaction::Transaction};
 use spl_token::state::Mint;
@@ -13,6 +15,8 @@ use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
+use utils::ConfigManager;
+use uuid::Uuid;
 
 /// ClmmPoolService handles CLMM pool creation operations
 pub struct ClmmPoolService {
@@ -20,11 +24,12 @@ pub struct ClmmPoolService {
     storage: ClmmPoolStorageService,
     sync_service: ClmmPoolSyncService,
     chain_loader: ChainPoolLoader,
+    config_service: Arc<ClmmConfigService>,
 }
 
 impl ClmmPoolService {
     /// Create a new ClmmPoolService with shared context and database
-    pub fn new(shared: Arc<SharedContext>, database: &database::Database) -> Self {
+    pub fn new(shared: Arc<SharedContext>, database: &database::Database, config_service: Arc<ClmmConfigService>) -> Self {
         let storage = ClmmPoolStorageBuilder::from_database(database);
         let sync_storage = ClmmPoolStorageBuilder::from_database(database);
         let sync_service = ClmmPoolSyncBuilder::from_context_and_storage(shared.clone(), sync_storage, None);
@@ -34,7 +39,120 @@ impl ClmmPoolService {
             storage,
             sync_service,
             chain_loader,
+            config_service,
         }
+    }
+
+    /// 从配置服务获取CLMM配置，支持数据库优先，链上兜底，异步保存策略
+    async fn get_clmm_config_by_id(&self, config_id: &str) -> (u64, u64, u32, u64) {
+        use crate::services::solana::config::ClmmConfigServiceTrait;
+
+        // 1. 首先尝试从数据库获取配置
+        match self.config_service.get_clmm_configs().await {
+            Ok(configs) => {
+                // 查找匹配的配置
+                for config in configs {
+                    if config.id == config_id {
+                        info!("✅ 从数据库获取CLMM配置: {}", config_id);
+                        return (config.protocol_fee_rate, config.trade_fee_rate, config.tick_spacing, config.fund_fee_rate);
+                    }
+                }
+                info!("⚠️ 数据库中未找到配置ID {}，尝试从链上获取", config_id);
+            }
+            Err(e) => {
+                info!("⚠️ 数据库查询失败: {}，尝试从链上获取配置", e);
+            }
+        }
+
+        // 2. 数据库中没有找到，尝试从链上获取
+        match self.fetch_config_from_chain(config_id).await {
+            Ok((protocol_fee_rate, trade_fee_rate, tick_spacing, fund_fee_rate)) => {
+                info!("✅ 从链上获取CLMM配置: {}", config_id);
+
+                // 3. 异步保存到数据库（不阻塞当前响应）
+                let config_service = self.config_service.clone();
+                let config_id_owned = config_id.to_string();
+                tokio::spawn(async move {
+                    // 根据配置ID计算索引，这里使用基于地址的简单映射
+                    let index = Self::calculate_config_index_from_id(&config_id_owned);
+
+                    let clmm_config = crate::dtos::static_dto::ClmmConfig {
+                        id: config_id_owned.clone(),
+                        index,
+                        protocol_fee_rate,
+                        trade_fee_rate,
+                        tick_spacing,
+                        fund_fee_rate,
+                        default_range: 0.1,
+                        default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+                    };
+
+                    match config_service.save_clmm_config(clmm_config).await {
+                        Ok(_) => info!("🔄 异步保存CLMM配置成功: {} (索引: {})", config_id_owned, index),
+                        Err(e) => info!("⚠️ 异步保存CLMM配置失败: {} - {}", config_id_owned, e),
+                    }
+                });
+
+                return (protocol_fee_rate, trade_fee_rate, tick_spacing, fund_fee_rate);
+            }
+            Err(e) => {
+                info!("⚠️ 从链上获取CLMM配置失败: {} - {}，使用默认值", config_id, e);
+            }
+        }
+
+        // 4. 链上获取也失败，返回默认配置值
+        info!("🔧 使用默认CLMM配置值: {}", config_id);
+        (120000, 2500, 60, 40000)
+    }
+
+    /// 从链上获取单个CLMM配置
+    async fn fetch_config_from_chain(&self, config_id: &str) -> Result<(u64, u64, u32, u64)> {
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        // 解析配置地址
+        let config_pubkey = Pubkey::from_str(config_id).map_err(|e| anyhow::anyhow!("解析配置地址失败: {}", e))?;
+
+        // 从链上获取并反序列化账户数据
+        let account_loader = utils::solana::account_loader::AccountLoader::new(&self.shared.rpc_client);
+        let amm_config = account_loader
+            .load_and_deserialize::<raydium_amm_v3::states::AmmConfig>(&config_pubkey)
+            .await
+            .map_err(|e| anyhow::anyhow!("从链上获取配置失败: {}", e))?;
+
+        Ok((
+            amm_config.protocol_fee_rate as u64,
+            amm_config.trade_fee_rate as u64,
+            amm_config.tick_spacing as u32,
+            amm_config.fund_fee_rate as u64,
+        ))
+    }
+
+    /// 从配置ID计算配置索引
+    /// 这是一个简化的映射，实际生产中可能需要更复杂的逻辑
+    fn calculate_config_index_from_id(config_id: &str) -> u32 {
+        // 基于配置地址的哈希值计算索引，确保同一地址总是产生相同索引
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        config_id.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        // 将哈希值映射到合理的索引范围 (0-255)
+        (hash % 256) as u32
+    }
+
+    /// 获取或生成lookup table account地址
+    fn get_lookup_table_account(&self, _pool: &database::clmm_pool::ClmmPool) -> String {
+        // 优先使用池子扩展信息中的lookup table account
+        // 如果没有，可以基于池子地址生成或使用通用默认值
+
+        // 检查是否有已知的lookup table account（从扩展信息或其他来源）
+        // 这里可以扩展逻辑来从链上查询或计算
+
+        // 目前使用Raydium的通用lookup table account
+        "GSZngJkhWZsKFdXax7AGGaXSemifVnsv5ZaMyzzQVSMt".to_string()
     }
 
     /// Create CLMM pool transaction (unsigned)
@@ -533,5 +651,101 @@ impl ClmmPoolService {
     /// 启动自动同步服务
     pub async fn start_auto_sync(&self) -> Result<()> {
         self.sync_service.start_auto_sync().await.map_err(|e| anyhow::anyhow!("同步服务启动失败: {}", e))
+    }
+
+    /// 根据池子ID列表获取池子密钥信息
+    pub async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse> {
+        info!("🔍 查询池子密钥信息，数量: {}", pool_ids.len());
+
+        let mut pool_keys = Vec::new();
+
+        for pool_id in pool_ids {
+            info!("  处理池子: {}", pool_id);
+
+            // 1. 先从数据库获取基础信息
+            match self.storage.get_pool_by_address(&pool_id).await {
+                Ok(Some(pool)) => {
+                    // 2. 构建Raydium格式的代币信息
+                    let mint_a = RaydiumMintInfo {
+                        chain_id: utils::SolanaChainId::from_env().chain_id(),
+                        address: pool.mint0.mint_address.clone(),
+                        program_id: pool.mint0.owner.clone(),
+                        logo_uri: pool.mint0.log_uri.clone().unwrap_or(String::default()),
+                        symbol: pool.mint0.symbol.clone().unwrap_or_else(|| "UNKNOWN".to_string()),
+                        name: pool.mint0.name.clone().unwrap_or_else(|| "Unknown Token".to_string()),
+                        decimals: pool.mint0.decimals,
+                        tags: pool.mint0.tags.clone().unwrap_or_default(),
+                        extensions: serde_json::json!({}),
+                    };
+
+                    let mint_b = RaydiumMintInfo {
+                        chain_id: utils::SolanaChainId::from_env().chain_id(),
+                        address: pool.mint1.mint_address.clone(),
+                        program_id: pool.mint1.owner.clone(),
+                        logo_uri: pool.mint1.log_uri.clone().unwrap_or(String::default()),
+                        symbol: pool.mint1.symbol.clone().unwrap_or_else(|| "UNKNOWN".to_string()),
+                        name: pool.mint1.name.clone().unwrap_or_else(|| "Unknown Token".to_string()),
+                        decimals: pool.mint1.decimals,
+                        tags: pool.mint1.tags.clone().unwrap_or_default(),
+                        extensions: serde_json::json!({}),
+                    };
+
+                    // 3. 构建金库信息
+                    let vault = VaultAddresses {
+                        vault_a: pool.vault_info.token_vault_0.clone(),
+                        vault_b: pool.vault_info.token_vault_1.clone(),
+                    };
+
+                    // 4. 构建配置信息 - 从配置服务动态获取,支持数据库优先，链上兜底，异步保存策略
+                    let (protocol_fee_rate, trade_fee_rate, tick_spacing, fund_fee_rate) = self.get_clmm_config_by_id(&pool.amm_config_address).await;
+
+                    let config = PoolConfig {
+                        id: pool.amm_config_address.clone(),
+                        index: pool.config_index as u32,
+                        protocol_fee_rate,
+                        trade_fee_rate,
+                        tick_spacing,
+                        fund_fee_rate,
+                        default_range: 0.1,
+                        default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+                    };
+
+                    // 5. 构建奖励信息（目前为空，可从链上获取）
+                    let reward_infos: Vec<PoolRewardInfo> = vec![];
+
+                    // 6. 构建完整的池子密钥信息
+                    let pool_key_info = PoolKeyInfo {
+                        program_id: ConfigManager::get_raydium_program_id()?.to_string(),
+                        id: pool_id.clone(),
+                        mint_a,
+                        mint_b,
+                        lookup_table_account: self.get_lookup_table_account(&pool),
+                        open_time: pool.open_time.to_string(),
+                        vault,
+                        config,
+                        reward_infos,
+                        observation_id: pool.extension_info.observation_address.clone(),
+                        ex_bitmap_account: pool.extension_info.tickarray_bitmap_extension.clone(),
+                    };
+
+                    pool_keys.push(Some(pool_key_info));
+                    info!("✅ 池子密钥信息构建成功: {}", pool_id);
+                }
+                Ok(None) => {
+                    info!("⚠️ 未找到池子: {}", pool_id);
+                    pool_keys.push(None);
+                }
+                Err(e) => {
+                    info!("❌ 查询池子失败: {} - {}", pool_id, e);
+                    pool_keys.push(None);
+                }
+            }
+        }
+
+        Ok(PoolKeyResponse {
+            id: Uuid::new_v4().to_string(),
+            success: true,
+            data: pool_keys,
+        })
     }
 }

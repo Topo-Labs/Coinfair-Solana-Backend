@@ -4,7 +4,7 @@ use crate::dtos::solana_dto::{
     BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
     CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse,
     DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
-    NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, PriceQuoteRequest,
+    NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PoolKeyResponse, PositionInfo, PriceQuoteRequest,
     PriceQuoteResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
 };
 
@@ -50,11 +50,13 @@ impl SolanaService {
     /// Create a new SolanaService with database integration
     pub fn with_database(database: database::Database) -> Result<Self> {
         let shared_context = Arc::new(SharedContext::new()?);
+        let config_service = ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone());
+        let config_service_arc = Arc::new(config_service);
 
         Ok(Self {
             swap_service: SwapService::new(shared_context.clone()),
             position_service: PositionService::with_database(shared_context.clone(), Arc::new(database.clone())),
-            clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database),
+            clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database, config_service_arc.clone()),
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
             config_service: ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()),
             liquidity_line_service: LiquidityLineService::new(shared_context.rpc_client.clone(), Arc::new(database)),
@@ -118,6 +120,8 @@ pub trait SolanaServiceTrait {
     async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse>;
 
     async fn query_pools_with_new_format2(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse2>;
+    // Pool key operations - NEW
+    async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse>;
 
     // AMM Pool operations
     async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse>;
@@ -314,5 +318,11 @@ impl SolanaServiceTrait for SolanaService {
     // Liquidity line operations - delegate to liquidity_line_service
     async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData> {
         self.liquidity_line_service.get_pool_liquidity_line(request).await
+    }
+
+    // Pool key operations - NEW
+    async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse> {
+        // 使用共享服务来获取池子密钥信息
+        self.clmm_pool_service.get_pools_key_by_ids(pool_ids).await
     }
 }

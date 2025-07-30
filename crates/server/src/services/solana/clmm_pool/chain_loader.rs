@@ -131,6 +131,11 @@ impl ChainPoolLoader {
                 owner: mint0_account.owner.to_string(),
                 symbol: None, // 需要额外查询获取
                 name: None,   // 需要额外查询获取
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
 
             mint1: TokenInfo {
@@ -139,6 +144,11 @@ impl ChainPoolLoader {
                 owner: mint1_account.owner.to_string(),
                 symbol: None, // 需要额外查询获取
                 name: None,   // 需要额外查询获取
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
             },
 
             price_info: PriceInfo {
