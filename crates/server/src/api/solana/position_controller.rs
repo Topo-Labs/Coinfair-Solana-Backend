@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::dtos::solana_dto::ApiResponse;
 use crate::{
     dtos::solana_dto::{
         CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse,
@@ -268,13 +269,13 @@ pub async fn calculate_liquidity(
 pub async fn get_user_positions(
     Extension(services): Extension<Services>,
     Query(request): Query<GetUserPositionsRequest>,
-) -> Result<Json<UserPositionsResponse>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ApiResponse<UserPositionsResponse>>, (StatusCode, Json<ErrorResponse>)> {
     info!("📋 接收到获取用户仓位列表请求");
 
     match services.solana.get_user_positions(request).await {
         Ok(response) => {
             info!("✅ 获取用户仓位列表成功，共{}个仓位", response.total_count);
-            Ok(Json(response))
+            Ok(Json(ApiResponse::success(response)))
         }
         Err(e) => {
             error!("❌ 获取用户仓位列表失败: {:?}", e);
@@ -308,7 +309,7 @@ pub async fn get_user_positions(
 pub async fn get_position_info(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<PositionInfo>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ApiResponse<PositionInfo>>, (StatusCode, Json<ErrorResponse>)> {
     let position_key = params.get("position_key").ok_or_else(|| {
         let error_response = ErrorResponse::new("POSITION_INFO_ERROR", "缺少position_key参数");
         (StatusCode::BAD_REQUEST, Json(error_response))
@@ -319,7 +320,7 @@ pub async fn get_position_info(
     match services.solana.get_position_info(position_key.clone()).await {
         Ok(response) => {
             info!("✅ 获取仓位详情成功");
-            Ok(Json(response))
+            Ok(Json(ApiResponse::success(response)))
         }
         Err(e) => {
             error!("❌ 获取仓位详情失败: {:?}", e);
@@ -359,7 +360,7 @@ pub async fn get_position_info(
 pub async fn check_position_exists(
     Extension(services): Extension<Services>,
     Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Result<Json<Option<PositionInfo>>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<Json<ApiResponse<Option<PositionInfo>>>, (StatusCode, Json<ErrorResponse>)> {
     let pool_address = params
         .get("pool_address")
         .ok_or_else(|| {
@@ -405,7 +406,7 @@ pub async fn check_position_exists(
             } else {
                 info!("✅ 没有找到相同范围的仓位");
             }
-            Ok(Json(response))
+            Ok(Json(ApiResponse::success(response)))
         }
         Err(e) => {
             error!("❌ 检查仓位存在性失败: {:?}", e);

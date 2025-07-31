@@ -7,6 +7,7 @@ mod integration_tests {
     use crate::dtos::solana_dto::CreatePoolRequest;
     use crate::services::solana::clmm_pool::service::ClmmPoolService;
     use crate::services::solana::clmm_pool::storage::ClmmPoolStorageService;
+    use crate::services::solana::config::ClmmConfigService;
     use crate::services::solana::shared::SharedContext;
     use database::clmm_pool::{ClmmPool, ExtensionInfo, PoolQueryParams, PoolStatus, PriceInfo, SyncStatus, TokenInfo, VaultInfo};
     use std::sync::Arc;
@@ -36,8 +37,11 @@ mod integration_tests {
             // 初始化数据库索引
             storage_service.init_indexes().await?;
 
+            // 创建配置服务
+            let config_service = Arc::new(ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()));
+
             // 创建池子服务
-            let pool_service = ClmmPoolService::new(shared_context.clone(), &database);
+            let pool_service = ClmmPoolService::new(shared_context.clone(), &database, config_service);
 
             Ok(TestEnvironment {
                 shared_context,
@@ -274,6 +278,11 @@ mod integration_tests {
                 owner: "owner1".to_string(),
                 symbol: Some("SOL".to_string()),
                 name: Some("Solana".to_string()),
+                attributes: None,
+                description: None,
+                external_url: None,
+                log_uri: None,
+                tags: None,
             },
             mint1: TokenInfo {
                 mint_address: "mint1".to_string(),
@@ -281,6 +290,11 @@ mod integration_tests {
                 owner: "owner2".to_string(),
                 symbol: Some("USDC".to_string()),
                 name: Some("USD Coin".to_string()),
+                attributes: None,
+                description: None,
+                external_url: None,
+                log_uri: None,
+                tags: None,
             },
             price_info: PriceInfo {
                 initial_price: 100.0,

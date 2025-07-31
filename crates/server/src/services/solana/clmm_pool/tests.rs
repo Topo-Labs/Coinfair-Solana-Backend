@@ -2,6 +2,7 @@
 
 use super::ClmmPoolService;
 use crate::dtos::solana_dto::CreatePoolRequest;
+use crate::services::solana::config::ClmmConfigService;
 use crate::services::solana::shared::SharedContext;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -113,7 +114,8 @@ mod create_pool_tests {
             }
         };
 
-        let _service = ClmmPoolService::new(shared_context, &database);
+        let config_service = Arc::new(ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()));
+        let _service = ClmmPoolService::new(shared_context, &database, config_service);
         // If we get here without panicking, the service was created successfully
     }
 }

@@ -31,7 +31,7 @@ impl LiquidityService {
         let position_storage_service = PositionStorageService::placeholder();
         Self { shared, position_storage_service }
     }
-    
+
     /// Create a new LiquidityService with database
     pub fn with_database(shared: Arc<SharedContext>, db: Arc<database::Database>) -> Self {
         let position_storage_service = PositionStorageService::new(db);
@@ -189,7 +189,7 @@ impl LiquidityService {
             pool_address: request.pool_address.clone(),
             timestamp: now,
         };
-        
+
         // 异步保存增加流动性信息到数据库（不阻塞主流程）
         let storage_service = self.position_storage_service.clone();
         let request_clone = request.clone();
@@ -347,7 +347,7 @@ impl LiquidityService {
             explorer_url,
             timestamp: now,
         };
-        
+
         // 异步保存增加流动性交易信息到数据库（不阻塞主流程）
         let storage_service = self.position_storage_service.clone();
         let request_clone = request.clone();
@@ -442,9 +442,9 @@ impl LiquidityService {
         let amount_1_expected = amount_1_raw;
 
         // 7. 应用滑点保护
-        let slippage = request.max_slippage_percent.unwrap_or(0.5) / 100.0; // 转换为小数
-        let amount_0_with_slippage = position_utils.apply_slippage(amount_0_expected, slippage, false); // false表示减少
-        let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage, false);
+        let slippage_percent = request.max_slippage_percent.unwrap_or(0.5); // 直接使用百分比值，不除以100
+        let amount_0_with_slippage = position_utils.apply_slippage(amount_0_expected, slippage_percent, true); // true表示计算最小输出
+        let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage_percent, true);
 
         // 8. 计算转账费
         let (transfer_fee_0, transfer_fee_1) =
@@ -489,7 +489,7 @@ impl LiquidityService {
 
         // CLI版本的奖励账户构建（main.rs:1147-1153）：
         // - reward_info.token_vault (第1个账户)
-        // - get_associated_token_address(&user, &reward_mint) (第2个账户)  
+        // - get_associated_token_address(&user, &reward_mint) (第2个账户)
         // - reward_info.token_mint (第3个账户，V2版本中总是添加)
 
         // 验证奖励账户数量逻辑
@@ -512,11 +512,14 @@ impl LiquidityService {
                 remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
             }
         }
-        
+
         let expected_remaining_accounts = valid_reward_count * reward_group_account_num + 1; // +1 for tickarray_bitmap_extension
         info!(
             "🔧 奖励账户验证 - valid_reward_count: {}, reward_group_account_num: {}, expected_total: {}, actual: {}",
-            valid_reward_count, reward_group_account_num, expected_remaining_accounts, remaining_accounts.len()
+            valid_reward_count,
+            reward_group_account_num,
+            expected_remaining_accounts,
+            remaining_accounts.len()
         );
         info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
@@ -537,8 +540,12 @@ impl LiquidityService {
                 let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?;
                 let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &reward_info.token_mint, &reward_token_program);
                 info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
-                let create_reward_ata_ix =
-                    spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &reward_info.token_mint, &reward_token_program);
+                let create_reward_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &user_wallet,
+                    &reward_info.token_mint,
+                    &reward_token_program,
+                );
                 instructions.push(create_reward_ata_ix);
             }
         }
@@ -604,7 +611,7 @@ impl LiquidityService {
             will_close_position,
             timestamp: now,
         };
-        
+
         // 异步保存减少流动性信息到数据库（不阻塞主流程）
         let storage_service = self.position_storage_service.clone();
         let request_clone = request.clone();
@@ -680,9 +687,9 @@ impl LiquidityService {
         let amount_0_expected = amount_0_raw;
         let amount_1_expected = amount_1_raw;
 
-        let slippage = request.max_slippage_percent.unwrap_or(0.5) / 100.0;
-        let amount_0_with_slippage = position_utils.apply_slippage(amount_0_expected, slippage, false);
-        let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage, false);
+        let slippage_percent = request.max_slippage_percent.unwrap_or(0.5); // 直接使用百分比值，不除以100
+        let amount_0_with_slippage = position_utils.apply_slippage(amount_0_expected, slippage_percent, true); // true表示计算最小输出
+        let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage_percent, true);
 
         let (transfer_fee_0, transfer_fee_1) =
             self.shared
@@ -729,7 +736,7 @@ impl LiquidityService {
         // 验证奖励账户数量逻辑
         let mut valid_reward_count = 0;
         let reward_group_account_num = 3; // V2版本中始终为3个账户
-        
+
         for reward_info in &pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
                 valid_reward_count += 1;
@@ -746,11 +753,14 @@ impl LiquidityService {
                 remaining_accounts.push(AccountMeta::new(reward_info.token_mint, false));
             }
         }
-        
+
         let expected_remaining_accounts = valid_reward_count * reward_group_account_num + 1; // +1 for tickarray_bitmap_extension
         info!(
             "🔧 奖励账户验证 - valid_reward_count: {}, reward_group_account_num: {}, expected_total: {}, actual: {}",
-            valid_reward_count, reward_group_account_num, expected_remaining_accounts, remaining_accounts.len()
+            valid_reward_count,
+            reward_group_account_num,
+            expected_remaining_accounts,
+            remaining_accounts.len()
         );
         info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
@@ -785,8 +795,12 @@ impl LiquidityService {
                 let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?;
                 let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &reward_info.token_mint, &reward_token_program);
                 info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
-                let create_reward_ata_ix =
-                    spl_associated_token_account::instruction::create_associated_token_account_idempotent(&user_wallet, &user_wallet, &reward_info.token_mint, &reward_token_program);
+                let create_reward_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &user_wallet,
+                    &reward_info.token_mint,
+                    &reward_token_program,
+                );
                 instructions.push(create_reward_ata_ix);
             }
         }
@@ -860,7 +874,7 @@ impl LiquidityService {
             explorer_url,
             timestamp: now,
         };
-        
+
         // 异步保存减少流动性交易信息到数据库（不阻塞主流程）
         let storage_service = self.position_storage_service.clone();
         let request_clone = request.clone();

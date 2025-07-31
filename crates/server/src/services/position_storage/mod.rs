@@ -515,8 +515,6 @@ impl PositionStorageService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::dtos::solana_dto::{OpenPositionRequest, OpenPositionResponse, TransactionStatus};
 
     // 这里可以添加单元测试
     // 注意：实际测试需要 mock 数据库连接
