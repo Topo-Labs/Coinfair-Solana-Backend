@@ -135,7 +135,16 @@ pub trait SolanaServiceTrait {
     async fn sync_clmm_configs_from_chain(&self) -> Result<u64>;
     async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String>;
     async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse>;
-    
+
+    /// 创建新的AMM配置（构建交易）
+    async fn create_amm_config(&self, request: crate::dtos::static_dto::CreateAmmConfigRequest) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse>;
+
+    /// 创建新的AMM配置并发送交易（用于测试）
+    async fn create_amm_config_and_send_transaction(
+        &self,
+        request: crate::dtos::static_dto::CreateAmmConfigRequest,
+    ) -> Result<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse>;
+
     // Liquidity line operations
     async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData>;
 }
@@ -314,7 +323,18 @@ impl SolanaServiceTrait for SolanaService {
     async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
         self.config_service.save_clmm_config_from_request(request).await
     }
-    
+
+    async fn create_amm_config(&self, request: crate::dtos::static_dto::CreateAmmConfigRequest) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse> {
+        self.config_service.create_amm_config(request).await
+    }
+
+    async fn create_amm_config_and_send_transaction(
+        &self,
+        request: crate::dtos::static_dto::CreateAmmConfigRequest,
+    ) -> Result<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse> {
+        self.config_service.create_amm_config_and_send_transaction(request).await
+    }
+
     // Liquidity line operations - delegate to liquidity_line_service
     async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData> {
         self.liquidity_line_service.get_pool_liquidity_line(request).await

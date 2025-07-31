@@ -537,7 +537,7 @@ impl DataTransformService {
     /// 根据配置索引计算交易费率
     fn calculate_trade_fee_rate(&self, config_index: u16) -> u32 {
         match config_index {
-            0 => 100,   // 0.01%
+            0 => 3000,  // 0.01%
             1 => 500,   // 0.05%
             2 => 2500,  // 0.25%
             3 => 10000, // 1%
@@ -548,7 +548,7 @@ impl DataTransformService {
     /// 根据配置索引计算tick间距
     fn calculate_tick_spacing(&self, config_index: u16) -> u32 {
         match config_index {
-            0 => 1,
+            0 => 60,
             1 => 10,
             2 => 50,
             3 => 100,
@@ -559,7 +559,7 @@ impl DataTransformService {
     /// 根据配置索引计算手续费率
     fn calculate_fee_rate(&self, config_index: u16) -> f64 {
         match config_index {
-            0 => 0.0001, // 0.01%
+            0 => 0.0005, // 0.05%
             1 => 0.0005, // 0.05%
             2 => 0.0025, // 0.25%
             3 => 0.01,   // 1%

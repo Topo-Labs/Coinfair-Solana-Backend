@@ -45,6 +45,76 @@ impl TransactionBuilder {
     }
 }
 
+/// AMM配置指令构建器 - 构建AMM配置相关指令
+pub struct AmmConfigInstructionBuilder;
+
+impl AmmConfigInstructionBuilder {
+    /// 构建创建AMM配置指令
+    pub fn build_create_amm_config_instruction(
+        program_id: &Pubkey,
+        owner: &Pubkey,
+        config_index: u16,
+        tick_spacing: u16,
+        trade_fee_rate: u32,
+        protocol_fee_rate: u32,
+        fund_fee_rate: u32,
+    ) -> Result<solana_sdk::instruction::Instruction> {
+        use super::{LogUtils, PDACalculator};
+        use borsh::BorshSerialize;
+
+        LogUtils::log_operation_start("创建AMM配置指令构建", &format!("配置索引: {}", config_index));
+
+        // 计算AMM配置PDA
+        let (amm_config_key, _bump) = PDACalculator::calculate_amm_config_pda(program_id, config_index);
+
+        // 使用预定义的discriminator常量 - CreateAmmConfig指令
+        let discriminator = instruction::CreateAmmConfig::DISCRIMINATOR;
+
+        #[derive(BorshSerialize)]
+        struct CreateAmmConfigArgs {
+            index: u16,
+            tick_spacing: u16,
+            trade_fee_rate: u32,
+            protocol_fee_rate: u32,
+            fund_fee_rate: u32,
+        }
+
+        let args = CreateAmmConfigArgs {
+            index: config_index,
+            tick_spacing,
+            trade_fee_rate,
+            protocol_fee_rate,
+            fund_fee_rate,
+        };
+
+        let mut data = discriminator.to_vec();
+        args.serialize(&mut data)?;
+
+        // 构建账户列表
+        let accounts = vec![
+            AccountMetaBuilder::signer(*owner),                                    // owner (signer)
+            AccountMetaBuilder::writable(amm_config_key, false),                   // amm_config (writable, PDA)
+            AccountMetaBuilder::readonly(solana_sdk::system_program::id(), false), // system_program
+        ];
+
+        let instruction = solana_sdk::instruction::Instruction {
+            program_id: *program_id,
+            accounts,
+            data,
+        };
+
+        LogUtils::log_operation_success(
+            "创建AMM配置指令构建",
+            &format!(
+                "配置地址: {}, 参数: tick_spacing={}, trade_fee_rate={}, protocol_fee_rate={}, fund_fee_rate={}",
+                amm_config_key, tick_spacing, trade_fee_rate, protocol_fee_rate, fund_fee_rate
+            ),
+        );
+
+        Ok(instruction)
+    }
+}
+
 /// 账户元数据构建器 - 统一管理账户元数据创建
 pub struct AccountMetaBuilder;
 

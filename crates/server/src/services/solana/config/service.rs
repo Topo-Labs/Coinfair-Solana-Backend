@@ -1,10 +1,15 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use database::{clmm_config::ClmmConfigRepository, Database};
+use solana_sdk::signature::Signer;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::dtos::static_dto::{ClmmConfig, ClmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse};
+use crate::dtos::static_dto::{
+    ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest, CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
+};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 
 /// CLMM配置服务trait
 #[async_trait]
@@ -20,9 +25,16 @@ pub trait ClmmConfigServiceTrait {
 
     /// 保存新的CLMM配置（基于请求数据）
     async fn save_clmm_config_from_request(&self, request: SaveClmmConfigRequest) -> Result<SaveClmmConfigResponse>;
+
+    /// 创建新的AMM配置（构建交易）
+    async fn create_amm_config(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigResponse>;
+
+    /// 创建新的AMM配置并发送交易（用于测试）
+    async fn create_amm_config_and_send_transaction(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigAndSendTransactionResponse>;
 }
 
 /// CLMM配置服务实现
+#[derive(Clone)]
 pub struct ClmmConfigService {
     database: Arc<Database>,
     rpc_client: Arc<solana_client::rpc_client::RpcClient>,
@@ -43,18 +55,14 @@ impl ClmmConfigService {
     /// 这个方法确保所有配置ID计算保持一致
     fn calculate_config_pda(&self, index: u16) -> Result<String> {
         info!("🔍 计算CLMM配置PDA，索引: {}", index);
-        
-        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()
-            .map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
-            
-        let (config_pda, bump) = utils::solana::calculators::PDACalculator::calculate_amm_config_pda(
-            &raydium_program_id, 
-            index
-        );
-        
+
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id().map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+
+        let (config_pda, bump) = utils::solana::calculators::PDACalculator::calculate_amm_config_pda(&raydium_program_id, index);
+
         let config_id = config_pda.to_string();
         info!("✅ 索引{}的配置PDA: {} (bump: {})", index, config_id, bump);
-        
+
         Ok(config_id)
     }
 }
@@ -150,8 +158,7 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         let mut pda_addresses = Vec::new();
         for &index in &amm_config_indexes {
             let config_id = self.calculate_config_pda(index)?;
-            let config_pda = config_id.parse::<solana_sdk::pubkey::Pubkey>()
-                .map_err(|e| anyhow::anyhow!("解析配置PDA失败: {}", e))?;
+            let config_pda = config_id.parse::<solana_sdk::pubkey::Pubkey>().map_err(|e| anyhow::anyhow!("解析配置PDA失败: {}", e))?;
             pda_addresses.push(config_pda);
         }
         info!("📋 计算所有AMM配置PDA: {:?}", pda_addresses);
@@ -288,13 +295,208 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
             }
         }
     }
+
+    /// 创建新的AMM配置（构建交易）
+    async fn create_amm_config(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigResponse> {
+        info!("🔧 开始构建创建AMM配置交易");
+        info!("  配置索引: {}", request.config_index);
+        info!("  tick间距: {}", request.tick_spacing);
+        info!("  交易费率: {}", request.trade_fee_rate);
+        info!("  协议费率: {}", request.protocol_fee_rate);
+        info!("  基金费率: {}", request.fund_fee_rate);
+
+        // 1. 获取必要的配置信息
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id().map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+
+        let admin_keypair = utils::solana::ConfigManager::get_admin_keypair().map_err(|e| anyhow::anyhow!("获取管理员密钥失败: {}", e))?;
+
+        // 2. 计算AMM配置地址
+        let (config_address, _bump) = utils::solana::PDACalculator::calculate_amm_config_pda(&raydium_program_id, request.config_index);
+
+        info!("📍 计算得到的配置地址: {}", config_address);
+
+        // 3. 检查配置是否已存在
+        match self.rpc_client.get_account(&config_address) {
+            Ok(_) => {
+                return Err(anyhow::anyhow!("配置索引 {} 已存在", request.config_index));
+            }
+            Err(_) => {
+                info!("✅ 配置索引 {} 可用", request.config_index);
+            }
+        }
+
+        // 4. 构建创建AMM配置指令
+        let create_instruction = utils::solana::AmmConfigInstructionBuilder::build_create_amm_config_instruction(
+            &raydium_program_id,
+            &admin_keypair.pubkey(),
+            request.config_index,
+            request.tick_spacing,
+            request.trade_fee_rate,
+            request.protocol_fee_rate,
+            request.fund_fee_rate,
+        )?;
+
+        // 5. 构建未签名交易
+        let mut message = solana_sdk::message::Message::new(&[create_instruction], Some(&admin_keypair.pubkey()));
+        message.recent_blockhash = self.rpc_client.get_latest_blockhash().map_err(|e| anyhow::anyhow!("获取最新区块哈希失败: {}", e))?;
+
+        // 序列化交易消息为Base64
+        let transaction_data = bincode::serialize(&message).map_err(|e| anyhow::anyhow!("序列化交易失败: {}", e))?;
+        let transaction_base64 = BASE64_STANDARD.encode(&transaction_data);
+
+        info!("✅ 创建AMM配置交易构建成功");
+
+        // 构建交易消息摘要
+        let transaction_message = format!(
+            "创建AMM配置 - 索引: {}, tick间距: {}, 交易费率: {}",
+            request.config_index, request.tick_spacing, request.trade_fee_rate
+        );
+
+        let now = chrono::Utc::now().timestamp();
+
+        let response = CreateAmmConfigResponse {
+            transaction: transaction_base64,
+            transaction_message,
+            config_address: config_address.to_string(),
+            config_index: request.config_index,
+            tick_spacing: request.tick_spacing,
+            trade_fee_rate: request.trade_fee_rate,
+            protocol_fee_rate: request.protocol_fee_rate,
+            fund_fee_rate: request.fund_fee_rate,
+            timestamp: now,
+        };
+
+        // 异步保存配置到数据库（不阻塞主流程）
+        let config_to_save = ClmmConfig {
+            id: config_address.to_string(),
+            index: request.config_index as u32,
+            protocol_fee_rate: request.protocol_fee_rate as u64,
+            trade_fee_rate: request.trade_fee_rate as u64,
+            tick_spacing: request.tick_spacing as u32,
+            fund_fee_rate: request.fund_fee_rate as u64,
+            default_range: 0.1,
+            default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+        };
+
+        let service_clone = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = service_clone.save_clmm_config(config_to_save).await {
+                tracing::warn!("保存AMM配置到数据库失败: {}", e);
+            } else {
+                tracing::info!("✅ AMM配置已异步保存到数据库");
+            }
+        });
+
+        Ok(response)
+    }
+
+    /// 创建新的AMM配置并发送交易（用于测试）
+    async fn create_amm_config_and_send_transaction(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigAndSendTransactionResponse> {
+        info!("🚀 开始创建AMM配置并发送交易");
+        info!("  配置索引: {}", request.config_index);
+        info!("  tick间距: {}", request.tick_spacing);
+        info!("  交易费率: {}", request.trade_fee_rate);
+        info!("  协议费率: {}", request.protocol_fee_rate);
+        info!("  基金费率: {}", request.fund_fee_rate);
+
+        // 1. 获取必要的配置信息
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id().map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+
+        let admin_keypair = utils::solana::ConfigManager::get_admin_keypair().map_err(|e| anyhow::anyhow!("获取管理员密钥失败: {}", e))?;
+
+        // 2. 计算AMM配置地址
+        let (config_address, _bump) = utils::solana::PDACalculator::calculate_amm_config_pda(&raydium_program_id, request.config_index);
+
+        info!("📍 计算得到的配置地址: {}", config_address);
+
+        // 3. 检查配置是否已存在
+        match self.rpc_client.get_account(&config_address) {
+            Ok(_) => {
+                return Err(anyhow::anyhow!("配置索引 {} 已存在", request.config_index));
+            }
+            Err(_) => {
+                info!("✅ 配置索引 {} 可用", request.config_index);
+            }
+        }
+
+        // 4. 构建创建AMM配置指令
+        let create_instruction = utils::solana::AmmConfigInstructionBuilder::build_create_amm_config_instruction(
+            &raydium_program_id,
+            &admin_keypair.pubkey(),
+            request.config_index,
+            request.tick_spacing,
+            request.trade_fee_rate,
+            request.protocol_fee_rate,
+            request.fund_fee_rate,
+        )?;
+
+        // 5. 构建、签名并发送交易
+        let recent_blockhash = self.rpc_client.get_latest_blockhash().map_err(|e| anyhow::anyhow!("获取最新区块哈希失败: {}", e))?;
+        let transaction = solana_sdk::transaction::Transaction::new_signed_with_payer(&[create_instruction], Some(&admin_keypair.pubkey()), &[&admin_keypair], recent_blockhash);
+
+        // 6. 发送交易
+        info!("📡 发送创建AMM配置交易...");
+        let signature = self
+            .rpc_client
+            .send_and_confirm_transaction(&transaction)
+            .map_err(|e| anyhow::anyhow!("发送交易失败: {}", e))?;
+
+        info!("✅ AMM配置创建成功");
+        info!("  交易签名: {}", signature);
+        info!("  配置地址: {}", config_address);
+
+        // 7. 异步保存配置到数据库（不阻塞主流程）
+        info!("💾 启动异步保存配置到数据库...");
+        let config_to_save = ClmmConfig {
+            id: config_address.to_string(),
+            index: request.config_index as u32,
+            protocol_fee_rate: request.protocol_fee_rate as u64,
+            trade_fee_rate: request.trade_fee_rate as u64,
+            tick_spacing: request.tick_spacing as u32,
+            fund_fee_rate: request.fund_fee_rate as u64,
+            default_range: 0.1,
+            default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
+        };
+
+        let service_clone = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = service_clone.save_clmm_config(config_to_save).await {
+                tracing::warn!("保存AMM配置到数据库失败: {}", e);
+            } else {
+                tracing::info!("✅ AMM配置已异步保存到数据库");
+            }
+        });
+
+        // 8. 构建响应（立即返回，不等待数据库保存）
+        let explorer_url = format!("https://explorer.solana.com/tx/{}", signature);
+        let now = chrono::Utc::now().timestamp();
+
+        let db_save_response = SaveClmmConfigResponse {
+            id: config_address.to_string(),
+            created: true,
+            message: format!("交易已成功提交，配置正在异步保存到数据库"),
+        };
+
+        Ok(CreateAmmConfigAndSendTransactionResponse {
+            signature: signature.to_string(),
+            config_address: config_address.to_string(),
+            config_index: request.config_index,
+            tick_spacing: request.tick_spacing,
+            trade_fee_rate: request.trade_fee_rate,
+            protocol_fee_rate: request.protocol_fee_rate,
+            fund_fee_rate: request.fund_fee_rate,
+            explorer_url,
+            db_save_response,
+            timestamp: now,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use database::Database;
+    use std::sync::Arc;
     use utils::config::AppConfig;
 
     async fn create_test_service() -> ClmmConfigService {
@@ -323,25 +525,25 @@ mod tests {
         // 测试PDA计算
         let index = 0;
         let result = service.calculate_config_pda(index);
-        
+
         assert!(result.is_ok());
         let config_id = result.unwrap();
-        
+
         // 验证配置ID不为空且是有效的Pubkey字符串格式
         assert!(!config_id.is_empty());
         assert!(config_id.parse::<solana_sdk::pubkey::Pubkey>().is_ok());
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_pda_consistency() {
         let service = create_test_service().await;
 
         let index = 1;
-        
+
         // 多次计算同一索引的PDA，结果应该一致
         let config_id1 = service.calculate_config_pda(index).unwrap();
         let config_id2 = service.calculate_config_pda(index).unwrap();
-        
+
         assert_eq!(config_id1, config_id2);
     }
 
@@ -353,7 +555,7 @@ mod tests {
         let config_id0 = service.calculate_config_pda(0).unwrap();
         let config_id1 = service.calculate_config_pda(1).unwrap();
         let config_id2 = service.calculate_config_pda(2).unwrap();
-        
+
         assert_ne!(config_id0, config_id1);
         assert_ne!(config_id1, config_id2);
         assert_ne!(config_id0, config_id2);

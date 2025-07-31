@@ -341,6 +341,110 @@ pub struct ClmmConfig {
 /// CLMM配置响应类型
 pub type ClmmConfigResponse = Vec<ClmmConfig>;
 
+/// 创建AMM配置请求
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, validator::Validate)]
+pub struct CreateAmmConfigRequest {
+    /// 配置索引
+    #[validate(range(min = 0, max = 65535))]
+    pub config_index: u16,
+
+    /// tick间距 - 决定价格点之间的间隔
+    #[validate(range(min = 1, max = 1000))]
+    pub tick_spacing: u16,
+
+    /// 交易费率 - 以百万分之一为单位 (10^-6)
+    #[validate(range(min = 0, max = 1000000))]
+    pub trade_fee_rate: u32,
+
+    /// 协议费率 - 以百万分之一为单位 (10^-6)
+    #[validate(range(min = 0, max = 1000000))]
+    pub protocol_fee_rate: u32,
+
+    /// 基金费率 - 以百万分之一为单位 (10^-6)
+    #[validate(range(min = 0, max = 1000000))]
+    pub fund_fee_rate: u32,
+}
+
+/// 创建AMM配置响应（构建交易）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateAmmConfigResponse {
+    /// 序列化的交易数据（Base64）
+    pub transaction: String,
+
+    /// 交易消息描述
+    #[serde(rename = "transactionMessage")]
+    pub transaction_message: String,
+
+    /// 创建的配置地址
+    #[serde(rename = "configAddress")]
+    pub config_address: String,
+
+    /// 配置索引
+    #[serde(rename = "configIndex")]
+    pub config_index: u16,
+
+    /// tick间距
+    #[serde(rename = "tickSpacing")]
+    pub tick_spacing: u16,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u32,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u32,
+
+    /// 创建时间戳
+    pub timestamp: i64,
+}
+
+/// 创建AMM配置并发送交易响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateAmmConfigAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 创建的配置地址
+    #[serde(rename = "configAddress")]
+    pub config_address: String,
+
+    /// 配置索引
+    #[serde(rename = "configIndex")]
+    pub config_index: u16,
+
+    /// tick间距
+    #[serde(rename = "tickSpacing")]
+    pub tick_spacing: u16,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u32,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u32,
+
+    /// 浏览器链接
+    #[serde(rename = "explorerUrl")]
+    pub explorer_url: String,
+
+    /// 配置保存到数据库的响应
+    #[serde(rename = "dbSaveResponse")]
+    pub db_save_response: SaveClmmConfigResponse,
+
+    /// 创建时间戳
+    pub timestamp: i64,
+}
+
 /// 保存CLMM配置请求
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, validator::Validate)]
 pub struct SaveClmmConfigRequest {
