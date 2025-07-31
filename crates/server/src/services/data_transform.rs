@@ -7,8 +7,10 @@ use crate::dtos::solana_dto::{ExtendedMintInfo, NewPoolListResponse, NewPoolList
 use crate::services::metaplex_service::{MetaplexService, TokenMetadata};
 use anyhow::Result;
 use database::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
+use database::clmm_pool::PoolType;
 use std::collections::HashMap;
 use tracing::{debug, info};
+use utils::constants;
 use uuid::Uuid;
 
 /// 数据转换服务
@@ -36,16 +38,20 @@ impl DataTransformService {
         for pool in &old_response.pools {
             // 检查mint0信息是否为空
             if pool.mint0.is_empty() {
-                mint_addresses.push(pool.mint0.mint_address.clone());
-                empty_token_count += 1;
+                if !mint_addresses.contains(&pool.mint0.mint_address) {
+                    mint_addresses.push(pool.mint0.mint_address.clone());
+                    empty_token_count += 1;
+                }
             } else {
                 filled_token_count += 1;
             }
 
             // 检查mint1信息是否为空
             if pool.mint1.is_empty() {
-                mint_addresses.push(pool.mint1.mint_address.clone());
-                empty_token_count += 1;
+                if !mint_addresses.contains(&pool.mint1.mint_address) {
+                    mint_addresses.push(pool.mint1.mint_address.clone());
+                    empty_token_count += 1;
+                }
             } else {
                 filled_token_count += 1;
             }
@@ -96,16 +102,20 @@ impl DataTransformService {
         for pool in &old_response.pools {
             // 检查mint0信息是否为空
             if pool.mint0.is_empty() {
-                mint_addresses.push(pool.mint0.mint_address.clone());
-                empty_token_count += 1;
+                if !mint_addresses.contains(&pool.mint0.mint_address) {
+                    mint_addresses.push(pool.mint0.mint_address.clone());
+                    empty_token_count += 1;
+                }
             } else {
                 filled_token_count += 1;
             }
 
             // 检查mint1信息是否为空
             if pool.mint1.is_empty() {
-                mint_addresses.push(pool.mint1.mint_address.clone());
-                empty_token_count += 1;
+                if !mint_addresses.contains(&pool.mint1.mint_address) {
+                    mint_addresses.push(pool.mint1.mint_address.clone());
+                    empty_token_count += 1;
+                }
             } else {
                 filled_token_count += 1;
             }
@@ -155,8 +165,8 @@ impl DataTransformService {
 
         let pool_info = PoolInfo {
             pool_type: match pool.pool_type {
-                database::clmm_pool::model::PoolType::Concentrated => "Concentrated".to_string(),
-                database::clmm_pool::model::PoolType::Standard => "Standard".to_string(),
+                PoolType::Concentrated => "Concentrated".to_string(),
+                PoolType::Standard => "Standard".to_string(),
             },
             program_id: self.get_program_id_for_pool(&pool),
             id: pool.pool_address.clone(),
@@ -673,14 +683,8 @@ impl DataTransformService {
     fn get_program_id_for_pool(&self, pool: &ClmmPool) -> String {
         // 根据池子类型和配置返回相应的程序ID
         match pool.pool_type {
-            database::clmm_pool::model::PoolType::Concentrated => {
-                // CLMM程序ID - Raydium CLMM
-                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".to_string()
-            }
-            database::clmm_pool::model::PoolType::Standard => {
-                // 标准AMM程序ID - Raydium AMM V4
-                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string()
-            }
+            PoolType::Concentrated => std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string()),
+            PoolType::Standard => std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string()),
         }
     }
 

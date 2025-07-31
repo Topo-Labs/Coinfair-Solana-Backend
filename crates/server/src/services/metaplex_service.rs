@@ -939,7 +939,7 @@ impl MetaplexService {
                     symbol: None,
                     name: None,
                     logo_uri: None,
-                    description: None,
+                    description: Some("Token without metadata".to_string()),
                     external_url: None,
                     attributes: None,
                     tags: vec![],

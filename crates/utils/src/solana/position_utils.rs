@@ -94,14 +94,7 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 根据流动性计算token数量
-    pub fn calculate_amounts_from_liquidity(
-        &self,
-        current_tick: i32,
-        current_sqrt_price_x64: u128,
-        tick_lower: i32,
-        tick_upper: i32,
-        liquidity: u128,
-    ) -> Result<(u64, u64)> {
+    pub fn calculate_amounts_from_liquidity(&self, current_tick: i32, current_sqrt_price_x64: u128, tick_lower: i32, tick_upper: i32, liquidity: u128) -> Result<(u64, u64)> {
         raydium_amm_v3::libraries::liquidity_math::get_delta_amounts_signed(current_tick, current_sqrt_price_x64, tick_lower, tick_upper, liquidity as i128)
             .map_err(|e| anyhow::anyhow!("流动性计算金额失败: {:?}", e))
     }
@@ -120,13 +113,7 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 检查仓位是否已存在 - 带重试逻辑
-    pub async fn find_existing_position(
-        &self,
-        user_wallet: &Pubkey,
-        pool_address: &Pubkey,
-        tick_lower: i32,
-        tick_upper: i32,
-    ) -> Result<Option<ExistingPosition>> {
+    pub async fn find_existing_position(&self, user_wallet: &Pubkey, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32) -> Result<Option<ExistingPosition>> {
         info!("🔍 检查是否存在相同范围的仓位");
         info!("  钱包: {}", user_wallet);
         info!("  池子: {}", pool_address);
@@ -149,13 +136,7 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 内部查找方法 - 单次尝试
-    async fn find_existing_position_internal(
-        &self,
-        user_wallet: &Pubkey,
-        pool_address: &Pubkey,
-        tick_lower: i32,
-        tick_upper: i32,
-    ) -> Result<Option<ExistingPosition>> {
+    async fn find_existing_position_internal(&self, user_wallet: &Pubkey, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32) -> Result<Option<ExistingPosition>> {
         // 获取用户所有NFT和position
         let position_nfts = self.get_user_position_nfts(user_wallet).await?;
         info!("🔍 找到 {} 个Position NFT", position_nfts.len());
@@ -175,10 +156,7 @@ impl<'a> PositionUtils<'a> {
                             info!("    tick范围: {} - {}", position_state.tick_lower_index, position_state.tick_upper_index);
                             info!("    流动性: {}", position_state.liquidity);
 
-                            if position_state.pool_id == *pool_address
-                                && position_state.tick_lower_index == tick_lower
-                                && position_state.tick_upper_index == tick_upper
-                            {
+                            if position_state.pool_id == *pool_address && position_state.tick_lower_index == tick_lower && position_state.tick_upper_index == tick_upper {
                                 info!("  🎯 找到匹配的仓位！");
                                 return Ok(Some(ExistingPosition {
                                     nft_mint: nft_info.nft_mint,
@@ -236,10 +214,7 @@ impl<'a> PositionUtils<'a> {
     async fn get_position_nfts_by_program_enhanced(&self, user_wallet: &Pubkey, token_program: &Pubkey) -> Result<Vec<PositionNftInfo>> {
         use solana_sdk::commitment_config::CommitmentConfig;
 
-        info!(
-            "🔍 获取{}程序的Position NFT",
-            if *token_program == spl_token::id() { "经典Token" } else { "Token-2022" }
-        );
+        info!("🔍 获取{}程序的Position NFT", if *token_program == spl_token::id() { "经典Token" } else { "Token-2022" });
 
         // 使用 Confirmed commitment 确保获取到最新数据
         let commitment = CommitmentConfig::confirmed();
@@ -272,9 +247,9 @@ impl<'a> PositionUtils<'a> {
                             .parse::<u64>()
                             .unwrap_or_else(|err| panic!("Invalid token amount: {}", err));
 
-                        let _close_authority = ui_token_account.close_authority.map_or(*user_wallet, |s| {
-                            s.parse::<Pubkey>().unwrap_or_else(|err| panic!("Invalid close authority: {}", err))
-                        });
+                        let _close_authority = ui_token_account
+                            .close_authority
+                            .map_or(*user_wallet, |s| s.parse::<Pubkey>().unwrap_or_else(|err| panic!("Invalid close authority: {}", err)));
 
                         if ui_token_account.token_amount.decimals == 0 && token_amount == 1 {
                             // 计算position PDA
@@ -316,13 +291,7 @@ impl<'a> PositionUtils<'a> {
     }
 
     /// 构建remaining accounts（tick arrays和bitmap）
-    pub async fn build_remaining_accounts(
-        &self,
-        pool_address: &Pubkey,
-        tick_lower: i32,
-        tick_upper: i32,
-        tick_spacing: u16,
-    ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
+    pub async fn build_remaining_accounts(&self, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32, tick_spacing: u16) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let mut remaining_accounts = Vec::new();
 
@@ -423,5 +392,43 @@ impl anchor_lang::AccountDeserialize for PersonalPositionState {
             token_fees_owed_0: position_state.token_fees_owed_0,
             token_fees_owed_1: position_state.token_fees_owed_1,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_position_seed_consistency() {
+        // 验证我们使用的 "position" 字符串是否与raydium_amm_v3::states::POSITION_SEED一致
+        let our_seed = b"position";
+        let raydium_seed = raydium_amm_v3::states::POSITION_SEED.as_bytes();
+
+        assert_eq!(
+            our_seed,
+            raydium_seed,
+            "我们使用的POSITION_SEED与raydium库不一致! 我们使用: {:?}, raydium使用: {:?}",
+            std::str::from_utf8(our_seed),
+            std::str::from_utf8(raydium_seed)
+        );
+    }
+
+    #[test]
+    fn test_pda_calculation_consistency() {
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        // 测试用的NFT mint地址
+        let test_mint = Pubkey::from_str("11111111111111111111111111111112").unwrap();
+        let test_program_id = Pubkey::from_str("CAMMCzo5YL8w4VFF8KVHrK22GGUQpMTdQa5KH8DF9EgV").unwrap();
+
+        // 我们的计算方式
+        let (our_pda, our_bump) = Pubkey::find_program_address(&[b"position", test_mint.as_ref()], &test_program_id);
+
+        // 外部项目的计算方式
+        let (external_pda, external_bump) = Pubkey::find_program_address(&[raydium_amm_v3::states::POSITION_SEED.as_bytes(), test_mint.as_ref()], &test_program_id);
+
+        assert_eq!(our_pda, external_pda, "PDA计算不一致! 我们计算: {}, 外部项目计算: {}", our_pda, external_pda);
+        assert_eq!(our_bump, external_bump, "PDA bump不一致! 我们计算: {}, 外部项目计算: {}", our_bump, external_bump);
     }
 }
