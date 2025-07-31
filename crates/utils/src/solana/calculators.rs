@@ -17,10 +17,9 @@ impl TransferFeeCalculator {
         if let Ok(mint_state) = account_state {
             let transfer_fee_config = mint_state.get_extension::<TransferFeeConfig>();
             info!("💰 正算 Transfer fee config: {:?}", transfer_fee_config);
-            let fee = if let Ok(transfer_fee_config) = transfer_fee_config {
-                transfer_fee_config.calculate_epoch_fee(epoch, amount).unwrap_or(0)
-            } else {
-                0
+            let fee = match transfer_fee_config {
+                Ok(config) => config.calculate_epoch_fee(epoch, amount).unwrap_or(0),
+                Err(_) => 0,
             };
             Ok(fee)
         } else {
@@ -34,20 +33,25 @@ impl TransferFeeCalculator {
         if let Ok(mint_state) = account_state {
             let transfer_fee_config = mint_state.get_extension::<TransferFeeConfig>();
             info!("💰 反算 Transfer fee config: {:?}", transfer_fee_config);
-            let fee = if let Ok(transfer_fee_config) = transfer_fee_config {
-                let transfer_fee = transfer_fee_config.get_epoch_fee(epoch);
-                info!("💰 Transfer fee: {:?}", transfer_fee);
-                if u16::from(transfer_fee.transfer_fee_basis_points) == MAX_FEE_BASIS_POINTS {
-                    u64::from(transfer_fee.maximum_fee)
-                } else {
-                    transfer_fee_config.calculate_inverse_epoch_fee(epoch, amount).unwrap_or(0)
+            let fee = match transfer_fee_config {
+                Ok(config) => {
+                    let transfer_fee = config.get_epoch_fee(epoch);
+                    info!("💰 Transfer fee: {:?}", transfer_fee);
+
+                    match u16::from(transfer_fee.transfer_fee_basis_points) {
+                        MAX_FEE_BASIS_POINTS => u64::from(transfer_fee.maximum_fee),
+                        _ => config.calculate_inverse_epoch_fee(epoch, amount).unwrap_or(0),
+                    }
                 }
-            } else {
-                MAX_FEE_BASIS_POINTS as u64 * 2
+                Err(_) => {
+                    // MAX_FEE_BASIS_POINTS as u64 * 2
+                    0
+                }
             };
             Ok(fee)
         } else {
-            Ok(MAX_FEE_BASIS_POINTS as u64 * 2)
+            // Ok(MAX_FEE_BASIS_POINTS as u64 * 2)
+            Ok(0)
         }
     }
 }

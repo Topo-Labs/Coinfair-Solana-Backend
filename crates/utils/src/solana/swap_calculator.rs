@@ -127,14 +127,7 @@ impl<'a> SwapCalculator<'a> {
     }
 
     /// 方案1: 通过模拟完整交换过程计算价格变化
-    async fn calculate_price_impact_by_price_change(
-        &self,
-        input_mint: &str,
-        output_mint: &str,
-        input_amount: u64,
-        output_amount: u64,
-        pool_address: &str,
-    ) -> Result<f64> {
+    async fn calculate_price_impact_by_price_change(&self, input_mint: &str, output_mint: &str, input_amount: u64, output_amount: u64, pool_address: &str) -> Result<f64> {
         info!("🔄 使用交换前后价格变化计算价格影响");
 
         let pool_pubkey = Pubkey::from_str(pool_address)?;
@@ -171,13 +164,7 @@ impl<'a> SwapCalculator<'a> {
     }
 
     /// 从sqrt_price_x64计算真实价格
-    fn calculate_price_from_sqrt_price_x64(
-        &self,
-        sqrt_price_x64: u128,
-        input_mint: &Pubkey,
-        _output_mint: &Pubkey,
-        pool_state: &raydium_amm_v3::states::PoolState,
-    ) -> f64 {
+    fn calculate_price_from_sqrt_price_x64(&self, sqrt_price_x64: u128, input_mint: &Pubkey, _output_mint: &Pubkey, pool_state: &raydium_amm_v3::states::PoolState) -> f64 {
         let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
         let price = sqrt_price * sqrt_price;
 
@@ -211,9 +198,7 @@ impl<'a> SwapCalculator<'a> {
 
         // 3. 使用AccountLoader加载核心交换账户
         let account_loader = AccountLoader::new(self.rpc_client);
-        let swap_accounts = account_loader
-            .load_swap_core_accounts(&pool_pubkey, &input_mint_pubkey, &output_mint_pubkey)
-            .await?;
+        let swap_accounts = account_loader.load_swap_core_accounts(&pool_pubkey, &input_mint_pubkey, &output_mint_pubkey).await?;
 
         // 4. 计算transfer fee
         let load_accounts = vec![mint0, mint1];
@@ -332,11 +317,7 @@ impl<'a> SwapCalculator<'a> {
         let mut loop_count = 0;
 
         // 主要交换循环 - 这是价格变化的核心
-        while state.amount_specified_remaining != 0
-            && state.sqrt_price_x64 != sqrt_price_limit_x64
-            && state.tick < tick_math::MAX_TICK
-            && state.tick > tick_math::MIN_TICK
-        {
+        while state.amount_specified_remaining != 0 && state.sqrt_price_x64 != sqrt_price_limit_x64 && state.tick < tick_math::MAX_TICK && state.tick > tick_math::MIN_TICK {
             if loop_count > 10 {
                 break; // 防止无限循环
             }
@@ -362,8 +343,7 @@ impl<'a> SwapCalculator<'a> {
             let tick_next = next_initialized_tick.tick.clamp(tick_math::MIN_TICK, tick_math::MAX_TICK);
             let sqrt_price_next_x64 = tick_math::get_sqrt_price_at_tick(tick_next).map_err(|e| anyhow::anyhow!("计算tick价格失败: {:?}", e))?;
 
-            let target_price = if (zero_for_one && sqrt_price_next_x64 < sqrt_price_limit_x64) || (!zero_for_one && sqrt_price_next_x64 > sqrt_price_limit_x64)
-            {
+            let target_price = if (zero_for_one && sqrt_price_next_x64 < sqrt_price_limit_x64) || (!zero_for_one && sqrt_price_next_x64 > sqrt_price_limit_x64) {
                 sqrt_price_limit_x64
             } else {
                 sqrt_price_next_x64
@@ -386,10 +366,7 @@ impl<'a> SwapCalculator<'a> {
             state.sqrt_price_x64 = swap_step.sqrt_price_next_x64;
 
             if is_base_input {
-                state.amount_specified_remaining = state
-                    .amount_specified_remaining
-                    .checked_sub(swap_step.amount_in + swap_step.fee_amount)
-                    .unwrap_or(0);
+                state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(swap_step.amount_in + swap_step.fee_amount).unwrap_or(0);
                 state.amount_calculated = state.amount_calculated.checked_add(swap_step.amount_out).unwrap_or(state.amount_calculated);
             } else {
                 state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(swap_step.amount_out).unwrap_or(0);
@@ -450,14 +427,7 @@ impl<'a> SwapCalculator<'a> {
     }
 
     /// 备用价格影响计算方法 - 基于CLMM特性的改进算法
-    async fn _calculate_price_impact_fallback(
-        &self,
-        input_mint: &str,
-        output_mint: &str,
-        input_amount: u64,
-        output_amount: u64,
-        pool_address: &str,
-    ) -> Result<f64> {
+    async fn _calculate_price_impact_fallback(&self, input_mint: &str, output_mint: &str, input_amount: u64, output_amount: u64, pool_address: &str) -> Result<f64> {
         info!("💰 使用备用价格影响计算方法");
 
         let pool_pubkey = Pubkey::from_str(pool_address)?;
@@ -486,11 +456,7 @@ impl<'a> SwapCalculator<'a> {
         let price = price_64 * price_64;
         let decimals_factor = 10_f64.powi(output_decimals as i32 - input_decimals as i32);
 
-        let current_rate = if zero_for_one {
-            price * decimals_factor
-        } else {
-            (1.0 / price) * decimals_factor
-        };
+        let current_rate = if zero_for_one { price * decimals_factor } else { (1.0 / price) * decimals_factor };
 
         // 6. 计算实际汇率
         let actual_rate = if output_amount > 0 {
@@ -543,9 +509,7 @@ impl<'a> SwapCalculator<'a> {
 
         // 3. 使用AccountLoader加载核心交换账户
         let account_loader = AccountLoader::new(self.rpc_client);
-        let swap_accounts = account_loader
-            .load_swap_core_accounts(&pool_pubkey, &input_mint_pubkey, &output_mint_pubkey)
-            .await?;
+        let swap_accounts = account_loader.load_swap_core_accounts(&pool_pubkey, &input_mint_pubkey, &output_mint_pubkey).await?;
 
         // 4. 为了保持与CLI完全一致，获取原始mint账户数据用于transfer fee计算
         let load_accounts = vec![mint0, mint1];
@@ -553,7 +517,7 @@ impl<'a> SwapCalculator<'a> {
         let mint0_account = mint_accounts[0].as_ref().ok_or_else(|| anyhow::anyhow!("无法加载mint0账户"))?;
         let mint1_account = mint_accounts[1].as_ref().ok_or_else(|| anyhow::anyhow!("无法加载mint1账户"))?;
 
-        // 5. 使用TransferFeeCalculator计算transfer fee
+        // 5. 使用TransferFeeCalculator计算transfer fee（与CLI完全一致）
         let epoch = self.rpc_client.get_epoch_info()?.epoch;
         let transfer_fee = if base_in {
             if swap_accounts.zero_for_one {
@@ -562,14 +526,14 @@ impl<'a> SwapCalculator<'a> {
                 TransferFeeCalculator::get_transfer_fee_from_mint_state(&mint1_account.data, epoch, amount)?
             }
         } else {
-            0
+            0 // base-out模式：transfer_fee = 0
         };
-        let amount_specified = amount.checked_sub(transfer_fee).unwrap();
+        let amount_specified = amount.checked_sub(transfer_fee).unwrap(); // base-out: amount_specified = amount
 
-        info!("💰 Transfer fee计算:");
+        info!("💰 Transfer fee计算 ({}模式):", if base_in { "Base-In" } else { "Base-Out" });
         info!("  原始金额: {}", amount);
         info!("  Transfer fee: {}", transfer_fee);
-        info!("  扣除费用后金额: {}", amount_specified);
+        info!("  Amount specified: {}", amount_specified);
 
         // 6. 加载当前和接下来的5个tick arrays
         let mut tick_arrays = self
@@ -583,7 +547,7 @@ impl<'a> SwapCalculator<'a> {
             .await?;
 
         // 7. 使用CLI完全相同的get_out_put_amount_and_remaining_accounts逻辑
-        let (output_amount, _tick_array_indexs) = self.get_output_amount_and_remaining_accounts_cli_exact(
+        let (calculated_amount, _tick_array_indexs) = self.get_output_amount_and_remaining_accounts_cli_exact(
             amount_specified,
             None,
             swap_accounts.zero_for_one,
@@ -596,42 +560,45 @@ impl<'a> SwapCalculator<'a> {
 
         // 8. 使用与CLI完全相同的slippage计算逻辑
         let other_amount_threshold = if base_in {
+            // ✅ 修复：base_in模式，使用与clmm-client完全相同的滑点计算（使用floor向下取整）
             let slippage = slippage_bps as f64 / 10000.0;
-            let amount_with_slippage = (output_amount as f64 * (1.0 - slippage)) as u64;
+            let amount_with_slippage = (calculated_amount as f64 * (1.0 - slippage)).floor() as u64;
             amount_with_slippage
         } else {
+            // ✅ 修复：base_out模式，使用与clmm-client完全相同的滑点计算（使用ceil向上取整）
             let slippage = slippage_bps as f64 / 10000.0;
-            let amount_with_slippage = (output_amount as f64 * (1.0 + slippage)) as u64;
+            let amount_with_slippage = (calculated_amount as f64 * (1.0 + slippage)).ceil() as u64;
             let transfer_fee = if swap_accounts.zero_for_one {
                 TransferFeeCalculator::get_transfer_fee_from_mint_state_inverse(&mint0_account.data, epoch, amount_with_slippage)?
             } else {
                 TransferFeeCalculator::get_transfer_fee_from_mint_state_inverse(&mint1_account.data, epoch, amount_with_slippage)?
             };
-            info!("💰 Base Out Transfer fee计算:");
-            info!("  原始金额: {}", amount_with_slippage);
+            info!("💰 Base Out Transfer fee计算（修复后）:");
+            info!("  计算出的所需输入: {}", calculated_amount);
+            info!("  滑点调整后（使用ceil）: {}", amount_with_slippage);
             info!("  Transfer fee: {}", transfer_fee);
-            info!("  增加费用后金额: {}", amount_with_slippage + transfer_fee);
-            amount_with_slippage * 2 + 2 * transfer_fee
+            info!("  最终最大输入阈值: {}", amount_with_slippage + transfer_fee);
+            amount_with_slippage + transfer_fee
         };
 
-        info!("✅ CLI完全相同逻辑计算完成");
-        info!("  输入金额: {} (原始: {})", amount_specified, amount);
-        info!("  输出金额: {}", output_amount);
-        info!("  滑点保护后阈值: {}", other_amount_threshold);
-        info!("  Transfer fee: {}", transfer_fee);
-        info!("  Zero for one: {}", swap_accounts.zero_for_one);
-
-        Ok((output_amount, other_amount_threshold))
+        if base_in {
+            info!("✅ Base-In模式计算完成");
+            info!("  输入金额: {} (原始: {})", amount_specified, amount);
+            info!("  计算出的输出金额: {}", calculated_amount);
+            info!("  最小输出阈值: {}", other_amount_threshold);
+            Ok((calculated_amount, other_amount_threshold))
+        } else {
+            info!("✅ Base-Out模式计算完成");
+            info!("  期望输出金额: {} (原始: {})", amount_specified, amount);
+            info!("  计算出的所需输入金额: {}", calculated_amount);
+            info!("  最大输入阈值: {}", other_amount_threshold);
+            // 对于base-out，返回(所需输入金额，最大输入阈值)
+            Ok((calculated_amount, other_amount_threshold))
+        }
     }
 
     /// 从官方API获取remaining accounts（备用方案）
-    pub async fn get_remaining_accounts_from_official_api(
-        &self,
-        _pool_id: &str,
-        input_mint: &str,
-        output_mint: &str,
-        amount_specified: u64,
-    ) -> Result<(Vec<String>, String)> {
+    pub async fn get_remaining_accounts_from_official_api(&self, _pool_id: &str, input_mint: &str, output_mint: &str, amount_specified: u64) -> Result<(Vec<String>, String)> {
         warn!("🌐 使用官方API获取remaining accounts（备用方案）");
 
         let url = format!(
@@ -646,12 +613,7 @@ impl<'a> SwapCalculator<'a> {
 
         let data: serde_json::Value = response.json().await?;
 
-        if let Some(route_plan) = data
-            .get("data")
-            .and_then(|d| d.get("routePlan"))
-            .and_then(|r| r.as_array())
-            .and_then(|arr| arr.first())
-        {
+        if let Some(route_plan) = data.get("data").and_then(|d| d.get("routePlan")).and_then(|r| r.as_array()).and_then(|arr| arr.first()) {
             let remaining_accounts = route_plan
                 .get("remainingAccounts")
                 .and_then(|r| r.as_array())
@@ -692,11 +654,7 @@ impl<'a> SwapCalculator<'a> {
         let mut tick_array_keys = Vec::new();
         tick_array_keys.push(
             Pubkey::find_program_address(
-                &[
-                    "tick_array".as_bytes(),
-                    pool_pubkey.as_ref(),
-                    current_valid_tick_array_start_index.to_be_bytes().as_ref(),
-                ],
+                &["tick_array".as_bytes(), pool_pubkey.as_ref(), current_valid_tick_array_start_index.to_be_bytes().as_ref()],
                 raydium_program_id,
             )
             .0,
@@ -714,11 +672,7 @@ impl<'a> SwapCalculator<'a> {
             current_valid_tick_array_start_index = next_tick_array_index.unwrap();
             tick_array_keys.push(
                 Pubkey::find_program_address(
-                    &[
-                        "tick_array".as_bytes(),
-                        pool_pubkey.as_ref(),
-                        current_valid_tick_array_start_index.to_be_bytes().as_ref(),
-                    ],
+                    &["tick_array".as_bytes(), pool_pubkey.as_ref(), current_valid_tick_array_start_index.to_be_bytes().as_ref()],
                     raydium_program_id,
                 )
                 .0,
@@ -870,11 +824,7 @@ impl<'a> SwapCalculator<'a> {
         let mut loop_count = 0;
 
         // 主交换循环
-        while state.amount_specified_remaining != 0
-            && state.sqrt_price_x64 != sqrt_price_limit_x64
-            && state.tick < tick_math::MAX_TICK
-            && state.tick > tick_math::MIN_TICK
-        {
+        while state.amount_specified_remaining != 0 && state.sqrt_price_x64 != sqrt_price_limit_x64 && state.tick < tick_math::MAX_TICK && state.tick > tick_math::MIN_TICK {
             if loop_count > 10 {
                 return Err(anyhow::anyhow!("loop_count limit"));
             }
@@ -934,15 +884,13 @@ impl<'a> SwapCalculator<'a> {
                 step.tick_next = tick_math::MAX_TICK;
             }
 
-            step.sqrt_price_next_x64 =
-                tick_math::get_sqrt_price_at_tick(step.tick_next).map_err(|e| anyhow::anyhow!("get_sqrt_price_at_tick failed: {:?}", e))?;
+            step.sqrt_price_next_x64 = tick_math::get_sqrt_price_at_tick(step.tick_next).map_err(|e| anyhow::anyhow!("get_sqrt_price_at_tick failed: {:?}", e))?;
 
-            let target_price =
-                if (zero_for_one && step.sqrt_price_next_x64 < sqrt_price_limit_x64) || (!zero_for_one && step.sqrt_price_next_x64 > sqrt_price_limit_x64) {
-                    sqrt_price_limit_x64
-                } else {
-                    step.sqrt_price_next_x64
-                };
+            let target_price = if (zero_for_one && step.sqrt_price_next_x64 < sqrt_price_limit_x64) || (!zero_for_one && step.sqrt_price_next_x64 > sqrt_price_limit_x64) {
+                sqrt_price_limit_x64
+            } else {
+                step.sqrt_price_next_x64
+            };
 
             // 计算交换步骤
             let swap_step = swap_math::compute_swap_step(

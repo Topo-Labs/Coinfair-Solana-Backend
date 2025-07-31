@@ -235,14 +235,14 @@ impl SwapService {
         let result = ResponseBuilder::create_swap_compute_v2_data(
             "BaseOut".to_string(),
             params.input_mint,
-            required_input_amount.to_string(),
+            params.amount.to_string(), // ✅ 修复：Base-Out模式应该使用用户指定的期望输出金额作为基准
             params.output_mint,
             desired_output_amount,
             other_amount_threshold, // 使用正确计算的阈值
             params.slippage_bps,
             route_plan,
             transfer_fee_info,
-            Some(required_input_amount),
+            Some(desired_output_amount), // ✅ 修复：amount_specified应该是期望的输出金额
             Some(epoch),
             price_impact_pct,
         );
@@ -376,12 +376,19 @@ impl SwapService {
         let other_amount_threshold = service_helpers.parse_amount(&swap_data.other_amount_threshold)?;
         let user_wallet = Pubkey::from_str(&request.wallet)?;
 
-        // 对于base-out，amount_specified通常是期望的输出金额
+        // ✅ 修复：对于base-out，我们应该使用原始用户请求的期望输出金额
+        // amount_specified 现在应该是期望的输出金额（在 compute 阶段我们正确设置了它）
         let actual_output_amount = if let Some(ref amount_specified) = swap_data.amount_specified {
             service_helpers.parse_amount(amount_specified)?
         } else {
+            // 如果没有 amount_specified，使用 output_amount 作为后备
             output_amount
         };
+
+        info!("🔍 Base-Out参数调试:");
+        info!("  期望输出金额 (amount_specified): {:?}", swap_data.amount_specified);
+        info!("  实际输出金额 (actual_output_amount): {}", actual_output_amount);
+        info!("  最大输入阈值 (other_amount_threshold): {}", other_amount_threshold);
 
         // 从route_plan中获取池子信息和remaining accounts
         let route_plan = swap_data.route_plan.first().ok_or_else(|| anyhow::anyhow!("No route plan found"))?;
@@ -451,7 +458,7 @@ impl SwapService {
             &pool_state.observation_key,
             remaining_accounts,
             actual_output_amount,   // 对于base-out，这是期望的输出金额
-            other_amount_threshold, // 这是最大允许的输入金额
+            other_amount_threshold, // 这是最大允许的输入金额（经过滑点和转账费调整）
             None,                   // sqrt_price_limit_x64
             false,                  // is_base_input = false for base-out
         )?;
