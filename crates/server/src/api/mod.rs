@@ -1,3 +1,4 @@
+pub mod auth_controller;
 pub mod refer_controller;
 pub mod reward_controller;
 pub mod solana;
@@ -34,4 +35,6 @@ pub fn app() -> Router {
         .nest("/reward", reward_controller::RewardController::app())
         .nest("/solana", solana::SolanaController::app())
         .nest("/solana/mint", static_controller::StaticController::app())
+        .nest("", auth_controller::AuthController::app())
+        .nest("", auth_controller::AdminAuthController::app())
 }

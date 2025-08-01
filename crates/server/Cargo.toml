@@ -59,12 +59,21 @@ spl-associated-token-account = { version = "6.0.0", features = [
       "no-entrypoint",
 ] }
 
+# 认证和安全相关依赖
+jsonwebtoken = "9.2"
+redis = { version = "0.24", features = ["tokio-comp"] }
+governor = "0.6"
+ed25519-dalek = "2.1"
+bs58 = "0.5"
+rand = "0.8"
+
 # monitor = { path = "../monitor/" }
 
-# For dev-dependencies, there is no need to config agiain.
-# [dev-dependencies]
-# mockito = { workspace = true }
-# axum-test = "14.8.0"
 utoipa = { version = "4.2", features = ["axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "5.0", features = ["axum"] }
 num-traits = { workspace = true }
+# For dev-dependencies, there is no need to config agiain.
+[dev-dependencies]
+tokio-test = "0.4"
+tower-test = "0.4"
+axum-test = "14.8.0"

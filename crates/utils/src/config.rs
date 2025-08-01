@@ -20,9 +20,9 @@ impl EnvLoader {
         println!("cargo_env: {}", cargo_env);
         // 2. 构建配置文件路径
         let env_file = match cargo_env.as_str() {
-            "production" | "prod" => ".env.production",
-            "development" | "dev" => ".env.development",
-            "test" => ".env.test",
+            "production" | "Production" | "prod" => ".env.production",
+            "development" | "Development" | "dev" => ".env.development",
+            "test" | "Test" => ".env.test",
             _ => {
                 println!("⚠️  未知的 CARGO_ENV: {}，使用默认的 .env.development", cargo_env);
                 ".env.development"
