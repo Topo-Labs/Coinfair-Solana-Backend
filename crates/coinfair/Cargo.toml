@@ -21,6 +21,7 @@ serde_json = { workspace = true }
 pbkdf2 = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }

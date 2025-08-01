@@ -8,22 +8,53 @@ use crate::services::metaplex_service::{MetaplexService, TokenMetadata};
 use anyhow::Result;
 use database::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
 use database::clmm_pool::PoolType;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
-use tracing::{debug, info};
+use std::sync::{Arc, Mutex};
+use tracing::{debug, info, warn};
 use utils::constants;
+use utils::solana::account_loader::AccountLoader;
 use uuid::Uuid;
+
+/// AMM配置缓存项
+#[derive(Debug, Clone)]
+struct AmmConfigCache {
+    pub protocol_fee_rate: u32,
+    pub trade_fee_rate: u32,
+    pub tick_spacing: u16,
+    pub fund_fee_rate: u32,
+    pub timestamp: u64, // 缓存时间戳
+}
 
 /// 数据转换服务
 pub struct DataTransformService {
     metaplex_service: MetaplexService,
+    rpc_client: Option<Arc<RpcClient>>,
+    amm_config_cache: Arc<Mutex<HashMap<String, AmmConfigCache>>>, // 线程安全的配置缓存
 }
 
 impl DataTransformService {
-    /// 创建新的数据转换服务
+    /// 创建新的数据转换服务（不带RPC客户端）
     pub fn new() -> Result<Self> {
         let metaplex_service = MetaplexService::new(None)?;
 
-        Ok(Self { metaplex_service })
+        Ok(Self {
+            metaplex_service,
+            rpc_client: None,
+            amm_config_cache: Arc::new(Mutex::new(HashMap::new())),
+        })
+    }
+
+    /// 创建新的数据转换服务（带RPC客户端，支持链上查询）
+    pub fn new_with_rpc(rpc_client: Arc<RpcClient>) -> Result<Self> {
+        let metaplex_service = MetaplexService::new(None)?;
+
+        Ok(Self {
+            metaplex_service,
+            rpc_client: Some(rpc_client),
+            amm_config_cache: Arc::new(Mutex::new(HashMap::new())),
+        })
     }
 
     /// 将传统的池子列表响应转换为新格式
@@ -67,6 +98,20 @@ impl DataTransformService {
             info!("✅ 所有代币信息已缓存，跳过链上查询");
             HashMap::new()
         };
+
+        // 收集所有唯一的AMM配置地址，准备批量加载
+        let mut amm_config_addresses = Vec::new();
+        for pool in &old_response.pools {
+            if !amm_config_addresses.contains(&pool.amm_config_address) {
+                amm_config_addresses.push(pool.amm_config_address.clone());
+            }
+        }
+
+        // 批量加载AMM配置（使用我们设计的批量方法！）
+        if !amm_config_addresses.is_empty() {
+            info!("🔗 批量预加载 {} 个AMM配置到缓存", amm_config_addresses.len());
+            let _loaded_configs = self.load_multiple_amm_configs(&amm_config_addresses).await?;
+        }
 
         // 转换池子数据
         let mut pool_infos = Vec::new();
@@ -132,6 +177,20 @@ impl DataTransformService {
             HashMap::new()
         };
 
+        // 收集所有唯一的AMM配置地址，准备批量加载
+        let mut amm_config_addresses = Vec::new();
+        for pool in &old_response.pools {
+            if !amm_config_addresses.contains(&pool.amm_config_address) {
+                amm_config_addresses.push(pool.amm_config_address.clone());
+            }
+        }
+
+        // 批量加载AMM配置（使用我们设计的批量方法！）
+        if !amm_config_addresses.is_empty() {
+            info!("🔗 批量预加载 {} 个AMM配置到缓存", amm_config_addresses.len());
+            let _loaded_configs = self.load_multiple_amm_configs(&amm_config_addresses).await?;
+        }
+
         // 转换池子数据
         let mut pool_infos = Vec::new();
         for pool in old_response.pools {
@@ -150,6 +209,186 @@ impl DataTransformService {
         Ok(response)
     }
 
+    /// 从链上加载AMM配置（支持缓存）
+    async fn load_amm_config_from_chain(&self, config_address: &str) -> Result<Option<AmmConfigCache>> {
+        // 检查缓存
+        {
+            let cache = self.amm_config_cache.lock().map_err(|e| anyhow::anyhow!("缓存锁获取失败: {}", e))?;
+            if let Some(cached_config) = cache.get(config_address) {
+                let current_time = chrono::Utc::now().timestamp() as u64;
+                // 缓存有效期为5分钟
+                if current_time - cached_config.timestamp < 300 {
+                    debug!("📋 使用缓存的AMM配置: {}", config_address);
+                    return Ok(Some(cached_config.clone()));
+                } else {
+                    debug!("⏰ 缓存已过期，重新从链上加载: {}", config_address);
+                }
+            }
+        }
+
+        // 如果没有RPC客户端，返回None
+        let rpc_client = match &self.rpc_client {
+            Some(client) => client,
+            None => {
+                debug!("🔍 没有RPC客户端，跳过链上AMM配置查询");
+                return Ok(None);
+            }
+        };
+
+        info!("🔗 从链上加载AMM配置: {}", config_address);
+
+        // 解析配置地址
+        let config_pubkey = match config_address.parse::<Pubkey>() {
+            Ok(pubkey) => pubkey,
+            Err(e) => {
+                warn!("❌ 无效的配置地址 {}: {}", config_address, e);
+                return Ok(None);
+            }
+        };
+
+        // 使用AccountLoader加载配置
+        let account_loader = AccountLoader::new(rpc_client);
+
+        match account_loader.load_and_deserialize::<raydium_amm_v3::states::AmmConfig>(&config_pubkey).await {
+            Ok(amm_config) => {
+                info!("✅ 成功从链上加载AMM配置: {:?}", amm_config);
+
+                let cache_item = AmmConfigCache {
+                    protocol_fee_rate: amm_config.protocol_fee_rate,
+                    trade_fee_rate: amm_config.trade_fee_rate,
+                    tick_spacing: amm_config.tick_spacing,
+                    fund_fee_rate: amm_config.fund_fee_rate,
+                    timestamp: chrono::Utc::now().timestamp() as u64,
+                };
+
+                // 更新缓存
+                {
+                    let mut cache = self.amm_config_cache.lock().map_err(|e| anyhow::anyhow!("缓存锁获取失败: {}", e))?;
+                    cache.insert(config_address.to_string(), cache_item.clone());
+                }
+
+                Ok(Some(cache_item))
+            }
+            Err(e) => {
+                warn!("❌ 从链上加载AMM配置失败 {}: {}", config_address, e);
+                Ok(None)
+            }
+        }
+    }
+
+    /// 批量加载多个AMM配置（支持缓存）
+    async fn load_multiple_amm_configs(&self, config_addresses: &[String]) -> Result<HashMap<String, AmmConfigCache>> {
+        let mut results = HashMap::new();
+        let mut need_to_load = Vec::new();
+
+        // 检查缓存，收集需要从链上加载的地址
+        {
+            let cache = self.amm_config_cache.lock().map_err(|e| anyhow::anyhow!("缓存锁获取失败: {}", e))?;
+            let current_time = chrono::Utc::now().timestamp() as u64;
+
+            for config_address in config_addresses {
+                if let Some(cached_config) = cache.get(config_address) {
+                    // 缓存有效期为5分钟
+                    if current_time - cached_config.timestamp < 300 {
+                        debug!("📋 使用缓存的AMM配置: {}", config_address);
+                        results.insert(config_address.clone(), cached_config.clone());
+                        continue;
+                    } else {
+                        debug!("⏰ 缓存已过期: {}", config_address);
+                    }
+                }
+                need_to_load.push(config_address.clone());
+            }
+        }
+
+        if need_to_load.is_empty() {
+            debug!("✅ 所有配置都来自缓存");
+            return Ok(results);
+        }
+
+        // 如果没有RPC客户端，返回已有结果
+        let rpc_client = match &self.rpc_client {
+            Some(client) => client,
+            None => {
+                debug!("🔍 没有RPC客户端，跳过批量AMM配置查询");
+                return Ok(results);
+            }
+        };
+
+        info!("🔗 批量加载{}个AMM配置（其中{}个需要从链上加载）", config_addresses.len(), need_to_load.len());
+
+        // 解析所有需要加载的地址
+        let mut pubkeys = Vec::new();
+        let mut valid_addresses = Vec::new();
+
+        for addr in &need_to_load {
+            match addr.parse::<Pubkey>() {
+                Ok(pubkey) => {
+                    pubkeys.push(pubkey);
+                    valid_addresses.push(addr.clone());
+                }
+                Err(e) => {
+                    warn!("❌ 无效的配置地址 {}: {}", addr, e);
+                }
+            }
+        }
+
+        if pubkeys.is_empty() {
+            return Ok(results);
+        }
+
+        // 使用AccountLoader批量加载
+        let account_loader = AccountLoader::new(rpc_client);
+
+        match account_loader.load_multiple_accounts(&pubkeys).await {
+            Ok(accounts) => {
+                let mut cache_updates = HashMap::new();
+
+                for (i, account_opt) in accounts.iter().enumerate() {
+                    let config_address = &valid_addresses[i];
+
+                    if let Some(account) = account_opt {
+                        match account_loader.deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(account) {
+                            Ok(amm_config) => {
+                                info!("✅ 成功加载AMM配置 {}: {:?}", config_address, amm_config);
+
+                                let cache_item = AmmConfigCache {
+                                    protocol_fee_rate: amm_config.protocol_fee_rate,
+                                    trade_fee_rate: amm_config.trade_fee_rate,
+                                    tick_spacing: amm_config.tick_spacing,
+                                    fund_fee_rate: amm_config.fund_fee_rate,
+                                    timestamp: chrono::Utc::now().timestamp() as u64,
+                                };
+
+                                results.insert(config_address.clone(), cache_item.clone());
+                                cache_updates.insert(config_address.clone(), cache_item);
+                            }
+                            Err(e) => {
+                                warn!("❌ 反序列化AMM配置失败 {}: {}", config_address, e);
+                            }
+                        }
+                    } else {
+                        warn!("⚠️ 未找到AMM配置账户: {}", config_address);
+                    }
+                }
+
+                // 批量更新缓存
+                if !cache_updates.is_empty() {
+                    let mut cache = self.amm_config_cache.lock().map_err(|e| anyhow::anyhow!("缓存锁获取失败: {}", e))?;
+                    for (addr, cache_item) in cache_updates {
+                        cache.insert(addr, cache_item);
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("❌ 批量加载AMM配置失败: {}", e);
+            }
+        }
+
+        info!("✅ 批量加载完成，成功加载{}个配置", results.len());
+        Ok(results)
+    }
+
     /// 将单个池子转换为新的池子信息格式
     async fn transform_pool_to_pool_info(&self, pool: ClmmPool, metadata_map: &HashMap<String, TokenMetadata>) -> Result<PoolInfo> {
         debug!("🔄 转换池子信息: {}", pool.pool_address);
@@ -160,8 +399,11 @@ impl DataTransformService {
         // 获取mint B的元数据 - 智能使用本地或链上数据
         let mint_b = self.create_extended_mint_info_smart(&pool.mint1, metadata_map)?;
 
-        // 创建池子配置信息（动态生成，基于池子实际配置）
-        let config = Some(self.create_pool_config_info(&pool));
+        // 创建池子配置信息（优先从链上获取真实配置，失败时使用硬编码值）
+        let config = Some(self.create_pool_config_info_from_chain(&pool).await.unwrap_or_else(|e| {
+            warn!("⚠️ 从链上获取配置失败，使用硬编码配置: {}", e);
+            self.create_pool_config_info_fallback(&pool)
+        }));
 
         let pool_info = PoolInfo {
             pool_type: match pool.pool_type {
@@ -534,8 +776,8 @@ impl DataTransformService {
         }
     }
 
-    /// 根据配置索引计算交易费率
-    fn calculate_trade_fee_rate(&self, config_index: u16) -> u32 {
+    /// 根据配置索引计算交易费率（Fallback方法，硬编码）
+    fn calculate_trade_fee_rate_fallback(&self, config_index: u16) -> u32 {
         match config_index {
             0 => 3000,  // 0.01%
             1 => 500,   // 0.05%
@@ -545,8 +787,8 @@ impl DataTransformService {
         }
     }
 
-    /// 根据配置索引计算tick间距
-    fn calculate_tick_spacing(&self, config_index: u16) -> u32 {
+    /// 根据配置索引计算tick间距（Fallback方法，硬编码）
+    fn calculate_tick_spacing_fallback(&self, config_index: u16) -> u32 {
         match config_index {
             0 => 60,
             1 => 10,
@@ -568,23 +810,58 @@ impl DataTransformService {
         }
     }
 
-    /// 创建智能的池子配置信息
-    fn create_pool_config_info(&self, pool: &ClmmPool) -> PoolConfigInfo {
+    /// 从链上创建池子配置信息（新方法，替代硬编码）
+    async fn create_pool_config_info_from_chain(&self, pool: &ClmmPool) -> Result<PoolConfigInfo> {
+        let config_address = &pool.amm_config_address;
+
+        // 尝试从链上加载配置
+        let amm_config = self.load_amm_config_from_chain(config_address).await?;
+
+        match amm_config {
+            Some(config) => {
+                info!("✅ 使用链上AMM配置数据: {}", config_address);
+
+                // 根据真实的tick间距和池子类型计算范围相关数据
+                let default_range = self.calculate_default_range_from_tick_spacing(config.tick_spacing, &pool.pool_type);
+                let current_price = pool.price_info.current_price.unwrap_or(pool.price_info.initial_price);
+                let default_range_point = self.generate_range_points_from_tick_spacing(config.tick_spacing, &pool.pool_type, current_price);
+
+                Ok(PoolConfigInfo {
+                    id: config_address.clone(),
+                    index: pool.config_index as u32,
+                    protocol_fee_rate: config.protocol_fee_rate,
+                    trade_fee_rate: config.trade_fee_rate,
+                    tick_spacing: config.tick_spacing as u32,
+                    fund_fee_rate: config.fund_fee_rate,
+                    default_range,
+                    default_range_point,
+                })
+            }
+            None => {
+                // 如果链上查询失败，抛出错误，让调用方使用fallback
+                Err(anyhow::anyhow!("无法从链上加载AMM配置: {}", config_address))
+            }
+        }
+    }
+
+    /// Fallback方法：创建池子配置信息（使用硬编码值，向后兼容）
+    fn create_pool_config_info_fallback(&self, pool: &ClmmPool) -> PoolConfigInfo {
         let config_index = pool.config_index;
-        let trade_fee_rate = self.calculate_trade_fee_rate(config_index);
-        let tick_spacing = self.calculate_tick_spacing(config_index);
+        let trade_fee_rate = self.calculate_trade_fee_rate_fallback(config_index);
+        let tick_spacing = self.calculate_tick_spacing_fallback(config_index);
 
-        // 根据配置索引动态计算协议费率
-        let protocol_fee_rate = self.calculate_protocol_fee_rate(config_index);
+        // 根据配置索引动态计算协议费率（硬编码值）
+        let protocol_fee_rate = self.calculate_protocol_fee_rate_fallback(config_index);
 
-        // 根据配置索引动态计算基金费率
-        let fund_fee_rate = self.calculate_fund_fee_rate(config_index);
+        // 根据配置索引动态计算基金费率（硬编码值）
+        let fund_fee_rate = self.calculate_fund_fee_rate_fallback(config_index);
 
         // 根据tick间距和池子类型智能计算默认范围
-        let default_range = self.calculate_default_range(tick_spacing, &pool.pool_type);
+        let default_range = self.calculate_default_range_from_tick_spacing(tick_spacing as u16, &pool.pool_type);
 
         // 根据池子的价格波动性和tick间距生成智能的范围点
-        let default_range_point = self.generate_range_points(tick_spacing, &pool.pool_type, pool.price_info.current_price.unwrap_or(pool.price_info.initial_price));
+        let current_price = pool.price_info.current_price.unwrap_or(pool.price_info.initial_price);
+        let default_range_point = self.generate_range_points_from_tick_spacing(tick_spacing as u16, &pool.pool_type, current_price);
 
         PoolConfigInfo {
             id: pool.amm_config_address.clone(),
@@ -598,8 +875,8 @@ impl DataTransformService {
         }
     }
 
-    /// 根据配置索引计算协议费率
-    fn calculate_protocol_fee_rate(&self, config_index: u16) -> u32 {
+    /// 根据配置索引计算协议费率（Fallback方法，硬编码）
+    fn calculate_protocol_fee_rate_fallback(&self, config_index: u16) -> u32 {
         match config_index {
             0 => 25000,  // 2.5% - 低费率配置，更高的协议费率
             1 => 120000, // 12% - 标准配置
@@ -609,8 +886,8 @@ impl DataTransformService {
         }
     }
 
-    /// 根据配置索引计算基金费率
-    fn calculate_fund_fee_rate(&self, config_index: u16) -> u32 {
+    /// 根据配置索引计算基金费率（Fallback方法，硬编码）
+    fn calculate_fund_fee_rate_fallback(&self, config_index: u16) -> u32 {
         match config_index {
             0 => 10000,  // 1% - 低费率配置
             1 => 40000,  // 4% - 标准配置
@@ -620,15 +897,16 @@ impl DataTransformService {
         }
     }
 
-    /// 根据tick间距和池子类型计算默认范围
-    fn calculate_default_range(&self, tick_spacing: u32, pool_type: &database::clmm_pool::model::PoolType) -> f64 {
+    /// 根据真实tick间距和池子类型计算默认范围（新方法，基于链上数据）
+    fn calculate_default_range_from_tick_spacing(&self, tick_spacing: u16, pool_type: &database::clmm_pool::model::PoolType) -> f64 {
         match pool_type {
             database::clmm_pool::model::PoolType::Concentrated => {
-                // 集中流动性池：根据tick间距调整范围
+                // 集中流动性池：根据真实tick间距调整范围
                 match tick_spacing {
-                    1 => 0.02,  // 非常窄的范围，适合稳定币对
+                    1 => 0.01,  // 超窄间距，适合稳定币对
                     10 => 0.05, // 窄范围，适合相关资产
                     50 => 0.1,  // 中等范围，标准配置
+                    60 => 0.02, // Raydium特殊配置
                     100 => 0.2, // 较宽范围，适合波动性资产
                     _ => 0.1,   // 默认
                 }
@@ -640,8 +918,8 @@ impl DataTransformService {
         }
     }
 
-    /// 根据池子特征生成智能的范围点
-    fn generate_range_points(&self, tick_spacing: u32, pool_type: &database::clmm_pool::model::PoolType, current_price: f64) -> Vec<f64> {
+    /// 根据真实tick间距生成智能的范围点（新方法，基于链上数据）
+    fn generate_range_points_from_tick_spacing(&self, tick_spacing: u16, pool_type: &database::clmm_pool::model::PoolType, current_price: f64) -> Vec<f64> {
         match pool_type {
             database::clmm_pool::model::PoolType::Concentrated => {
                 match tick_spacing {
@@ -664,6 +942,9 @@ impl DataTransformService {
 
                     // 中等间距：适中波动性
                     50 => vec![0.05, 0.1, 0.2, 0.4, 0.8],
+
+                    // Raydium特殊配置
+                    60 => vec![0.01, 0.02, 0.05, 0.1, 0.2],
 
                     // 宽间距：高波动性资产
                     100 => vec![0.1, 0.2, 0.5, 1.0, 2.0],
@@ -721,8 +1002,8 @@ impl DataTransformService {
             _ => {}
         }
 
-        // 基于tick间距的标签
-        let tick_spacing = self.calculate_tick_spacing(pool.config_index);
+        // 基于tick间距的标签（使用fallback方法获取tick间距）
+        let tick_spacing = self.calculate_tick_spacing_fallback(pool.config_index);
         match tick_spacing {
             1 => tags.push("stable-pair".to_string()),
             10 => tags.push("correlated".to_string()),
@@ -881,12 +1162,13 @@ mod tests {
     fn test_calculate_fee_rates() {
         let transform_service = DataTransformService::new().unwrap();
 
-        assert_eq!(transform_service.calculate_trade_fee_rate(0), 100);
-        assert_eq!(transform_service.calculate_trade_fee_rate(1), 500);
-        assert_eq!(transform_service.calculate_trade_fee_rate(2), 2500);
-        assert_eq!(transform_service.calculate_trade_fee_rate(999), 500); // default
+        // 测试fallback方法
+        assert_eq!(transform_service.calculate_trade_fee_rate_fallback(0), 3000);
+        assert_eq!(transform_service.calculate_trade_fee_rate_fallback(1), 500);
+        assert_eq!(transform_service.calculate_trade_fee_rate_fallback(2), 2500);
+        assert_eq!(transform_service.calculate_trade_fee_rate_fallback(999), 500); // default
 
-        assert_eq!(transform_service.calculate_fee_rate(0), 0.0001);
+        assert_eq!(transform_service.calculate_fee_rate(0), 0.0005);
         assert_eq!(transform_service.calculate_fee_rate(1), 0.0005);
         assert_eq!(transform_service.calculate_fee_rate(2), 0.0025);
         assert_eq!(transform_service.calculate_fee_rate(999), 0.0005); // default
@@ -896,11 +1178,99 @@ mod tests {
     fn test_calculate_tick_spacing() {
         let transform_service = DataTransformService::new().unwrap();
 
-        assert_eq!(transform_service.calculate_tick_spacing(0), 1);
-        assert_eq!(transform_service.calculate_tick_spacing(1), 10);
-        assert_eq!(transform_service.calculate_tick_spacing(2), 50);
-        assert_eq!(transform_service.calculate_tick_spacing(3), 100);
-        assert_eq!(transform_service.calculate_tick_spacing(999), 10); // default
+        // 测试fallback方法
+        assert_eq!(transform_service.calculate_tick_spacing_fallback(0), 60);
+        assert_eq!(transform_service.calculate_tick_spacing_fallback(1), 10);
+        assert_eq!(transform_service.calculate_tick_spacing_fallback(2), 50);
+        assert_eq!(transform_service.calculate_tick_spacing_fallback(3), 100);
+        assert_eq!(transform_service.calculate_tick_spacing_fallback(999), 10); // default
+    }
+
+    #[tokio::test]
+    async fn test_load_amm_config_from_chain() {
+        // 这个测试需要真实的RPC连接，仅在集成测试时运行
+        if std::env::var("RUN_INTEGRATION_TESTS").is_ok() {
+            let rpc_client = Arc::new(solana_client::rpc_client::RpcClient::new("https://api.devnet.solana.com".to_string()));
+            let service = DataTransformService::new_with_rpc(rpc_client).unwrap();
+
+            // 使用一个已知的测试配置地址
+            let test_config_address = "test_config_address";
+
+            match service.load_amm_config_from_chain(test_config_address).await {
+                Ok(Some(config)) => {
+                    assert!(config.tick_spacing > 0);
+                    assert!(config.trade_fee_rate > 0);
+                    println!("✅ 成功加载配置: {:?}", config);
+                }
+                Ok(None) => {
+                    println!("⚠️ 配置不存在或RPC客户端未配置");
+                }
+                Err(e) => {
+                    println!("❌ 加载配置失败: {}", e);
+                }
+            }
+        } else {
+            println!("跳过集成测试 - 设置RUN_INTEGRATION_TESTS环境变量以运行");
+        }
+    }
+
+    #[test]
+    fn test_cache_functionality() {
+        let service = DataTransformService::new().unwrap();
+
+        // 测试缓存结构初始化
+        {
+            let cache = service.amm_config_cache.lock().unwrap();
+            assert!(cache.is_empty());
+        }
+
+        // 测试缓存插入
+        {
+            let mut cache = service.amm_config_cache.lock().unwrap();
+            let test_config = AmmConfigCache {
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 500,
+                tick_spacing: 10,
+                fund_fee_rate: 40000,
+                timestamp: chrono::Utc::now().timestamp() as u64,
+            };
+            cache.insert("test_address".to_string(), test_config.clone());
+
+            assert_eq!(cache.len(), 1);
+            assert_eq!(cache.get("test_address").unwrap().tick_spacing, 10);
+        }
+    }
+
+    #[test]
+    fn test_tick_spacing_based_calculations() {
+        let service = DataTransformService::new().unwrap();
+
+        // 测试基于真实tick间距的范围计算
+        let default_range = service.calculate_default_range_from_tick_spacing(10, &database::clmm_pool::model::PoolType::Concentrated);
+        assert_eq!(default_range, 0.05);
+
+        let default_range = service.calculate_default_range_from_tick_spacing(60, &database::clmm_pool::model::PoolType::Concentrated);
+        assert_eq!(default_range, 0.02);
+
+        // 测试基于真实tick间距的范围点计算
+        let range_points = service.generate_range_points_from_tick_spacing(10, &database::clmm_pool::model::PoolType::Concentrated, 100.0);
+        assert!(!range_points.is_empty());
+        assert!(range_points.contains(&0.01));
+    }
+
+    #[test]
+    fn test_fallback_methods() {
+        let service = DataTransformService::new().unwrap();
+
+        // 测试fallback方法返回的硬编码值
+        assert_eq!(service.calculate_trade_fee_rate_fallback(0), 3000);
+        assert_eq!(service.calculate_trade_fee_rate_fallback(1), 500);
+
+        assert_eq!(service.calculate_tick_spacing_fallback(0), 60);
+        assert_eq!(service.calculate_tick_spacing_fallback(1), 10);
+
+        assert_eq!(service.calculate_protocol_fee_rate_fallback(1), 120000);
+        assert_eq!(service.calculate_fund_fee_rate_fallback(1), 40000);
     }
 
     #[tokio::test]

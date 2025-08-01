@@ -9,7 +9,7 @@ use timer::Timer;
 use tokio::time::{sleep, Duration};
 use tokio::{signal, sync::Notify, task::JoinSet};
 use tracing::info;
-use utils::AppConfig;
+use utils::{logger::Logger, AppConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -25,11 +25,16 @@ pub struct Coinfair {
     timer: Timer,
     telegram: HopeBot,
     config: Arc<AppConfig>,
+    _log_guard: tracing_appender::non_blocking::WorkerGuard,
 }
 
 impl Coinfair {
     pub async fn new() -> Self {
         let config = Coinfair::with_config();
+        
+        // 初始化日志系统 - 在这里统一管理
+        let log_guard = Self::setup_logging(&config);
+        
         let services = Coinfair::with_service(config.clone()).await;
         let monitor = Coinfair::with_monitor(services.clone()).await;
         let telegram = Coinfair::with_telegram(services.clone());
@@ -41,6 +46,7 @@ impl Coinfair {
             timer,
             telegram,
             config,
+            _log_guard: log_guard,
         }
     }
 
@@ -124,6 +130,26 @@ impl Coinfair {
         utils::EnvLoader::load_env_file().ok();
         let config = Arc::new(AppConfig::parse());
         config
+    }
+
+    fn setup_logging(config: &AppConfig) -> tracing_appender::non_blocking::WorkerGuard {
+        // 获取可执行文件所在目录，构建日志路径
+        let log_dir = if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                Some(exe_dir.join("logs"))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        println!("🚀 正在启动 Coinfair 后端服务...");
+        if let Some(ref dir) = log_dir {
+            println!("📁 日志目录: {:?}", dir);
+        }
+        
+        Logger::new_with_log_dir(config.cargo_env, log_dir)
     }
 
     async fn with_service(config: Arc<AppConfig>) -> Services {

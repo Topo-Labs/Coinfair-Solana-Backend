@@ -5,18 +5,14 @@ use database::Database;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
 use tracing::info;
-use utils::{logger::Logger, AppConfig};
+use utils::AppConfig;
 
 pub struct ApplicationServer;
 
 impl ApplicationServer {
     pub async fn serve(config: Arc<AppConfig>) -> anyhow::Result<()> {
-        // 根据 CARGO_ENV 加载对应的环境配置文件
-        // if let Err(e) = utils::EnvLoader::load_env_file() {
-        //     tracing::warn!("Failed to load environment file: {}", e);
-        // }
-
-        let _guard = Logger::new(config.cargo_env);
+        // 注意：日志初始化已经在主程序(coinfair/src/main.rs)中完成
+        // 这里不再重复初始化日志
 
         let address = format!("{}:{}", config.app_host, config.app_port);
         let tcp_listener = tokio::net::TcpListener::bind(address).await.context("🔴 Failed to bind TCP listener")?;
