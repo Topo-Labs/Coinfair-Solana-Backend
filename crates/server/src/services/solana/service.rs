@@ -12,6 +12,7 @@ use super::amm_pool::AmmPoolService;
 use super::clmm_pool::ClmmPoolService;
 use super::config::{ClmmConfigService, ClmmConfigServiceTrait};
 use super::liquidity_line::LiquidityLineService;
+use super::nft::NftService;
 use super::position::PositionService;
 use super::shared::{SharedContext, SolanaHelpers};
 use super::swap::SwapService;
@@ -32,6 +33,7 @@ pub struct SolanaService {
     amm_pool_service: AmmPoolService,
     config_service: ClmmConfigService,
     liquidity_line_service: LiquidityLineService,
+    pub nft: NftService,
 }
 
 impl SolanaService {
@@ -60,6 +62,7 @@ impl SolanaService {
             amm_pool_service: AmmPoolService::new(shared_context.clone()),
             config_service: ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()),
             liquidity_line_service: LiquidityLineService::new(shared_context.rpc_client.clone(), Arc::new(database)),
+            nft: NftService::new(shared_context.clone()),
             shared_context,
         })
     }
@@ -147,6 +150,10 @@ pub trait SolanaServiceTrait {
 
     // Liquidity line operations
     async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData>;
+    
+    // NFT operations
+    async fn mint_nft(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftResponse>;
+    async fn mint_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -344,5 +351,14 @@ impl SolanaServiceTrait for SolanaService {
     async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse> {
         // 使用共享服务来获取池子密钥信息
         self.clmm_pool_service.get_pools_key_by_ids(pool_ids).await
+    }
+    
+    // NFT operations - delegate to nft service
+    async fn mint_nft(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftResponse> {
+        self.nft.mint_nft(request).await
+    }
+    
+    async fn mint_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse> {
+        self.nft.mint_nft_and_send_transaction(request).await
     }
 }

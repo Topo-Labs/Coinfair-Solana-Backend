@@ -99,6 +99,24 @@ impl SolanaHelpers {
 pub struct SolanaUtils;
 
 impl SolanaUtils {
+    /// Generate explorer URL for a transaction
+    pub fn get_explorer_url(signature: &str, rpc_url: &str) -> String {
+        // Determine network based on RPC URL
+        let network = if rpc_url.contains("devnet") {
+            "devnet"
+        } else if rpc_url.contains("testnet") {
+            "testnet"
+        } else {
+            "mainnet-beta"
+        };
+        
+        if network == "mainnet-beta" {
+            format!("https://explorer.solana.com/tx/{}", signature)
+        } else {
+            format!("https://explorer.solana.com/tx/{}?cluster={}", signature, network)
+        }
+    }
+
     /// 反序列化anchor账户
     pub fn deserialize_anchor_account<T: AccountDeserialize>(account: &Account) -> Result<T> {
         let mut data: &[u8] = &account.data;

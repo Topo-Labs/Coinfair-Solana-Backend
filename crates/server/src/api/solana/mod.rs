@@ -3,6 +3,7 @@ pub mod clmm_pool_create;
 pub mod clmm_pool_query;
 pub mod cpmm_pool_create;
 pub mod liquidity_line_controller;
+pub mod nft_controller;
 pub mod position_controller;
 pub mod static_config_controller;
 pub mod swap_controller;
@@ -29,6 +30,9 @@ impl SolanaController {
             
             // 仓位管理路由 - 使用强制权限检查
             .nest("/position", Self::position_routes())
+            
+            // NFT推荐路由 - 使用强制权限检查
+            .nest("/nft", Self::nft_routes())
             
             // 池子管理路由 - 使用强制权限检查和特定权限
             .nest("/pool", Self::pool_management_routes())
@@ -87,6 +91,12 @@ impl SolanaController {
     /// 仓位管理路由 - 开仓、平仓、增减流动性等
     fn position_routes() -> Router {
         position_controller::PositionController::routes()
+            .layer(middleware::from_fn(Self::apply_solana_auth))
+    }
+    
+    /// NFT推荐路由 - NFT铸造等
+    fn nft_routes() -> Router {
+        nft_controller::NftController::routes()
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }
 

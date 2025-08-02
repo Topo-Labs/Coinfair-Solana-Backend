@@ -45,34 +45,31 @@ impl ConfigManager {
     /// 获取管理员密钥
     /// 从环境变量 ADMIN_PRIVATE_KEY 或 PRIVATE_KEY 读取私钥
     pub fn get_admin_keypair() -> Result<solana_sdk::signature::Keypair> {
-        use solana_sdk::signature::Keypair;
         use solana_sdk::bs58;
-        
+        use solana_sdk::signature::Keypair;
+
         // 尝试从多个环境变量获取私钥
         let private_key_str = std::env::var("ADMIN_PRIVATE_KEY")
             .or_else(|_| std::env::var("PRIVATE_KEY"))
             .map_err(|_| anyhow::anyhow!("未找到管理员私钥，请设置 ADMIN_PRIVATE_KEY 或 PRIVATE_KEY 环境变量"))?;
-        
+
         // 支持多种私钥格式
         let keypair = if private_key_str.starts_with('[') && private_key_str.ends_with(']') {
             // JSON 数组格式 [1,2,3,...]
-            let bytes: Vec<u8> = serde_json::from_str(&private_key_str)
-                .map_err(|e| anyhow::anyhow!("解析私钥JSON格式失败: {}", e))?;
+            let bytes: Vec<u8> = serde_json::from_str(&private_key_str).map_err(|e| anyhow::anyhow!("解析私钥JSON格式失败: {}", e))?;
             if bytes.len() != 64 {
                 return Err(anyhow::anyhow!("私钥长度必须是64字节"));
             }
             Keypair::from_bytes(&bytes)?
         } else {
             // Base58 格式
-            let bytes = bs58::decode(&private_key_str)
-                .into_vec()
-                .map_err(|e| anyhow::anyhow!("解码Base58私钥失败: {}", e))?;
+            let bytes = bs58::decode(&private_key_str).into_vec().map_err(|e| anyhow::anyhow!("解码Base58私钥失败: {}", e))?;
             if bytes.len() != 64 {
                 return Err(anyhow::anyhow!("私钥长度必须是64字节"));
             }
             Keypair::from_bytes(&bytes)?
         };
-        
+
         Ok(keypair)
     }
 }
