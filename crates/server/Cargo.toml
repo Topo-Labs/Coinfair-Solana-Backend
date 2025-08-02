@@ -72,6 +72,7 @@ rand = "0.8"
 utoipa = { version = "4.2", features = ["axum_extras", "chrono"] }
 utoipa-swagger-ui = { version = "5.0", features = ["axum"] }
 num-traits = { workspace = true }
+urlencoding = "2.1"
 # For dev-dependencies, there is no need to config agiain.
 [dev-dependencies]
 tokio-test = "0.4"

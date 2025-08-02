@@ -305,6 +305,7 @@ mod tests {
             solana_auth_message_ttl: 300,
             redis_url: None,
             rate_limit_redis_prefix: "test:ratelimit".to_string(),
+            auth_disabled: false,
         }
     }
 

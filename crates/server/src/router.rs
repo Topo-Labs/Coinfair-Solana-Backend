@@ -4,13 +4,15 @@ use crate::{
     auth::{
         AuthConfig, JwtManager, MultiDimensionalRateLimit,
         PermissionManager, RateLimitService, SolanaAuthService,
+        SolanaMiddlewareBuilder,
     },
 };
 use axum::{
     error_handling::HandleErrorLayer,
-    http::{Method, StatusCode},
-    middleware as axum_middleware,
-    response::IntoResponse,
+    extract::State,
+    http::{Method, StatusCode, Request},
+    middleware::{self as axum_middleware, Next},
+    response::{IntoResponse, Response},
     routing::get,
     BoxError, Extension, Json, Router,
 };
@@ -42,6 +44,13 @@ impl AppRouter {
         let solana_auth_service = SolanaAuthService::new(jwt_manager.clone(), auth_config.clone());
         let permission_manager = PermissionManager::new();
         
+        // 创建 Solana 权限中间件构建器
+        let solana_middleware_builder = SolanaMiddlewareBuilder::new(
+            jwt_manager.clone(), 
+            services.solana_permission.clone(),
+            auth_config.clone()
+        );
+        
         // 初始化速率限制服务
         let rate_limit_service = RateLimitService::new(
             auth_config.redis_url.clone(),
@@ -53,6 +62,16 @@ impl AppRouter {
             None, // 使用默认用户等级配置
             None, // 使用默认端点配置
         );
+        
+        // 克隆用于中间件
+        let rate_limiter_for_middleware = Arc::new(MultiDimensionalRateLimit::new(
+            RateLimitService::new(
+                auth_config.redis_url.clone(),
+                auth_config.rate_limit_redis_prefix.clone(),
+            ).expect("Failed to initialize rate limit service for middleware"),
+            None,
+            None,
+        ));
         
         let cors = CorsLayer::new()
             .allow_origin(Any)
@@ -77,6 +96,11 @@ impl AppRouter {
             .nest("/api/v1", api::app())
             // API 文档说明页面
             .route("/api-docs", get(api_docs_info))
+            // 添加速率限制中间件
+            .layer(axum_middleware::from_fn_with_state(
+                rate_limiter_for_middleware, 
+                Self::rate_limit_middleware
+            ))
             // 添加IP日志中间件
             .layer(axum_middleware::from_fn(middleware::simple_ip_logger))
             .layer(cors)
@@ -87,6 +111,7 @@ impl AppRouter {
                     .layer(Extension(Arc::new(solana_auth_service)))
                     .layer(Extension(Arc::new(permission_manager)))
                     .layer(Extension(Arc::new(multi_rate_limiter)))
+                    .layer(Extension(Arc::new(solana_middleware_builder)))
                     .layer(TraceLayer::new_for_http())
                     .layer(HandleErrorLayer::new(Self::handle_timeout_error))
                     .timeout(Duration::from_secs(*HTTP_TIMEOUT))
@@ -136,6 +161,15 @@ impl AppRouter {
                 })),
             )
         }
+    }
+
+    /// 速率限制中间件
+    async fn rate_limit_middleware(
+        State(rate_limiter): State<Arc<MultiDimensionalRateLimit>>,
+        request: Request<axum::body::Body>,
+        next: Next,
+    ) -> Result<Response, StatusCode> {
+        rate_limiter.middleware(request, next).await
     }
 }
 

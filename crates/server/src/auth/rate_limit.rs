@@ -347,9 +347,11 @@ impl MultiDimensionalRateLimit {
         request: Request,
         next: Next,
     ) -> Result<Response, StatusCode> {
-        let _uri = request.uri().path().to_string();
+        let uri = request.uri().path().to_string();
         let client_ip = self.extract_client_ip(&request);
         let auth_user = request.extensions().get::<AuthUser>().cloned();
+
+        debug!("🔒 Rate limit middleware called for IP: {} | Path: {}", client_ip, uri);
 
         // 基础IP限制（防止滥用）
         let ip_config = RateLimitConfig {

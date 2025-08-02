@@ -13,6 +13,7 @@ pub mod position_storage;
 pub mod refer_service;
 pub mod reward_service;
 pub mod solana;
+pub mod solana_permission_service;
 // pub mod solana_service;
 pub mod user_service;
 
@@ -20,6 +21,7 @@ use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
     solana::{DynSolanaService, SolanaService},
+    solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
     user_service::{DynUserService, UserService},
 };
 use database::{clmm_pool::PoolTypeMigration, position::repository::PositionRepositoryTrait, Database};
@@ -32,6 +34,7 @@ pub struct Services {
     pub refer: DynReferService,
     pub reward: DynRewardService,
     pub solana: DynSolanaService,
+    pub solana_permission: DynSolanaPermissionService,
     pub database: Arc<Database>,
 }
 
@@ -67,11 +70,17 @@ impl Services {
                     }
                 };
 
+                // 创建权限服务
+                let solana_permission = Arc::new(
+                    SolanaPermissionService::with_database(database.clone())
+                ) as DynSolanaPermissionService;
+
                 let mut services = Self {
                     user,
                     refer,
                     reward,
                     solana,
+                    solana_permission,
                     database,
                 };
 
@@ -98,6 +107,11 @@ impl Services {
         // 创建带数据库的SolanaService
         let solana = Arc::new(SolanaService::with_database(db)?) as DynSolanaService;
 
+        // 创建权限服务
+        let solana_permission = Arc::new(
+            SolanaPermissionService::with_database(database.clone())
+        ) as DynSolanaPermissionService;
+
         info!("🧠 initializing services from environment...");
 
         Ok(Self {
@@ -105,6 +119,7 @@ impl Services {
             refer,
             reward,
             solana,
+            solana_permission,
             database,
         })
     }
@@ -122,11 +137,75 @@ impl Services {
         // 3. 初始化Position存储服务索引
         self.init_position_indexes().await?;
 
-        // 4. 应用默认分页配置
+        // 4. 初始化权限配置索引
+        self.init_permission_indexes().await?;
+
+        // 5. 初始化默认权限配置
+        self.init_default_permission_config().await?;
+
+        // 6. 初始化权限服务（从数据库加载配置）
+        self.init_permission_service().await?;
+
+        // 7. 应用默认分页配置
         self.apply_default_pagination_config().await?;
 
         info!("✅ 数据库服务初始化完成");
         Ok(())
+    }
+
+    /// 初始化权限配置索引
+    async fn init_permission_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("🔧 初始化权限配置数据库索引...");
+        
+        match self.database.init_permission_indexes().await {
+            Ok(_) => {
+                info!("✅ 权限配置数据库索引初始化完成");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ 权限配置数据库索引初始化失败: {}", e);
+                Err(format!("权限索引初始化失败: {}", e).into())
+            }
+        }
+    }
+
+    /// 初始化权限服务
+    async fn init_permission_service(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("🔧 初始化权限服务...");
+        
+        // 将权限服务向下转型为具体类型以调用 init_from_database 方法
+        if let Some(concrete_service) = self.solana_permission.as_any().downcast_ref::<SolanaPermissionService>() {
+            match concrete_service.init_from_database().await {
+                Ok(_) => {
+                    info!("✅ 权限服务初始化完成");
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("❌ 权限服务初始化失败: {}", e);
+                    Err(format!("权限服务初始化失败: {}", e).into())
+                }
+            }
+        } else {
+            // 如果不是具体类型，说明是测试环境或其他实现，跳过数据库初始化
+            info!("⚠️ 权限服务非数据库实现，跳过数据库初始化");
+            Ok(())
+        }
+    }
+
+    /// 初始化默认权限配置
+    async fn init_default_permission_config(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("🔧 初始化默认权限配置...");
+        
+        match self.database.init_default_permission_config().await {
+            Ok(_) => {
+                info!("✅ 默认权限配置初始化完成");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ 默认权限配置初始化失败: {}", e);
+                Err(format!("权限配置初始化失败: {}", e).into())
+            }
+        }
     }
 
     /// 运行池子类型迁移

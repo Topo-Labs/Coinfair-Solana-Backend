@@ -15,6 +15,7 @@ fn test_auth_config() -> AuthConfig {
         solana_auth_message_ttl: 300,
         redis_url: None, // 使用内存存储进行测试
         rate_limit_redis_prefix: "test:ratelimit".to_string(),
+        auth_disabled: false,
     }
 }
 
@@ -394,6 +395,417 @@ mod rate_limit_tests {
             }
             _ => panic!("应该创建用户端点组合类型的限制密钥"),
         }
+    }
+}
+
+#[cfg(test)]
+mod solana_permission_tests {
+    use super::*;
+    use crate::auth::{
+        SolanaPermissionManager, SolanaApiAction, SolanaPermissionPolicy,
+        SolanaApiPermissionConfig, GlobalSolanaPermissionConfig
+    };
+    use std::collections::{HashSet, HashMap};
+
+    fn create_test_permissions() -> HashSet<Permission> {
+        let mut permissions = HashSet::new();
+        permissions.insert(Permission::ReadPool);
+        permissions.insert(Permission::CreatePosition);
+        permissions.insert(Permission::ReadPosition);
+        permissions
+    }
+
+    #[test]
+    fn test_solana_permission_manager_creation() {
+        let manager = SolanaPermissionManager::new();
+        let global_config = manager.get_global_config();
+        
+        assert!(global_config.global_read_enabled);
+        assert!(global_config.global_write_enabled);
+        assert!(!global_config.emergency_shutdown);
+        assert!(!global_config.maintenance_mode);
+        assert_eq!(global_config.version, 1);
+        
+        let api_configs = manager.get_all_api_configs();
+        assert!(!api_configs.is_empty());
+        assert!(api_configs.contains_key("/api/v1/solana/swap"));
+    }
+
+    #[test]
+    fn test_permission_policy_allow() {
+        let manager = SolanaPermissionManager::new();
+        let user_perms = create_test_permissions();
+        
+        // 测试无条件允许的策略
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::Allow,
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_permission_policy_deny() {
+        let manager = SolanaPermissionManager::new();
+        let user_perms = create_test_permissions();
+        
+        // 测试无条件拒绝的策略
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::Deny,
+            &user_perms,
+            &UserTier::Admin, // 即使是管理员也应该被拒绝
+        );
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "操作被拒绝");
+    }
+
+    #[test]
+    fn test_permission_policy_require_permission() {
+        let manager = SolanaPermissionManager::new();
+        let mut user_perms = HashSet::new();
+        user_perms.insert(Permission::ReadPool);
+        
+        // 测试用户有所需权限
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermission(Permission::ReadPool),
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_ok());
+        
+        // 测试用户缺少所需权限
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermission(Permission::CreatePosition),
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("缺少必需权限"));
+    }
+
+    #[test]
+    fn test_permission_policy_require_min_tier() {
+        let manager = SolanaPermissionManager::new();
+        let user_perms = HashSet::new();
+        
+        // 测试用户等级满足要求
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequireMinTier(UserTier::Basic),
+            &user_perms,
+            &UserTier::Premium,
+        );
+        assert!(result.is_ok());
+        
+        // 测试用户等级不满足要求
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequireMinTier(UserTier::Premium),
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("用户等级不足"));
+    }
+
+    #[test]
+    fn test_permission_policy_require_permission_and_tier() {
+        let manager = SolanaPermissionManager::new();
+        let mut user_perms = HashSet::new();
+        user_perms.insert(Permission::CreatePosition);
+        
+        // 测试用户有权限且等级足够
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::Basic),
+            &user_perms,
+            &UserTier::Premium,
+        );
+        assert!(result.is_ok());
+        
+        // 测试用户有权限但等级不够
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::Premium),
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_err());
+        
+        // 测试用户等级足够但缺少权限
+        user_perms.clear();
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::Basic),
+            &user_perms,
+            &UserTier::Premium,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_admin_bypass() {
+        let manager = SolanaPermissionManager::new();
+        let user_perms = HashSet::new(); // 管理员不需要具体权限
+        
+        // 管理员应该能绕过权限要求
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermission(Permission::CreatePosition),
+            &user_perms,
+            &UserTier::Admin,
+        );
+        assert!(result.is_ok());
+        
+        // 管理员应该能绕过权限和等级要求
+        let result = manager.check_permission_policy(
+            &SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::VIP),
+            &user_perms,
+            &UserTier::Admin,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_global_permission_priority() {
+        let mut manager = SolanaPermissionManager::new();
+        let user_perms = create_test_permissions();
+        
+        // 正常情况下应该允许读取
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_ok());
+        
+        // 关闭全局读取权限后应该被拒绝
+        manager.toggle_global_read(false);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("全局读取权限已关闭"));
+    }
+
+    #[test]
+    fn test_emergency_shutdown_priority() {
+        let mut manager = SolanaPermissionManager::new();
+        let user_perms = create_test_permissions();
+        
+        // 紧急停用前应该正常工作
+        let result = manager.check_api_permission(
+            "/api/v1/solana/swap",
+            &SolanaApiAction::Write,
+            &user_perms,
+            &UserTier::Basic,
+        );
+        assert!(result.is_ok());
+        
+        // 紧急停用后所有请求都应该被拒绝
+        manager.emergency_shutdown(true);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/swap",
+            &SolanaApiAction::Write,
+            &user_perms,
+            &UserTier::Admin, // 即使管理员也应该被拒绝
+        );
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "系统紧急停用中");
+    }
+
+    #[test]
+    fn test_maintenance_mode() {
+        let mut manager = SolanaPermissionManager::new();
+        let user_perms = create_test_permissions();
+        
+        // 开启维护模式
+        manager.toggle_maintenance_mode(true);
+        
+        // 普通用户应该被拒绝
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Premium,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("系统维护模式"));
+        
+        // 管理员应该可以访问
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Admin,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_endpoint_pattern_matching() {
+        let manager = SolanaPermissionManager::new();
+        
+        // 精确匹配
+        let config = manager.get_api_config("/api/v1/solana/swap");
+        assert!(config.is_some());
+        assert_eq!(config.unwrap().name, "代币交换");
+        
+        // 通配符匹配 - 流动性分布图
+        let config = manager.get_api_config("/api/v1/solana/pools/line/position");
+        assert!(config.is_some());
+        assert_eq!(config.unwrap().name, "流动性分布图");
+        
+        // 通配符匹配 - CLMM配置
+        let config = manager.get_api_config("/api/v1/solana/main/clmm-config/list");
+        assert!(config.is_some());
+        assert_eq!(config.unwrap().name, "CLMM配置");
+        
+        // 不匹配的端点
+        let config = manager.get_api_config("/api/v1/unknown/endpoint");
+        assert!(config.is_none());
+    }
+
+    #[test]
+    fn test_api_config_update() {
+        let mut manager = SolanaPermissionManager::new();
+        
+        let new_config = SolanaApiPermissionConfig {
+            endpoint: "/api/v1/solana/test".to_string(),
+            name: "测试API".to_string(),
+            category: "测试".to_string(),
+            read_policy: SolanaPermissionPolicy::RequireMinTier(UserTier::VIP),
+            write_policy: SolanaPermissionPolicy::Deny,
+            enabled: true,
+            created_at: chrono::Utc::now().timestamp() as u64,
+            updated_at: chrono::Utc::now().timestamp() as u64,
+        };
+        
+        // 添加新配置
+        manager.update_api_config("/api/v1/solana/test".to_string(), new_config.clone());
+        
+        // 验证配置已添加
+        let retrieved = manager.get_api_config("/api/v1/solana/test");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name, "测试API");
+    }
+
+    #[test]
+    fn test_batch_update_api_configs() {
+        let mut manager = SolanaPermissionManager::new();
+        
+        let mut configs = HashMap::new();
+        configs.insert(
+            "/api/v1/solana/test1".to_string(),
+            SolanaApiPermissionConfig {
+                endpoint: "/api/v1/solana/test1".to_string(),
+                name: "测试API1".to_string(),
+                category: "测试".to_string(),
+                read_policy: SolanaPermissionPolicy::Allow,
+                write_policy: SolanaPermissionPolicy::Deny,
+                enabled: true,
+                created_at: chrono::Utc::now().timestamp() as u64,
+                updated_at: chrono::Utc::now().timestamp() as u64,
+            }
+        );
+        configs.insert(
+            "/api/v1/solana/test2".to_string(),
+            SolanaApiPermissionConfig {
+                endpoint: "/api/v1/solana/test2".to_string(),
+                name: "测试API2".to_string(),
+                category: "测试".to_string(),
+                read_policy: SolanaPermissionPolicy::RequireMinTier(UserTier::Premium),
+                write_policy: SolanaPermissionPolicy::RequirePermission(Permission::CreatePosition),
+                enabled: false,
+                created_at: chrono::Utc::now().timestamp() as u64,
+                updated_at: chrono::Utc::now().timestamp() as u64,
+            }
+        );
+        
+        // 批量更新
+        manager.batch_update_api_configs(configs);
+        
+        // 验证更新结果
+        let config1 = manager.get_api_config("/api/v1/solana/test1");
+        assert!(config1.is_some());
+        assert_eq!(config1.unwrap().name, "测试API1");
+        
+        let config2 = manager.get_api_config("/api/v1/solana/test2");
+        assert!(config2.is_some());
+        assert_eq!(config2.unwrap().name, "测试API2");
+        assert!(!config2.unwrap().enabled);
+    }
+
+    #[test]
+    fn test_user_tier_hierarchy() {
+        let manager = SolanaPermissionManager::new();
+        
+        // 测试等级层次
+        assert!(manager.user_tier_meets_minimum(&UserTier::Premium, &UserTier::Basic));
+        assert!(manager.user_tier_meets_minimum(&UserTier::VIP, &UserTier::Premium));
+        assert!(manager.user_tier_meets_minimum(&UserTier::Admin, &UserTier::VIP));
+        
+        // 测试等级不足
+        assert!(!manager.user_tier_meets_minimum(&UserTier::Basic, &UserTier::Premium));
+        assert!(!manager.user_tier_meets_minimum(&UserTier::Premium, &UserTier::VIP));
+        
+        // 测试相同等级
+        assert!(manager.user_tier_meets_minimum(&UserTier::Premium, &UserTier::Premium));
+    }
+
+    #[test]
+    fn test_api_disabled_check() {
+        let mut manager = SolanaPermissionManager::new();
+        let user_perms = create_test_permissions();
+        
+        // 创建一个禁用的API配置
+        let disabled_config = SolanaApiPermissionConfig {
+            endpoint: "/api/v1/solana/disabled".to_string(),
+            name: "禁用的API".to_string(),
+            category: "测试".to_string(),
+            read_policy: SolanaPermissionPolicy::Allow,
+            write_policy: SolanaPermissionPolicy::Allow,
+            enabled: false, // 禁用
+            created_at: chrono::Utc::now().timestamp() as u64,
+            updated_at: chrono::Utc::now().timestamp() as u64,
+        };
+        
+        manager.update_api_config("/api/v1/solana/disabled".to_string(), disabled_config);
+        
+        // 即使权限策略允许，禁用的API也应该被拒绝
+        let result = manager.check_api_permission(
+            "/api/v1/solana/disabled",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Admin,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("已禁用"));
+    }
+
+    #[test]
+    fn test_global_config_update() {
+        let mut manager = SolanaPermissionManager::new();
+        
+        let new_global_config = GlobalSolanaPermissionConfig {
+            global_read_enabled: false,
+            global_write_enabled: true,
+            default_read_policy: SolanaPermissionPolicy::RequireMinTier(UserTier::Premium),
+            default_write_policy: SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::VIP),
+            emergency_shutdown: false,
+            maintenance_mode: true,
+            version: 2,
+            last_updated: chrono::Utc::now().timestamp() as u64,
+            updated_by: "test_admin".to_string(),
+        };
+        
+        manager.update_global_config(new_global_config.clone());
+        
+        let updated_config = manager.get_global_config();
+        assert!(!updated_config.global_read_enabled);
+        assert!(updated_config.global_write_enabled);
+        assert!(updated_config.maintenance_mode);
+        assert_eq!(updated_config.updated_by, "test_admin");
+        assert!(updated_config.version > 2); // 版本应该自动递增
     }
 }
 

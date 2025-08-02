@@ -8,29 +8,57 @@ pub mod static_config_controller;
 pub mod swap_controller;
 pub mod swap_v2_controller;
 
-use axum::Router;
+use axum::{middleware, Extension, Router};
+use crate::auth::SolanaMiddlewareBuilder;
+use std::sync::Arc;
 
 pub struct SolanaController;
 
 impl SolanaController {
     pub fn app() -> Router {
         Router::new()
-            // 直接合并swap相关路由
-            .merge(swap_controller::SwapController::routes())
-            .merge(swap_v2_controller::SwapV2Controller::routes())
-            // position路由嵌套在/position下
-            .nest("/position", position_controller::PositionController::routes())
-            // pool路由嵌套在/pool下
+            // 公开信息路由 - 使用可选权限检查
+            .nest("/main", Self::public_info_routes())
+            .nest("/mint", Self::mint_info_routes())
+            
+            // 查询路由 - 使用可选权限检查
+            .nest("/pools", Self::query_routes())
+            
+            // 交易路由 - 使用强制权限检查  
+            .merge(Self::trading_routes())
+            
+            // 仓位管理路由 - 使用强制权限检查
+            .nest("/position", Self::position_routes())
+            
+            // 池子管理路由 - 使用强制权限检查和特定权限
+            .nest("/pool", Self::pool_management_routes())
+    }
+
+    /// 公开信息路由 - 版本、配置等基础信息
+    fn public_info_routes() -> Router {
+        Router::new()
+            .route("/version", axum::routing::get(static_config_controller::get_version))
+            .route("/auto-fee", axum::routing::get(static_config_controller::get_auto_fee))
+            .route("/rpcs", axum::routing::get(static_config_controller::get_rpcs))
+            .route("/chain-time", axum::routing::get(static_config_controller::get_chain_time))
+            .route("/info", axum::routing::get(static_config_controller::get_info))
+            .nest("/clmm-config", clmm_config_controller::ClmmConfigController::routes())
+            .layer(middleware::from_fn(Self::apply_solana_optional_auth))
+    }
+
+    /// 代币信息路由
+    fn mint_info_routes() -> Router {
+        Router::new()
+            .route("/list", axum::routing::get(static_config_controller::get_mint_list))
+            .layer(middleware::from_fn(Self::apply_solana_optional_auth))
+    }
+
+    /// 查询路由 - 池子信息、流动性数据等
+    fn query_routes() -> Router {
+        Router::new()
+            // pools/info路由 - 池子基础信息
             .nest(
-                "/pool",
-                Router::new()
-                    .merge(clmm_pool_create::ClmmPoolCreateController::routes())
-                    .merge(cpmm_pool_create::CpmmPoolCreateController::routes())
-                    .merge(clmm_pool_query::ClmmPoolQueryController::routes()),
-            )
-            // pools/info路由
-            .nest(
-                "/pools/info",
+                "/info",
                 Router::new()
                     .route("/list", axum::routing::get(clmm_pool_query::get_pool_list))
                     .route("/mint", axum::routing::get(clmm_pool_query::get_pools_by_mint_pair))
@@ -38,21 +66,56 @@ impl SolanaController {
             )
             // pools/key路由 - 池子密钥信息
             .nest(
-                "/pools/key",
+                "/key",
                 Router::new()
                     .route("/ids", axum::routing::get(clmm_pool_query::get_pools_key_by_ids)),
             )
             // pools/line路由 - 流动性线图
-            .nest("/pools/line", liquidity_line_controller::LiquidityLineController::routes())
-            // CLMM配置路由
-            .nest("/main/clmm-config", Router::new().merge(clmm_config_controller::ClmmConfigController::routes()))
-            // 静态配置路由
-            .route("/main/version", axum::routing::get(static_config_controller::get_version))
-            .route("/main/auto-fee", axum::routing::get(static_config_controller::get_auto_fee))
-            .route("/main/rpcs", axum::routing::get(static_config_controller::get_rpcs))
-            .route("/main/chain-time", axum::routing::get(static_config_controller::get_chain_time))
-            .route("/mint/list", axum::routing::get(static_config_controller::get_mint_list))
-            .route("/main/info", axum::routing::get(static_config_controller::get_info))
-        // .route("/main/clmm-config", axum::routing::get(clmm_config_controller::ClmmConfigController::routes()))
+            .nest("/line", liquidity_line_controller::LiquidityLineController::routes())
+            .layer(middleware::from_fn(Self::apply_solana_optional_auth))
+    }
+
+    /// 交易路由 - 交换操作
+    fn trading_routes() -> Router {
+        Router::new()
+            // 合并swap相关路由
+            .merge(swap_controller::SwapController::routes())
+            .merge(swap_v2_controller::SwapV2Controller::routes())
+            .layer(middleware::from_fn(Self::apply_solana_auth))
+    }
+
+    /// 仓位管理路由 - 开仓、平仓、增减流动性等
+    fn position_routes() -> Router {
+        position_controller::PositionController::routes()
+            .layer(middleware::from_fn(Self::apply_solana_auth))
+    }
+
+    /// 池子管理路由 - 创建池子等高级操作
+    fn pool_management_routes() -> Router {
+        Router::new()
+            .merge(clmm_pool_create::ClmmPoolCreateController::routes())
+            .merge(cpmm_pool_create::CpmmPoolCreateController::routes())
+            .merge(clmm_pool_query::ClmmPoolQueryController::routes())
+            .layer(middleware::from_fn(Self::apply_solana_auth))
+    }
+
+    /// 应用Solana权限检查中间件（强制认证）
+    async fn apply_solana_auth(
+        Extension(solana_middleware): Extension<Arc<SolanaMiddlewareBuilder>>,
+        request: axum::extract::Request,
+        next: axum::middleware::Next,
+    ) -> Result<axum::response::Response, axum::http::StatusCode> {
+        let middleware_fn = solana_middleware.solana_auth();
+        middleware_fn(request, next).await
+    }
+
+    /// 应用Solana可选权限检查中间件（允许匿名访问但检查权限）
+    async fn apply_solana_optional_auth(
+        Extension(solana_middleware): Extension<Arc<SolanaMiddlewareBuilder>>,
+        request: axum::extract::Request,
+        next: axum::middleware::Next,
+    ) -> Result<axum::response::Response, axum::http::StatusCode> {
+        let middleware_fn = solana_middleware.solana_optional_auth();
+        middleware_fn(request, next).await
     }
 }

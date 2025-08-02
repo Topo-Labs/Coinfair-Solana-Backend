@@ -195,6 +195,8 @@ pub struct AuthConfig {
     pub solana_auth_message_ttl: u64,
     pub redis_url: Option<String>,
     pub rate_limit_redis_prefix: String,
+    /// 认证开关：true时禁用认证，false时启用认证
+    pub auth_disabled: bool,
 }
 
 impl Default for AuthConfig {
@@ -213,6 +215,10 @@ impl Default for AuthConfig {
             redis_url: std::env::var("REDIS_URL").ok(),
             rate_limit_redis_prefix: std::env::var("RATE_LIMIT_REDIS_PREFIX")
                 .unwrap_or_else(|_| "coinfair:ratelimit".to_string()),
+            auth_disabled: std::env::var("AUTH_DISABLED")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
         }
     }
 }
