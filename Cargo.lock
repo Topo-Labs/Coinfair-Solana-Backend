@@ -1462,6 +1462,7 @@ dependencies = [
  "mpl-token-metadata",
  "rand 0.9.1",
  "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "referral",
  "regex",
  "serde",
  "serde_json",
@@ -5753,6 +5754,14 @@ dependencies = [
  "getrandom 0.2.16",
  "libredox",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "referral"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
 ]
 
 [[package]]

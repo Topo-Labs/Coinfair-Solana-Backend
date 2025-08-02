@@ -21,6 +21,10 @@ pub struct ClientConfig {
     pub pool_id_account: Option<Pubkey>,
     pub tickarray_bitmap_extension: Option<Pubkey>,
     pub amm_config_index: u16,
+    pub upper_path: String,
+    pub referral_program: Pubkey,
+    pub coinfair_nft: Pubkey,
+    pub lower_path: String,
 }
 
 pub fn read_keypair_file(s: &str) -> Result<Keypair> {

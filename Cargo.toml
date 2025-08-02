@@ -10,6 +10,7 @@ members = [
       "crates/solana/clmm-client",
       "crates/solana/cpmm",
       "crates/solana/cpmm-client",
+      "crates/solana/referral",
       "crates/telegram",
       "crates/timer",
       "crates/utils",
