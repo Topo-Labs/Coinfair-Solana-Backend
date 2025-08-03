@@ -154,6 +154,10 @@ pub trait SolanaServiceTrait {
     // NFT operations
     async fn mint_nft(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftResponse>;
     async fn mint_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse>;
+    
+    // Claim NFT operations
+    async fn claim_nft(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftResponse>;
+    async fn claim_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -360,5 +364,14 @@ impl SolanaServiceTrait for SolanaService {
     
     async fn mint_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse> {
         self.nft.mint_nft_and_send_transaction(request).await
+    }
+    
+    // Claim NFT operations - delegate to nft service
+    async fn claim_nft(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftResponse> {
+        self.nft.claim_nft(request).await
+    }
+    
+    async fn claim_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse> {
+        self.nft.claim_nft_and_send_transaction(request).await
     }
 }

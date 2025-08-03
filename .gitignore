@@ -75,3 +75,4 @@ static_api.md
 docs/*
 tests/*
 .claude/*
+lower-wallet.json

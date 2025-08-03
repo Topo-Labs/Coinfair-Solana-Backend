@@ -14,6 +14,31 @@ use utoipa::OpenApi;
     paths(
         // System health check
         crate::api::health,
+        // Authentication endpoints
+        crate::api::auth_controller::generate_auth_message,
+        crate::api::auth_controller::solana_login,
+        crate::api::auth_controller::refresh_token,
+        crate::api::auth_controller::get_user_profile,
+        crate::api::auth_controller::logout,
+        crate::api::auth_controller::check_auth_status,
+        crate::api::auth_controller::list_authenticated_users,
+        crate::api::auth_controller::get_user_permissions,
+        crate::api::auth_controller::update_user_permissions,
+        // Development Authentication endpoints
+        crate::api::dev_auth_controller::generate_admin_token,
+        crate::api::dev_auth_controller::generate_user_token,
+        crate::api::dev_auth_controller::get_token_info,
+        // Permission Management endpoints
+        crate::api::permission_management_controller::get_global_config,
+        crate::api::permission_management_controller::update_global_config,
+        crate::api::permission_management_controller::toggle_global_read,
+        crate::api::permission_management_controller::toggle_global_write,
+        crate::api::permission_management_controller::emergency_shutdown,
+        crate::api::permission_management_controller::toggle_maintenance_mode,
+        crate::api::permission_management_controller::get_all_api_configs,
+        crate::api::permission_management_controller::get_api_configs_stats,
+        crate::api::permission_management_controller::test_permission,
+        crate::api::permission_management_controller::reload_configuration,
         // Refer endpoints
         crate::api::refer_controller::get_upper,
         crate::api::refer_controller::get_uppers,
@@ -79,6 +104,13 @@ use utoipa::OpenApi;
         // CLMM Configuration endpoints
         crate::api::solana::clmm_config_controller::get_clmm_configs,
         crate::api::solana::clmm_config_controller::save_clmm_config,
+        // Solana NFT endpoints
+        crate::api::solana::nft_controller::mint_nft,
+        crate::api::solana::nft_controller::mint_nft_and_send_transaction,
+        crate::api::solana::nft_controller::claim_nft,
+        crate::api::solana::nft_controller::claim_nft_and_send_transaction,
+        // Liquidity Line endpoints
+        crate::api::solana::liquidity_line_controller::get_pool_liquidity_line,
         // Static Price endpoint
         crate::api::static_controller::get_mint_price,
     ),
@@ -90,6 +122,17 @@ use utoipa::OpenApi;
             database::reward::model::RewardItem,
             database::reward::model::RewardItemWithTime,
             database::user::model::User,
+            // Authentication models
+            crate::auth::models::SolanaLoginRequest,
+            crate::auth::models::AuthResponse,
+            crate::auth::models::UserInfo,
+            crate::auth::solana_auth::GenerateAuthMessageRequest,
+            crate::auth::solana_auth::AuthMessageResponse,
+            // Development Auth DTOs
+            crate::api::dev_auth_controller::AdminTokenRequest,
+            crate::api::dev_auth_controller::UserTokenRequest,
+            crate::api::dev_auth_controller::DevTokenResponse,
+            crate::api::dev_auth_controller::TokenInfoResponse,
             // CLMM Pool models
             database::clmm_pool::ClmmPool,
             database::clmm_pool::TokenInfo,
@@ -204,10 +247,29 @@ use utoipa::OpenApi;
             crate::dtos::static_dto::ClmmConfig,
             crate::dtos::static_dto::SaveClmmConfigRequest,
             crate::dtos::static_dto::SaveClmmConfigResponse,
+            // NFT DTOs
+            crate::dtos::solana_dto::MintNftRequest,
+            crate::dtos::solana_dto::MintNftResponse,
+            crate::dtos::solana_dto::MintNftAndSendTransactionResponse,
+            crate::dtos::solana_dto::ClaimNftRequest,
+            crate::dtos::solana_dto::ClaimNftResponse,
+            crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::MintNftResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::MintNftAndSendTransactionResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::ClaimNftResponse>,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse>,
+            // Liquidity Line DTOs
+            crate::dtos::solana_dto::PoolLiquidityLineRequest,
+            crate::dtos::solana_dto::PoolLiquidityLineData,
+            crate::dtos::solana_dto::LiquidityLinePoint,
+            crate::dtos::solana_dto::ApiResponse<crate::dtos::solana_dto::PoolLiquidityLineData>,
         )
     ),
     tags(
         (name = "系统状态", description = "系统健康检查和状态监控"),
+        (name = "认证管理", description = "Solana钱包认证和用户管理"),
+        (name = "开发认证", description = "开发环境下的令牌生成和管理"),
+        (name = "权限管理", description = "API权限配置和管理"),
         (name = "refer", description = "推荐关系管理"),
         (name = "reward", description = "奖励系统"),
         (name = "user", description = "用户管理"),
@@ -219,7 +281,9 @@ use utoipa::OpenApi;
         (name = "Solana经典AMM", description = "Solana 经典AMM池子创建接口"),
         (name = "系统配置", description = "系统配置相关接口"),
         (name = "代币信息", description = "代币信息相关接口"),
-        (name = "CLMM配置管理", description = "CLMM配置管理相关接口")
+        (name = "CLMM配置管理", description = "CLMM配置管理相关接口"),
+        (name = "Solana推荐NFT", description = "Solana推荐NFT相关接口"),
+        (name = "流动性分布", description = "池子流动性分布查询接口")
     )
 )]
 pub struct ApiDoc;
