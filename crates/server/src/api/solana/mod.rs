@@ -5,6 +5,7 @@ pub mod cpmm_pool_create;
 pub mod liquidity_line_controller;
 pub mod nft_controller;
 pub mod position_controller;
+pub mod referral_controller;
 pub mod static_config_controller;
 pub mod swap_controller;
 pub mod swap_v2_controller;
@@ -96,7 +97,9 @@ impl SolanaController {
     
     /// NFT推荐路由 - NFT铸造等
     fn nft_routes() -> Router {
-        nft_controller::NftController::routes()
+        Router::new()
+            .merge(nft_controller::NftController::routes())
+            .nest("/referral", referral_controller::ReferralController::routes())
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }
 

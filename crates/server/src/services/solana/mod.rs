@@ -8,6 +8,7 @@ pub mod liquidity;
 pub mod liquidity_line;
 pub mod nft;
 pub mod position;
+pub mod referral;
 pub mod service;
 pub mod shared;
 pub mod swap;

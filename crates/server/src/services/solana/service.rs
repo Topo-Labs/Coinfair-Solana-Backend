@@ -3,7 +3,8 @@
 use crate::dtos::solana_dto::{
     BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
     CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse,
-    DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+    DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest, 
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
     NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PoolKeyResponse, PositionInfo, PriceQuoteRequest,
     PriceQuoteResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
 };
@@ -14,6 +15,7 @@ use super::config::{ClmmConfigService, ClmmConfigServiceTrait};
 use super::liquidity_line::LiquidityLineService;
 use super::nft::NftService;
 use super::position::PositionService;
+use super::referral::ReferralService;
 use super::shared::{SharedContext, SolanaHelpers};
 use super::swap::SwapService;
 
@@ -34,6 +36,7 @@ pub struct SolanaService {
     config_service: ClmmConfigService,
     liquidity_line_service: LiquidityLineService,
     pub nft: NftService,
+    pub referral: ReferralService,
 }
 
 impl SolanaService {
@@ -63,6 +66,7 @@ impl SolanaService {
             config_service: ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()),
             liquidity_line_service: LiquidityLineService::new(shared_context.rpc_client.clone(), Arc::new(database)),
             nft: NftService::new(shared_context.clone()),
+            referral: ReferralService::new(shared_context.clone()),
             shared_context,
         })
     }
@@ -78,6 +82,9 @@ impl Default for SolanaService {
 /// Trait defining all Solana service operations
 #[async_trait]
 pub trait SolanaServiceTrait {
+    /// 支持类型转换的方法，用于downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
+    
     // Basic operations
     async fn swap_tokens(&self, request: SwapRequest) -> Result<SwapResponse>;
     async fn get_balance(&self) -> Result<BalanceResponse>;
@@ -163,6 +170,11 @@ pub trait SolanaServiceTrait {
 /// Implementation of SolanaServiceTrait that delegates to specialized services
 #[async_trait]
 impl SolanaServiceTrait for SolanaService {
+    /// 支持类型转换的方法，用于downcasting
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
     // Swap operations - delegate to swap_service
     async fn swap_tokens(&self, request: SwapRequest) -> Result<SwapResponse> {
         self.swap_service.swap_tokens(request).await
