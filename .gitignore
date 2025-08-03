@@ -70,7 +70,6 @@ perf.data*
 CLAUDE.md
 screenshots/
 /data/
-static_api.md
 .codebuddy/*
 docs/*
 tests/*
