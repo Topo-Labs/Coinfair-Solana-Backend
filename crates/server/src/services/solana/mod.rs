@@ -12,6 +12,7 @@ pub mod referral;
 pub mod service;
 pub mod shared;
 pub mod swap;
+pub mod token;
 
 // Re-export the main service and trait for external use
 pub use service::{DynSolanaService, SolanaService, SolanaServiceTrait};

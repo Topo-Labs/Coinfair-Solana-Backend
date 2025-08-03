@@ -13,42 +13,32 @@ use tracing::{info, error};
 use utils::{AppConfig, AppResult};
 
 pub mod refer;
-use refer::model::Refer;
-
 pub mod user;
-use user::model::User;
-
 pub mod reward;
-use reward::model::Reward;
-
 pub mod clmm_pool;
-use clmm_pool::model::ClmmPool;
-
 pub mod clmm_config;
-use clmm_config::model::ClmmConfigModel;
-
 pub mod position;
-use position::model::Position;
-
 pub mod permission_config;
-use permission_config::model::{GlobalSolanaPermissionConfigModel, SolanaApiPermissionConfigModel, PermissionConfigLogModel};
-use permission_config::repository::{GlobalPermissionConfigRepository, ApiPermissionConfigRepository, PermissionConfigLogRepository};
+
+pub mod token_info;
 
 #[derive(Clone, Debug)]
 pub struct Database {
-    pub refers: Collection<Refer>,
-    pub users: Collection<User>,
-    pub rewards: Collection<Reward>,
-    pub clmm_pools: Collection<ClmmPool>,
-    pub clmm_configs: Collection<ClmmConfigModel>,
-    pub positions: Collection<Position>,
-    pub global_permission_configs: Collection<GlobalSolanaPermissionConfigModel>,
-    pub api_permission_configs: Collection<SolanaApiPermissionConfigModel>,
-    pub permission_config_logs: Collection<PermissionConfigLogModel>,
+    pub refers: Collection<refer::model::Refer>,
+    pub users: Collection<user::model::User>,
+    pub rewards: Collection<reward::model::Reward>,
+    pub clmm_pools: Collection<clmm_pool::model::ClmmPool>,
+    pub clmm_configs: Collection<clmm_config::model::ClmmConfigModel>,
+    pub positions: Collection<position::model::Position>,
+    pub global_permission_configs: Collection<permission_config::model::GlobalSolanaPermissionConfigModel>,
+    pub api_permission_configs: Collection<permission_config::model::SolanaApiPermissionConfigModel>,
+    pub permission_config_logs: Collection<permission_config::model::PermissionConfigLogModel>,
+    pub token_infos: Collection<token_info::model::TokenInfo>,
     // 仓库层
-    pub global_permission_repository: GlobalPermissionConfigRepository,
-    pub api_permission_repository: ApiPermissionConfigRepository,
-    pub permission_log_repository: PermissionConfigLogRepository,
+    pub global_permission_repository: permission_config::repository::GlobalPermissionConfigRepository,
+    pub api_permission_repository: permission_config::repository::ApiPermissionConfigRepository,
+    pub permission_log_repository: permission_config::repository::PermissionConfigLogRepository,
+    pub token_info_repository: token_info::repository::TokenInfoRepository,
 }
 
 impl Database {
@@ -75,11 +65,13 @@ impl Database {
         let global_permission_configs = db.collection("GlobalSolanaPermissionConfig");
         let api_permission_configs = db.collection("SolanaApiPermissionConfig");
         let permission_config_logs = db.collection("PermissionConfigLog");
+        let token_infos = db.collection("TokenInfo");
 
         // 初始化仓库层
-        let global_permission_repository = GlobalPermissionConfigRepository::new(global_permission_configs.clone());
-        let api_permission_repository = ApiPermissionConfigRepository::new(api_permission_configs.clone());
-        let permission_log_repository = PermissionConfigLogRepository::new(permission_config_logs.clone());
+        let global_permission_repository = permission_config::repository::GlobalPermissionConfigRepository::new(global_permission_configs.clone());
+        let api_permission_repository = permission_config::repository::ApiPermissionConfigRepository::new(api_permission_configs.clone());
+        let permission_log_repository = permission_config::repository::PermissionConfigLogRepository::new(permission_config_logs.clone());
+        let token_info_repository = token_info::repository::TokenInfoRepository::new(token_infos.clone());
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -93,9 +85,11 @@ impl Database {
             global_permission_configs,
             api_permission_configs,
             permission_config_logs,
+            token_infos,
             global_permission_repository,
             api_permission_repository,
             permission_log_repository,
+            token_info_repository,
         })
     }
 
@@ -106,6 +100,9 @@ impl Database {
         
         // 初始化权限配置日志索引
         let _result = self.permission_log_repository.init_indexes().await;
+        
+        // 初始化代币信息索引
+        let _result = self.token_info_repository.init_indexes().await;
         
         info!("✅ 权限配置索引初始化完成");
         Ok(())
@@ -236,3 +233,32 @@ impl Database {
         Ok(())
     }
 }
+
+// Re-export specific items to avoid naming conflicts
+// Export specific items from clmm_config
+pub use clmm_config::{model as clmm_config_model, repository as clmm_config_repository};
+
+// Export specific items from clmm_pool, excluding TokenInfo to avoid conflict
+pub use clmm_pool::{
+    model::{ClmmPool, PriceInfo, VaultInfo, ExtensionInfo, TransactionInfo, SyncStatus, 
+           PoolStatus, TransactionStatus, PoolStats, PoolQueryParams, PoolType},
+    repository as clmm_pool_repository, migration
+};
+
+// Re-export clmm_pool::TokenInfo with alias if needed
+pub use clmm_pool::model::TokenInfo as ClmmTokenInfo;
+
+// Export all from permission_config with aliases to avoid conflicts
+pub use permission_config::{
+    model as permission_config_model,
+    repository as permission_config_repository
+};
+
+// Export all from position (no conflicts)  
+pub use position::*;
+
+// Export all from token_info with aliases to avoid conflicts
+pub use token_info::{
+    model as token_info_model,
+    repository as token_info_repository
+};

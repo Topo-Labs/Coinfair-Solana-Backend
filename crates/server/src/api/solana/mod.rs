@@ -9,6 +9,7 @@ pub mod referral_controller;
 pub mod static_config_controller;
 pub mod swap_controller;
 pub mod swap_v2_controller;
+pub mod token_controller;
 
 use axum::{middleware, Extension, Router};
 use crate::auth::SolanaMiddlewareBuilder;
@@ -54,7 +55,8 @@ impl SolanaController {
     /// 代币信息路由
     fn mint_info_routes() -> Router {
         Router::new()
-            .route("/list", axum::routing::get(static_config_controller::get_mint_list))
+            // 新的代币管理路由（接管所有mint相关路由）
+            .merge(token_controller::TokenController::routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 

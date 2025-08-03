@@ -21,6 +21,7 @@ use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
     solana::{DynSolanaService, SolanaService},
+    solana::token::service::TokenService,
     solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
     user_service::{DynUserService, UserService},
 };
@@ -35,6 +36,7 @@ pub struct Services {
     pub reward: DynRewardService,
     pub solana: DynSolanaService,
     pub solana_permission: DynSolanaPermissionService,
+    pub token: Arc<TokenService>,
     pub database: Arc<Database>,
 }
 
@@ -75,12 +77,16 @@ impl Services {
                     SolanaPermissionService::with_database(database.clone())
                 ) as DynSolanaPermissionService;
 
+                // 创建代币服务
+                let token = Arc::new(TokenService::new(database.clone()));
+
                 let mut services = Self {
                     user,
                     refer,
                     reward,
                     solana,
                     solana_permission,
+                    token,
                     database,
                 };
 
@@ -112,6 +118,9 @@ impl Services {
             SolanaPermissionService::with_database(database.clone())
         ) as DynSolanaPermissionService;
 
+        // 创建代币服务
+        let token = Arc::new(TokenService::new(database.clone()));
+
         info!("🧠 initializing services from environment...");
 
         Ok(Self {
@@ -120,6 +129,7 @@ impl Services {
             reward,
             solana,
             solana_permission,
+            token,
             database,
         })
     }
@@ -140,17 +150,36 @@ impl Services {
         // 4. 初始化权限配置索引
         self.init_permission_indexes().await?;
 
-        // 5. 初始化默认权限配置
+        // 5. 初始化TokenInfo索引
+        self.init_token_info_indexes().await?;
+
+        // 6. 初始化默认权限配置
         self.init_default_permission_config().await?;
 
-        // 6. 初始化权限服务（从数据库加载配置）
+        // 7. 初始化权限服务（从数据库加载配置）
         self.init_permission_service().await?;
 
-        // 7. 应用默认分页配置
+        // 8. 应用默认分页配置
         self.apply_default_pagination_config().await?;
 
         info!("✅ 数据库服务初始化完成");
         Ok(())
+    }
+
+    /// 初始化TokenInfo索引
+    async fn init_token_info_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
+        info!("🔧 初始化TokenInfo数据库索引...");
+
+        match self.database.token_info_repository.init_indexes().await {
+            Ok(_) => {
+                info!("✅ TokenInfo数据库索引初始化完成");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ TokenInfo数据库索引初始化失败: {}", e);
+                Err(format!("TokenInfo索引初始化失败: {}", e).into())
+            }
+        }
     }
 
     /// 初始化权限配置索引
