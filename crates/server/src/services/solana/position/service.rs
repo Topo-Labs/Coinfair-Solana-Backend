@@ -524,14 +524,24 @@ impl PositionService {
         };
 
         // 2. 使用优化版本的Position工具获取NFT信息（显著提升性能）
-        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
-        let position_nfts = position_utils.get_user_position_nfts(&wallet_address).await?;
+        let position_utils_optimized = PositionUtilsOptimized::new(&self.shared.rpc_client);
+        let position_nfts = position_utils_optimized.get_user_position_nfts(&wallet_address).await?;
 
-        // 3. 批量加载position状态
-        let mut positions = Vec::new();
-        for nft_info in position_nfts {
-            if let Ok(position_account) = self.shared.rpc_client.get_account(&nft_info.position_pda) {
-                if let Ok(position_state) = position_utils.deserialize_position_state(&position_account) {
+        // 3. 批量加载position状态（优化性能）
+        info!("🚀 开始批量获取 {} 个position账户", position_nfts.len());
+        let position_addresses: Vec<Pubkey> = position_nfts.iter().map(|nft| nft.position_pda).collect();
+        
+        // 批量获取所有position账户
+        let position_accounts = self.shared.rpc_client.get_multiple_accounts(&position_addresses)?;
+        info!("✅ 批量获取position账户完成，收到 {} 个响应", position_accounts.len());
+        
+        // 解析position状态并收集需要的pool地址
+        let mut position_states = Vec::new();
+        let mut pool_addresses = std::collections::HashSet::new();
+        
+        for (i, account_option) in position_accounts.iter().enumerate() {
+            if let Some(account) = account_option {
+                if let Ok(position_state) = position_utils_optimized.deserialize_position_state(account) {
                     // 过滤池子（如果指定）
                     if let Some(ref pool_filter) = request.pool_address {
                         let pool_pubkey = Pubkey::from_str(pool_filter)?;
@@ -539,31 +549,52 @@ impl PositionService {
                             continue;
                         }
                     }
-
-                    // 计算价格
-                    let pool_account = self.shared.rpc_client.get_account(&position_state.pool_id)?;
-                    let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
-
-                    let tick_lower_price =
-                        position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-                    let tick_upper_price =
-                        position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-
-                    positions.push(PositionInfo {
-                        position_key: nft_info.position_pda.to_string(),
-                        nft_mint: position_state.nft_mint.to_string(),
-                        pool_id: position_state.pool_id.to_string(),
-                        tick_lower_index: position_state.tick_lower_index,
-                        tick_upper_index: position_state.tick_upper_index,
-                        liquidity: position_state.liquidity.to_string(),
-                        tick_lower_price,
-                        tick_upper_price,
-                        token_fees_owed_0: position_state.token_fees_owed_0,
-                        token_fees_owed_1: position_state.token_fees_owed_1,
-                        reward_infos: vec![],                       // 简化处理
-                        created_at: chrono::Utc::now().timestamp(), // 暂时使用当前时间
-                    });
+                    
+                    pool_addresses.insert(position_state.pool_id);
+                    position_states.push((i, position_state));
                 }
+            }
+        }
+        
+        // 批量获取池子状态（去重）
+        info!("🚀 开始批量获取 {} 个去重的pool账户", pool_addresses.len());
+        let pool_addresses_vec: Vec<Pubkey> = pool_addresses.into_iter().collect();
+        let pool_accounts = self.shared.rpc_client.get_multiple_accounts(&pool_addresses_vec)?;
+        info!("✅ 批量获取pool账户完成，收到 {} 个响应", pool_accounts.len());
+        
+        // 构建pool状态缓存
+        let mut pool_states_cache = std::collections::HashMap::new();
+        for (i, account_option) in pool_accounts.iter().enumerate() {
+            if let Some(account) = account_option {
+                if let Ok(pool_state) = SolanaUtils::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(account) {
+                    pool_states_cache.insert(pool_addresses_vec[i], pool_state);
+                }
+            }
+        }
+        
+        // 构建最终的position信息
+        let mut positions = Vec::new();
+        for (nft_index, position_state) in position_states {
+            if let Some(pool_state) = pool_states_cache.get(&position_state.pool_id) {
+                let tick_lower_price =
+                    position_utils_optimized.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+                let tick_upper_price =
+                    position_utils_optimized.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+
+                positions.push(PositionInfo {
+                    position_key: position_nfts[nft_index].position_pda.to_string(),
+                    nft_mint: position_state.nft_mint.to_string(),
+                    pool_id: position_state.pool_id.to_string(),
+                    tick_lower_index: position_state.tick_lower_index,
+                    tick_upper_index: position_state.tick_upper_index,
+                    liquidity: position_state.liquidity.to_string(),
+                    tick_lower_price,
+                    tick_upper_price,
+                    token_fees_owed_0: position_state.token_fees_owed_0,
+                    token_fees_owed_1: position_state.token_fees_owed_1,
+                    reward_infos: vec![],                       // 简化处理
+                    created_at: chrono::Utc::now().timestamp(), // 暂时使用当前时间
+                });
             }
         }
 

@@ -8,6 +8,7 @@
 //! 5. 性能监控 - 完整的性能统计和监控
 
 use anyhow::Result;
+use rayon::prelude::*;
 use solana_account_decoder::parse_token::TokenAccountType;
 use solana_account_decoder::UiAccountData;
 use solana_client::rpc_client::RpcClient;
@@ -363,51 +364,66 @@ impl<'a> PositionUtilsOptimized<'a> {
         // 批量获取所有position账户
         let position_accounts = self.get_positions_batch(position_pdas).await?;
 
-        // 并行处理和匹配
-        for (index, (nft_info, position_account_opt)) in position_nfts.iter().zip(position_accounts.iter()).enumerate() {
-            info!("🔍 检查NFT #{}: mint={}, position_pda={}", index + 1, nft_info.nft_mint, nft_info.position_pda);
+        // 并行处理和匹配 - 使用Rayon进行CPU密集型并行处理
+        let matching_result = position_nfts
+            .par_iter()
+            .zip(position_accounts.par_iter())
+            .enumerate()
+            .find_first(|(index, (nft_info, position_account_opt))| {
+                info!("🔍 检查NFT #{}: mint={}, position_pda={}", index + 1, nft_info.nft_mint, nft_info.position_pda);
 
-            if let Some(position_account) = position_account_opt {
-                info!("  ✅ 成功获取position账户数据，大小: {} bytes", position_account.data.len());
+                if let Some(position_account) = position_account_opt {
+                    info!("  ✅ 成功获取position账户数据，大小: {} bytes", position_account.data.len());
 
-                match self.deserialize_position_state(position_account) {
-                    Ok(position_state) => {
-                        info!("  ✅ 成功反序列化position状态:");
-                        info!("    池子ID: {}", position_state.pool_id);
-                        info!("    tick范围: {} - {}", position_state.tick_lower_index, position_state.tick_upper_index);
-                        info!("    流动性: {}", position_state.liquidity);
+                    match self.deserialize_position_state(position_account) {
+                        Ok(position_state) => {
+                            info!("  ✅ 成功反序列化position状态:");
+                            info!("    池子ID: {}", position_state.pool_id);
+                            info!("    tick范围: {} - {}", position_state.tick_lower_index, position_state.tick_upper_index);
+                            info!("    流动性: {}", position_state.liquidity);
 
-                        if position_state.pool_id == *pool_address 
-                            && position_state.tick_lower_index == tick_lower 
-                            && position_state.tick_upper_index == tick_upper {
-                            info!("  🎯 找到匹配的仓位！");
-                            
-                            let query_time = start_time.elapsed();
-                            
-                            // 记录性能统计
-                            if let Some(stats) = &self.stats {
-                                // 批量查询减少了RPC调用次数：NFT查询 + 批量position查询
-                                let rpc_calls = 2;
-                                stats.record_query(rpc_calls, query_time.as_millis() as u64, position_nfts.len(), false);
+                            if position_state.pool_id == *pool_address 
+                                && position_state.tick_lower_index == tick_lower 
+                                && position_state.tick_upper_index == tick_upper {
+                                info!("  🎯 找到匹配的仓位！");
+                                return true;
+                            } else {
+                                info!("  ⏭️ 仓位不匹配，继续搜索");
+                                return false;
                             }
-                            
-                            return Ok(Some(ExistingPosition {
-                                nft_mint: nft_info.nft_mint,
-                                nft_token_account: nft_info.nft_account,
-                                position_key: nft_info.position_pda,
-                                liquidity: position_state.liquidity,
-                                nft_token_program: nft_info.token_program,
-                            }));
-                        } else {
-                            info!("  ⏭️ 仓位不匹配，继续搜索");
+                        }
+                        Err(e) => {
+                            warn!("  ⚠️ 反序列化position状态失败: {:?}", e);
+                            return false;
                         }
                     }
-                    Err(e) => {
-                        warn!("  ⚠️ 反序列化position状态失败: {:?}", e);
-                    }
+                } else {
+                    warn!("  ⚠️ 获取position账户失败，账户可能不存在");
+                    return false;
                 }
-            } else {
-                warn!("  ⚠️ 获取position账户失败，账户可能不存在");
+            });
+
+        // 处理匹配结果
+        if let Some((_index, (nft_info, position_account_opt))) = matching_result {
+            if let Some(position_account) = position_account_opt {
+                if let Ok(position_state) = self.deserialize_position_state(position_account) {
+                    let query_time = start_time.elapsed();
+                    
+                    // 记录性能统计
+                    if let Some(stats) = &self.stats {
+                        // 批量查询减少了RPC调用次数：NFT查询 + 批量position查询
+                        let rpc_calls = 2;
+                        stats.record_query(rpc_calls, query_time.as_millis() as u64, position_nfts.len(), false);
+                    }
+                    
+                    return Ok(Some(ExistingPosition {
+                        nft_mint: nft_info.nft_mint,
+                        nft_token_account: nft_info.nft_account,
+                        position_key: nft_info.position_pda,
+                        liquidity: position_state.liquidity,
+                        nft_token_program: nft_info.token_program,
+                    }));
+                }
             }
         }
 
