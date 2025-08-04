@@ -1,7 +1,9 @@
+use crate::auth::{AuthUser, require_admin};
 use crate::dtos::static_dto::{ApiResponse, MintListResponse};
 use crate::services::Services;
 use axum::{
     extract::{Query, Extension, Path},
+    middleware,
     response::Json,
     routing::{get, post},
     Router,
@@ -34,7 +36,8 @@ pub struct TokenController;
 impl TokenController {
     /// 创建代币管理路由
     pub fn routes() -> Router {
-        Router::new()
+        // 公共路由（无需权限）
+        let public_routes = Router::new()
             // 代币推送接口
             .route("/push", post(push_token))
             
@@ -45,12 +48,17 @@ impl TokenController {
             .route("/trending", get(get_trending_tokens))
             .route("/new", get(get_new_tokens))
             .route("/stats", get(get_token_stats))
-            .route("/info/:address", get(get_token_by_address))
+            .route("/info/:address", get(get_token_by_address));
             
-            // 管理员接口
-            .route("/admin/status/:address", post(update_token_status))
-            .route("/admin/verification/:address", post(update_token_verification))
-            .route("/admin/delete/:address", post(delete_token))
+        // 管理员路由（需要管理员权限）
+        let admin_routes = Router::new()
+            .route("/status/:address", post(update_token_status))
+            .route("/verification/:address", post(update_token_verification))
+            .route("/delete/:address", post(delete_token))
+            .layer(middleware::from_fn(require_admin));
+            
+        // 合并路由
+        public_routes.nest("/admin", admin_routes)
     }
 }
 
@@ -580,13 +588,11 @@ pub async fn get_token_stats(
 )]
 pub async fn update_token_status(
     Extension(services): Extension<Services>,
+    Extension(user): Extension<AuthUser>,
     Path(address): Path<String>,
     Json(status): Json<database::token_info::TokenStatus>,
-    // Extension(user): Extension<User>, // TODO: 添加权限验证
 ) -> AppResult<Json<ApiResponse<bool>>> {
-    warn!("🔄 管理员更新代币状态: {} -> {:?}", address, status);
-
-    // TODO: 验证管理员权限
+    warn!("🔄 管理员更新代币状态: {} -> {:?} (操作员: {})", address, status, user.user_id);
 
     // 验证地址格式
     services.token.validate_token_address(&address)?;
@@ -624,13 +630,11 @@ pub async fn update_token_status(
 )]
 pub async fn update_token_verification(
     Extension(services): Extension<Services>,
+    Extension(user): Extension<AuthUser>,
     Path(address): Path<String>,
     Json(verification): Json<database::token_info::VerificationStatus>,
-    // Extension(user): Extension<User>, // TODO: 添加权限验证
 ) -> AppResult<Json<ApiResponse<bool>>> {
-    warn!("🔄 管理员更新代币验证状态: {} -> {:?}", address, verification);
-
-    // TODO: 验证管理员权限
+    warn!("🔄 管理员更新代币验证状态: {} -> {:?} (操作员: {})", address, verification, user.user_id);
 
     // 验证地址格式
     services.token.validate_token_address(&address)?;
@@ -688,12 +692,10 @@ pub async fn update_token_verification(
 )]
 pub async fn delete_token(
     Extension(services): Extension<Services>,
+    Extension(user): Extension<AuthUser>,
     Path(address): Path<String>,
-    // Extension(user): Extension<User>, // TODO: 添加权限验证
 ) -> AppResult<Json<ApiResponse<bool>>> {
-    warn!("🗑️ 管理员删除代币: {} (危险操作)", address);
-
-    // TODO: 验证超级管理员权限
+    warn!("🗑️ 管理员删除代币: {} (危险操作，操作员: {})", address, user.user_id);
 
     // 验证地址格式
     services.token.validate_token_address(&address)?;
