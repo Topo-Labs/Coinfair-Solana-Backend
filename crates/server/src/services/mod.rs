@@ -20,8 +20,8 @@ pub mod user_service;
 use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
-    solana::{DynSolanaService, SolanaService},
     solana::token::service::TokenService,
+    solana::{DynSolanaService, SolanaService},
     solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
     user_service::{DynUserService, UserService},
 };
@@ -73,9 +73,7 @@ impl Services {
                 };
 
                 // 创建权限服务
-                let solana_permission = Arc::new(
-                    SolanaPermissionService::with_database(database.clone())
-                ) as DynSolanaPermissionService;
+                let solana_permission = Arc::new(SolanaPermissionService::with_database(database.clone())) as DynSolanaPermissionService;
 
                 // 创建代币服务
                 let token = Arc::new(TokenService::new(database.clone()));
@@ -114,9 +112,7 @@ impl Services {
         let solana = Arc::new(SolanaService::with_database(db)?) as DynSolanaService;
 
         // 创建权限服务
-        let solana_permission = Arc::new(
-            SolanaPermissionService::with_database(database.clone())
-        ) as DynSolanaPermissionService;
+        let solana_permission = Arc::new(SolanaPermissionService::with_database(database.clone())) as DynSolanaPermissionService;
 
         // 创建代币服务
         let token = Arc::new(TokenService::new(database.clone()));
@@ -139,7 +135,7 @@ impl Services {
         info!("🔧 初始化数据库服务...");
 
         // 1. 运行池子类型迁移
-        self.run_pool_type_migration().await?;
+        // self.run_pool_type_migration().await?;
 
         // 2. 初始化CLMM池子存储服务索引
         self.init_clmm_pool_indexes().await?;
@@ -160,7 +156,25 @@ impl Services {
         self.init_permission_service().await?;
 
         // 8. 应用默认分页配置
-        self.apply_default_pagination_config().await?;
+        // self.apply_default_pagination_config().await?;
+
+        // 9. 验证数据库健康状态
+        match self.get_database_health().await {
+            Ok(health) => {
+                info!("🏥 数据库健康检查:");
+                info!("  状态: {}", if health.is_healthy { "健康" } else { "异常" });
+                info!("  响应时间: {}ms", health.response_time_ms);
+                info!("  总池子数: {}", health.total_pools);
+                info!("  活跃池子数: {}", health.active_pools);
+
+                if !health.is_healthy {
+                    warn!("⚠️ 数据库健康检查发现问题: {:?}", health.issues);
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 数据库健康检查失败: {}", e);
+            }
+        }
 
         info!("✅ 数据库服务初始化完成");
         Ok(())
@@ -185,7 +199,7 @@ impl Services {
     /// 初始化权限配置索引
     async fn init_permission_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔧 初始化权限配置数据库索引...");
-        
+
         match self.database.init_permission_indexes().await {
             Ok(_) => {
                 info!("✅ 权限配置数据库索引初始化完成");
@@ -201,7 +215,7 @@ impl Services {
     /// 初始化权限服务
     async fn init_permission_service(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔧 初始化权限服务...");
-        
+
         // 将权限服务向下转型为具体类型以调用 init_from_database 方法
         if let Some(concrete_service) = self.solana_permission.as_any().downcast_ref::<SolanaPermissionService>() {
             match concrete_service.init_from_database().await {
@@ -224,7 +238,7 @@ impl Services {
     /// 初始化默认权限配置
     async fn init_default_permission_config(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔧 初始化默认权限配置...");
-        
+
         match self.database.init_default_permission_config().await {
             Ok(_) => {
                 info!("✅ 默认权限配置初始化完成");
@@ -237,7 +251,8 @@ impl Services {
         }
     }
 
-    /// 运行池子类型迁移
+    /// 运行池子类型迁移，暂时不使用这个迁移，因为是新功能上线，无历史数据
+    #[allow(dead_code)]
     async fn run_pool_type_migration(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔄 检查池子类型迁移状态...");
 
@@ -339,7 +354,8 @@ impl Services {
         Ok(())
     }
 
-    /// 应用默认分页配置
+    /// 应用默认分页配置 目前没有使用这个全局配置
+    #[allow(dead_code)]
     async fn apply_default_pagination_config(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("⚙️ 应用默认分页配置...");
 
