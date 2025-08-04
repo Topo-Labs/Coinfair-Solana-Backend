@@ -11,7 +11,7 @@ use super::super::liquidity::LiquidityService;
 use crate::services::position_storage::PositionStorageService;
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
-use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtils};
+use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtilsOptimized};
 
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -64,8 +64,8 @@ impl PositionService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        // 3. 使用Position工具进行计算
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        // 3. 使用优化版本的Position工具进行计算（显著提升性能）
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         // 价格转换为tick（与CLI版本完全一致的流程）
         // 步骤1: 价格转sqrt_price
@@ -287,8 +287,8 @@ impl PositionService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        // 3. 使用Position工具进行计算
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        // 3. 使用优化版本的Position工具进行计算（显著提升性能）
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         // 价格转换为tick（与CLI版本完全一致的流程）
         // 步骤1: 价格转sqrt_price
@@ -465,8 +465,8 @@ impl PositionService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        // 3. 使用Position工具进行计算
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        // 3. 使用优化版本的Position工具进行计算
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         // 价格转换为tick
         let tick_lower_index = position_utils.price_to_tick(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
@@ -523,8 +523,8 @@ impl PositionService {
             return Err(anyhow::anyhow!("缺少必需的钱包地址参数"));
         };
 
-        // 2. 使用Position工具获取NFT信息
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        // 2. 使用优化版本的Position工具获取NFT信息（显著提升性能）
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
         let position_nfts = position_utils.get_user_position_nfts(&wallet_address).await?;
 
         // 3. 批量加载position状态
@@ -582,7 +582,7 @@ impl PositionService {
         info!("🔍 获取仓位详情: {}", position_key);
 
         let position_pubkey = Pubkey::from_str(&position_key)?;
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         // 加载position状态
         let position_account = self.shared.rpc_client.get_account(&position_pubkey)?;
@@ -626,7 +626,7 @@ impl PositionService {
             return Err(anyhow::anyhow!("缺少必需的钱包地址参数"));
         };
 
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         if let Some(existing) = position_utils
             .find_existing_position(&wallet_pubkey, &pool_pubkey, tick_lower, tick_upper)
@@ -684,7 +684,7 @@ impl PositionService {
             return Err(anyhow::anyhow!("无效的滑点百分比: {}", slippage_percent));
         }
 
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
         Ok(position_utils.apply_slippage(amount, slippage_percent, is_minimum))
     }
 

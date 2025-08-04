@@ -59,7 +59,7 @@ coverage/
 perf.data*
 
 # 文档生成
-/docs/book/
+docs/*
 
 # WebAssembly
 *.wasm
@@ -71,7 +71,6 @@ CLAUDE.md
 screenshots/
 /data/
 .codebuddy/*
-docs/*
 tests/*
 .claude/*
 lower-wallet.json

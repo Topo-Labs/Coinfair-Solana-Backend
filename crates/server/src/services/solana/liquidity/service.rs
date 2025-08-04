@@ -7,7 +7,7 @@ use crate::dtos::solana_dto::{
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
 use crate::services::position_storage::PositionStorageService;
-use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtils};
+use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtilsOptimized};
 
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -57,8 +57,8 @@ impl LiquidityService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        // 4. 使用Position工具进行计算
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        // 4. 使用优化版本的Position工具进行计算（显著提升性能）
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         // 价格转换为tick（与CLI版本完全一致的流程）
         let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
@@ -76,7 +76,7 @@ impl LiquidityService {
         let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
         let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
-        // 5. 查找现有的匹配仓位（必须）
+        // 5. 查找现有的匹配仓位（必须）- 使用优化版本显著提升性能
         let existing_position = position_utils
             .find_existing_position(&user_wallet, &pool_address, tick_lower_adjusted, tick_upper_adjusted)
             .await?
@@ -231,7 +231,7 @@ impl LiquidityService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
         let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
@@ -400,8 +400,8 @@ impl LiquidityService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        // 4. 查找现有的匹配仓位
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        // 4. 查找现有的匹配仓位 - 使用优化版本显著提升性能
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
         let existing_position = position_utils
             .find_existing_position(&user_wallet, &pool_address, request.tick_lower_index, request.tick_upper_index)
             .await?
@@ -655,7 +655,7 @@ impl LiquidityService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        let position_utils = PositionUtils::new(&self.shared.rpc_client);
+        let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
         let existing_position = position_utils
             .find_existing_position(&user_wallet, &pool_address, request.tick_lower_index, request.tick_upper_index)
             .await?
