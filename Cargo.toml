@@ -3,6 +3,7 @@ members = [
       "crates/coinfair",
       "crates/database",
       "crates/dex",
+      "crates/solana-event-listener",
       "crates/monitor",
       "crates/server",
       "crates/solana",

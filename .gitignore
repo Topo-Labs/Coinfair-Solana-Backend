@@ -74,3 +74,5 @@ screenshots/
 tests/*
 .claude/*
 lower-wallet.json
+/references
+coinfair合约事件监听.md

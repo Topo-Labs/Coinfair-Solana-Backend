@@ -3,6 +3,7 @@ use clap::Parser;
 use database::Database;
 use monitor::monitor::Monitor;
 use server::{app::ApplicationServer, services::Services};
+use solana_event_listener::{config::EventListenerConfig, EventListenerService};
 use std::sync::Arc;
 use telegram::HopeBot;
 use timer::Timer;
@@ -24,6 +25,7 @@ pub struct Coinfair {
     monitor: Monitor,
     timer: Timer,
     telegram: HopeBot,
+    event_listener: Option<EventListenerService>,
     config: Arc<AppConfig>,
     _log_guard: tracing_appender::non_blocking::WorkerGuard,
 }
@@ -31,20 +33,22 @@ pub struct Coinfair {
 impl Coinfair {
     pub async fn new() -> Self {
         let config = Coinfair::with_config();
-        
+
         // 初始化日志系统 - 在这里统一管理
         let log_guard = Self::setup_logging(&config);
-        
+
         let services = Coinfair::with_service(config.clone()).await;
         let monitor = Coinfair::with_monitor(services.clone()).await;
         let telegram = Coinfair::with_telegram(services.clone());
         let timer = Coinfair::with_timer(services.clone(), telegram.clone());
+        let event_listener = Coinfair::with_event_listener(config.clone()).await;
 
         Self {
             services,
             monitor,
             timer,
             telegram,
+            event_listener,
             config,
             _log_guard: log_guard,
         }
@@ -109,6 +113,24 @@ impl Coinfair {
             }
         });
 
+        // 启动事件监听服务
+        if let Some(event_listener) = self.event_listener {
+            set.spawn(async move {
+                loop {
+                    info!("🎯 启动Event-Listener服务...");
+                    match event_listener.start().await {
+                        Ok(_) => {
+                            info!("✅ Event-Listener服务正常退出，重启中...");
+                        }
+                        Err(e) => {
+                            info!("❌ Event-Listener服务异常: {:?}，2秒后重启...", e);
+                        }
+                    }
+                    sleep(Duration::from_secs(2)).await;
+                }
+            });
+        }
+
         tokio::select! {
             _ = async {
                 while let Some(_) = set.join_next().await {
@@ -143,12 +165,12 @@ impl Coinfair {
         } else {
             None
         };
-        
+
         println!("🚀 正在启动 Coinfair 后端服务...");
         if let Some(ref dir) = log_dir {
             println!("📁 日志目录: {:?}", dir);
         }
-        
+
         Logger::new_with_log_dir(config.cargo_env, log_dir)
     }
 
@@ -172,6 +194,30 @@ impl Coinfair {
     fn with_timer(services: Services, telegram: HopeBot) -> Timer {
         let timer = Timer::new(None, services, telegram);
         timer
+    }
+
+    async fn with_event_listener(_config: Arc<AppConfig>) -> Option<EventListenerService> {
+        // 尝试创建事件监听器配置
+        match EventListenerConfig::from_env().await {
+            Ok(event_config) => {
+                info!("🎯 初始化Event-Listener配置...");
+
+                match EventListenerService::new(event_config).await {
+                    Ok(service) => {
+                        info!("✅ Event-Listener服务初始化成功");
+                        Some(service)
+                    }
+                    Err(e) => {
+                        info!("❌ Event-Listener服务初始化失败: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                info!("❌ Event-Listener配置加载失败: {}", e);
+                None
+            }
+        }
     }
 }
 

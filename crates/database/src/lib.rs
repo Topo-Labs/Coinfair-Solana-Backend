@@ -19,8 +19,8 @@ pub mod clmm_pool;
 pub mod clmm_config;
 pub mod position;
 pub mod permission_config;
-
 pub mod token_info;
+pub mod event_model;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -34,11 +34,19 @@ pub struct Database {
     pub api_permission_configs: Collection<permission_config::model::SolanaApiPermissionConfigModel>,
     pub permission_config_logs: Collection<permission_config::model::PermissionConfigLogModel>,
     pub token_infos: Collection<token_info::model::TokenInfo>,
+    // 事件模型集合
+    pub clmm_pool_events: Collection<event_model::ClmmPoolEvent>,
+    pub nft_claim_events: Collection<event_model::NftClaimEvent>,
+    pub reward_distribution_events: Collection<event_model::RewardDistributionEvent>,
     // 仓库层
     pub global_permission_repository: permission_config::repository::GlobalPermissionConfigRepository,
     pub api_permission_repository: permission_config::repository::ApiPermissionConfigRepository,
     pub permission_log_repository: permission_config::repository::PermissionConfigLogRepository,
     pub token_info_repository: token_info::repository::TokenInfoRepository,
+    // 事件仓库
+    pub clmm_pool_event_repository: event_model::repository::ClmmPoolEventRepository,
+    pub nft_claim_event_repository: event_model::repository::NftClaimEventRepository,
+    pub reward_distribution_event_repository: event_model::repository::RewardDistributionEventRepository,
 }
 
 impl Database {
@@ -66,12 +74,20 @@ impl Database {
         let api_permission_configs = db.collection("SolanaApiPermissionConfig");
         let permission_config_logs = db.collection("PermissionConfigLog");
         let token_infos = db.collection("TokenInfo");
+        // 事件集合
+        let clmm_pool_events = db.collection("ClmmPoolEvent");
+        let nft_claim_events = db.collection("NftClaimEvent");
+        let reward_distribution_events = db.collection("RewardDistributionEvent");
 
         // 初始化仓库层
         let global_permission_repository = permission_config::repository::GlobalPermissionConfigRepository::new(global_permission_configs.clone());
         let api_permission_repository = permission_config::repository::ApiPermissionConfigRepository::new(api_permission_configs.clone());
         let permission_log_repository = permission_config::repository::PermissionConfigLogRepository::new(permission_config_logs.clone());
         let token_info_repository = token_info::repository::TokenInfoRepository::new(token_infos.clone());
+        // 事件仓库
+        let clmm_pool_event_repository = event_model::repository::ClmmPoolEventRepository::new(clmm_pool_events.clone());
+        let nft_claim_event_repository = event_model::repository::NftClaimEventRepository::new(nft_claim_events.clone());
+        let reward_distribution_event_repository = event_model::repository::RewardDistributionEventRepository::new(reward_distribution_events.clone());
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -86,10 +102,16 @@ impl Database {
             api_permission_configs,
             permission_config_logs,
             token_infos,
+            clmm_pool_events,
+            nft_claim_events,
+            reward_distribution_events,
             global_permission_repository,
             api_permission_repository,
             permission_log_repository,
             token_info_repository,
+            clmm_pool_event_repository,
+            nft_claim_event_repository,
+            reward_distribution_event_repository,
         })
     }
 
@@ -104,7 +126,12 @@ impl Database {
         // 初始化代币信息索引
         let _result = self.token_info_repository.init_indexes().await;
         
-        info!("✅ 权限配置索引初始化完成");
+        // 初始化事件索引
+        let _result = self.clmm_pool_event_repository.init_indexes().await;
+        let _result = self.nft_claim_event_repository.init_indexes().await;
+        let _result = self.reward_distribution_event_repository.init_indexes().await;
+        
+        info!("✅ 权限配置和事件索引初始化完成");
         Ok(())
     }
 

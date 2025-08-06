@@ -35,3 +35,4 @@ monitor = { path = "../monitor/" }
 server = { path = "../server/" }
 timer = { path = "../timer/" }
 telegram = { path = "../telegram/" }
+solana-event-listener = { path = "../solana-event-listener/" }
