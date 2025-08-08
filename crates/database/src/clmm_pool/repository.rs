@@ -1,13 +1,14 @@
 use super::model::*;
 use mongodb::{
     bson::{doc, Document},
-    options::{FindOptions, IndexOptions},
+    options::{FindOptions, IndexOptions, UpdateOptions},
     Collection, IndexModel,
 };
 use tracing::info;
 use utils::AppResult;
 
 /// CLMM池子数据库操作接口
+#[derive(Clone, Debug)]
 pub struct ClmmPoolRepository {
     collection: Collection<ClmmPool>,
 }
@@ -46,8 +47,8 @@ impl ClmmPoolRepository {
             IndexModel::builder().keys(doc! { "status": 1 }).build(),
             // 价格范围索引
             IndexModel::builder().keys(doc! { "price_info.initial_price": 1 }).build(),
-            // 时间索引
-            IndexModel::builder().keys(doc! { "created_at": -1 }).build(),
+            // API创建时间索引
+            IndexModel::builder().keys(doc! { "api_created_at": -1 }).build(),
             // 开放时间索引
             IndexModel::builder().keys(doc! { "open_time": 1 }).build(),
             // 同步状态复合索引
@@ -68,8 +69,40 @@ impl ClmmPoolRepository {
             IndexModel::builder()
                 .keys(doc! {
                     "pool_type": 1,
-                    "created_at": -1
+                    "api_created_at": -1
                 })
+                .build(),
+            // 链上确认状态索引
+            IndexModel::builder()
+                .keys(doc! {
+                    "chain_confirmed": 1,
+                    "api_created_at": 1
+                })
+                .options(IndexOptions::builder()
+                    .name("idx_chain_confirmed_created".to_string())
+                    .build())
+                .build(),
+            // 池子地址和事件slot索引（用于版本控制）
+            IndexModel::builder()
+                .keys(doc! {
+                    "pool_address": 1,
+                    "event_updated_slot": -1
+                })
+                .options(IndexOptions::builder()
+                    .name("idx_pool_slot".to_string())
+                    .build())
+                .build(),
+            // 事件签名索引（稀疏索引）
+            IndexModel::builder()
+                .keys(doc! { "event_signature": 1 })
+                .options(IndexOptions::builder()
+                    .sparse(true)
+                    .name("idx_event_signature".to_string())
+                    .build())
+                .build(),
+            // 数据来源索引
+            IndexModel::builder()
+                .keys(doc! { "data_source": 1 })
                 .build(),
         ];
 
@@ -99,7 +132,7 @@ impl ClmmPoolRepository {
             ]
         };
 
-        let options = FindOptions::builder().limit(limit.unwrap_or(50)).sort(doc! { "created_at": -1 }).build();
+        let options = FindOptions::builder().limit(limit.unwrap_or(50)).sort(doc! { "api_created_at": -1 }).build();
 
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
@@ -115,7 +148,7 @@ impl ClmmPoolRepository {
     pub async fn find_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
         let filter = doc! { "creator_wallet": creator_wallet };
 
-        let options = FindOptions::builder().limit(limit.unwrap_or(50)).sort(doc! { "created_at": -1 }).build();
+        let options = FindOptions::builder().limit(limit.unwrap_or(50)).sort(doc! { "api_created_at": -1 }).build();
 
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
@@ -169,7 +202,7 @@ impl ClmmPoolRepository {
             if let Some(end_time) = params.end_time {
                 time_filter.insert("$lte", end_time as f64);
             }
-            filter.insert("created_at", time_filter);
+            filter.insert("api_created_at", time_filter);
         }
 
         // 构建查询选项
@@ -186,7 +219,7 @@ impl ClmmPoolRepository {
         }
 
         // 排序
-        let sort_field = params.sort_by.as_deref().unwrap_or("created_at");
+        let sort_field = params.sort_by.as_deref().unwrap_or("api_created_at");
         let sort_order = if params.sort_order.as_deref() == Some("asc") { 1 } else { -1 };
         options.sort = Some(doc! { sort_field: sort_order });
 
@@ -284,7 +317,7 @@ impl ClmmPoolRepository {
 
         // 今日新增池子数量
         let today_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp() as f64;
-        let today_new_pools = self.collection.count_documents(doc! { "created_at": { "$gte": today_start } }, None).await?;
+        let today_new_pools = self.collection.count_documents(doc! { "api_created_at": { "$gte": today_start } }, None).await?;
 
         // 按状态分组统计 (使用聚合管道)
         let status_pipeline = vec![doc! {
@@ -453,11 +486,11 @@ impl ClmmPoolRepository {
 
         // 构建排序文档
         let sort_field = match params.pool_sort_field.as_deref().unwrap_or("default") {
-            "default" => "created_at",
-            "created_at" => "created_at",
+            "default" => "api_created_at",
+            "created_at" => "api_created_at",
             "price" => "price_info.initial_price",
             "open_time" => "open_time",
-            _ => "created_at", // 默认排序字段
+            _ => "api_created_at", // 默认排序字段
         };
 
         let sort_direction = if params.sort_type.as_deref() == Some("asc") { 1 } else { -1 };
@@ -527,6 +560,93 @@ impl ClmmPoolRepository {
             type_counts,
         })
     }
+
+    /// Upsert池子（基于pool_address）
+    pub async fn upsert_pool(&self, pool: ClmmPool) -> AppResult<()> {
+        let filter = doc! {
+            "pool_address": &pool.pool_address
+        };
+        
+        let update = doc! {
+            "$set": mongodb::bson::to_document(&pool)?,
+            "$setOnInsert": {
+                "api_created_at": chrono::Utc::now().timestamp()
+            }
+        };
+        
+        let options = UpdateOptions::builder()
+            .upsert(true)
+            .build();
+        
+        self.collection
+            .update_one(filter, update, options)
+            .await?;
+        
+        Ok(())
+    }
+    
+    /// 条件更新池子（带版本控制）
+    pub async fn update_pool_with_version_check(
+        &self,
+        pool_address: &str,
+        update_doc: Document,
+        min_slot: Option<u64>
+    ) -> AppResult<bool> {
+        let mut filter = doc! {
+            "pool_address": pool_address
+        };
+        
+        // 添加版本控制条件
+        if let Some(slot) = min_slot {
+            filter.insert("$or", doc! {
+                "event_updated_slot": { "$exists": false },
+                "event_updated_slot": { "$lte": slot as i64 }
+            });
+        }
+        
+        let result = self.collection
+            .update_one(filter, update_doc, None)
+            .await?;
+        
+        Ok(result.modified_count > 0)
+    }
+    
+    /// 根据地址更新池子
+    pub async fn update_pool_by_address(&self, pool_address: &str, update_doc: Document) -> AppResult<()> {
+        let filter = doc! { "pool_address": pool_address };
+        self.collection.update_one(filter, update_doc, None).await?;
+        Ok(())
+    }
+    
+    /// 批量查询需要同步的池子
+    pub async fn find_pools_need_sync(&self, limit: i64) -> AppResult<Vec<ClmmPool>> {
+        let filter = doc! {
+            "$or": [
+                { "chain_confirmed": false },
+                { "sync_status.needs_sync": true }
+            ]
+        };
+        
+        let options = FindOptions::builder()
+            .limit(limit)
+            .sort(doc! { "api_created_at": 1 })  // 优先处理早创建的
+            .build();
+        
+        let mut cursor = self.collection.find(filter, options).await?;
+        let mut pools = Vec::new();
+        
+        while cursor.advance().await? {
+            pools.push(cursor.deserialize_current()?);
+        }
+        
+        Ok(pools)
+    }
+    
+    /// 插入池子
+    pub async fn insert_pool(&self, pool: ClmmPool) -> AppResult<()> {
+        self.collection.insert_one(pool, None).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -594,8 +714,13 @@ mod tests {
                 },
                 creator_wallet: "creator1111111111111111111111111111".to_string(),
                 open_time: base_time,
-                created_at: base_time,
+                api_created_at: base_time,
+                api_created_slot: Some(100000),
                 updated_at: base_time,
+                event_signature: None,
+                event_updated_slot: None,
+                event_confirmed_at: None,
+                event_updated_at: None,
                 transaction_info: None,
                 status: PoolStatus::Active,
                 sync_status: SyncStatus {
@@ -605,6 +730,8 @@ mod tests {
                     sync_error: None,
                 },
                 pool_type: PoolType::Concentrated,
+                data_source: DataSource::ApiCreated,
+                chain_confirmed: false,
             },
             ClmmPool {
                 id: None,
@@ -652,8 +779,13 @@ mod tests {
                 },
                 creator_wallet: "creator2222222222222222222222222222".to_string(),
                 open_time: base_time + 3600,
-                created_at: base_time + 3600,
+                api_created_at: base_time + 3600,
+                api_created_slot: Some(100100),
                 updated_at: base_time + 3600,
+                event_signature: None,
+                event_updated_slot: None,
+                event_confirmed_at: None,
+                event_updated_at: None,
                 transaction_info: None,
                 status: PoolStatus::Active,
                 sync_status: SyncStatus {
@@ -663,6 +795,8 @@ mod tests {
                     sync_error: None,
                 },
                 pool_type: PoolType::Standard,
+                data_source: DataSource::ApiCreated,
+                chain_confirmed: false,
             },
             ClmmPool {
                 id: None,
@@ -710,8 +844,13 @@ mod tests {
                 },
                 creator_wallet: "creator1111111111111111111111111111".to_string(), // Same creator as first pool
                 open_time: base_time + 7200,
-                created_at: base_time + 7200,
+                api_created_at: base_time + 7200,
+                api_created_slot: Some(100200),
                 updated_at: base_time + 7200,
+                event_signature: None,
+                event_updated_slot: None,
+                event_confirmed_at: None,
+                event_updated_at: None,
                 transaction_info: None,
                 status: PoolStatus::Created,
                 sync_status: SyncStatus {
@@ -721,6 +860,8 @@ mod tests {
                     sync_error: None,
                 },
                 pool_type: PoolType::Concentrated,
+                data_source: DataSource::ApiCreated,
+                chain_confirmed: false,
             },
         ]
     }
@@ -914,9 +1055,9 @@ mod tests {
         let result = repository.query_pools_with_pagination(&params).await.unwrap();
 
         assert_eq!(result.pools.len(), 3);
-        // Should be sorted by created_at descending (newest first)
-        assert!(result.pools[0].created_at >= result.pools[1].created_at);
-        assert!(result.pools[1].created_at >= result.pools[2].created_at);
+        // Should be sorted by api_created_at descending (newest first)
+        assert!(result.pools[0].api_created_at >= result.pools[1].api_created_at);
+        assert!(result.pools[1].api_created_at >= result.pools[2].api_created_at);
 
         // Test ascending sort
         let params = PoolListRequest {
@@ -926,9 +1067,9 @@ mod tests {
 
         let result = repository.query_pools_with_pagination(&params).await.unwrap();
 
-        // Should be sorted by created_at ascending (oldest first)
-        assert!(result.pools[0].created_at <= result.pools[1].created_at);
-        assert!(result.pools[1].created_at <= result.pools[2].created_at);
+        // Should be sorted by api_created_at ascending (oldest first)
+        assert!(result.pools[0].api_created_at <= result.pools[1].api_created_at);
+        assert!(result.pools[1].api_created_at <= result.pools[2].api_created_at);
 
         // Test price sorting
         let params = PoolListRequest {

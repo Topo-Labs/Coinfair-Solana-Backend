@@ -16,6 +16,28 @@ pub enum PoolType {
     Standard,
 }
 
+/// 数据来源枚举
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
+pub enum DataSource {
+    /// 通过API创建
+    #[serde(rename = "api")]
+    ApiCreated,
+    
+    /// 来自链上事件
+    #[serde(rename = "chain")]
+    ChainEvent,
+    
+    /// API创建后被链上确认
+    #[serde(rename = "api_chain_confirmed")]
+    ApiChainConfirmed,
+}
+
+impl Default for DataSource {
+    fn default() -> Self {
+        DataSource::ApiCreated
+    }
+}
+
 impl Default for PoolType {
     fn default() -> Self {
         PoolType::Concentrated
@@ -84,13 +106,32 @@ pub struct ClmmPool {
     #[serde(with = "mongodb::bson::serde_helpers::u64_as_f64")]
     pub open_time: u64,
 
-    /// 创建时间戳
+    /// API创建时间戳
     #[serde(with = "mongodb::bson::serde_helpers::u64_as_f64")]
-    pub created_at: u64,
+    pub api_created_at: u64,
+
+    /// API创建时的slot
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_created_slot: Option<u64>,
 
     /// 更新时间戳
     #[serde(with = "mongodb::bson::serde_helpers::u64_as_f64")]
     pub updated_at: u64,
+
+    /// 链上事件签名
+    pub event_signature: Option<String>,
+
+    /// 链上事件更新的slot
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_updated_slot: Option<u64>,
+
+    /// 链上事件确认时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_confirmed_at: Option<u64>,
+
+    /// 链上事件更新时间
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_updated_at: Option<u64>,
 
     /// 交易信息 (可选，仅在实际发送交易时填充)
     pub transaction_info: Option<TransactionInfo>,
@@ -104,6 +145,14 @@ pub struct ClmmPool {
     /// 池子类型 (concentrated or standard)
     #[serde(default)]
     pub pool_type: PoolType,
+
+    /// 数据来源
+    #[serde(default)]
+    pub data_source: DataSource,
+
+    /// 是否已被链上确认
+    #[serde(default)]
+    pub chain_confirmed: bool,
 }
 
 /// 代币属性
@@ -531,8 +580,13 @@ mod tests {
             },
             creator_wallet: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_string(),
             open_time: 1640995200,
-            created_at: 1640995200,
+            api_created_at: 1640995200,
+            api_created_slot: Some(100000),
             updated_at: 1640995200,
+            event_signature: None,
+            event_updated_slot: None,
+            event_confirmed_at: None,
+            event_updated_at: None,
             transaction_info: None,
             status: PoolStatus::Created,
             sync_status: SyncStatus {
@@ -542,9 +596,13 @@ mod tests {
                 sync_error: None,
             },
             pool_type: PoolType::Concentrated,
+            data_source: DataSource::ApiCreated,
+            chain_confirmed: false,
         };
 
         assert_eq!(pool.pool_type, PoolType::Concentrated);
+        assert_eq!(pool.data_source, DataSource::ApiCreated);
+        assert_eq!(pool.chain_confirmed, false);
     }
 
     #[test]

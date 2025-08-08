@@ -1,10 +1,35 @@
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 #[derive(clap::ValueEnum, Clone, Debug, Copy)]
 #[clap(rename_all = "lowercase")]
 pub enum CargoEnv {
     Development,
     Production,
+}
+
+/// 事件监听器数据库操作模式
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub enum EventListenerDbMode {
+    #[serde(rename = "update_only")]
+    UpdateOnly,
+    #[serde(rename = "upsert")]
+    Upsert,
+}
+
+impl Default for EventListenerDbMode {
+    fn default() -> Self {
+        EventListenerDbMode::UpdateOnly
+    }
+}
+
+impl From<&str> for EventListenerDbMode {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "upsert" => EventListenerDbMode::Upsert,
+            _ => EventListenerDbMode::UpdateOnly,
+        }
+    }
 }
 
 /// 环境配置加载器
@@ -82,6 +107,14 @@ pub struct AppConfig {
 
     #[clap(long, env, default_value = "info")]
     pub rust_log: String,
+    
+    /// 是否允许事件监听器插入新池子记录
+    #[clap(long, env, default_value = "false")]
+    pub enable_pool_event_insert: bool,
+    
+    /// 事件监听器数据库操作模式
+    #[clap(long, env, default_value = "update_only")]
+    pub event_listener_db_mode: String,
 }
 
 impl Default for AppConfig {
@@ -104,6 +137,17 @@ impl AppConfig {
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
             amm_config_index: 0,
             rust_log: "info".to_string(),
+            enable_pool_event_insert: std::env::var("ENABLE_POOL_EVENT_INSERT")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
+            event_listener_db_mode: std::env::var("EVENT_LISTENER_DB_MODE")
+                .unwrap_or_else(|_| "update_only".to_string()),
         }
+    }
+    
+    /// 获取事件监听器数据库操作模式
+    pub fn get_event_listener_db_mode(&self) -> EventListenerDbMode {
+        EventListenerDbMode::from(self.event_listener_db_mode.as_str())
     }
 }

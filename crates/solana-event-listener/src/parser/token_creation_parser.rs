@@ -8,6 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use database::token_info::{DataSource, TokenInfo, TokenInfoRepository, TokenPushRequest};
 use mongodb::Client;
 use serde::{Deserialize, Serialize};
+use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -41,18 +42,18 @@ pub struct TokenCreationEvent {
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct SwapEvent {
     /// The pool for which token_0 and token_1 were swapped
-    pub pool_state: String,
+    pub pool_state: Pubkey,
 
     /// The address that initiated the swap call, and that received the callback
-    pub sender: String,
+    pub sender: Pubkey,
 
     /// The payer token account in zero for one swaps, or the recipient token account
     /// in one for zero swaps
-    pub token_account_0: String,
+    pub token_account_0: Pubkey,
 
     /// The payer token account in one for zero swaps, or the recipient token account
     /// in zero for one swaps
-    pub token_account_1: String,
+    pub token_account_1: Pubkey,
 
     /// The real delta amount of the token_0 of the pool or user
     pub amount_0: u64,
@@ -381,8 +382,8 @@ impl EventParser for TokenCreationParser {
 
 #[cfg(test)]
 mod tests {
-    use solana_sdk::pubkey;
     use super::*;
+    use solana_sdk::pubkey;
     use solana_sdk::pubkey::Pubkey;
 
     fn create_test_config() -> EventListenerConfig {

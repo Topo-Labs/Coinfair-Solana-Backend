@@ -1026,7 +1026,7 @@ impl DataTransformService {
     /// 计算完成的farm数量（基于池子年龄和活动）
     fn calculate_farm_finished_count(&self, pool: &ClmmPool) -> u32 {
         let current_time = chrono::Utc::now().timestamp() as u64;
-        let pool_age_days = (current_time - pool.created_at) / 86400;
+        let pool_age_days = (current_time - pool.api_created_at) / 86400;
 
         // 基于池子年龄和类型估算已完成的farm数量
         match pool.pool_type {
@@ -1079,7 +1079,7 @@ impl DataTransformService {
     /// 判断是否为启动迁移池
     fn is_launch_migrate_pool(&self, pool: &ClmmPool) -> bool {
         let current_time = chrono::Utc::now().timestamp() as u64;
-        let pool_age_hours = (current_time - pool.created_at) / 3600;
+        let pool_age_hours = (current_time - pool.api_created_at) / 3600;
 
         // 新创建的池子（24小时内）可能是迁移池
         if pool_age_hours < 24 {
@@ -1144,8 +1144,16 @@ mod tests {
             },
             creator_wallet: "test_creator".to_string(),
             open_time: 0,
-            created_at: 1640995200,
+            api_created_at: 1640995200,
+            api_created_slot: None,
             updated_at: 1640995200,
+            
+            // 链上事件字段
+            event_signature: None,
+            event_updated_slot: None,
+            event_confirmed_at: None,
+            event_updated_at: None,
+            
             transaction_info: None,
             status: PoolStatus::Active,
             sync_status: SyncStatus {
@@ -1155,6 +1163,8 @@ mod tests {
                 sync_error: None,
             },
             pool_type: PoolType::Concentrated,
+            data_source: database::clmm_pool::DataSource::ApiCreated,
+            chain_confirmed: false,
         }
     }
 

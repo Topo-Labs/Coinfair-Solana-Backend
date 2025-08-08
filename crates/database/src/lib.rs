@@ -39,6 +39,7 @@ pub struct Database {
     pub nft_claim_events: Collection<event_model::NftClaimEvent>,
     pub reward_distribution_events: Collection<event_model::RewardDistributionEvent>,
     // 仓库层
+    pub clmm_pool_repository: clmm_pool::repository::ClmmPoolRepository,
     pub global_permission_repository: permission_config::repository::GlobalPermissionConfigRepository,
     pub api_permission_repository: permission_config::repository::ApiPermissionConfigRepository,
     pub permission_log_repository: permission_config::repository::PermissionConfigLogRepository,
@@ -80,6 +81,7 @@ impl Database {
         let reward_distribution_events = db.collection("RewardDistributionEvent");
 
         // 初始化仓库层
+        let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
         let global_permission_repository = permission_config::repository::GlobalPermissionConfigRepository::new(global_permission_configs.clone());
         let api_permission_repository = permission_config::repository::ApiPermissionConfigRepository::new(api_permission_configs.clone());
         let permission_log_repository = permission_config::repository::PermissionConfigLogRepository::new(permission_config_logs.clone());
@@ -105,6 +107,7 @@ impl Database {
             clmm_pool_events,
             nft_claim_events,
             reward_distribution_events,
+            clmm_pool_repository,
             global_permission_repository,
             api_permission_repository,
             permission_log_repository,

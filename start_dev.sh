@@ -20,7 +20,3 @@ echo "📝 日志文件: $LOG_FILE"
 # 启动程序
 # RUST_LOG=debug cargo run --bin coinfair 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$LOG_FILE" &
 RUST_LOG=info cargo run --bin coinfair
-
-# 获取进程ID
-PID=$!
-echo "✅ 服务已启动 (PID: $PID)"

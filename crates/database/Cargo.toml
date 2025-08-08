@@ -17,7 +17,7 @@ tracing = { workspace = true }
 validator = { workspace = true }
 utils = { path = "../utils" }
 chrono = { version = "0.4.38", features = ["serde"] }
-anyhow.workspace = true
+anyhow = { workspace = true }
 futures = "0.3.31"
 futures-util = "0.3.31"
 solana-sdk = { workspace = true }

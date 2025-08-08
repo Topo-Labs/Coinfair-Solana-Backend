@@ -30,7 +30,7 @@ impl DiscriminatorManager {
         //暂时改成swap
 
         // 未来可以添加更多事件类型
-        // self.register_discriminator([89, 202, 187, 172, 108, 193, 190, 8], "pool_creation");
+        // self.register_discriminator([25, 94, 75, 47, 112, 99, 53, 63]], "pool_creation");
         // self.register_discriminator([123, 45, 67, 89, 10, 11, 12, 13], "nft_claim");
         // self.register_discriminator([98, 76, 54, 32, 10, 98, 76, 54], "reward_distribution");
     }

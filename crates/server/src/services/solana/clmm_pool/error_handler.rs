@@ -244,7 +244,7 @@ impl ConsistencyChecker {
         
         // 4. 检查时间戳合理性
         let now = chrono::Utc::now().timestamp() as u64;
-        if pool.created_at > now + 3600 {  // 允许1小时的时间偏差
+        if pool.api_created_at > now + 3600 {  // 允许1小时的时间偏差
             issues.push(ConsistencyIssue {
                 issue_type: ConsistencyIssueType::InvalidValue,
                 field_name: "created_at".to_string(),
@@ -253,7 +253,7 @@ impl ConsistencyChecker {
             });
         }
         
-        if pool.updated_at < pool.created_at {
+        if pool.updated_at < pool.api_created_at {
             issues.push(ConsistencyIssue {
                 issue_type: ConsistencyIssueType::InvalidValue,
                 field_name: "updated_at".to_string(),
@@ -324,8 +324,8 @@ impl ConsistencyChecker {
                 }
                 ConsistencyIssueType::InvalidValue if issue.field_name == "updated_at" => {
                     // 自动修复更新时间
-                    if pool.updated_at < pool.created_at {
-                        pool.updated_at = pool.created_at;
+                    if pool.updated_at < pool.api_created_at {
+                        pool.updated_at = pool.api_created_at;
                         fixed_issues.push("修复了更新时间".to_string());
                     }
                 }

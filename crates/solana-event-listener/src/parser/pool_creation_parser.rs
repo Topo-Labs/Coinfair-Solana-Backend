@@ -6,50 +6,51 @@ use crate::{
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
+use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
+use utils::solana::account_loader::AccountLoader;
 
 /// 池子创建事件的原始数据结构（与Raydium CLMM智能合约保持一致）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct PoolCreationEvent {
-    /// CLMM池子地址
-    pub pool_address: String,
-    /// 代币A的mint地址
-    pub token_a_mint: String,
-    /// 代币B的mint地址  
-    pub token_b_mint: String,
-    /// 代币A的小数位数
-    pub token_a_decimals: u8,
-    /// 代币B的小数位数
-    pub token_b_decimals: u8,
-    /// 手续费率 (单位: 万分之一, 如3000表示0.3%)
-    pub fee_rate: u32,
-    /// 初始sqrt价格
-    pub sqrt_price_x64: String,
-    /// 初始tick
+    /// 第一个代币的mint地址（按地址排序）
+    pub token_mint_0: Pubkey,
+    /// 第二个代币的mint地址（按地址排序）
+    pub token_mint_1: Pubkey,
+    /// tick间距的最小数量
+    pub tick_spacing: u16,
+    /// 创建的池子地址
+    pub pool_state: Pubkey,
+    /// 初始sqrt价格，Q64.64格式
+    pub sqrt_price_x64: u128,
+    /// 初始tick，即池子起始价格的log base 1.0001
     pub tick: i32,
-    /// 池子创建者
-    pub creator: String,
-    /// CLMM配置地址
-    pub clmm_config: String,
-    /// 创建时间戳
-    pub created_at: i64,
+    /// token_0的金库地址
+    pub token_vault_0: Pubkey,
+    /// token_1的金库地址
+    pub token_vault_1: Pubkey,
 }
 
 /// 池子创建事件解析器
 pub struct PoolCreationParser {
     /// 事件的discriminator（从Raydium CLMM IDL获取）
     discriminator: [u8; 8],
+    /// RPC客户端，用于查询链上数据
+    rpc_client: RpcClient,
 }
 
 impl PoolCreationParser {
     /// 创建新的池子创建事件解析器
-    pub fn new(_config: &EventListenerConfig) -> Result<Self> {
+    pub fn new(config: &EventListenerConfig) -> Result<Self> {
         // Raydium CLMM PoolCreated事件的discriminator
         // 注意：实际部署时需要从Raydium IDL获取正确的discriminator
-        let discriminator = [89, 202, 187, 172, 108, 193, 190, 8];
+        let discriminator = [25, 94, 75, 47, 112, 99, 53, 63];
+        
+        // 创建RPC客户端
+        let rpc_client = RpcClient::new(config.solana.rpc_url.clone());
 
-        Ok(Self { discriminator })
+        Ok(Self { discriminator, rpc_client })
     }
 
     /// 从程序数据解析池子创建事件
@@ -72,15 +73,15 @@ impl PoolCreationParser {
         // Borsh反序列化事件数据
         let event_data = &data[8..];
         let event = PoolCreationEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
-
-        debug!("✅ 成功解析池子创建事件: 池子={}, 代币对={}/{}", event.pool_address, event.token_a_mint, event.token_b_mint);
+        info!("池子解析成功：{:?}", event);
+        debug!("✅ 成功解析池子创建事件: 池子={}, 代币对={}/{}", event.pool_state, event.token_mint_0, event.token_mint_1);
         Ok(event)
     }
 
     /// 计算池子相关指标
-    fn calculate_pool_metrics(&self, event: &PoolCreationEvent) -> (f64, f64, String) {
+    fn calculate_pool_metrics(&self, event: &PoolCreationEvent, fee_rate: u32) -> (f64, f64, String) {
         // 计算价格 (从sqrt_price_x64反推)
-        let sqrt_price_x64 = event.sqrt_price_x64.parse::<u128>().unwrap();
+        let sqrt_price_x64 = event.sqrt_price_x64;
         let price_ratio = if sqrt_price_x64 > 0 {
             let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
             sqrt_price * sqrt_price
@@ -88,48 +89,104 @@ impl PoolCreationParser {
             0.0
         };
 
-        // 计算年化手续费率
-        let annual_fee_rate = (event.fee_rate as f64 / 10000.0) * 365.0; // 假设每天交易一次
+        // 计算年化手续费率（需要从其他地方获取fee_rate）
+        let annual_fee_rate = (fee_rate as f64 / 10000.0) * 365.0; // 假设每天交易一次
 
-        // 确定池子类型
-        let pool_type = match event.fee_rate {
-            100 => "超低费率".to_string(),  // 0.01%
-            500 => "低费率".to_string(),    // 0.05%
-            2500 => "标准费率".to_string(), // 0.25%
-            3000 => "标准费率".to_string(), // 0.3%
-            10000 => "高费率".to_string(),  // 1%
-            _ => format!("自定义费率({})", event.fee_rate as f64 / 10000.0),
+        // 根据tick_spacing确定池子类型
+        let pool_type = match event.tick_spacing {
+            1 => "超高精度".to_string(),   // tick_spacing=1，最高精度
+            5 => "高精度".to_string(),     // tick_spacing=5
+            10 => "标准精度".to_string(),  // tick_spacing=10
+            60 => "低精度".to_string(),    // tick_spacing=60
+            120 => "超低精度".to_string(), // tick_spacing=120
+            _ => format!("自定义精度({})", event.tick_spacing),
         };
 
         (price_ratio, annual_fee_rate, pool_type)
     }
 
-    /// 将原始事件转换为ParsedEvent
-    fn convert_to_parsed_event(&self, event: PoolCreationEvent, signature: String, slot: u64) -> ParsedEvent {
-        let (initial_price, annual_fee_rate, pool_type) = self.calculate_pool_metrics(&event);
+    /// 从链上查询缺失的信息（如费率、小数位等）
+    async fn fetch_missing_info(&self, pool_address: Pubkey, _token_mint_0: Pubkey, _token_mint_1: Pubkey) -> Result<(u32, u8, u8, Pubkey, Pubkey, i64)> {
+        let account_loader = AccountLoader::new(&self.rpc_client);
+        
+        info!("🔍 从链上查询池子状态: {}", pool_address);
+        
+        // 只需要查询一次PoolState，里面包含了所有需要的信息
+        let pool_state = account_loader.load_and_deserialize::<raydium_amm_v3::states::PoolState>(&pool_address).await
+            .map_err(|e| EventListenerError::EventParsing(format!("无法加载池子状态 {}: {}", pool_address, e)))?;
+        
+        debug!("✅ 成功获取池子状态，AMM配置: {}", pool_state.amm_config);
+        
+        // 查询AMM配置以获取费率
+        let fee_rate = match self.fetch_amm_config_fee_rate(&pool_state.amm_config).await {
+            Some(rate) => rate,
+            None => 3000, // AMM配置查询失败时使用默认费率
+        };
+        
+        // 直接从PoolState获取代币小数位数
+        let token_0_decimals = pool_state.mint_decimals_0;
+        let token_1_decimals = pool_state.mint_decimals_1;
+        
+        // 直接从PoolState获取创建者
+        let creator = pool_state.owner;
+        
+        // 直接从PoolState获取CLMM配置地址
+        let clmm_config = pool_state.amm_config;
+        
+        // 使用池子的开放时间作为创建时间
+        let created_at = pool_state.open_time as i64;
+        
+        info!("📊 池子信息查询完成 - 费率: {}, 小数位: {}/{}, 创建者: {}, 配置: {}, 创建时间: {}", 
+              fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at);
+        
+        Ok((fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at))
+    }
 
-        ParsedEvent::PoolCreation(PoolCreationEventData {
-            pool_address: event.pool_address,
-            token_a_mint: event.token_a_mint,
-            token_b_mint: event.token_b_mint,
-            token_a_decimals: event.token_a_decimals,
-            token_b_decimals: event.token_b_decimals,
-            fee_rate: event.fee_rate,
-            fee_rate_percentage: event.fee_rate as f64 / 10000.0,
+    /// 获取AMM配置的费率
+    async fn fetch_amm_config_fee_rate(&self, amm_config_address: &Pubkey) -> Option<u32> {
+        let account_loader = AccountLoader::new(&self.rpc_client);
+        match account_loader.load_and_deserialize::<raydium_amm_v3::states::AmmConfig>(amm_config_address).await {
+            Ok(amm_config) => {
+                debug!("✅ 获取AMM配置费率: {}", amm_config.trade_fee_rate);
+                Some(amm_config.trade_fee_rate)
+            }
+            Err(e) => {
+                warn!("⚠️ 无法获取AMM配置: {}", e);
+                None
+            }
+        }
+    }
+
+    /// 将原始事件转换为ParsedEvent
+    async fn convert_to_parsed_event(&self, event: PoolCreationEvent, signature: String, slot: u64) -> Result<ParsedEvent> {
+        // 获取缺失的信息
+        let (fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at) = 
+            self.fetch_missing_info(event.pool_state, event.token_mint_0, event.token_mint_1).await?;
+
+        let (initial_price, annual_fee_rate, pool_type) = self.calculate_pool_metrics(&event, fee_rate);
+
+        Ok(ParsedEvent::PoolCreation(PoolCreationEventData {
+            pool_address: event.pool_state.to_string(),
+            token_a_mint: event.token_mint_0.to_string(),
+            token_b_mint: event.token_mint_1.to_string(),
+            token_a_decimals: token_0_decimals,
+            token_b_decimals: token_1_decimals,
+            fee_rate,
+            fee_rate_percentage: fee_rate as f64 / 10000.0,
             annual_fee_rate,
             pool_type,
-            sqrt_price_x64: event.sqrt_price_x64,
+            sqrt_price_x64: event.sqrt_price_x64.to_string(),
             initial_price,
             initial_tick: event.tick,
-            creator: event.creator,
-            clmm_config: event.clmm_config,
+            creator: creator.to_string(),
+            clmm_config: clmm_config.to_string(),
             is_stable_pair: false,        // 需要通过代币分析确定
             estimated_liquidity_usd: 0.0, // 创建时暂无流动性
-            created_at: event.created_at,
+            created_at,
             signature,
             slot,
             processed_at: chrono::Utc::now().to_rfc3339(),
-        })
+        }))
     }
 
     /// 验证池子创建事件数据
@@ -171,16 +228,16 @@ impl PoolCreationParser {
         }
 
         // 验证创建者地址
-        if event.creator == Pubkey::default().to_string() {
-            warn!("❌ 无效的创建者地址");
-            return Ok(false);
-        }
+        // if event.creator == Pubkey::default().to_string() {
+        //     warn!("❌ 无效的创建者地址");
+        //     return Ok(false);
+        // }
 
-        // 验证CLMM配置地址
-        if event.clmm_config == Pubkey::default().to_string() {
-            warn!("❌ 无效的CLMM配置地址");
-            return Ok(false);
-        }
+        // // 验证CLMM配置地址
+        // if event.clmm_config == Pubkey::default().to_string() {
+        //     warn!("❌ 无效的CLMM配置地址");
+        //     return Ok(false);
+        // }
 
         // 验证时间戳合理性
         let now = chrono::Utc::now().timestamp();
@@ -215,9 +272,14 @@ impl EventParser for PoolCreationParser {
                 if let Some(data_part) = log.strip_prefix("Program data: ") {
                     match self.parse_program_data(data_part) {
                         Ok(event) => {
-                            info!("🏊 第{}行发现池子创建事件: {} (费率: {}%)", index + 1, event.pool_address, event.fee_rate as f64 / 10000.0);
-                            let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot);
-                            return Ok(Some(parsed_event));
+                            info!("🏊 第{}行发现池子创建事件: {} (tick_spacing: {})", index + 1, event.pool_state, event.tick_spacing);
+                            match self.convert_to_parsed_event(event, signature.to_string(), slot).await {
+                                Ok(parsed_event) => return Ok(Some(parsed_event)),
+                                Err(e) => {
+                                    warn!("❌ 池子事件转换失败: {}", e);
+                                    continue;
+                                }
+                            }
                         }
                         Err(EventListenerError::DiscriminatorMismatch) => {
                             // Discriminator不匹配是正常情况，继续尝试下一条日志
@@ -282,17 +344,14 @@ mod tests {
 
     fn create_test_pool_creation_event() -> PoolCreationEvent {
         PoolCreationEvent {
-            pool_address: Pubkey::new_unique().to_string(),
-            token_a_mint: Pubkey::new_unique().to_string(),
-            token_b_mint: Pubkey::new_unique().to_string(),
-            token_a_decimals: 9,
-            token_b_decimals: 6,
-            fee_rate: 3000,              // 0.3%
-            sqrt_price_x64: (1u128 << 64).to_string(), // 价格为1.0
+            token_mint_0: Pubkey::new_unique(),
+            token_mint_1: Pubkey::new_unique(),
+            tick_spacing: 10,
+            pool_state: Pubkey::new_unique(),
+            sqrt_price_x64: 1u128 << 64, // 价格为1.0
             tick: 0,
-            creator: Pubkey::new_unique().to_string(),
-            clmm_config: Pubkey::new_unique().to_string(),
-            created_at: chrono::Utc::now().timestamp(),
+            token_vault_0: Pubkey::new_unique(),
+            token_vault_1: Pubkey::new_unique(),
         }
     }
 
@@ -302,24 +361,22 @@ mod tests {
         let parser = PoolCreationParser::new(&config).unwrap();
 
         assert_eq!(parser.get_event_type(), "pool_creation");
-        assert_eq!(parser.get_discriminator(), [89, 202, 187, 172, 108, 193, 190, 8]);
+        assert_eq!(parser.get_discriminator(), [25, 94, 75, 47, 112, 99, 53, 63]);
     }
 
-    #[test]
-    fn test_convert_to_parsed_event() {
+    #[tokio::test]
+    async fn test_convert_to_parsed_event() {
         let config = create_test_config();
         let parser = PoolCreationParser::new(&config).unwrap();
         let test_event = create_test_pool_creation_event();
 
-        let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345);
+        let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345).await;
 
         match parsed {
-            ParsedEvent::PoolCreation(data) => {
-                assert_eq!(data.pool_address, test_event.pool_address);
-                assert_eq!(data.token_a_mint, test_event.token_a_mint);
-                assert_eq!(data.token_b_mint, test_event.token_b_mint);
-                assert_eq!(data.fee_rate, test_event.fee_rate);
-                assert_eq!(data.fee_rate_percentage, 0.3);
+            Ok(ParsedEvent::PoolCreation(data)) => {
+                assert_eq!(data.pool_address, test_event.pool_state.to_string());
+                assert_eq!(data.token_a_mint, test_event.token_mint_0.to_string());
+                assert_eq!(data.token_b_mint, test_event.token_mint_1.to_string());
                 assert_eq!(data.signature, "test_signature");
                 assert_eq!(data.slot, 12345);
             }
@@ -372,16 +429,17 @@ mod tests {
         let parser = PoolCreationParser::new(&config).unwrap();
 
         let event = PoolCreationEvent {
-            fee_rate: 3000,              // 0.3%
-            sqrt_price_x64: (1u128 << 64).to_string(), // sqrt(1.0)
+            tick_spacing: 10,            // 标准精度
+            sqrt_price_x64: 1u128 << 64, // sqrt(1.0)
             ..create_test_pool_creation_event()
         };
 
-        let (price, annual_fee, pool_type) = parser.calculate_pool_metrics(&event);
+        let fee_rate = 3000; // 0.3%
+        let (price, annual_fee, pool_type) = parser.calculate_pool_metrics(&event, fee_rate);
 
         assert!((price - 1.0).abs() < 0.0001); // 价格应该接近1.0
         assert_eq!(annual_fee, 109.5); // 0.3% * 365
-        assert_eq!(pool_type, "标准费率");
+        assert_eq!(pool_type, "标准精度");
     }
 
     #[test]
@@ -394,9 +452,9 @@ mod tests {
 
         // 测试反序列化
         let deserialized = PoolCreationEvent::try_from_slice(&serialized).unwrap();
-        assert_eq!(deserialized.pool_address, event.pool_address);
-        assert_eq!(deserialized.token_a_mint, event.token_a_mint);
-        assert_eq!(deserialized.fee_rate, event.fee_rate);
+        assert_eq!(deserialized.pool_state, event.pool_state);
+        assert_eq!(deserialized.token_mint_0, event.token_mint_0);
+        assert_eq!(deserialized.tick_spacing, event.tick_spacing);
     }
 
     #[tokio::test]

@@ -171,8 +171,16 @@ impl ChainPoolLoader {
 
             creator_wallet: pool_state.owner.to_string(), // 使用池子owner作为创建者
             open_time: pool_state.open_time,
-            created_at: now,
+            api_created_at: now,
+            api_created_slot: None,
             updated_at: now,
+            
+            // 链上事件字段
+            event_signature: None,
+            event_updated_slot: None,
+            event_confirmed_at: None,
+            event_updated_at: None,
+            
             transaction_info: None,
             status: PoolStatus::Active, // 已存在的池子认为是活跃状态
 
@@ -184,6 +192,8 @@ impl ChainPoolLoader {
             },
 
             pool_type: PoolType::Concentrated, // 当前只支持CLMM池
+            data_source: database::clmm_pool::DataSource::ChainEvent,
+            chain_confirmed: true, // 从链上加载的池子已确认
         };
 
         debug!("✅ 池子信息加载完成: {}", pool_address);

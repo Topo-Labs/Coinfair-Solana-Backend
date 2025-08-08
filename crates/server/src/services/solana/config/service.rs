@@ -512,6 +512,8 @@ mod tests {
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
             amm_config_index: 0,
             rust_log: "info".to_string(),
+            enable_pool_event_insert: false,
+            event_listener_db_mode: "update_only".to_string(),
         });
         let database = Arc::new(Database::new(config).await.unwrap());
         let rpc_client = Arc::new(solana_client::rpc_client::RpcClient::new("https://api.devnet.solana.com".to_string()));

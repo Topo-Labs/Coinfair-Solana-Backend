@@ -4,7 +4,7 @@
 
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
 use crate::services::metaplex_service::TokenMetadata;
-use database::clmm_pool::{ClmmPool, ClmmPoolRepository, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo};
+use database::clmm_pool::{ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo};
 use mongodb::Collection;
 use tracing::{debug, error, info, warn};
 use utils::AppResult;
@@ -71,12 +71,19 @@ impl ClmmPoolStorageService {
         info!("💾 存储池子创建数据: {}", response.pool_address);
 
         // 检查池子是否已存在
-        if let Ok(Some(_)) = self.repository.find_by_pool_address(&response.pool_address).await {
-            warn!("⚠️ 池子已存在，跳过存储: {}", response.pool_address);
-            return Err(anyhow::anyhow!("池子已存在: {}", response.pool_address).into());
+        if let Ok(Some(existing)) = self.repository.find_by_pool_address(&response.pool_address).await {
+            // 如果已存在且已被链上确认，拒绝覆盖
+            if existing.chain_confirmed {
+                warn!("⚠️ 池子已被链上确认，拒绝API覆盖: {}", response.pool_address);
+                return Err(anyhow::anyhow!("池子已存在且已被链上确认: {}", response.pool_address).into());
+            }
+            warn!("⚠️ 池子已存在（未确认），将更新: {}", response.pool_address);
         }
 
         let now = chrono::Utc::now().timestamp() as u64;
+        
+        // 获取当前slot（这里简化处理，实际应该从RPC获取）
+        let api_slot = self.get_current_slot().await.unwrap_or(0);
 
         // 解析mint地址，确保顺序正确
         let mut mint0_addr = request.mint0.clone();
@@ -141,8 +148,18 @@ impl ClmmPoolStorageService {
 
             creator_wallet: request.user_wallet.clone(),
             open_time: request.open_time,
-            created_at: now,
+            
+            // 新字段
+            api_created_at: now,
+            api_created_slot: Some(api_slot),
             updated_at: now,
+            
+            // 链上事件字段（初始为空）
+            event_signature: None,
+            event_updated_slot: None,
+            event_confirmed_at: None,
+            event_updated_at: None,
+            
             transaction_info: None, // 仅构建交易时为空
             status: PoolStatus::Created,
 
@@ -154,12 +171,24 @@ impl ClmmPoolStorageService {
             },
 
             pool_type: database::clmm_pool::model::PoolType::Concentrated,
+            
+            // 新增状态字段
+            data_source: DataSource::ApiCreated,
+            chain_confirmed: false,
         };
 
-        let pool_id = self.repository.create_pool(&pool).await?;
-        info!("✅ 池子创建数据存储成功，ID: {}", pool_id);
+        // 使用upsert操作
+        self.repository.upsert_pool(pool).await?;
+        info!("✅ 池子创建数据存储成功: {}", response.pool_address);
 
-        Ok(pool_id)
+        Ok(response.pool_address.clone())
+    }
+    
+    /// 获取当前slot（简化实现）
+    async fn get_current_slot(&self) -> AppResult<u64> {
+        // TODO: 实际应该从RPC client获取
+        // 这里返回一个基于时间戳的模拟值
+        Ok(chrono::Utc::now().timestamp() as u64 / 10)
     }
 
     /// 存储池子创建并发送交易的响应数据
@@ -167,6 +196,7 @@ impl ClmmPoolStorageService {
         info!("💾 存储池子创建和交易数据: {}", response.pool_address);
 
         let now = chrono::Utc::now().timestamp() as u64;
+        let api_slot = self.get_current_slot().await.unwrap_or(0);
 
         // 解析mint地址，确保顺序正确
         let mut mint0_addr = request.mint0.clone();
@@ -241,8 +271,18 @@ impl ClmmPoolStorageService {
 
             creator_wallet: request.user_wallet.clone(),
             open_time: request.open_time,
-            created_at: now,
+            
+            // 新字段
+            api_created_at: now,
+            api_created_slot: Some(api_slot),
             updated_at: now,
+            
+            // 交易已发送，可以填充事件字段
+            event_signature: Some(response.signature.clone()),
+            event_updated_slot: Some(api_slot), // 暂时使用同一个slot
+            event_confirmed_at: Some(now),
+            event_updated_at: Some(now),
+            
             transaction_info: Some(transaction_info),
             status: PoolStatus::Active, // 交易已确认，状态为活跃
 
@@ -254,12 +294,17 @@ impl ClmmPoolStorageService {
             },
 
             pool_type: database::clmm_pool::model::PoolType::Concentrated,
+            
+            // 状态字段
+            data_source: DataSource::ApiCreated,
+            chain_confirmed: true, // 交易已发送并确认
         };
 
-        let pool_id = self.repository.create_pool(&pool).await?;
-        info!("✅ 池子创建和交易数据存储成功，ID: {}", pool_id);
+        // 使用upsert操作
+        self.repository.upsert_pool(pool).await?;
+        info!("✅ 池子创建和交易数据存储成功: {}", response.pool_address);
 
-        Ok(pool_id)
+        Ok(response.pool_address.clone())
     }
 
     /// 直接存储池子数据 (用于测试)

@@ -328,6 +328,8 @@ mod tests {
             private_key: None,
             amm_config_index: 0,
             rust_log: "info".to_string(),
+            enable_pool_event_insert: false,
+            event_listener_db_mode: "update_only".to_string(),
         });
 
         // 使用正确的方式创建Database

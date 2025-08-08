@@ -313,8 +313,16 @@ mod integration_tests {
             },
             creator_wallet: "creator".to_string(),
             open_time: 0,
-            created_at: chrono::Utc::now().timestamp() as u64,
+            api_created_at: chrono::Utc::now().timestamp() as u64,
+            api_created_slot: None,
             updated_at: chrono::Utc::now().timestamp() as u64,
+            
+            // 链上事件字段
+            event_signature: None,
+            event_updated_slot: None,
+            event_confirmed_at: None,
+            event_updated_at: None,
+            
             transaction_info: None,
             status: PoolStatus::Created,
             sync_status: SyncStatus {
@@ -325,6 +333,8 @@ mod integration_tests {
             },
 
             pool_type: database::clmm_pool::model::PoolType::Concentrated,
+            data_source: database::clmm_pool::DataSource::ApiCreated,
+            chain_confirmed: false,
         };
 
         // 测试数据存储和查询

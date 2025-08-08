@@ -8,12 +8,15 @@ use crate::{
 };
 use chrono::Utc;
 use database::{
+    clmm_pool::{ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo},
     event_model::{ClmmPoolEvent, NftClaimEvent, RewardDistributionEvent},
-    token_info::{DataSource, TokenInfoRepository, TokenPushRequest},
+    token_info::{DataSource as TokenDataSource, TokenInfoRepository, TokenPushRequest},
     Database,
 };
+use mongodb::bson::doc;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
+use utils::config::{AppConfig, EventListenerDbMode};
 
 /// 事件存储接口
 ///
@@ -23,6 +26,8 @@ pub struct EventStorage {
     config: Arc<EventListenerConfig>,
     database: Arc<Database>,
     token_repository: Arc<TokenInfoRepository>,
+    clmm_pool_repository: Arc<ClmmPoolRepository>,
+    app_config: Arc<AppConfig>,
 }
 
 impl EventStorage {
@@ -43,24 +48,39 @@ impl EventStorage {
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
             amm_config_index: 0,
             rust_log: "info".to_string(),
+            // 读取环境变量
+            enable_pool_event_insert: std::env::var("ENABLE_POOL_EVENT_INSERT")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
+            event_listener_db_mode: std::env::var("EVENT_LISTENER_DB_MODE")
+                .unwrap_or_else(|_| "update_only".to_string()),
         });
 
         // 创建数据库实例
         let database = Arc::new(
-            Database::new(app_config)
+            Database::new(app_config.clone())
                 .await
                 .map_err(|e| EventListenerError::Persistence(format!("数据库初始化失败: {}", e)))?,
         );
 
         // 创建代币信息仓库
         let token_repository = Arc::new(database.token_info_repository.clone());
+        
+        // 创建CLMM池子仓库
+        let clmm_pool_repository = Arc::new(database.clmm_pool_repository.clone());
 
         info!("✅ 事件存储初始化完成，数据库: {}", config.database.database_name);
+        info!("📊 事件监听器配置: enable_insert={}, mode={}", 
+            app_config.enable_pool_event_insert, 
+            app_config.event_listener_db_mode);
 
         Ok(Self {
             config,
             database,
             token_repository,
+            clmm_pool_repository,
+            app_config,
         })
     }
 
@@ -300,32 +320,42 @@ impl EventStorage {
         Ok(true)
     }
 
-    /// 写入单个池子创建事件
+    /// 写入单个池子创建事件（改造版：更新ClmmPool表）
     async fn write_single_pool_creation(&self, event: &PoolCreationEventData) -> Result<bool> {
-        // 检查是否已存在
-        let existing = self
-            .database
-            .clmm_pool_event_repository
-            .find_by_pool_address(&event.pool_address.to_string())
+        info!("🔄 处理链上池子创建事件: {}", event.pool_address);
+        
+        // 1. 查找是否有对应的API创建记录
+        let existing_pool = self
+            .clmm_pool_repository
+            .find_by_pool_address(&event.pool_address)
             .await
-            .map_err(|e| EventListenerError::Persistence(format!("查询现有池子事件失败: {}", e)))?;
-
-        if existing.is_some() {
-            debug!("池子事件已存在，跳过: {}", event.pool_address);
-            return Ok(false);
+            .map_err(|e| EventListenerError::Persistence(
+                format!("查询池子失败: {}", e)
+            ))?;
+        
+        match existing_pool {
+            Some(mut pool) => {
+                // 2. 存在记录，执行智能更新
+                info!("📝 找到已存在的池子记录，执行更新: {}", event.pool_address);
+                self.smart_update_pool_from_event(&mut pool, event).await
+            }
+            None => {
+                // 3. 不存在记录，检查是否允许插入
+                if self.app_config.enable_pool_event_insert {
+                    info!("🆕 池子不存在且允许插入，从链上事件创建新记录: {}", 
+                        event.pool_address);
+                    self.create_pool_from_chain_event(event).await
+                } else {
+                    warn!("⚠️ 池子不存在但禁止插入新记录(ENABLE_POOL_EVENT_INSERT=false): {}", 
+                        event.pool_address);
+                    
+                    // 仍然保存到ClmmPoolEvent作为审计记录
+                    self.save_pool_event_as_audit_log(event).await?;
+                    
+                    Ok(false)
+                }
+            }
         }
-
-        // 转换为数据库模型
-        let pool_event = self.convert_to_pool_event(event)?;
-
-        // 插入数据库
-        self.database
-            .clmm_pool_event_repository
-            .insert_pool_event(pool_event)
-            .await
-            .map_err(|e| EventListenerError::Persistence(format!("插入池子事件失败: {}", e)))?;
-
-        Ok(true)
     }
 
     /// 写入单个NFT领取事件
@@ -510,7 +540,7 @@ impl EventStorage {
                 "slot": event.slot,
                 "source": "event-listener"
             })),
-            source: Some(DataSource::OnchainSync),
+            source: Some(TokenDataSource::OnchainSync),
         })
     }
 
@@ -532,6 +562,265 @@ impl EventStorage {
             ParsedEvent::NftClaim(nft_event) => self.write_single_nft_claim(nft_event).await,
             ParsedEvent::RewardDistribution(reward_event) => self.write_single_reward_distribution(reward_event).await,
         }
+    }
+
+    /// 智能更新池子（防止覆盖）
+    async fn smart_update_pool_from_event(&self, 
+        pool: &mut ClmmPool, 
+        event: &PoolCreationEventData
+    ) -> Result<bool> {
+        // 版本控制：检查slot防止旧事件覆盖新数据
+        if let Some(api_slot) = pool.api_created_slot {
+            if event.slot < api_slot {
+                warn!("⚠️ 忽略旧事件: event_slot({}) < api_slot({}), pool: {}", 
+                    event.slot, api_slot, pool.pool_address);
+                return Ok(false);
+            }
+        }
+        
+        // 如果已经被链上确认，检查是否需要更新
+        if pool.chain_confirmed {
+            if let Some(event_slot) = pool.event_updated_slot {
+                if event.slot <= event_slot {
+                    debug!("ℹ️ 池子已有更新的链上数据，跳过: {} (existing_slot: {}, new_slot: {})", 
+                        pool.pool_address, event_slot, event.slot);
+                    return Ok(false);
+                }
+            }
+        }
+        
+        let now = chrono::Utc::now().timestamp() as u64;
+        
+        // 根据操作模式决定更新策略
+        let update_strategy = match self.app_config.get_event_listener_db_mode() {
+            EventListenerDbMode::UpdateOnly => {
+                // 仅更新模式：只更新必要字段
+                doc! {
+                    "$set": {
+                        // 更新链上事件信息
+                        "event_signature": &event.signature,
+                        "event_updated_slot": event.slot as i64,
+                        "event_confirmed_at": event.created_at,
+                        "event_updated_at": now as i64,
+                        
+                        // 更新状态
+                        "status": "Active",
+                        "chain_confirmed": true,
+                        "data_source": if pool.data_source == DataSource::ApiCreated {
+                            "api_chain_confirmed"
+                        } else {
+                            "chain"
+                        },
+                        
+                        // 更新价格信息（链上数据更准确）
+                        "price_info.current_price": event.initial_price,
+                        "price_info.current_tick": event.initial_tick,
+                        
+                        // 更新时间戳
+                        "updated_at": now as i64,
+                    },
+                    
+                    // 仅在字段不存在时设置（保护已有数据）
+                    "$setOnInsert": {
+                        "mint0.decimals": event.token_a_decimals as i32,
+                        "mint1.decimals": event.token_b_decimals as i32,
+                    }
+                }
+            }
+            EventListenerDbMode::Upsert => {
+                // Upsert模式：可以覆盖更多字段
+                doc! {
+                    "$set": {
+                        // 更新链上事件信息
+                        "event_signature": &event.signature,
+                        "event_updated_slot": event.slot as i64,
+                        "event_confirmed_at": event.created_at,
+                        "event_updated_at": now as i64,
+                        
+                        // 更新状态
+                        "status": "Active",
+                        "chain_confirmed": true,
+                        "data_source": "api_chain_confirmed",
+                        
+                        // 更新价格信息
+                        "price_info.current_price": event.initial_price,
+                        "price_info.current_tick": event.initial_tick,
+                        "price_info.sqrt_price_x64": &event.sqrt_price_x64,
+                        
+                        // 更新代币信息
+                        "mint0.decimals": event.token_a_decimals as i32,
+                        "mint1.decimals": event.token_b_decimals as i32,
+                        
+                        // 更新费率信息
+                        "fee_rate": event.fee_rate,
+                        
+                        // 更新时间戳
+                        "updated_at": now as i64,
+                    }
+                }
+            }
+        };
+        
+        // 执行更新
+        let updated = self.clmm_pool_repository
+            .update_pool_with_version_check(
+                &pool.pool_address, 
+                update_strategy,
+                Some(event.slot)
+            )
+            .await
+            .map_err(|e| EventListenerError::Persistence(
+                format!("更新池子失败: {}", e)
+            ))?;
+        
+        if updated {
+            info!("✅ 池子已通过链上事件更新: {} (slot: {}, mode: {:?})", 
+                pool.pool_address, event.slot, self.app_config.get_event_listener_db_mode());
+        } else {
+            warn!("⚠️ 池子更新被版本控制拒绝: {} (可能是并发更新)", pool.pool_address);
+        }
+        
+        // 同时保存到ClmmPoolEvent作为审计日志
+        self.save_pool_event_as_audit_log(event).await?;
+        
+        Ok(updated)
+    }
+    
+    /// 从链上事件创建新池子记录（仅在允许时调用）
+    async fn create_pool_from_chain_event(&self, 
+        event: &PoolCreationEventData
+    ) -> Result<bool> {
+        // 再次检查开关（双重保险）
+        if !self.app_config.enable_pool_event_insert {
+            warn!("❌ 尝试从事件创建池子但开关已关闭: {}", event.pool_address);
+            return Ok(false);
+        }
+        
+        info!("🆕 从链上事件创建新池子: {}", event.pool_address);
+        
+        let now = chrono::Utc::now().timestamp() as u64;
+        
+        // 构建完整的池子记录
+        let pool = ClmmPool {
+            id: None,
+            pool_address: event.pool_address.clone(),
+            amm_config_address: event.clmm_config.clone(),
+            config_index: 0,  // 默认值，需要后续同步
+            
+            mint0: TokenInfo {
+                mint_address: event.token_a_mint.clone(),
+                decimals: event.token_a_decimals,
+                owner: String::new(),  // 需要后续同步
+                symbol: None,
+                name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
+            },
+            
+            mint1: TokenInfo {
+                mint_address: event.token_b_mint.clone(),
+                decimals: event.token_b_decimals,
+                owner: String::new(),
+                symbol: None,
+                name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
+            },
+            
+            price_info: PriceInfo {
+                initial_price: event.initial_price,
+                sqrt_price_x64: event.sqrt_price_x64.clone(),
+                initial_tick: event.initial_tick,
+                current_price: Some(event.initial_price),
+                current_tick: Some(event.initial_tick),
+            },
+            
+            vault_info: VaultInfo {
+                token_vault_0: String::new(),  // 需要后续同步
+                token_vault_1: String::new(),
+            },
+            
+            extension_info: ExtensionInfo {
+                observation_address: String::new(),
+                tickarray_bitmap_extension: String::new(),
+            },
+            
+            creator_wallet: event.creator.clone(),
+            open_time: event.created_at as u64,
+            
+            // 时间戳字段
+            api_created_at: event.created_at as u64,  // 使用事件时间
+            api_created_slot: None,  // 纯链上创建，无API slot
+            updated_at: now,
+            
+            // 链上事件信息
+            event_signature: Some(event.signature.clone()),
+            event_updated_slot: Some(event.slot),
+            event_confirmed_at: Some(event.created_at as u64),
+            event_updated_at: Some(now),
+            
+            // 状态管理
+            status: PoolStatus::Active,
+            data_source: DataSource::ChainEvent,
+            chain_confirmed: true,
+            
+            transaction_info: Some(TransactionInfo {
+                signature: event.signature.clone(),
+                status: TransactionStatus::Confirmed,
+                explorer_url: format!("https://explorer.solana.com/tx/{}", event.signature),
+                confirmed_at: event.created_at as u64,
+            }),
+            
+            sync_status: SyncStatus {
+                last_sync_at: now,
+                sync_version: 1,
+                needs_sync: true,  // 标记需要同步完整信息
+                sync_error: None,
+            },
+            
+            pool_type: database::clmm_pool::PoolType::Concentrated,
+        };
+        
+        // 插入新记录
+        self.clmm_pool_repository
+            .insert_pool(pool)
+            .await
+            .map_err(|e| EventListenerError::Persistence(
+                format!("插入池子失败: {}", e)
+            ))?;
+        
+        info!("✅ 成功从链上事件创建池子记录: {}", event.pool_address);
+        
+        // 保存审计日志
+        self.save_pool_event_as_audit_log(event).await?;
+        
+        Ok(true)
+    }
+    
+    /// 保存池子事件作为审计日志
+    async fn save_pool_event_as_audit_log(&self, 
+        event: &PoolCreationEventData
+    ) -> Result<()> {
+        // 转换为ClmmPoolEvent用于审计
+        let pool_event = self.convert_to_pool_event(event)?;
+        
+        // 插入到事件表（作为审计日志）
+        self.database
+            .clmm_pool_event_repository
+            .insert_pool_event(pool_event)
+            .await
+            .map_err(|e| EventListenerError::Persistence(
+                format!("保存审计日志失败: {}", e)
+            ))?;
+        
+        debug!("📝 池子事件已保存为审计日志: {}", event.pool_address);
+        Ok(())
     }
 
     /// 获取存储统计信息
