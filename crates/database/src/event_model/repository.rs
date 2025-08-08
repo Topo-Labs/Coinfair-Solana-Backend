@@ -52,7 +52,7 @@ impl ClmmPoolEventRepository {
 
     /// 插入池子创建事件
     pub async fn insert_pool_event(&self, mut event: ClmmPoolEvent) -> AppResult<String> {
-        event.updated_at = Utc::now();
+        event.updated_at = Utc::now().timestamp();
 
         let result = self.collection.insert_one(event, None).await?;
 
@@ -178,7 +178,7 @@ impl NftClaimEventRepository {
 
     /// 插入NFT领取事件
     pub async fn insert_nft_claim_event(&self, mut event: NftClaimEvent) -> AppResult<String> {
-        event.updated_at = Utc::now();
+        event.updated_at = Utc::now().timestamp();
 
         let result = self.collection.insert_one(event, None).await?;
 
@@ -289,7 +289,7 @@ impl RewardDistributionEventRepository {
 
     /// 插入奖励分发事件
     pub async fn insert_reward_event(&self, mut event: RewardDistributionEvent) -> AppResult<String> {
-        event.updated_at = Utc::now();
+        event.updated_at = Utc::now().timestamp();
 
         let result = self.collection.insert_one(event, None).await?;
 

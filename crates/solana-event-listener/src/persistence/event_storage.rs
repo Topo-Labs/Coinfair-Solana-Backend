@@ -1,19 +1,22 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{ParsedEvent, event_parser::{TokenCreationEventData, PoolCreationEventData, NftClaimEventData, RewardDistributionEventData}},
+    parser::{
+        event_parser::{NftClaimEventData, PoolCreationEventData, RewardDistributionEventData, TokenCreationEventData},
+        ParsedEvent,
+    },
 };
+use chrono::Utc;
 use database::{
-    token_info::{TokenPushRequest, DataSource, TokenInfoRepository},
     event_model::{ClmmPoolEvent, NftClaimEvent, RewardDistributionEvent},
+    token_info::{DataSource, TokenInfoRepository, TokenPushRequest},
     Database,
 };
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
-use chrono::Utc;
 
 /// 事件存储接口
-/// 
+///
 /// 负责将解析后的事件持久化到数据库
 /// 支持批量写入和事务处理
 pub struct EventStorage {
@@ -26,7 +29,7 @@ impl EventStorage {
     /// 创建新的事件存储
     pub async fn new(config: &EventListenerConfig) -> Result<Self> {
         let config = Arc::new(config.clone());
-        
+
         // 创建数据库连接
         // 创建AppConfig（避免clap参数解析）
         let app_config = Arc::new(utils::config::AppConfig {
@@ -43,10 +46,13 @@ impl EventStorage {
         });
 
         // 创建数据库实例
-        let database = Arc::new(Database::new(app_config).await
-            .map_err(|e| EventListenerError::Persistence(format!("数据库初始化失败: {}", e)))?);
+        let database = Arc::new(
+            Database::new(app_config)
+                .await
+                .map_err(|e| EventListenerError::Persistence(format!("数据库初始化失败: {}", e)))?,
+        );
 
-        // 创建代币信息仓库 
+        // 创建代币信息仓库
         let token_repository = Arc::new(database.token_info_repository.clone());
 
         info!("✅ 事件存储初始化完成，数据库: {}", config.database.database_name);
@@ -65,15 +71,15 @@ impl EventStorage {
         }
 
         debug!("💾 开始批量写入 {} 个事件", events.len());
-        
+
         let mut written_count = 0u64;
-        
+
         // 按事件类型分组处理
         let mut token_creation_events = Vec::new();
         let mut pool_creation_events = Vec::new();
         let mut nft_claim_events = Vec::new();
         let mut reward_distribution_events = Vec::new();
-        
+
         for event in events {
             match event {
                 ParsedEvent::TokenCreation(token_event) => {
@@ -154,7 +160,7 @@ impl EventStorage {
     /// 批量写入池子创建事件
     async fn write_pool_creation_batch(&self, events: &[&PoolCreationEventData]) -> Result<u64> {
         let mut written_count = 0u64;
-        
+
         for event in events {
             match self.write_single_pool_creation(event).await {
                 Ok(true) => {
@@ -166,11 +172,11 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ 池子创建事件写入失败: {} - {}", event.pool_address, e);
-                    
+
                     if self.is_fatal_error(&e) {
                         return Err(e);
                     }
-                    
+
                     warn!("⚠️ 跳过失败的事件: {}", event.pool_address);
                 }
             }
@@ -182,7 +188,7 @@ impl EventStorage {
     /// 批量写入NFT领取事件
     async fn write_nft_claim_batch(&self, events: &[&NftClaimEventData]) -> Result<u64> {
         let mut written_count = 0u64;
-        
+
         for event in events {
             match self.write_single_nft_claim(event).await {
                 Ok(true) => {
@@ -194,11 +200,11 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ NFT领取事件写入失败: {} by {} - {}", event.nft_mint, event.claimer, e);
-                    
+
                     if self.is_fatal_error(&e) {
                         return Err(e);
                     }
-                    
+
                     warn!("⚠️ 跳过失败的事件: {} by {}", event.nft_mint, event.claimer);
                 }
             }
@@ -210,7 +216,7 @@ impl EventStorage {
     /// 批量写入奖励分发事件
     async fn write_reward_distribution_batch(&self, events: &[&RewardDistributionEventData]) -> Result<u64> {
         let mut written_count = 0u64;
-        
+
         for event in events {
             match self.write_single_reward_distribution(event).await {
                 Ok(true) => {
@@ -222,11 +228,11 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ 奖励分发事件写入失败: {} to {} - {}", event.distribution_id, event.recipient, e);
-                    
+
                     if self.is_fatal_error(&e) {
                         return Err(e);
                     }
-                    
+
                     warn!("⚠️ 跳过失败的事件: {} to {}", event.distribution_id, event.recipient);
                 }
             }
@@ -236,7 +242,7 @@ impl EventStorage {
     }
     async fn write_token_creation_batch(&self, events: &[&TokenCreationEventData]) -> Result<u64> {
         let mut written_count = 0u64;
-        
+
         for event in events {
             match self.write_single_token_creation(event).await {
                 Ok(true) => {
@@ -247,14 +253,13 @@ impl EventStorage {
                     debug!("ℹ️ 代币创建事件已存在，跳过: {} ({})", event.symbol, event.mint_address);
                 }
                 Err(e) => {
-                    error!("❌ 代币创建事件写入失败: {} ({}) - {}", 
-                           event.symbol, event.mint_address, e);
-                    
+                    error!("❌ 代币创建事件写入失败: {} ({}) - {}", event.symbol, event.mint_address, e);
+
                     // 根据错误类型决定是否继续
                     if self.is_fatal_error(&e) {
                         return Err(e);
                     }
-                    
+
                     // 非致命错误，记录但继续处理其他事件
                     warn!("⚠️ 跳过失败的事件: {} ({})", event.symbol, event.mint_address);
                 }
@@ -267,7 +272,10 @@ impl EventStorage {
     /// 写入单个代币创建事件
     async fn write_single_token_creation(&self, event: &TokenCreationEventData) -> Result<bool> {
         // 检查是否已存在
-        let existing = self.token_repository.find_by_address(&event.mint_address.to_string()).await
+        let existing = self
+            .token_repository
+            .find_by_address(&event.mint_address.to_string())
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("查询现有代币失败: {}", e)))?;
 
         if existing.is_some() {
@@ -279,13 +287,14 @@ impl EventStorage {
         let push_request = self.convert_to_push_request(event)?;
 
         // 推送到数据库
-        let response = self.token_repository.push_token(push_request).await
+        let response = self
+            .token_repository
+            .push_token(push_request)
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("推送代币信息失败: {}", e)))?;
 
         if !response.success {
-            return Err(EventListenerError::Persistence(
-                format!("代币信息推送失败: {}", response.message)
-            ));
+            return Err(EventListenerError::Persistence(format!("代币信息推送失败: {}", response.message)));
         }
 
         Ok(true)
@@ -294,8 +303,11 @@ impl EventStorage {
     /// 写入单个池子创建事件
     async fn write_single_pool_creation(&self, event: &PoolCreationEventData) -> Result<bool> {
         // 检查是否已存在
-        let existing = self.database.clmm_pool_event_repository
-            .find_by_pool_address(&event.pool_address.to_string()).await
+        let existing = self
+            .database
+            .clmm_pool_event_repository
+            .find_by_pool_address(&event.pool_address.to_string())
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("查询现有池子事件失败: {}", e)))?;
 
         if existing.is_some() {
@@ -307,8 +319,10 @@ impl EventStorage {
         let pool_event = self.convert_to_pool_event(event)?;
 
         // 插入数据库
-        self.database.clmm_pool_event_repository
-            .insert_pool_event(pool_event).await
+        self.database
+            .clmm_pool_event_repository
+            .insert_pool_event(pool_event)
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("插入池子事件失败: {}", e)))?;
 
         Ok(true)
@@ -320,8 +334,10 @@ impl EventStorage {
         let nft_event = self.convert_to_nft_claim_event(event)?;
 
         // 插入数据库
-        self.database.nft_claim_event_repository
-            .insert_nft_claim_event(nft_event).await
+        self.database
+            .nft_claim_event_repository
+            .insert_nft_claim_event(nft_event)
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("插入NFT领取事件失败: {}", e)))?;
 
         Ok(true)
@@ -330,8 +346,11 @@ impl EventStorage {
     /// 写入单个奖励分发事件
     async fn write_single_reward_distribution(&self, event: &RewardDistributionEventData) -> Result<bool> {
         // 检查是否已存在
-        let existing = self.database.reward_distribution_event_repository
-            .find_by_distribution_id(event.distribution_id).await
+        let existing = self
+            .database
+            .reward_distribution_event_repository
+            .find_by_distribution_id(event.distribution_id)
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("查询现有奖励事件失败: {}", e)))?;
 
         if existing.is_some() {
@@ -343,8 +362,10 @@ impl EventStorage {
         let reward_event = self.convert_to_reward_distribution_event(event)?;
 
         // 插入数据库
-        self.database.reward_distribution_event_repository
-            .insert_reward_event(reward_event).await
+        self.database
+            .reward_distribution_event_repository
+            .insert_reward_event(reward_event)
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("插入奖励分发事件失败: {}", e)))?;
 
         Ok(true)
@@ -352,24 +373,24 @@ impl EventStorage {
 
     /// 将池子创建事件转换为数据库模型
     fn convert_to_pool_event(&self, event: &PoolCreationEventData) -> Result<ClmmPoolEvent> {
-        let now = Utc::now();
-        
+        let now = Utc::now().timestamp();
+
         Ok(ClmmPoolEvent {
             id: None,
-            pool_address: event.pool_address,
-            token_a_mint: event.token_a_mint,
-            token_b_mint: event.token_b_mint,
+            pool_address: event.pool_address.clone(),
+            token_a_mint: event.token_a_mint.clone(),
+            token_b_mint: event.token_b_mint.clone(),
             token_a_decimals: event.token_a_decimals,
             token_b_decimals: event.token_b_decimals,
             fee_rate: event.fee_rate,
             fee_rate_percentage: event.fee_rate_percentage,
             annual_fee_rate: event.annual_fee_rate,
             pool_type: event.pool_type.clone(),
-            sqrt_price_x64: event.sqrt_price_x64,
+            sqrt_price_x64: event.sqrt_price_x64.clone(),
             initial_price: event.initial_price,
             initial_tick: event.initial_tick,
-            creator: event.creator,
-            clmm_config: event.clmm_config,
+            creator: event.creator.clone(),
+            clmm_config: event.clmm_config.clone(),
             is_stable_pair: event.is_stable_pair,
             estimated_liquidity_usd: event.estimated_liquidity_usd,
             created_at: event.created_at,
@@ -382,18 +403,18 @@ impl EventStorage {
 
     /// 将NFT领取事件转换为数据库模型
     fn convert_to_nft_claim_event(&self, event: &NftClaimEventData) -> Result<NftClaimEvent> {
-        let now = Utc::now();
-        
+        let now = Utc::now().timestamp();
+
         Ok(NftClaimEvent {
             id: None,
-            nft_mint: event.nft_mint,
-            claimer: event.claimer,
-            referrer: event.referrer,
+            nft_mint: event.nft_mint.clone(),
+            claimer: event.claimer.clone(),
+            referrer: event.referrer.clone(),
             tier: event.tier,
             tier_name: event.tier_name.clone(),
             tier_bonus_rate: event.tier_bonus_rate,
             claim_amount: event.claim_amount,
-            token_mint: event.token_mint,
+            token_mint: event.token_mint.clone(),
             reward_multiplier: event.reward_multiplier,
             reward_multiplier_percentage: event.reward_multiplier_percentage,
             bonus_amount: event.bonus_amount,
@@ -401,7 +422,7 @@ impl EventStorage {
             claim_type_name: event.claim_type_name.clone(),
             total_claimed: event.total_claimed,
             claim_progress_percentage: event.claim_progress_percentage,
-            pool_address: event.pool_address,
+            pool_address: event.pool_address.clone(),
             has_referrer: event.has_referrer,
             is_emergency_claim: event.is_emergency_claim,
             estimated_usd_value: event.estimated_usd_value,
@@ -415,15 +436,15 @@ impl EventStorage {
 
     /// 将奖励分发事件转换为数据库模型
     fn convert_to_reward_distribution_event(&self, event: &RewardDistributionEventData) -> Result<RewardDistributionEvent> {
-        let now = Utc::now();
-        
+        let now = Utc::now().timestamp();
+
         Ok(RewardDistributionEvent {
             id: None,
             distribution_id: event.distribution_id,
-            reward_pool: event.reward_pool,
-            recipient: event.recipient,
-            referrer: event.referrer,
-            reward_token_mint: event.reward_token_mint,
+            reward_pool: event.reward_pool.clone(),
+            recipient: event.recipient.clone(),
+            referrer: event.referrer.clone(),
+            reward_token_mint: event.reward_token_mint.clone(),
             reward_amount: event.reward_amount,
             base_reward_amount: event.base_reward_amount,
             bonus_amount: event.bonus_amount,
@@ -431,7 +452,7 @@ impl EventStorage {
             reward_type_name: event.reward_type_name.clone(),
             reward_source: event.reward_source,
             reward_source_name: event.reward_source_name.clone(),
-            related_address: event.related_address,
+            related_address: event.related_address.clone(),
             multiplier: event.multiplier,
             multiplier_percentage: event.multiplier_percentage,
             is_locked: event.is_locked,
@@ -453,15 +474,17 @@ impl EventStorage {
     fn convert_to_push_request(&self, event: &TokenCreationEventData) -> Result<TokenPushRequest> {
         // 确定标签
         let mut tags = vec!["event-listener".to_string(), "onchain".to_string()];
-        
+
         if event.has_whitelist {
             tags.push("whitelist".to_string());
         }
-        
+
         // 根据供应量添加标签
-        if event.supply > 1_000_000_000_000_000_000 { // 大于10^18
+        if event.supply > 1_000_000_000_000_000_000 {
+            // 大于10^18
             tags.push("large-supply".to_string());
-        } else if event.supply < 1_000_000_000 { // 小于10^9
+        } else if event.supply < 1_000_000_000 {
+            // 小于10^9
             tags.push("small-supply".to_string());
         }
 
@@ -478,10 +501,7 @@ impl EventStorage {
             freeze_authority: None,  // 从事件中无法获取，设为None
             mint_authority: Some(event.creator.to_string()),
             permanent_delegate: None, // 从事件中无法获取，设为None
-            minted_at: Some(
-                chrono::DateTime::from_timestamp(event.created_at, 0)
-                    .unwrap_or_else(|| chrono::Utc::now())
-            ),
+            minted_at: Some(chrono::DateTime::from_timestamp(event.created_at, 0).unwrap_or_else(|| chrono::Utc::now())),
             extensions: Some(serde_json::json!({
                 "supply": event.supply,
                 "has_whitelist": event.has_whitelist,
@@ -498,7 +518,7 @@ impl EventStorage {
     fn is_fatal_error(&self, error: &EventListenerError) -> bool {
         match error {
             EventListenerError::Database(_) => true,     // 数据库连接错误是致命的
-            EventListenerError::Config(_) => true,      // 配置错误是致命的
+            EventListenerError::Config(_) => true,       // 配置错误是致命的
             EventListenerError::Persistence(_) => false, // 持久化错误通常可以跳过
             _ => false,
         }
@@ -507,25 +527,20 @@ impl EventStorage {
     /// 写入单个事件（非批量）
     pub async fn write_event(&self, event: &ParsedEvent) -> Result<bool> {
         match event {
-            ParsedEvent::TokenCreation(token_event) => {
-                self.write_single_token_creation(token_event).await
-            }
-            ParsedEvent::PoolCreation(pool_event) => {
-                self.write_single_pool_creation(pool_event).await
-            }
-            ParsedEvent::NftClaim(nft_event) => {
-                self.write_single_nft_claim(nft_event).await
-            }
-            ParsedEvent::RewardDistribution(reward_event) => {
-                self.write_single_reward_distribution(reward_event).await
-            }
+            ParsedEvent::TokenCreation(token_event) => self.write_single_token_creation(token_event).await,
+            ParsedEvent::PoolCreation(pool_event) => self.write_single_pool_creation(pool_event).await,
+            ParsedEvent::NftClaim(nft_event) => self.write_single_nft_claim(nft_event).await,
+            ParsedEvent::RewardDistribution(reward_event) => self.write_single_reward_distribution(reward_event).await,
         }
     }
 
     /// 获取存储统计信息
     pub async fn get_storage_stats(&self) -> Result<StorageStats> {
         // 获取代币统计
-        let token_stats = self.token_repository.get_token_stats().await
+        let token_stats = self
+            .token_repository
+            .get_token_stats()
+            .await
             .map_err(|e| EventListenerError::Persistence(format!("获取代币统计失败: {}", e)))?;
 
         Ok(StorageStats {
@@ -575,6 +590,7 @@ pub struct StorageStats {
 
 #[cfg(test)]
 mod tests {
+    use solana_sdk::pubkey::Pubkey;
     use super::*;
 
     fn create_test_config() -> EventListenerConfig {
@@ -612,13 +628,13 @@ mod tests {
 
     fn create_test_token_event() -> TokenCreationEventData {
         TokenCreationEventData {
-            mint_address: solana_sdk::pubkey::Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             uri: "https://example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: solana_sdk::pubkey::Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,
@@ -630,9 +646,7 @@ mod tests {
     #[test]
     fn test_convert_to_push_request() {
         let config = create_test_config();
-        let storage = tokio_test::block_on(async {
-            EventStorage::new(&config).await
-        });
+        let storage = tokio_test::block_on(async { EventStorage::new(&config).await });
 
         // 如果连接失败（比如没有MongoDB），跳过这个测试
         if storage.is_err() {
@@ -641,9 +655,9 @@ mod tests {
 
         let storage = storage.unwrap();
         let event = create_test_token_event();
-        
+
         let push_request = storage.convert_to_push_request(&event).unwrap();
-        
+
         assert_eq!(push_request.address, event.mint_address.to_string());
         assert_eq!(push_request.name, event.name);
         assert_eq!(push_request.symbol, event.symbol);
@@ -655,9 +669,7 @@ mod tests {
     #[test]
     fn test_is_fatal_error() {
         let config = create_test_config();
-        let storage = tokio_test::block_on(async {
-            EventStorage::new(&config).await
-        });
+        let storage = tokio_test::block_on(async { EventStorage::new(&config).await });
 
         if storage.is_err() {
             return;
@@ -666,9 +678,7 @@ mod tests {
         let storage = storage.unwrap();
 
         // 数据库错误应该是致命的
-        let db_error = EventListenerError::Database(
-            mongodb::error::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "test"))
-        );
+        let db_error = EventListenerError::Database(mongodb::error::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "test")));
         assert!(storage.is_fatal_error(&db_error));
 
         // 持久化错误不应该是致命的
@@ -679,7 +689,7 @@ mod tests {
     #[tokio::test]
     async fn test_write_batch_empty() {
         let config = create_test_config();
-        
+
         // 如果无法连接数据库，跳过测试
         if let Ok(storage) = EventStorage::new(&config).await {
             let result = storage.write_batch(&[]).await.unwrap();
@@ -690,7 +700,7 @@ mod tests {
     #[tokio::test]
     async fn test_write_batch_with_new_event_types() {
         let config = create_test_config();
-        
+
         // 如果无法连接数据库，跳过测试
         if let Ok(storage) = EventStorage::new(&config).await {
             // 创建各种类型的事件
@@ -698,9 +708,9 @@ mod tests {
             let pool_event = ParsedEvent::PoolCreation(create_test_pool_event());
             let nft_event = ParsedEvent::NftClaim(create_test_nft_event());
             let reward_event = ParsedEvent::RewardDistribution(create_test_reward_event());
-            
+
             let events = vec![token_event, pool_event, nft_event, reward_event];
-            
+
             // 这个测试可能会失败，因为需要实际的数据库连接
             // 但它验证了接口的正确性
             let result = storage.write_batch(&events).await;
@@ -720,16 +730,16 @@ mod tests {
     #[tokio::test]
     async fn test_write_single_events() {
         let config = create_test_config();
-        
+
         if let Ok(storage) = EventStorage::new(&config).await {
             // 测试写入单个池子创建事件
             let pool_event = ParsedEvent::PoolCreation(create_test_pool_event());
             let _result = storage.write_event(&pool_event).await;
-            
+
             // 测试写入单个NFT领取事件
             let nft_event = ParsedEvent::NftClaim(create_test_nft_event());
             let _result = storage.write_event(&nft_event).await;
-            
+
             // 测试写入单个奖励分发事件
             let reward_event = ParsedEvent::RewardDistribution(create_test_reward_event());
             let _result = storage.write_event(&reward_event).await;
@@ -739,20 +749,20 @@ mod tests {
     fn create_test_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
         use crate::parser::event_parser::PoolCreationEventData;
         PoolCreationEventData {
-            pool_address: solana_sdk::pubkey::Pubkey::new_unique(),
-            token_a_mint: solana_sdk::pubkey::Pubkey::new_unique(),
-            token_b_mint: solana_sdk::pubkey::Pubkey::new_unique(),
+            pool_address: Pubkey::new_unique().to_string(),
+            token_a_mint: Pubkey::new_unique().to_string(),
+            token_b_mint: Pubkey::new_unique().to_string(),
             token_a_decimals: 9,
             token_b_decimals: 6,
             fee_rate: 3000,
             fee_rate_percentage: 0.3,
             annual_fee_rate: 109.5,
             pool_type: "标准费率".to_string(),
-            sqrt_price_x64: 1u128 << 64,
+            sqrt_price_x64: (1u128 << 64).to_string(),
             initial_price: 1.0,
             initial_tick: 0,
-            creator: solana_sdk::pubkey::Pubkey::new_unique(),
-            clmm_config: solana_sdk::pubkey::Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
+            clmm_config: Pubkey::new_unique().to_string(),
             is_stable_pair: false,
             estimated_liquidity_usd: 0.0,
             created_at: chrono::Utc::now().timestamp(),
@@ -765,14 +775,14 @@ mod tests {
     fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
         use crate::parser::event_parser::NftClaimEventData;
         NftClaimEventData {
-            nft_mint: solana_sdk::pubkey::Pubkey::new_unique(),
-            claimer: solana_sdk::pubkey::Pubkey::new_unique(),
-            referrer: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+            nft_mint: Pubkey::new_unique().to_string(),
+            claimer: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
             tier: 3,
             tier_name: "Gold".to_string(),
             tier_bonus_rate: 1.5,
             claim_amount: 1000000,
-            token_mint: solana_sdk::pubkey::Pubkey::new_unique(),
+            token_mint: Pubkey::new_unique().to_string(),
             reward_multiplier: 15000,
             reward_multiplier_percentage: 1.5,
             bonus_amount: 1500000,
@@ -780,7 +790,7 @@ mod tests {
             claim_type_name: "定期领取".to_string(),
             total_claimed: 5000000,
             claim_progress_percentage: 20.0,
-            pool_address: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+            pool_address: Some(Pubkey::new_unique().to_string()),
             has_referrer: true,
             is_emergency_claim: false,
             estimated_usd_value: 0.0,
@@ -795,10 +805,10 @@ mod tests {
         use crate::parser::event_parser::RewardDistributionEventData;
         RewardDistributionEventData {
             distribution_id: 12345,
-            reward_pool: solana_sdk::pubkey::Pubkey::new_unique(),
-            recipient: solana_sdk::pubkey::Pubkey::new_unique(),
-            referrer: Some(solana_sdk::pubkey::Pubkey::new_unique()),
-            reward_token_mint: solana_sdk::pubkey::Pubkey::new_unique(),
+            reward_pool: Pubkey::new_unique().to_string(),
+            recipient: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
+            reward_token_mint: Pubkey::new_unique().to_string(),
             reward_amount: 1500000,
             base_reward_amount: 1000000,
             bonus_amount: 500000,
@@ -806,7 +816,7 @@ mod tests {
             reward_type_name: "流动性奖励".to_string(),
             reward_source: 1,
             reward_source_name: "流动性挖矿".to_string(),
-            related_address: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+            related_address: Some(Pubkey::new_unique().to_string()),
             multiplier: 15000,
             multiplier_percentage: 1.5,
             is_locked: true,
@@ -826,9 +836,7 @@ mod tests {
     #[test]
     fn test_tag_generation() {
         let config = create_test_config();
-        let storage = tokio_test::block_on(async {
-            EventStorage::new(&config).await
-        });
+        let storage = tokio_test::block_on(async { EventStorage::new(&config).await });
 
         if storage.is_err() {
             return;

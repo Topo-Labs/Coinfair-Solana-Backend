@@ -13,11 +13,11 @@ use tracing::{debug, info, warn};
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct PoolCreationEvent {
     /// CLMM池子地址
-    pub pool_address: Pubkey,
+    pub pool_address: String,
     /// 代币A的mint地址
-    pub token_a_mint: Pubkey,
+    pub token_a_mint: String,
     /// 代币B的mint地址  
-    pub token_b_mint: Pubkey,
+    pub token_b_mint: String,
     /// 代币A的小数位数
     pub token_a_decimals: u8,
     /// 代币B的小数位数
@@ -25,13 +25,13 @@ pub struct PoolCreationEvent {
     /// 手续费率 (单位: 万分之一, 如3000表示0.3%)
     pub fee_rate: u32,
     /// 初始sqrt价格
-    pub sqrt_price_x64: u128,
+    pub sqrt_price_x64: String,
     /// 初始tick
     pub tick: i32,
     /// 池子创建者
-    pub creator: Pubkey,
+    pub creator: String,
     /// CLMM配置地址
-    pub clmm_config: Pubkey,
+    pub clmm_config: String,
     /// 创建时间戳
     pub created_at: i64,
 }
@@ -80,8 +80,9 @@ impl PoolCreationParser {
     /// 计算池子相关指标
     fn calculate_pool_metrics(&self, event: &PoolCreationEvent) -> (f64, f64, String) {
         // 计算价格 (从sqrt_price_x64反推)
-        let price_ratio = if event.sqrt_price_x64 > 0 {
-            let sqrt_price = event.sqrt_price_x64 as f64 / (1u128 << 64) as f64;
+        let sqrt_price_x64 = event.sqrt_price_x64.parse::<u128>().unwrap();
+        let price_ratio = if sqrt_price_x64 > 0 {
+            let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
             sqrt_price * sqrt_price
         } else {
             0.0
@@ -134,13 +135,13 @@ impl PoolCreationParser {
     /// 验证池子创建事件数据
     fn validate_pool_creation(&self, event: &PoolCreationEventData) -> Result<bool> {
         // 验证池子地址
-        if event.pool_address == Pubkey::default() {
+        if event.pool_address == Pubkey::default().to_string() {
             warn!("❌ 无效的池子地址");
             return Ok(false);
         }
 
         // 验证代币地址
-        if event.token_a_mint == Pubkey::default() || event.token_b_mint == Pubkey::default() {
+        if event.token_a_mint == Pubkey::default().to_string() || event.token_b_mint == Pubkey::default().to_string() {
             warn!("❌ 无效的代币地址: {} 或 {}", event.token_a_mint, event.token_b_mint);
             return Ok(false);
         }
@@ -164,19 +165,19 @@ impl PoolCreationParser {
         }
 
         // 验证sqrt价格
-        if event.sqrt_price_x64 == 0 {
+        if event.sqrt_price_x64.parse::<u128>().unwrap() == 0 {
             warn!("❌ sqrt价格不能为0");
             return Ok(false);
         }
 
         // 验证创建者地址
-        if event.creator == Pubkey::default() {
+        if event.creator == Pubkey::default().to_string() {
             warn!("❌ 无效的创建者地址");
             return Ok(false);
         }
 
         // 验证CLMM配置地址
-        if event.clmm_config == Pubkey::default() {
+        if event.clmm_config == Pubkey::default().to_string() {
             warn!("❌ 无效的CLMM配置地址");
             return Ok(false);
         }
@@ -281,16 +282,16 @@ mod tests {
 
     fn create_test_pool_creation_event() -> PoolCreationEvent {
         PoolCreationEvent {
-            pool_address: Pubkey::new_unique(),
-            token_a_mint: Pubkey::new_unique(),
-            token_b_mint: Pubkey::new_unique(),
+            pool_address: Pubkey::new_unique().to_string(),
+            token_a_mint: Pubkey::new_unique().to_string(),
+            token_b_mint: Pubkey::new_unique().to_string(),
             token_a_decimals: 9,
             token_b_decimals: 6,
             fee_rate: 3000,              // 0.3%
-            sqrt_price_x64: 1u128 << 64, // 价格为1.0
+            sqrt_price_x64: (1u128 << 64).to_string(), // 价格为1.0
             tick: 0,
-            creator: Pubkey::new_unique(),
-            clmm_config: Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
+            clmm_config: Pubkey::new_unique().to_string(),
             created_at: chrono::Utc::now().timestamp(),
         }
     }
@@ -332,20 +333,20 @@ mod tests {
         let parser = PoolCreationParser::new(&config).unwrap();
 
         let valid_event = PoolCreationEventData {
-            pool_address: Pubkey::new_unique(),
-            token_a_mint: Pubkey::new_unique(),
-            token_b_mint: Pubkey::new_unique(),
+            pool_address: Pubkey::new_unique().to_string(),
+            token_a_mint: Pubkey::new_unique().to_string(),
+            token_b_mint: Pubkey::new_unique().to_string(),
             token_a_decimals: 9,
             token_b_decimals: 6,
             fee_rate: 3000,
             fee_rate_percentage: 0.3,
             annual_fee_rate: 109.5,
             pool_type: "标准费率".to_string(),
-            sqrt_price_x64: 1u128 << 64,
+            sqrt_price_x64: (1u128 << 64).to_string(),
             initial_price: 1.0,
             initial_tick: 0,
-            creator: Pubkey::new_unique(),
-            clmm_config: Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
+            clmm_config: Pubkey::new_unique().to_string(),
             is_stable_pair: false,
             estimated_liquidity_usd: 0.0,
             created_at: chrono::Utc::now().timestamp(),
@@ -358,7 +359,7 @@ mod tests {
 
         // 测试无效事件（相同的代币）
         let invalid_event = PoolCreationEventData {
-            token_b_mint: valid_event.token_a_mint, // 相同的代币
+            token_b_mint: valid_event.token_a_mint.clone(), // 相同的代币
             ..valid_event.clone()
         };
 
@@ -372,7 +373,7 @@ mod tests {
 
         let event = PoolCreationEvent {
             fee_rate: 3000,              // 0.3%
-            sqrt_price_x64: 1u128 << 64, // sqrt(1.0)
+            sqrt_price_x64: (1u128 << 64).to_string(), // sqrt(1.0)
             ..create_test_pool_creation_event()
         };
 
@@ -418,20 +419,20 @@ mod tests {
         let parser = PoolCreationParser::new(&config).unwrap();
 
         let event = ParsedEvent::PoolCreation(PoolCreationEventData {
-            pool_address: Pubkey::new_unique(),
-            token_a_mint: Pubkey::new_unique(),
-            token_b_mint: Pubkey::new_unique(),
+            pool_address: Pubkey::new_unique().to_string(),
+            token_a_mint: Pubkey::new_unique().to_string(),
+            token_b_mint: Pubkey::new_unique().to_string(),
             token_a_decimals: 9,
             token_b_decimals: 6,
             fee_rate: 3000,
             fee_rate_percentage: 0.3,
             annual_fee_rate: 109.5,
             pool_type: "标准费率".to_string(),
-            sqrt_price_x64: 1u128 << 64,
+            sqrt_price_x64: (1u128 << 64).to_string(),
             initial_price: 1.0,
             initial_tick: 0,
-            creator: Pubkey::new_unique(),
-            clmm_config: Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
+            clmm_config: Pubkey::new_unique().to_string(),
             is_stable_pair: false,
             estimated_liquidity_usd: 0.0,
             created_at: chrono::Utc::now().timestamp(),

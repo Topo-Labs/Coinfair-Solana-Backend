@@ -2,7 +2,7 @@ use solana_client::rpc_response::RpcLogsResponse;
 use solana_sdk::pubkey::Pubkey;
 
 /// 事件过滤器
-/// 
+///
 /// 用于过滤和分类接收到的事件，决定哪些事件需要处理
 #[derive(Debug, Clone)]
 pub struct EventFilter {
@@ -44,10 +44,10 @@ impl EventFilter {
     /// 判断是否应该处理该事件
     pub fn should_process(&self, log_response: &RpcLogsResponse) -> bool {
         use tracing::info;
-        
+
         info!("🔍 过滤器检查事件: {}", log_response.signature);
-        info!("🔍 日志内容: {:?}", log_response.logs);
-        
+        // info!("🔍 日志内容: {:?}", log_response.logs);
+
         // 检查是否有错误且需要过滤错误
         if self.filter_errors && log_response.err.is_some() {
             info!("🚫 事件有错误，被过滤");
@@ -70,7 +70,7 @@ impl EventFilter {
         // 检查事件类型过滤
         if let Some(event_type) = self.extract_event_type(&log_response.logs) {
             info!("🔍 提取的事件类型: {}", event_type);
-            
+
             // 检查黑名单
             if self.event_type_blacklist.contains(&event_type) {
                 info!("🚫 事件类型在黑名单中");
@@ -109,7 +109,7 @@ impl EventFilter {
                 return Some("program_data".to_string());
             }
         }
-        
+
         // 如果没有程序数据日志，再查找指令日志
         for log in logs {
             // 查找指令日志，但排除程序调用日志
@@ -177,11 +177,7 @@ mod tests {
     use super::*;
     use std::str::FromStr;
 
-    fn create_test_log_response(
-        logs: Vec<String>,
-        signature: &str,
-        err: Option<String>,
-    ) -> RpcLogsResponse {
+    fn create_test_log_response(logs: Vec<String>, signature: &str, err: Option<String>) -> RpcLogsResponse {
         RpcLogsResponse {
             signature: signature.to_string(),
             err: err.map(|_| solana_sdk::transaction::TransactionError::AccountNotFound),
@@ -213,10 +209,7 @@ mod tests {
         let program_id = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
         let filter = EventFilter::accept_all(vec![program_id]);
 
-        let logs = vec![
-            format!("Program {} invoke [1]", program_id),
-            "Program data: test".to_string(),
-        ];
+        let logs = vec![format!("Program {} invoke [1]", program_id), "Program data: test".to_string()];
 
         let log_response = create_test_log_response(logs, "test_signature", None);
         assert!(filter.should_process(&log_response));
@@ -227,10 +220,7 @@ mod tests {
         let program_id = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
         let filter = EventFilter::accept_all(vec![program_id]);
 
-        let logs = vec![
-            "Program 11111111111111111111111111111111 invoke [1]".to_string(),
-            "Program data: test".to_string(),
-        ];
+        let logs = vec!["Program 11111111111111111111111111111111 invoke [1]".to_string(), "Program data: test".to_string()];
 
         let log_response = create_test_log_response(logs, "test_signature", None);
         assert!(!filter.should_process(&log_response));
@@ -241,16 +231,10 @@ mod tests {
         let program_id = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
         let filter = EventFilter::new(vec![program_id]).with_error_filtering(true);
 
-        let logs = vec![
-            format!("Program {} invoke [1]", program_id),
-        ];
+        let logs = vec![format!("Program {} invoke [1]", program_id)];
 
         // Test with error
-        let log_response_with_error = create_test_log_response(
-            logs.clone(),
-            "test_signature",
-            Some("InstructionError".to_string()),
-        );
+        let log_response_with_error = create_test_log_response(logs.clone(), "test_signature", Some("InstructionError".to_string()));
         assert!(!filter.should_process(&log_response_with_error));
 
         // Test without error
@@ -264,17 +248,12 @@ mod tests {
         let filter = EventFilter::accept_all(vec![program_id]).with_min_log_length(2);
 
         // Test with insufficient logs
-        let short_logs = vec![
-            format!("Program {} invoke [1]", program_id),
-        ];
+        let short_logs = vec![format!("Program {} invoke [1]", program_id)];
         let log_response_short = create_test_log_response(short_logs, "test_signature", None);
         assert!(!filter.should_process(&log_response_short));
 
         // Test with sufficient logs
-        let long_logs = vec![
-            format!("Program {} invoke [1]", program_id),
-            "Program data: test".to_string(),
-        ];
+        let long_logs = vec![format!("Program {} invoke [1]", program_id), "Program data: test".to_string()];
         let log_response_long = create_test_log_response(long_logs, "test_signature", None);
         assert!(filter.should_process(&log_response_long));
     }
@@ -300,20 +279,13 @@ mod tests {
     #[test]
     fn test_whitelist_filtering() {
         let program_id = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
-        let filter = EventFilter::accept_all(vec![program_id])
-            .with_event_whitelist(vec!["program_data".to_string()]);
+        let filter = EventFilter::accept_all(vec![program_id]).with_event_whitelist(vec!["program_data".to_string()]);
 
-        let logs_allowed = vec![
-            format!("Program {} invoke [1]", program_id),
-            "Program data: test".to_string(),
-        ];
+        let logs_allowed = vec![format!("Program {} invoke [1]", program_id), "Program data: test".to_string()];
         let log_response_allowed = create_test_log_response(logs_allowed, "test_signature", None);
         assert!(filter.should_process(&log_response_allowed));
 
-        let logs_not_allowed = vec![
-            format!("Program {} invoke [1]", program_id),
-            "invoke [other_instruction]".to_string(),
-        ];
+        let logs_not_allowed = vec![format!("Program {} invoke [1]", program_id), "invoke [other_instruction]".to_string()];
         let log_response_not_allowed = create_test_log_response(logs_not_allowed, "test_signature", None);
         assert!(!filter.should_process(&log_response_not_allowed));
     }
@@ -321,20 +293,13 @@ mod tests {
     #[test]
     fn test_blacklist_filtering() {
         let program_id = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
-        let filter = EventFilter::accept_all(vec![program_id])
-            .with_event_blacklist(vec!["forbidden_event".to_string()]);
+        let filter = EventFilter::accept_all(vec![program_id]).with_event_blacklist(vec!["forbidden_event".to_string()]);
 
-        let logs_allowed = vec![
-            format!("Program {} invoke [1]", program_id),
-            "Program data: test".to_string(),
-        ];
+        let logs_allowed = vec![format!("Program {} invoke [1]", program_id), "Program data: test".to_string()];
         let log_response_allowed = create_test_log_response(logs_allowed, "test_signature", None);
         assert!(filter.should_process(&log_response_allowed));
 
-        let logs_blacklisted = vec![
-            format!("Program {} invoke [1]", program_id),
-            "invoke [forbidden_event]".to_string(),
-        ];
+        let logs_blacklisted = vec![format!("Program {} invoke [1]", program_id), "invoke [forbidden_event]".to_string()];
         let log_response_blacklisted = create_test_log_response(logs_blacklisted, "test_signature", None);
         assert!(!filter.should_process(&log_response_blacklisted));
     }

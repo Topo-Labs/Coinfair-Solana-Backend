@@ -2,6 +2,9 @@ pub mod clmm_config_controller;
 pub mod clmm_pool_create;
 pub mod clmm_pool_query;
 pub mod cpmm_pool_create;
+pub mod event_controller;
+#[cfg(test)]
+pub mod event_controller_tests;
 pub mod liquidity_line_controller;
 pub mod nft_controller;
 pub mod position_controller;
@@ -11,8 +14,8 @@ pub mod swap_controller;
 pub mod swap_v2_controller;
 pub mod token_controller;
 
-use axum::{middleware, Extension, Router};
 use crate::auth::SolanaMiddlewareBuilder;
+use axum::{middleware, Extension, Router};
 use std::sync::Arc;
 
 pub struct SolanaController;
@@ -23,19 +26,16 @@ impl SolanaController {
             // 公开信息路由 - 使用可选权限检查
             .nest("/main", Self::public_info_routes())
             .nest("/mint", Self::mint_info_routes())
-            
             // 查询路由 - 使用可选权限检查
             .nest("/pools", Self::query_routes())
-            
-            // 交易路由 - 使用强制权限检查  
+            // 事件查询路由 - 使用可选权限检查
+            .nest("/events", Self::event_routes())
+            // 交易路由 - 使用强制权限检查
             .merge(Self::trading_routes())
-            
             // 仓位管理路由 - 使用强制权限检查
             .nest("/position", Self::position_routes())
-            
             // NFT推荐路由 - 使用强制权限检查
             .nest("/nft", Self::nft_routes())
-            
             // 池子管理路由 - 使用强制权限检查和特定权限
             .nest("/pool", Self::pool_management_routes())
     }
@@ -72,14 +72,15 @@ impl SolanaController {
                     .route("/ids", axum::routing::get(clmm_pool_query::get_pools_by_ids)),
             )
             // pools/key路由 - 池子密钥信息
-            .nest(
-                "/key",
-                Router::new()
-                    .route("/ids", axum::routing::get(clmm_pool_query::get_pools_key_by_ids)),
-            )
+            .nest("/key", Router::new().route("/ids", axum::routing::get(clmm_pool_query::get_pools_key_by_ids)))
             // pools/line路由 - 流动性线图
             .nest("/line", liquidity_line_controller::LiquidityLineController::routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
+    }
+
+    /// 事件查询路由 - NFT领取和奖励分发事件
+    fn event_routes() -> Router {
+        event_controller::EventController::routes().layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 
     /// 交易路由 - 交换操作
@@ -93,10 +94,9 @@ impl SolanaController {
 
     /// 仓位管理路由 - 开仓、平仓、增减流动性等
     fn position_routes() -> Router {
-        position_controller::PositionController::routes()
-            .layer(middleware::from_fn(Self::apply_solana_auth))
+        position_controller::PositionController::routes().layer(middleware::from_fn(Self::apply_solana_auth))
     }
-    
+
     /// NFT推荐路由 - NFT铸造等
     fn nft_routes() -> Router {
         Router::new()

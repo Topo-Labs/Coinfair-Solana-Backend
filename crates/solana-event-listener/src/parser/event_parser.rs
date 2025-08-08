@@ -42,7 +42,7 @@ impl ParsedEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenCreationEventData {
     /// 代币的 Mint 地址
-    pub mint_address: solana_sdk::pubkey::Pubkey,
+    pub mint_address: String,
     /// 代币名称
     pub name: String,
     /// 代币符号
@@ -54,7 +54,7 @@ pub struct TokenCreationEventData {
     /// 供应量（以最小单位计）
     pub supply: u64,
     /// 创建者的钱包地址
-    pub creator: solana_sdk::pubkey::Pubkey,
+    pub creator: String,
     /// 是否支持白名单（true 表示有白名单机制）
     pub has_whitelist: bool,
     /// 白名单资格检查的时间戳（Unix 时间戳，0 表示无时间限制）
@@ -71,11 +71,11 @@ pub struct TokenCreationEventData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolCreationEventData {
     /// CLMM池子地址
-    pub pool_address: solana_sdk::pubkey::Pubkey,
+    pub pool_address: String,
     /// 代币A的mint地址
-    pub token_a_mint: solana_sdk::pubkey::Pubkey,
+    pub token_a_mint: String,
     /// 代币B的mint地址
-    pub token_b_mint: solana_sdk::pubkey::Pubkey,
+    pub token_b_mint: String,
     /// 代币A的小数位数
     pub token_a_decimals: u8,
     /// 代币B的小数位数
@@ -89,15 +89,15 @@ pub struct PoolCreationEventData {
     /// 池子类型
     pub pool_type: String,
     /// 初始sqrt价格
-    pub sqrt_price_x64: u128,
+    pub sqrt_price_x64: String,
     /// 初始价格比率
     pub initial_price: f64,
     /// 初始tick
     pub initial_tick: i32,
     /// 池子创建者
-    pub creator: solana_sdk::pubkey::Pubkey,
+    pub creator: String,
     /// CLMM配置地址
-    pub clmm_config: solana_sdk::pubkey::Pubkey,
+    pub clmm_config: String,
     /// 是否为稳定币对
     pub is_stable_pair: bool,
     /// 预估流动性价值(USD)
@@ -116,11 +116,11 @@ pub struct PoolCreationEventData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NftClaimEventData {
     /// NFT的mint地址
-    pub nft_mint: solana_sdk::pubkey::Pubkey,
+    pub nft_mint: String,
     /// 领取者钱包地址
-    pub claimer: solana_sdk::pubkey::Pubkey,
+    pub claimer: String,
     /// 推荐人地址（可选）
-    pub referrer: Option<solana_sdk::pubkey::Pubkey>,
+    pub referrer: Option<String>,
     /// NFT等级 (1-5级)
     pub tier: u8,
     /// 等级名称
@@ -130,7 +130,7 @@ pub struct NftClaimEventData {
     /// 领取的代币数量
     pub claim_amount: u64,
     /// 代币mint地址
-    pub token_mint: solana_sdk::pubkey::Pubkey,
+    pub token_mint: String,
     /// 奖励倍率 (基点)
     pub reward_multiplier: u16,
     /// 奖励倍率百分比
@@ -146,7 +146,7 @@ pub struct NftClaimEventData {
     /// 领取进度百分比
     pub claim_progress_percentage: f64,
     /// NFT所属的池子地址（可选）
-    pub pool_address: Option<solana_sdk::pubkey::Pubkey>,
+    pub pool_address: Option<String>,
     /// 是否有推荐人
     pub has_referrer: bool,
     /// 是否为紧急领取
@@ -169,13 +169,13 @@ pub struct RewardDistributionEventData {
     /// 奖励分发ID
     pub distribution_id: u64,
     /// 奖励池地址
-    pub reward_pool: solana_sdk::pubkey::Pubkey,
+    pub reward_pool: String,
     /// 接收者钱包地址
-    pub recipient: solana_sdk::pubkey::Pubkey,
+    pub recipient: String,
     /// 推荐人地址（可选）
-    pub referrer: Option<solana_sdk::pubkey::Pubkey>,
+    pub referrer: Option<String>,
     /// 奖励代币mint地址
-    pub reward_token_mint: solana_sdk::pubkey::Pubkey,
+    pub reward_token_mint: String,
     /// 奖励数量
     pub reward_amount: u64,
     /// 基础奖励金额
@@ -191,7 +191,7 @@ pub struct RewardDistributionEventData {
     /// 奖励来源名称
     pub reward_source_name: String,
     /// 相关地址
-    pub related_address: Option<solana_sdk::pubkey::Pubkey>,
+    pub related_address: Option<String>,
     /// 奖励倍率 (基点)
     pub multiplier: u16,
     /// 奖励倍率百分比
@@ -389,6 +389,7 @@ impl EventParserRegistry {
 
 #[cfg(test)]
 mod tests {
+    use solana_sdk::pubkey::Pubkey;
     use super::*;
 
     // Mock解析器用于测试
@@ -420,13 +421,13 @@ mod tests {
     #[test]
     fn test_parsed_event_types() {
         let event = ParsedEvent::TokenCreation(TokenCreationEventData {
-            mint_address: solana_sdk::pubkey::Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             uri: "https://example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: solana_sdk::pubkey::Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,
@@ -444,7 +445,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_id: Pubkey::new_unique(),
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -484,7 +485,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_id: Pubkey::new_unique(),
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -538,7 +539,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_id: Pubkey::new_unique(),
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -585,7 +586,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_id: Pubkey::new_unique(),
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {

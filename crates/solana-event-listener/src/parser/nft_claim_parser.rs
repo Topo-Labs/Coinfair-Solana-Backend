@@ -6,24 +6,23 @@ use crate::{
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
-use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
 /// NFT领取事件的原始数据结构（与智能合约保持一致）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct NftClaimEvent {
     /// NFT的mint地址
-    pub nft_mint: Pubkey,
+    pub nft_mint: String,
     /// 领取者钱包地址
-    pub claimer: Pubkey,
+    pub claimer: String,
     /// 推荐人地址（可选）
-    pub referrer: Option<Pubkey>,
+    pub referrer: Option<String>,
     /// NFT等级 (1-5级)
     pub tier: u8,
     /// 领取的代币数量（以最小单位计）
     pub claim_amount: u64,
     /// 代币mint地址
-    pub token_mint: Pubkey,
+    pub token_mint: String,
     /// 奖励倍率 (基点，如10000表示1.0倍)
     pub reward_multiplier: u16,
     /// 领取类型 (0: 定期领取, 1: 一次性领取, 2: 紧急领取)
@@ -31,7 +30,7 @@ pub struct NftClaimEvent {
     /// 本次领取后的累计领取量
     pub total_claimed: u64,
     /// NFT所属的池子地址（可选）
-    pub pool_address: Option<Pubkey>,
+    pub pool_address: Option<String>,
     /// 领取时间戳
     pub claimed_at: i64,
 }
@@ -137,7 +136,7 @@ impl NftClaimParser {
         ParsedEvent::NftClaim(NftClaimEventData {
             nft_mint: event.nft_mint,
             claimer: event.claimer,
-            referrer: event.referrer,
+            referrer: event.referrer.clone(),
             tier: event.tier,
             tier_name: self.get_tier_name(event.tier),
             tier_bonus_rate,
@@ -164,19 +163,19 @@ impl NftClaimParser {
     /// 验证NFT领取事件数据
     fn validate_nft_claim(&self, event: &NftClaimEventData) -> Result<bool> {
         // 验证NFT地址
-        if event.nft_mint == Pubkey::default() {
+        if event.nft_mint == String::default() {
             warn!("❌ 无效的NFT地址");
             return Ok(false);
         }
 
         // 验证领取者地址
-        if event.claimer == Pubkey::default() {
+        if event.claimer == String::default() {
             warn!("❌ 无效的领取者地址");
             return Ok(false);
         }
 
         // 验证代币地址
-        if event.token_mint == Pubkey::default() {
+        if event.token_mint == String::default() {
             warn!("❌ 无效的代币地址");
             return Ok(false);
         }
@@ -219,8 +218,8 @@ impl NftClaimParser {
         }
 
         // 验证推荐人不能是自己
-        if let Some(referrer) = event.referrer {
-            if referrer == event.claimer {
+        if let Some(referrer) = &event.referrer {
+            if referrer == &event.claimer {
                 warn!("❌ 推荐人不能是自己: {}", event.claimer);
                 return Ok(false);
             }
@@ -289,7 +288,8 @@ impl EventParser for NftClaimParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
+    use anchor_lang::pubkey;
+    use solana_sdk::pubkey::Pubkey;
 
     fn create_test_config() -> EventListenerConfig {
         EventListenerConfig {
@@ -297,7 +297,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                program_id: pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -326,16 +326,16 @@ mod tests {
 
     fn create_test_nft_claim_event() -> NftClaimEvent {
         NftClaimEvent {
-            nft_mint: Pubkey::new_unique(),
-            claimer: Pubkey::new_unique(),
-            referrer: Some(Pubkey::new_unique()),
+            nft_mint: Pubkey::new_unique().to_string(),
+            claimer: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
             tier: 3,
             claim_amount: 1000000, // 1 token with 6 decimals
-            token_mint: Pubkey::new_unique(),
+            token_mint: Pubkey::new_unique().to_string(),
             reward_multiplier: 15000, // 1.5倍
             claim_type: 0,            // 定期领取
             total_claimed: 5000000,   // 总共领取了5个代币
-            pool_address: Some(Pubkey::new_unique()),
+            pool_address: Some(Pubkey::new_unique().to_string()),
             claimed_at: chrono::Utc::now().timestamp(),
         }
     }
@@ -427,14 +427,14 @@ mod tests {
         let parser = NftClaimParser::new(&config).unwrap();
 
         let valid_event = NftClaimEventData {
-            nft_mint: Pubkey::new_unique(),
-            claimer: Pubkey::new_unique(),
-            referrer: Some(Pubkey::new_unique()),
+            nft_mint: Pubkey::new_unique().to_string(),
+            claimer: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
             tier: 3,
             tier_name: "Gold".to_string(),
             tier_bonus_rate: 1.5,
             claim_amount: 1000000,
-            token_mint: Pubkey::new_unique(),
+            token_mint: Pubkey::new_unique().to_string(),
             reward_multiplier: 15000,
             reward_multiplier_percentage: 1.5,
             bonus_amount: 1500000,
@@ -442,7 +442,7 @@ mod tests {
             claim_type_name: "定期领取".to_string(),
             total_claimed: 5000000,
             claim_progress_percentage: 20.0,
-            pool_address: Some(Pubkey::new_unique()),
+            pool_address: Some(Pubkey::new_unique().to_string()),
             has_referrer: true,
             is_emergency_claim: false,
             estimated_usd_value: 0.0,
@@ -464,7 +464,7 @@ mod tests {
 
         // 测试推荐人是自己的情况
         let self_referrer_event = NftClaimEventData {
-            referrer: Some(valid_event.claimer), // 推荐人是自己
+            referrer: Some(valid_event.claimer.clone()), // 推荐人是自己
             ..valid_event.clone()
         };
 
@@ -507,14 +507,14 @@ mod tests {
         let parser = NftClaimParser::new(&config).unwrap();
 
         let event = ParsedEvent::NftClaim(NftClaimEventData {
-            nft_mint: Pubkey::new_unique(),
-            claimer: Pubkey::new_unique(),
-            referrer: Some(Pubkey::new_unique()),
+            nft_mint: Pubkey::new_unique().to_string(),
+            claimer: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
             tier: 3,
             tier_name: "Gold".to_string(),
             tier_bonus_rate: 1.5,
             claim_amount: 1000000,
-            token_mint: Pubkey::new_unique(),
+            token_mint: Pubkey::new_unique().to_string(),
             reward_multiplier: 15000,
             reward_multiplier_percentage: 1.5,
             bonus_amount: 1500000,
@@ -522,7 +522,7 @@ mod tests {
             claim_type_name: "定期领取".to_string(),
             total_claimed: 5000000,
             claim_progress_percentage: 20.0,
-            pool_address: Some(Pubkey::new_unique()),
+            pool_address: Some(Pubkey::new_unique().to_string()),
             has_referrer: true,
             is_emergency_claim: false,
             estimated_usd_value: 0.0,

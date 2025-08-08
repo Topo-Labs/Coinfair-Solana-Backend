@@ -2746,3 +2746,313 @@ pub struct MintCounterData {
     /// PDA bump
     pub bump: u8,
 }
+
+// ============ 事件查询相关DTO ============
+
+/// 分页查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct PaginationParams {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+    
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+    
+    /// 排序字段
+    pub sort_by: Option<String>,
+    
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+}
+
+fn default_page() -> u64 {
+    1
+}
+
+fn default_page_size() -> u64 {
+    20
+}
+
+fn validate_sort_order(value: &str) -> Result<(), validator::ValidationError> {
+    if value == "asc" || value == "desc" {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("invalid_sort_order"))
+    }
+}
+
+/// NFT领取事件查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct NftClaimEventQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+    
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+    
+    /// 排序字段
+    pub sort_by: Option<String>,
+    
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+    
+    /// NFT等级过滤（1-5）
+    #[validate(range(min = 1, max = 5))]
+    pub tier: Option<u8>,
+    
+    /// 是否有推荐人
+    pub has_referrer: Option<bool>,
+    
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+    
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+}
+
+/// 奖励分发事件查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct RewardDistributionEventQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+    
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+    
+    /// 排序字段
+    pub sort_by: Option<String>,
+    
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+    
+    /// 是否锁定
+    pub is_locked: Option<bool>,
+    
+    /// 奖励类型
+    pub reward_type: Option<u8>,
+    
+    /// 奖励来源
+    pub reward_source: Option<u8>,
+    
+    /// 是否为推荐奖励
+    pub is_referral_reward: Option<bool>,
+    
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+    
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+}
+
+/// 通用分页响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct EventPaginatedResponse<T> {
+    /// 数据项列表
+    pub items: Vec<T>,
+    
+    /// 总记录数
+    pub total: u64,
+    
+    /// 当前页码
+    pub page: u64,
+    
+    /// 每页条数
+    pub page_size: u64,
+    
+    /// 总页数
+    pub total_pages: u64,
+}
+
+/// NFT领取事件响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NftClaimEventResponse {
+    /// NFT的mint地址
+    pub nft_mint: String,
+    
+    /// 领取者钱包地址
+    pub claimer: String,
+    
+    /// 推荐人地址（可选）
+    pub referrer: Option<String>,
+    
+    /// NFT等级
+    pub tier: u8,
+    
+    /// 等级名称
+    pub tier_name: String,
+    
+    /// 领取的代币数量
+    pub claim_amount: u64,
+    
+    /// 实际奖励金额
+    pub bonus_amount: u64,
+    
+    /// 是否有推荐人
+    pub has_referrer: bool,
+    
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+    
+    /// 领取时间戳
+    pub claimed_at: String,
+    
+    /// 交易签名
+    pub signature: String,
+}
+
+/// 奖励分发事件响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardDistributionEventResponse {
+    /// 奖励分发ID
+    pub distribution_id: u64,
+    
+    /// 接收者钱包地址
+    pub recipient: String,
+    
+    /// 推荐人地址（可选）
+    pub referrer: Option<String>,
+    
+    /// 奖励代币mint地址
+    pub reward_token_mint: String,
+    
+    /// 奖励数量
+    pub reward_amount: u64,
+    
+    /// 奖励类型名称
+    pub reward_type_name: String,
+    
+    /// 是否已锁定
+    pub is_locked: bool,
+    
+    /// 解锁时间戳
+    pub unlock_timestamp: Option<String>,
+    
+    /// 是否为推荐奖励
+    pub is_referral_reward: bool,
+    
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+    
+    /// 发放时间戳
+    pub distributed_at: String,
+    
+    /// 交易签名
+    pub signature: String,
+}
+
+/// NFT领取统计响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NftClaimStatsResponse {
+    /// 总领取次数
+    pub total_claims: u64,
+    
+    /// 今日领取次数
+    pub today_claims: u64,
+    
+    /// 等级分布 (等级, 数量, 总金额)
+    pub tier_distribution: Vec<TierDistribution>,
+}
+
+/// 等级分布信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TierDistribution {
+    /// 等级
+    pub tier: u8,
+    
+    /// 该等级的领取数量
+    pub count: u64,
+    
+    /// 该等级的总金额
+    pub total_amount: u64,
+}
+
+/// 奖励分发统计响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardStatsResponse {
+    /// 总分发次数
+    pub total_distributions: u64,
+    
+    /// 今日分发次数
+    pub today_distributions: u64,
+    
+    /// 锁定中的奖励数量
+    pub locked_rewards: u64,
+    
+    /// 奖励类型分布
+    pub reward_type_distribution: Vec<RewardTypeDistribution>,
+}
+
+/// 奖励类型分布信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardTypeDistribution {
+    /// 奖励类型
+    pub reward_type: u8,
+    
+    /// 该类型的分发数量
+    pub count: u64,
+    
+    /// 该类型的总金额
+    pub total_amount: u64,
+}
+
+/// 用户奖励汇总响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserRewardSummaryResponse {
+    /// 接收者地址
+    pub recipient: String,
+    
+    /// 总奖励次数
+    pub total_rewards: u64,
+    
+    /// 总奖励金额
+    pub total_amount: u64,
+    
+    /// 锁定金额
+    pub locked_amount: u64,
+    
+    /// 未锁定金额
+    pub unlocked_amount: u64,
+    
+    /// 推荐奖励次数
+    pub referral_rewards: u64,
+    
+    /// 推荐奖励金额
+    pub referral_amount: u64,
+}
+
+/// 用户NFT领取汇总响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserNftClaimSummaryResponse {
+    /// 领取者地址
+    pub claimer: String,
+    
+    /// 总领取次数
+    pub total_claims: u64,
+    
+    /// 总领取金额
+    pub total_claim_amount: u64,
+    
+    /// 总奖励金额
+    pub total_bonus_amount: u64,
+    
+    /// 有推荐人的领取次数
+    pub claims_with_referrer: u64,
+    
+    /// 等级分布
+    pub tier_distribution: Vec<(u8, u32)>,
+}

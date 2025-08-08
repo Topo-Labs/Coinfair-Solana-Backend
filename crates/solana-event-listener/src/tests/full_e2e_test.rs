@@ -25,6 +25,7 @@ use crate::{
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use solana_sdk::pubkey::Pubkey;
 use tokio::time::{sleep, timeout, Duration};
 use tracing::{error, info, warn};
 
@@ -507,13 +508,13 @@ async fn test_e2e_database_write_verification() {
     // 创建测试事件（模拟真实解析结果）
     let test_events = vec![
         ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
-            mint_address: solana_sdk::pubkey::Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "E2E Test Token".to_string(),
             symbol: "E2ETEST".to_string(),
             uri: "https://e2e-test.example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000000000,
-            creator: solana_sdk::pubkey::Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: chrono::Utc::now().timestamp(),
@@ -558,7 +559,7 @@ async fn test_e2e_database_write_verification() {
 // 辅助函数：创建逼真的测试数据
 fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
     crate::parser::event_parser::PoolCreationEventData {
-        pool_address: solana_sdk::pubkey::Pubkey::new_unique(),
+        pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(),  // SOL
         token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse().unwrap(), // USDC
         token_a_decimals: 9,
@@ -567,10 +568,10 @@ fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreationEve
         fee_rate_percentage: 0.25,
         annual_fee_rate: 91.25,
         pool_type: "标准费率".to_string(),
-        sqrt_price_x64: 7922816251426433759354395034_u128, // 约 100 SOL/USDC
+        sqrt_price_x64: 7922816251426433759354395034_u128.to_string(), // 约 100 SOL/USDC
         initial_price: 100.0,
         initial_tick: 46054,
-        creator: solana_sdk::pubkey::Pubkey::new_unique(),
+        creator: Pubkey::new_unique().to_string(),
         clmm_config: "6WaEpWoTW4gYcHRAaCivNp3PPwPBaOd6zMpMySgCFjhj".parse().unwrap(),
         is_stable_pair: false,
         estimated_liquidity_usd: 50000.0,
@@ -583,9 +584,9 @@ fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreationEve
 
 fn create_realistic_nft_event() -> crate::parser::event_parser::NftClaimEventData {
     crate::parser::event_parser::NftClaimEventData {
-        nft_mint: solana_sdk::pubkey::Pubkey::new_unique(),
-        claimer: solana_sdk::pubkey::Pubkey::new_unique(),
-        referrer: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        nft_mint: Pubkey::new_unique().to_string(),
+        claimer: Pubkey::new_unique().to_string(),
+        referrer: Some(Pubkey::new_unique().to_string()),
         tier: 4, // Platinum
         tier_name: "Platinum".to_string(),
         tier_bonus_rate: 2.0,
@@ -598,7 +599,7 @@ fn create_realistic_nft_event() -> crate::parser::event_parser::NftClaimEventDat
         claim_type_name: "定期领取".to_string(),
         total_claimed: 25000000, // 25 tokens total
         claim_progress_percentage: 20.0,
-        pool_address: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        pool_address: Some(Pubkey::new_unique().to_string()),
         has_referrer: true,
         is_emergency_claim: false,
         estimated_usd_value: 500.0, // $500 USD
@@ -613,9 +614,9 @@ fn create_realistic_reward_event() -> crate::parser::event_parser::RewardDistrib
     let now = chrono::Utc::now();
     crate::parser::event_parser::RewardDistributionEventData {
         distribution_id: now.timestamp_millis() as u64,
-        reward_pool: solana_sdk::pubkey::Pubkey::new_unique(),
-        recipient: solana_sdk::pubkey::Pubkey::new_unique(),
-        referrer: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        reward_pool: Pubkey::new_unique().to_string(),
+        recipient: Pubkey::new_unique().to_string(),
+        referrer: Some(Pubkey::new_unique().to_string()),
         reward_token_mint: "So11111111111111111111111111111111111111112".parse().unwrap(),
         reward_amount: 2500000,      // 2.5 SOL
         base_reward_amount: 2000000, // 2 SOL base
@@ -624,7 +625,7 @@ fn create_realistic_reward_event() -> crate::parser::event_parser::RewardDistrib
         reward_type_name: "流动性挖矿奖励".to_string(),
         reward_source: 1,
         reward_source_name: "CLMM流动性挖矿".to_string(),
-        related_address: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        related_address: Some(Pubkey::new_unique().to_string()),
         multiplier: 12500, // 1.25x
         multiplier_percentage: 1.25,
         is_locked: true,

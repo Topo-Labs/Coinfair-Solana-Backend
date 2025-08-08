@@ -12,12 +12,14 @@ LOG_FILE="logs/server_${TIMESTAMP}.log"
 
 # 设置环境变量
 export CARGO_ENV=development
+export MONGO_DB=coinfair_development
 
 # 显示日志文件位置
 echo "📝 日志文件: $LOG_FILE"
 
 # 启动程序
-RUST_LOG=debug cargo run --bin coinfair 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$LOG_FILE" &
+# RUST_LOG=debug cargo run --bin coinfair 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$LOG_FILE" &
+RUST_LOG=info cargo run --bin coinfair
 
 # 获取进程ID
 PID=$!

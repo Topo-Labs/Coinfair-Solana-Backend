@@ -14,13 +14,13 @@ pub struct RewardDistributionEvent {
     /// 奖励分发ID（唯一标识符）
     pub distribution_id: u64,
     /// 奖励池地址
-    pub reward_pool: Pubkey,
+    pub reward_pool: String,
     /// 接收者钱包地址
-    pub recipient: Pubkey,
+    pub recipient: String,
     /// 推荐人地址（可选）
-    pub referrer: Option<Pubkey>,
+    pub referrer: Option<String>,
     /// 奖励代币mint地址
-    pub reward_token_mint: Pubkey,
+    pub reward_token_mint: String,
     /// 奖励数量（以最小单位计）
     pub reward_amount: u64,
     /// 奖励类型 (0: 交易奖励, 1: 推荐奖励, 2: 流动性奖励, 3: 治理奖励, 4: 空投奖励)
@@ -28,7 +28,7 @@ pub struct RewardDistributionEvent {
     /// 奖励来源 (0: DEX交易, 1: 流动性挖矿, 2: 推荐计划, 3: 治理投票, 4: 特殊活动)
     pub reward_source: u8,
     /// 相关的交易或池子地址（可选）
-    pub related_address: Option<Pubkey>,
+    pub related_address: Option<String>,
     /// 奖励倍率（基点，如10000表示1.0倍）
     pub multiplier: u16,
     /// 基础奖励金额（倍率计算前）
@@ -146,7 +146,7 @@ impl RewardDistributionParser {
             distribution_id: event.distribution_id,
             reward_pool: event.reward_pool,
             recipient: event.recipient,
-            referrer: event.referrer,
+            referrer: event.referrer.clone(),
             reward_token_mint: event.reward_token_mint,
             reward_amount: event.reward_amount,
             base_reward_amount: event.base_reward_amount,
@@ -181,19 +181,19 @@ impl RewardDistributionParser {
         }
 
         // 验证奖励池地址
-        if event.reward_pool == Pubkey::default() {
+        if event.reward_pool == Pubkey::default().to_string() {
             warn!("❌ 无效的奖励池地址");
             return Ok(false);
         }
 
         // 验证接收者地址
-        if event.recipient == Pubkey::default() {
+        if event.recipient == Pubkey::default().to_string() {
             warn!("❌ 无效的接收者地址");
             return Ok(false);
         }
 
         // 验证奖励代币地址
-        if event.reward_token_mint == Pubkey::default() {
+        if event.reward_token_mint == Pubkey::default().to_string() {
             warn!("❌ 无效的奖励代币地址");
             return Ok(false);
         }
@@ -263,8 +263,8 @@ impl RewardDistributionParser {
         }
 
         // 验证推荐人不能是自己
-        if let Some(referrer) = event.referrer {
-            if referrer == event.recipient {
+        if let Some(referrer) = &event.referrer {
+            if referrer == &event.recipient {
                 warn!("❌ 推荐人不能是自己: {}", event.recipient);
                 return Ok(false);
             }
@@ -380,14 +380,14 @@ mod tests {
         let now = chrono::Utc::now().timestamp();
         RewardDistributionEvent {
             distribution_id: 12345,
-            reward_pool: Pubkey::new_unique(),
-            recipient: Pubkey::new_unique(),
-            referrer: Some(Pubkey::new_unique()),
-            reward_token_mint: Pubkey::new_unique(),
+            reward_pool: Pubkey::new_unique().to_string(),
+            recipient: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
+            reward_token_mint: Pubkey::new_unique().to_string(),
             reward_amount: 1500000, // 1.5 tokens with 6 decimals
             reward_type: 2,         // 流动性奖励
             reward_source: 1,       // 流动性挖矿
-            related_address: Some(Pubkey::new_unique()),
+            related_address: Some(Pubkey::new_unique().to_string()),
             multiplier: 15000,           // 1.5倍
             base_reward_amount: 1000000, // 1 token基础奖励
             is_locked: true,
@@ -490,10 +490,10 @@ mod tests {
 
         let valid_event = RewardDistributionEventData {
             distribution_id: 12345,
-            reward_pool: Pubkey::new_unique(),
-            recipient: Pubkey::new_unique(),
-            referrer: Some(Pubkey::new_unique()),
-            reward_token_mint: Pubkey::new_unique(),
+            reward_pool: Pubkey::new_unique().to_string(),
+            recipient: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
+            reward_token_mint: Pubkey::new_unique().to_string(),
             reward_amount: 1500000,
             base_reward_amount: 1000000,
             bonus_amount: 500000,
@@ -501,7 +501,7 @@ mod tests {
             reward_type_name: "流动性奖励".to_string(),
             reward_source: 1,
             reward_source_name: "流动性挖矿".to_string(),
-            related_address: Some(Pubkey::new_unique()),
+            related_address: Some(Pubkey::new_unique().to_string()),
             multiplier: 15000,
             multiplier_percentage: 1.5,
             is_locked: true,
@@ -529,7 +529,7 @@ mod tests {
 
         // 测试推荐人是自己的情况
         let self_referrer_event = RewardDistributionEventData {
-            referrer: Some(valid_event.recipient), // 推荐人是自己
+            referrer: Some(valid_event.recipient.clone()), // 推荐人是自己
             ..valid_event.clone()
         };
 
@@ -582,10 +582,10 @@ mod tests {
 
         let event = ParsedEvent::RewardDistribution(RewardDistributionEventData {
             distribution_id: 12345,
-            reward_pool: Pubkey::new_unique(),
-            recipient: Pubkey::new_unique(),
-            referrer: Some(Pubkey::new_unique()),
-            reward_token_mint: Pubkey::new_unique(),
+            reward_pool: Pubkey::new_unique().to_string(),
+            recipient: Pubkey::new_unique().to_string(),
+            referrer: Some(Pubkey::new_unique().to_string()),
+            reward_token_mint: Pubkey::new_unique().to_string(),
             reward_amount: 1500000,
             base_reward_amount: 1000000,
             bonus_amount: 500000,
@@ -593,7 +593,7 @@ mod tests {
             reward_type_name: "流动性奖励".to_string(),
             reward_source: 1,
             reward_source_name: "流动性挖矿".to_string(),
-            related_address: Some(Pubkey::new_unique()),
+            related_address: Some(Pubkey::new_unique().to_string()),
             multiplier: 15000,
             multiplier_percentage: 1.5,
             is_locked: true,

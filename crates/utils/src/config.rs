@@ -1,6 +1,7 @@
 use clap::Parser;
 
 #[derive(clap::ValueEnum, Clone, Debug, Copy)]
+#[clap(rename_all = "lowercase")]
 pub enum CargoEnv {
     Development,
     Production,
@@ -87,5 +88,22 @@ impl Default for AppConfig {
     fn default() -> Self {
         EnvLoader::load_env_file().ok();
         AppConfig::parse()
+    }
+}
+impl AppConfig {
+    /// 手动创建配置实例（用于测试）
+    pub fn new_for_test() -> Self {
+        Self {
+            cargo_env: CargoEnv::Development,
+            app_host: "0.0.0.0".to_string(),
+            app_port: 8765,
+            mongo_uri: std::env::var("MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string()),
+            mongo_db: std::env::var("MONGO_DB").unwrap_or_else(|_| "test_db".to_string()),
+            rpc_url: "https://api.devnet.solana.com".to_string(),
+            private_key: None,
+            raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            amm_config_index: 0,
+            rust_log: "info".to_string(),
+        }
     }
 }

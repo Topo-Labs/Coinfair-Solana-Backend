@@ -4,6 +4,7 @@
 pub mod amm_pool;
 pub mod clmm_pool;
 pub mod config;
+pub mod event;
 pub mod liquidity;
 pub mod liquidity_line;
 pub mod nft;

@@ -8,7 +8,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use database::token_info::{DataSource, TokenInfo, TokenInfoRepository, TokenPushRequest};
 use mongodb::Client;
 use serde::{Deserialize, Serialize};
-use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -16,7 +15,7 @@ use tracing::{debug, error, info, warn};
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct TokenCreationEvent {
     /// 代币的 Mint 地址
-    pub mint_address: Pubkey,
+    pub mint_address: String,
     /// 代币名称
     pub name: String,
     /// 代币符号
@@ -28,7 +27,7 @@ pub struct TokenCreationEvent {
     /// 供应量（以最小单位计）
     pub supply: u64,
     /// 创建者的钱包地址
-    pub creator: Pubkey,
+    pub creator: String,
     /// 是否支持白名单（true 表示有白名单机制）
     pub has_whitelist: bool,
     /// 白名单资格检查的时间戳（Unix 时间戳，0 表示无时间限制）
@@ -42,18 +41,18 @@ pub struct TokenCreationEvent {
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct SwapEvent {
     /// The pool for which token_0 and token_1 were swapped
-    pub pool_state: Pubkey,
+    pub pool_state: String,
 
     /// The address that initiated the swap call, and that received the callback
-    pub sender: Pubkey,
+    pub sender: String,
 
     /// The payer token account in zero for one swaps, or the recipient token account
     /// in one for zero swaps
-    pub token_account_0: Pubkey,
+    pub token_account_0: String,
 
     /// The payer token account in one for zero swaps, or the recipient token account
     /// in zero for one swaps
-    pub token_account_1: Pubkey,
+    pub token_account_1: String,
 
     /// The real delta amount of the token_0 of the pool or user
     pub amount_0: u64,
@@ -382,8 +381,9 @@ impl EventParser for TokenCreationParser {
 
 #[cfg(test)]
 mod tests {
+    use solana_sdk::pubkey;
     use super::*;
-    use std::str::FromStr;
+    use solana_sdk::pubkey::Pubkey;
 
     fn create_test_config() -> EventListenerConfig {
         EventListenerConfig {
@@ -391,7 +391,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                program_id: pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -420,13 +420,13 @@ mod tests {
 
     fn create_test_token_creation_event() -> TokenCreationEvent {
         TokenCreationEvent {
-            mint_address: Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             uri: "https://example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,
@@ -469,13 +469,13 @@ mod tests {
         let parser = TokenCreationParser::new(&config).unwrap();
 
         let valid_event = TokenCreationEventData {
-            mint_address: Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "Valid Token".to_string(),
             symbol: "VALID".to_string(),
             uri: "https://example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,

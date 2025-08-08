@@ -16,6 +16,7 @@ use crate::{
     metrics::MetricsCollector,
 };
 use std::sync::Arc;
+use anchor_lang::prelude::Pubkey;
 use tokio::time::{timeout, Duration};
 use tracing::{info, warn};
 
@@ -186,13 +187,13 @@ async fn test_e2e_database_persistence() {
             let test_events = vec![
                 crate::parser::ParsedEvent::TokenCreation(
                     crate::parser::event_parser::TokenCreationEventData {
-                        mint_address: solana_sdk::pubkey::Pubkey::new_unique(),
+                        mint_address: Pubkey::new_unique().to_string(),
                         name: "E2E Test Token".to_string(),
                         symbol: "E2E".to_string(),
                         uri: "https://e2e-test.example.com/metadata.json".to_string(),
                         decimals: 9,
                         supply: 1000000,
-                        creator: solana_sdk::pubkey::Pubkey::new_unique(),
+                        creator: Pubkey::new_unique().to_string(),
                         has_whitelist: false,
                         whitelist_deadline: 0,
                         created_at: chrono::Utc::now().timestamp(),
@@ -238,20 +239,20 @@ async fn test_e2e_database_persistence() {
 /// 辅助函数：创建测试池子事件
 fn create_test_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
     crate::parser::event_parser::PoolCreationEventData {
-        pool_address: solana_sdk::pubkey::Pubkey::new_unique(),
-        token_a_mint: solana_sdk::pubkey::Pubkey::new_unique(),
-        token_b_mint: solana_sdk::pubkey::Pubkey::new_unique(),
+        pool_address: Pubkey::new_unique().to_string(),
+        token_a_mint: Pubkey::new_unique().to_string(),
+        token_b_mint: Pubkey::new_unique().to_string(),
         token_a_decimals: 9,
         token_b_decimals: 6,
         fee_rate: 3000,
         fee_rate_percentage: 0.3,
         annual_fee_rate: 109.5,
         pool_type: "标准费率".to_string(),
-        sqrt_price_x64: 1u128 << 64,
+        sqrt_price_x64: (1u128 << 64).to_string(),
         initial_price: 1.0,
         initial_tick: 0,
-        creator: solana_sdk::pubkey::Pubkey::new_unique(),
-        clmm_config: solana_sdk::pubkey::Pubkey::new_unique(),
+        creator: Pubkey::new_unique().to_string(),
+        clmm_config: Pubkey::new_unique().to_string(),
         is_stable_pair: false,
         estimated_liquidity_usd: 0.0,
         created_at: chrono::Utc::now().timestamp(),
@@ -264,14 +265,14 @@ fn create_test_pool_event() -> crate::parser::event_parser::PoolCreationEventDat
 /// 辅助函数：创建测试NFT事件
 fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
     crate::parser::event_parser::NftClaimEventData {
-        nft_mint: solana_sdk::pubkey::Pubkey::new_unique(),
-        claimer: solana_sdk::pubkey::Pubkey::new_unique(),
-        referrer: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        nft_mint: Pubkey::new_unique().to_string(),
+        claimer: Pubkey::new_unique().to_string(),
+        referrer: Some(Pubkey::new_unique().to_string()),
         tier: 3,
         tier_name: "Gold".to_string(),
         tier_bonus_rate: 1.5,
         claim_amount: 1000000,
-        token_mint: solana_sdk::pubkey::Pubkey::new_unique(),
+        token_mint: Pubkey::new_unique().to_string(),
         reward_multiplier: 15000,
         reward_multiplier_percentage: 1.5,
         bonus_amount: 1500000,
@@ -279,7 +280,7 @@ fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
         claim_type_name: "定期领取".to_string(),
         total_claimed: 5000000,
         claim_progress_percentage: 20.0,
-        pool_address: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        pool_address: Some(Pubkey::new_unique().to_string()),
         has_referrer: true,
         is_emergency_claim: false,
         estimated_usd_value: 0.0,
@@ -294,10 +295,10 @@ fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
 fn create_test_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
     crate::parser::event_parser::RewardDistributionEventData {
         distribution_id: chrono::Utc::now().timestamp_millis() as u64,
-        reward_pool: solana_sdk::pubkey::Pubkey::new_unique(),
-        recipient: solana_sdk::pubkey::Pubkey::new_unique(),
-        referrer: Some(solana_sdk::pubkey::Pubkey::new_unique()),
-        reward_token_mint: solana_sdk::pubkey::Pubkey::new_unique(),
+        reward_pool: Pubkey::new_unique().to_string(),
+        recipient: Pubkey::new_unique().to_string(),
+        referrer: Some(Pubkey::new_unique().to_string()),
+        reward_token_mint: Pubkey::new_unique().to_string(),
         reward_amount: 1500000,
         base_reward_amount: 1000000,
         bonus_amount: 500000,
@@ -305,7 +306,7 @@ fn create_test_reward_event() -> crate::parser::event_parser::RewardDistribution
         reward_type_name: "流动性奖励".to_string(),
         reward_source: 1,
         reward_source_name: "流动性挖矿".to_string(),
-        related_address: Some(solana_sdk::pubkey::Pubkey::new_unique()),
+        related_address: Some(Pubkey::new_unique().to_string()),
         multiplier: 15000,
         multiplier_percentage: 1.5,
         is_locked: true,

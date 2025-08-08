@@ -17,6 +17,7 @@ use crate::{
     parser::EventParserRegistry,
 };
 use std::sync::Arc;
+use solana_sdk::pubkey::Pubkey;
 use tokio::time::{timeout, Duration};
 
 /// 创建测试配置
@@ -132,13 +133,13 @@ async fn test_fix_3_intelligent_retry_logic() {
     // 创建测试事件
     let test_batch = vec![crate::parser::ParsedEvent::TokenCreation(
         crate::parser::event_parser::TokenCreationEventData {
-            mint_address: solana_sdk::pubkey::Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "Integration Test Token".to_string(),
             symbol: "ITEST".to_string(),
             uri: "https://test.example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: solana_sdk::pubkey::Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,

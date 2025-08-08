@@ -537,6 +537,7 @@ impl Clone for BatchWriter {
 
 #[cfg(test)]
 mod tests {
+    use solana_sdk::pubkey::Pubkey;
     use super::*;
     use crate::parser::{event_parser::TokenCreationEventData, ParsedEvent};
 
@@ -580,13 +581,13 @@ mod tests {
 
     fn create_test_event() -> ParsedEvent {
         ParsedEvent::TokenCreation(TokenCreationEventData {
-            mint_address: solana_sdk::pubkey::Pubkey::new_unique(),
+            mint_address: Pubkey::new_unique().to_string(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             uri: "https://example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: solana_sdk::pubkey::Pubkey::new_unique(),
+            creator: Pubkey::new_unique().to_string(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,

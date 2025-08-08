@@ -287,10 +287,10 @@ mod tests {
     #[tokio::test]
     async fn test_is_development_environment() {
         // 设置测试环境变量
-        std::env::set_var("CARGO_ENV", "Development");
+        std::env::set_var("CARGO_ENV", "development");
         assert!(is_development_environment());
 
-        std::env::set_var("CARGO_ENV", "Production");
+        std::env::set_var("CARGO_ENV", "production");
         assert!(!is_development_environment());
 
         std::env::remove_var("CARGO_ENV");
@@ -299,7 +299,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_admin_token_generation() {
-        std::env::set_var("CARGO_ENV", "Development");
+        std::env::set_var("CARGO_ENV", "development");
 
         let config = AuthConfig::default();
         let jwt_manager = Arc::new(JwtManager::new(config));
