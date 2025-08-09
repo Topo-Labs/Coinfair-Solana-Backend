@@ -122,6 +122,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "allocator-api2"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+
+[[package]]
 name = "anchor-attribute-access-control"
 version = "0.31.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3061,6 +3067,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
+name = "foldhash"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
 name = "foreign-types"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3331,6 +3343,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "governor"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "444405bbb1a762387aa22dd569429533b54a1d8759d35d3b64cb39b0293eaa19"
+dependencies = [
+ "cfg-if",
+ "dashmap 6.1.0",
+ "futures-sink",
+ "futures-timer",
+ "futures-util",
+ "getrandom 0.3.3",
+ "hashbrown 0.15.4",
+ "nonzero_ext",
+ "parking_lot",
+ "portable-atomic",
+ "quanta",
+ "rand 0.9.1",
+ "smallvec",
+ "spinning_top",
+ "web-time",
+]
+
+[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3398,6 +3433,11 @@ name = "hashbrown"
 version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5971ac85611da7067dbfcabef3c70ebb5606018acd9e2a3903a0da507521e0d5"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash",
+]
 
 [[package]]
 name = "hashers"
@@ -5739,20 +5779,21 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.24.0"
+version = "0.32.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c580d9cbbe1d1b479e8d67cf9daf6a62c957e6846048408b80b43ac3f6af84cd"
+checksum = "e1f66bf4cac9733a23bcdf1e0e01effbaaad208567beba68be8f67e5f4af3ee1"
 dependencies = [
- "async-trait",
  "bytes",
+ "cfg-if",
  "combine 4.6.7",
  "futures-util",
  "itoa",
+ "num-bigint 0.4.6",
  "percent-encoding",
  "pin-project-lite",
  "ryu",
  "sha1_smol",
- "socket2 0.4.10",
+ "socket2 0.6.0",
  "tokio",
  "tokio-util 0.7.15",
  "url",
@@ -6676,7 +6717,7 @@ dependencies = [
  "ed25519-dalek 2.2.0",
  "ethers",
  "futures",
- "governor",
+ "governor 0.10.1",
  "jsonwebtoken 9.3.1",
  "lazy_static",
  "mongodb",
@@ -6694,9 +6735,9 @@ dependencies = [
  "solana-client",
  "solana-sdk",
  "spl-associated-token-account 6.0.0",
- "spl-memo 4.0.3",
+ "spl-memo 6.0.0",
  "spl-pod 0.5.0",
- "spl-token 4.0.2",
+ "spl-token 7.0.0",
  "spl-token-2022 7.0.0",
  "spl-token-metadata-interface 0.6.0",
  "thiserror 1.0.69",
@@ -6903,6 +6944,16 @@ checksum = "e22376abed350d73dd1cd119b57ffccad95b4e585a7cda43e286245ce23c0678"
 dependencies = [
  "libc",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "socket2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
+dependencies = [
+ "libc",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7496,7 +7547,7 @@ dependencies = [
  "solana-client",
  "solana-program-pack",
  "solana-sdk",
- "spl-token 4.0.2",
+ "spl-token 7.0.0",
  "spl-token-2022 7.0.0",
  "sysinfo",
  "thiserror 1.0.69",
@@ -8493,7 +8544,7 @@ dependencies = [
  "dashmap 5.5.3",
  "futures",
  "futures-util",
- "governor",
+ "governor 0.6.3",
  "histogram",
  "indexmap",
  "itertools 0.12.1",
@@ -9055,15 +9106,6 @@ dependencies = [
 
 [[package]]
 name = "spl-memo"
-version = "4.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64f13e674ae639249a78e2445fb043cf70e18f60e6dcf87a5411bc8c9580f130"
-dependencies = [
- "solana-program",
-]
-
-[[package]]
-name = "spl-memo"
 version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0dba2f2bb6419523405d21c301a32c9f9568354d4742552e7972af801f4bdb3"
@@ -9211,21 +9253,6 @@ dependencies = [
  "spl-pod 0.5.0",
  "spl-program-error 0.6.0",
  "spl-type-length-value 0.7.0",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "spl-token"
-version = "4.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9e171cbcb4b1f72f6d78ed1e975cb467f56825c27d09b8dd2608e4e7fc8b3b"
-dependencies = [
- "arrayref",
- "bytemuck",
- "num-derive 0.4.2",
- "num-traits",
- "num_enum",
- "solana-program",
  "thiserror 1.0.69",
 ]
 
@@ -10784,8 +10811,8 @@ dependencies = [
  "solana-client",
  "solana-sdk",
  "spl-associated-token-account 6.0.0",
- "spl-memo 4.0.3",
- "spl-token 4.0.2",
+ "spl-memo 6.0.0",
+ "spl-token 7.0.0",
  "spl-token-2022 7.0.0",
  "thiserror 1.0.69",
  "time",

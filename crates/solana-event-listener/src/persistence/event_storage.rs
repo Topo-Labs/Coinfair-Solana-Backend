@@ -2,7 +2,7 @@ use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
     parser::{
-        event_parser::{NftClaimEventData, PoolCreationEventData, RewardDistributionEventData, TokenCreationEventData},
+        event_parser::{NftClaimEventData, PoolCreationEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData},
         ParsedEvent,
     },
 };
@@ -99,6 +99,7 @@ impl EventStorage {
         let mut pool_creation_events = Vec::new();
         let mut nft_claim_events = Vec::new();
         let mut reward_distribution_events = Vec::new();
+        let mut swap_events = Vec::new();
 
         for event in events {
             match event {
@@ -113,6 +114,9 @@ impl EventStorage {
                 }
                 ParsedEvent::RewardDistribution(reward_event) => {
                     reward_distribution_events.push(reward_event);
+                }
+                ParsedEvent::Swap(swap_event) => {
+                    swap_events.push(swap_event);
                 }
             }
         }
@@ -168,6 +172,20 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ 奖励分发事件批量写入失败: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 批量处理交换事件
+        if !swap_events.is_empty() {
+            match self.write_swap_batch(&swap_events).await {
+                Ok(count) => {
+                    written_count += count;
+                    info!("✅ 成功写入 {} 个交换事件", count);
+                }
+                Err(e) => {
+                    error!("❌ 交换事件批量写入失败: {}", e);
                     return Err(e);
                 }
             }
@@ -254,6 +272,34 @@ impl EventStorage {
                     }
 
                     warn!("⚠️ 跳过失败的事件: {} to {}", event.distribution_id, event.recipient);
+                }
+            }
+        }
+
+        Ok(written_count)
+    }
+
+    /// 批量写入交换事件
+    async fn write_swap_batch(&self, events: &[&SwapEventData]) -> Result<u64> {
+        let mut written_count = 0u64;
+
+        for event in events {
+            match self.write_single_swap(event).await {
+                Ok(true) => {
+                    written_count += 1;
+                    debug!("✅ 交换事件已写入: {} in pool {}", event.signature, event.pool_address);
+                }
+                Ok(false) => {
+                    debug!("ℹ️ 交换事件已存在，跳过: {} in pool {}", event.signature, event.pool_address);
+                }
+                Err(e) => {
+                    error!("❌ 交换事件写入失败: {} in pool {} - {}", event.signature, event.pool_address, e);
+
+                    if self.is_fatal_error(&e) {
+                        return Err(e);
+                    }
+
+                    warn!("⚠️ 跳过失败的事件: {} in pool {}", event.signature, event.pool_address);
                 }
             }
         }
@@ -398,6 +444,25 @@ impl EventStorage {
             .await
             .map_err(|e| EventListenerError::Persistence(format!("插入奖励分发事件失败: {}", e)))?;
 
+        Ok(true)
+    }
+
+    /// 写入单个交换事件
+    async fn write_single_swap(&self, event: &SwapEventData) -> Result<bool> {
+        // 交换事件通常不需要去重（每个签名都是唯一的）
+        // 但可以根据业务需求添加
+        info!("💱 记录交换事件: {} in pool {}, amount: {}→{}", 
+            event.signature, 
+            event.pool_address, 
+            event.amount_0, 
+            event.amount_1);
+
+        // 目前只记录日志，可以根据需求添加数据库存储
+        // 例如：存储到交易历史表、更新池子统计等
+        
+        // 这里可以添加实际的数据库写入逻辑
+        // 例如：更新池子的交易量、价格等
+        
         Ok(true)
     }
 
@@ -561,6 +626,7 @@ impl EventStorage {
             ParsedEvent::PoolCreation(pool_event) => self.write_single_pool_creation(pool_event).await,
             ParsedEvent::NftClaim(nft_event) => self.write_single_nft_claim(nft_event).await,
             ParsedEvent::RewardDistribution(reward_event) => self.write_single_reward_distribution(reward_event).await,
+            ParsedEvent::Swap(swap_event) => self.write_single_swap(swap_event).await,
         }
     }
 
@@ -888,7 +954,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {

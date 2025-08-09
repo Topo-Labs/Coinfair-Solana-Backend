@@ -78,7 +78,7 @@ impl SubscriptionManager {
         
         // 创建事件过滤器
         let event_filter = Arc::new(
-            EventFilter::accept_all(vec![config.solana.program_id])
+            EventFilter::accept_all(config.solana.program_ids.clone())  // 传递多个程序ID
                 .with_error_filtering(true) // 过滤失败的交易
                 .with_min_log_length(1)     // 至少要有一条日志
         );
@@ -312,22 +312,34 @@ impl SubscriptionManager {
 
         info!("🔍 事件通过过滤器，开始解析: {}", signature);
 
-        // 尝试解析事件
-        match self.parser_registry.parse_event(&log_response.logs).await {
+        // 尝试解析事件（使用智能路由）
+        match self.parser_registry.parse_event_with_context(&log_response.logs, signature, slot).await {
             Ok(Some(parsed_event)) => {
                 info!("✅ 事件解析成功: {} -> {:?}", signature, parsed_event.event_type());
+                
+                // 尝试从日志中提取程序ID用于监控
+                let program_id = self.extract_program_id_from_logs(&log_response.logs);
                 
                 // 提交到批量写入器
                 self.batch_writer.submit_event(parsed_event).await?;
                 
-                // 更新检查点
-                self.checkpoint_manager.update_last_processed(signature, slot).await?;
+                // 更新检查点 - 使用程序特定的检查点更新
+                if let Some(ref prog_id_str) = program_id {
+                    // 如果能提取到程序ID，使用程序特定的检查点更新
+                    self.checkpoint_manager.update_last_processed_for_program(prog_id_str, signature, slot).await?;
+                } else {
+                    // 回退到向后兼容的方法（更新第一个程序的检查点）
+                    self.checkpoint_manager.update_last_processed(signature, slot).await?;
+                }
                 
                 // 标记为已处理
                 self.mark_signature_processed(signature);
                 
-                // 更新指标
+                // 更新指标 - 包括程序特定的指标
                 self.metrics.record_event_processed().await?;
+                if let Some(prog_id) = program_id {
+                    self.metrics.record_event_processed_for_program(&prog_id).await?;
+                }
                 self.processed_events.fetch_add(1, Ordering::Relaxed);
             }
             Ok(None) => {
@@ -335,12 +347,63 @@ impl SubscriptionManager {
             }
             Err(e) => {
                 warn!("❌ 事件解析失败: {} - {}", signature, e);
+                
+                // 尝试从日志中提取程序ID用于错误监控
+                let program_id = self.extract_program_id_from_logs(&log_response.logs);
+                let error_type = self.classify_error(&e);
+                
                 self.failed_events.fetch_add(1, Ordering::Relaxed);
+                self.metrics.record_event_failed().await?;
+                if let Some(prog_id) = program_id {
+                    self.metrics.record_event_failed_for_program(&prog_id, &error_type).await?;
+                }
                 return Err(e);
             }
         }
 
         Ok(())
+    }
+
+    /// 从日志中提取程序ID
+    fn extract_program_id_from_logs(&self, logs: &[String]) -> Option<String> {
+        for log in logs {
+            // 查找形如 "Program 11111111111111111111111111111111 invoke [1]" 的日志
+            if log.starts_with("Program ") && log.contains(" invoke [") {
+                let parts: Vec<&str> = log.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let program_id = parts[1];
+                    // 验证是否是我们监听的程序ID之一
+                    for target_id in &self.config.solana.program_ids {
+                        if target_id.to_string() == program_id {
+                            return Some(program_id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// 将错误分类为监控类别
+    fn classify_error(&self, error: &crate::error::EventListenerError) -> String {
+        use crate::error::EventListenerError;
+        
+        match error {
+            EventListenerError::EventParsing(_) => "parse_error".to_string(),
+            EventListenerError::Database(_) => "database_error".to_string(),
+            EventListenerError::WebSocket(_) => "websocket_error".to_string(),
+            EventListenerError::Config(_) => "config_error".to_string(),
+            EventListenerError::DiscriminatorMismatch => "discriminator_mismatch".to_string(),
+            EventListenerError::Persistence(_) => "persistence_error".to_string(),
+            EventListenerError::Checkpoint(_) => "checkpoint_error".to_string(),
+            EventListenerError::Metrics(_) => "metrics_error".to_string(),
+            EventListenerError::SolanaRpc(_) => "solana_rpc_error".to_string(),
+            EventListenerError::Serialization(_) => "serialization_error".to_string(),
+            EventListenerError::Base64Decode(_) => "base64_decode_error".to_string(),
+            EventListenerError::IO(_) => "io_error".to_string(),
+            EventListenerError::SolanaSDK(_) => "solana_sdk_error".to_string(),
+            EventListenerError::Unknown(_) => "unknown_error".to_string(),
+        }
     }
 
     /// 清理循环（定期清理缓存和过期数据）
@@ -489,7 +552,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                program_ids: vec![solana_sdk::pubkey::Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -605,6 +668,54 @@ mod tests {
             Err(e) => {
                 // 在测试环境中，如果RPC不可用，这是可以接受的
                 println!("⚠️ 无法获取slot（测试环境RPC可能不可用）: {}", e);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_intelligent_routing_calls_with_context() {
+        let config = create_test_config();
+        let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
+        let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
+        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
+        let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
+
+        let manager = SubscriptionManager::new(
+            &config,
+            parser_registry,
+            batch_writer,
+            checkpoint_manager,
+            metrics,
+        ).await.unwrap();
+
+        // 测试日志数据，包含程序调用信息
+        let logs_with_program_invocation = vec![
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
+            "Program data: invalid_base64_data".to_string(),
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK consumed 52341 of 200000 compute units".to_string(),
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
+        ];
+
+        // 验证解析器注册表能够正确提取程序ID
+        let extracted_program_id = manager.parser_registry.extract_program_id_from_logs(&logs_with_program_invocation);
+        assert!(extracted_program_id.is_some(), "应该能从日志中提取到程序ID");
+
+        // 测试智能路由是否正确调用parse_event_with_context
+        let result = manager.parser_registry.parse_event_with_context(&logs_with_program_invocation, "test_signature", 12345).await;
+        
+        // 验证调用成功（即使数据无效，智能路由流程应该正常工作）
+        match result {
+            Ok(None) => {
+                // 这是预期结果：没有找到匹配的事件，但智能路由正常工作
+                println!("✅ 智能路由正常工作，未找到匹配事件（预期结果）");
+            }
+            Err(_) => {
+                // 也是可以接受的：可能因为数据解析失败
+                println!("✅ 智能路由正常调用，数据解析失败（预期结果）");
+            }
+            Ok(Some(_)) => {
+                // 意外的成功解析
+                println!("⚠️ 意外解析成功，可能是测试数据问题");
             }
         }
     }

@@ -28,7 +28,7 @@ fn create_e2e_test_config() -> EventListenerConfig {
             ws_url: "wss://api.devnet.solana.com".to_string(),
             commitment: "confirmed".to_string(),
             // 使用一个在devnet上活跃的程序ID（Raydium CLMM）
-            program_id: "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".parse().unwrap(),
+            program_ids: vec!["CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".parse().unwrap()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {

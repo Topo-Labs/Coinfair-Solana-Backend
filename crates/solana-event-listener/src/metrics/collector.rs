@@ -228,10 +228,27 @@ impl MetricsCollector {
         Ok(())
     }
 
-    /// 记录事件处理成功
+    /// 记录事件处理成功 - 支持多程序标签
     pub async fn record_event_processed(&self) -> Result<()> {
         self.events_processed.fetch_add(1, Ordering::Relaxed);
         debug!("📈 记录事件处理成功");
+        Ok(())
+    }
+
+    /// 记录特定程序的事件处理成功
+    pub async fn record_event_processed_for_program(&self, program_id: &str) -> Result<()> {
+        self.events_processed.fetch_add(1, Ordering::Relaxed);
+        
+        // 创建带有程序ID标签的指标
+        let metric = MetricData::new(
+            "events_processed_by_program".to_string(),
+            MetricType::Counter,
+            1.0,
+            "Events processed by specific program".to_string(),
+        ).with_label("program_id".to_string(), program_id.to_string());
+        
+        self.add_custom_metric(metric).await?;
+        debug!("📈 记录程序{}事件处理成功", program_id);
         Ok(())
     }
 
@@ -239,6 +256,25 @@ impl MetricsCollector {
     pub async fn record_event_failed(&self) -> Result<()> {
         self.events_failed.fetch_add(1, Ordering::Relaxed);
         debug!("📉 记录事件处理失败");
+        Ok(())
+    }
+
+    /// 记录特定程序的事件处理失败
+    pub async fn record_event_failed_for_program(&self, program_id: &str, error: &str) -> Result<()> {
+        self.events_failed.fetch_add(1, Ordering::Relaxed);
+        
+        // 创建带有程序ID和错误类型标签的指标
+        let metric = MetricData::new(
+            "events_failed_by_program".to_string(),
+            MetricType::Counter,
+            1.0,
+            "Events failed by specific program".to_string(),
+        )
+        .with_label("program_id".to_string(), program_id.to_string())
+        .with_label("error_type".to_string(), error.to_string());
+        
+        self.add_custom_metric(metric).await?;
+        debug!("📉 记录程序{}事件处理失败: {}", program_id, error);
         Ok(())
     }
 
@@ -750,7 +786,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {

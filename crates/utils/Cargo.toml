@@ -35,7 +35,7 @@ base64 = { workspace = true }
 bincode = { workspace = true }
 borsh = { workspace = true }
 dotenvy = { workspace = true }
-spl-memo = { version = "4.0.0", features = ["no-entrypoint"] }
+spl-memo = { version = "6.0.0", features = ["no-entrypoint"] }
 reqwest = { version = "0.11", features = ["json"] }
 rust_decimal = { workspace = true }
 mpl-token-metadata = "5.1.0"

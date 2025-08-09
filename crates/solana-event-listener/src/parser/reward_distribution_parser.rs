@@ -45,16 +45,20 @@ pub struct RewardDistributionEvent {
 pub struct RewardDistributionParser {
     /// 事件的discriminator
     discriminator: [u8; 8],
+    /// 目标程序ID，指定此解析器处理哪个程序的事件
+    target_program_id: Pubkey,
 }
 
 impl RewardDistributionParser {
     /// 创建新的奖励发放事件解析器
-    pub fn new(_config: &EventListenerConfig) -> Result<Self> {
+    pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // 奖励发放事件的discriminator
-        // 注意：实际部署时需要从智能合约IDL获取正确的discriminator
         let discriminator = [178, 95, 213, 88, 42, 167, 129, 77];
 
-        Ok(Self { discriminator })
+        Ok(Self {
+            discriminator,
+            target_program_id: program_id,
+        })
     }
 
     /// 从程序数据解析奖励发放事件
@@ -289,12 +293,20 @@ impl RewardDistributionParser {
 
 #[async_trait]
 impl EventParser for RewardDistributionParser {
+    fn get_program_id(&self) -> Pubkey {
+        self.target_program_id
+    }
+
     fn get_discriminator(&self) -> [u8; 8] {
         self.discriminator
     }
 
     fn get_event_type(&self) -> &'static str {
         "reward_distribution"
+    }
+
+    fn supports_program(&self, program_id: &Pubkey) -> Option<bool> {
+        Some(*program_id == self.target_program_id)
     }
 
     async fn parse_from_logs(&self, logs: &[String], signature: &str, slot: u64) -> Result<Option<ParsedEvent>> {
@@ -349,7 +361,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                program_ids: vec![Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -399,7 +411,7 @@ mod tests {
     #[test]
     fn test_reward_distribution_parser_creation() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "reward_distribution");
         assert_eq!(parser.get_discriminator(), [178, 95, 213, 88, 42, 167, 129, 77]);
@@ -408,7 +420,7 @@ mod tests {
     #[test]
     fn test_reward_type_mapping() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_reward_type_name(0), "交易奖励");
         assert_eq!(parser.get_reward_type_name(1), "推荐奖励");
@@ -421,7 +433,7 @@ mod tests {
     #[test]
     fn test_reward_source_mapping() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_reward_source_name(0), "DEX交易");
         assert_eq!(parser.get_reward_source_name(1), "流动性挖矿");
@@ -434,7 +446,7 @@ mod tests {
     #[test]
     fn test_convert_to_parsed_event() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
         let test_event = create_test_reward_distribution_event();
 
         let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345);
@@ -463,7 +475,7 @@ mod tests {
     #[test]
     fn test_calculate_reward_metrics() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let event = RewardDistributionEvent {
             reward_amount: 1500000,
@@ -486,7 +498,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_reward_distribution() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let valid_event = RewardDistributionEventData {
             distribution_id: 12345,
@@ -564,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_from_logs_no_program_data() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let logs = vec![
             "Program 11111111111111111111111111111111 invoke [1]".to_string(),
@@ -578,7 +590,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_event() {
         let config = create_test_config();
-        let parser = RewardDistributionParser::new(&config).unwrap();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let event = ParsedEvent::RewardDistribution(RewardDistributionEventData {
             distribution_id: 12345,

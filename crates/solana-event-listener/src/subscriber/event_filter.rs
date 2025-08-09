@@ -1,5 +1,6 @@
 use solana_client::rpc_response::RpcLogsResponse;
 use solana_sdk::pubkey::Pubkey;
+use tracing::info;
 
 /// 事件过滤器
 ///
@@ -43,8 +44,6 @@ impl EventFilter {
 
     /// 判断是否应该处理该事件
     pub fn should_process(&self, log_response: &RpcLogsResponse) -> bool {
-        use tracing::info;
-
         info!("🔍 过滤器检查事件: {}", log_response.signature);
         // info!("🔍 日志内容: {:?}", log_response.logs);
 
@@ -62,7 +61,6 @@ impl EventFilter {
 
         // 检查是否包含目标程序的日志
         let contains_target = self.contains_target_program_logs(&log_response.logs);
-        info!("🔍 是否包含目标程序: {}", contains_target);
         if !contains_target {
             return false;
         }
@@ -93,6 +91,7 @@ impl EventFilter {
         for log in logs {
             for program_id in &self.target_programs {
                 if log.contains(&program_id.to_string()) {
+                    info!("🔍 日志包含目标程序: {}", program_id);
                     return true;
                 }
             }

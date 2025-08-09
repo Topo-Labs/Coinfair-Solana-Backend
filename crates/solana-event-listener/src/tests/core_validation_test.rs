@@ -37,7 +37,7 @@ fn test_parser_registry() {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             ws_url: "wss://api.devnet.solana.com".to_string(),
             commitment: "confirmed".to_string(),
-            program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+            program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {
@@ -67,7 +67,7 @@ fn test_parser_registry() {
     let parser_count = registry.parser_count();
     
     println!("✅ 解析器注册表创建成功，包含{}个解析器", parser_count);
-    assert_eq!(parser_count, 4, "应该有4个解析器");
+    assert_eq!(parser_count, 5, "应该有5个解析器");
     
     let parsers = registry.get_registered_parsers();
     for (parser_type, discriminator) in parsers {
@@ -86,7 +86,7 @@ async fn test_metrics_collector() {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             ws_url: "wss://api.devnet.solana.com".to_string(),
             commitment: "confirmed".to_string(),
-            program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+            program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {
@@ -216,7 +216,7 @@ fn test_parser_creation() -> bool {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             ws_url: "wss://api.devnet.solana.com".to_string(),
             commitment: "confirmed".to_string(),
-            program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+            program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {
@@ -254,7 +254,7 @@ async fn test_metrics_creation() -> bool {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             ws_url: "wss://api.devnet.solana.com".to_string(),
             commitment: "confirmed".to_string(),
-            program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+            program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {

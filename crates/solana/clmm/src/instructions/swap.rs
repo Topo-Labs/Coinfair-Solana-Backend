@@ -810,7 +810,7 @@ mod swap_test {
 
     pub fn get_tick_array_states_mut(
         deque_tick_array_states: &VecDeque<RefCell<TickArrayState>>,
-    ) -> RefCell<VecDeque<RefMut<TickArrayState>>> {
+    ) -> RefCell<VecDeque<RefMut<'_, TickArrayState>>> {
         let mut tick_array_states = VecDeque::new();
 
         for tick_array_state in deque_tick_array_states {

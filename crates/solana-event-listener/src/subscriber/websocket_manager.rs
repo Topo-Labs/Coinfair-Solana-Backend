@@ -32,7 +32,7 @@ use tracing::{debug, error, info, warn};
 /// - 提供连接状态监控
 pub struct WebSocketManager {
     config: Arc<EventListenerConfig>,
-    program_id: Pubkey,
+    program_ids: Vec<Pubkey>,
     is_connected: Arc<AtomicBool>,
     is_running: Arc<AtomicBool>,
     connection_count: Arc<RwLock<u64>>,
@@ -53,12 +53,17 @@ pub struct ConnectionStats {
 impl WebSocketManager {
     /// 创建新的WebSocket管理器
     pub fn new(config: Arc<EventListenerConfig>) -> Result<Self> {
-        let program_id = config.solana.program_id;
+        let program_ids = config.solana.program_ids.clone();
+        
+        if program_ids.is_empty() {
+            return Err(EventListenerError::Config("程序ID列表不能为空".to_string()));
+        }
+        
         let (event_sender, event_receiver) = broadcast::channel(10240); // 增加到10倍缓冲区
 
         Ok(Self {
             config,
-            program_id,
+            program_ids,
             is_connected: Arc::new(AtomicBool::new(false)),
             is_running: Arc::new(AtomicBool::new(false)),
             connection_count: Arc::new(RwLock::new(0)),
@@ -76,7 +81,7 @@ impl WebSocketManager {
         }
 
         self.is_running.store(true, Ordering::Relaxed);
-        info!("🔌 启动WebSocket连接管理器，目标程序: {}", self.program_id);
+        info!("🔌 启动WebSocket连接管理器，监听{}个程序: {:?}", self.program_ids.len(), self.program_ids);
 
         // 使用指数退避重连策略
         let backoff = ExponentialBackoff {
@@ -135,14 +140,30 @@ impl WebSocketManager {
             commitment: Some(parse_commitment_config(&self.config.solana.commitment)),
         };
 
-        // 订阅程序日志
-        let (mut logs_subscription, _logs_unsubscribe) = pubsub_client
-            .logs_subscribe(
-                RpcTransactionLogsFilter::Mentions(vec![self.program_id.to_string()]),
-                config,
-            )
-            .await
-            .map_err(|e| EventListenerError::WebSocket(format!("订阅日志失败: {}", e)))?;
+        info!("📡 为{}个程序创建独立订阅", self.program_ids.len());
+
+        // 存储所有订阅流和取消订阅句柄
+        let mut all_subscriptions = Vec::new();
+        let mut _all_unsubscribes = Vec::new();
+
+        // 为每个程序ID创建独立的订阅
+        for (index, program_id) in self.program_ids.iter().enumerate() {
+            let program_id_string = program_id.to_string();
+            info!("📡 订阅程序 {}/{}: {}", index + 1, self.program_ids.len(), program_id_string);
+
+            // 为单个程序ID创建订阅
+            let (logs_subscription, logs_unsubscribe) = pubsub_client
+                .logs_subscribe(
+                    RpcTransactionLogsFilter::Mentions(vec![program_id_string]),
+                    config.clone(),
+                )
+                .await
+                .map_err(|e| EventListenerError::WebSocket(format!("订阅程序 {} 失败: {}", program_id, e)))?;
+
+            all_subscriptions.push((index, logs_subscription));
+            _all_unsubscribes.push(logs_unsubscribe);
+            info!("✅ 程序 {} 订阅成功", program_id);
+        }
 
         // 更新连接状态
         self.is_connected.store(true, Ordering::Relaxed);
@@ -155,13 +176,28 @@ impl WebSocketManager {
             *last_time = Some(Instant::now());
         }
 
-        info!("✅ WebSocket连接建立，开始监听事件");
+        info!("✅ WebSocket连接建立，开始监听{}个订阅流的事件", all_subscriptions.len());
 
-        // 处理传入的日志事件
+        // 使用select_all合并所有订阅流
+        use futures::stream::select_all;
+        
+        // 将所有订阅流合并为一个流
+        let streams: Vec<_> = all_subscriptions
+            .into_iter()
+            .enumerate()
+            .map(|(i, (program_index, subscription))| {
+                subscription.map(move |log_response| (i, program_index, log_response))
+            })
+            .collect();
+        
+        let mut merged_stream = select_all(streams);
+
+        // 处理合并后的事件流
         while self.is_running.load(Ordering::Relaxed) {
-            match logs_subscription.next().await {
-                Some(log_response) => {
-                    debug!("📨 接收到日志事件: {}", log_response.value.signature);
+            match merged_stream.next().await {
+                Some((_subscription_idx, program_idx, log_response)) => {
+                    let program_id = &self.program_ids[program_idx];
+                    debug!("📨 接收到程序 {} 的日志事件: {}", program_id, log_response.value.signature);
 
                     // 广播事件给所有订阅者
                     match self.event_sender.send(log_response.value) {
@@ -174,10 +210,10 @@ impl WebSocketManager {
                     }
                 }
                 None => {
-                    warn!("📡 WebSocket连接意外断开");
+                    warn!("📡 所有WebSocket订阅意外断开");
                     self.is_connected.store(false, Ordering::Relaxed);
                     return Err(EventListenerError::WebSocket(
-                        "WebSocket连接意外断开".to_string(),
+                        "所有WebSocket订阅意外断开".to_string(),
                     ));
                 }
             }
@@ -227,7 +263,7 @@ impl Clone for WebSocketManager {
     fn clone(&self) -> Self {
         Self {
             config: Arc::clone(&self.config),
-            program_id: self.program_id,
+            program_ids: self.program_ids.clone(),
             is_connected: Arc::clone(&self.is_connected),
             is_running: Arc::clone(&self.is_running),
             connection_count: Arc::clone(&self.connection_count),
@@ -260,7 +296,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                program_ids: vec![Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {

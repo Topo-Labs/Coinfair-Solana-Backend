@@ -78,6 +78,7 @@ impl Default for CheckpointRecord {
 /// - 支持崩溃恢复和断点续传
 /// - 定期保存检查点以确保数据不丢失
 /// - 提供检查点查询和统计功能
+/// - 支持多程序独立检查点管理
 pub struct CheckpointManager {
     config: Arc<EventListenerConfig>,
     collection: Collection<CheckpointRecord>,
@@ -85,8 +86,8 @@ pub struct CheckpointManager {
     // 运行状态
     is_running: Arc<AtomicBool>,
 
-    // 内存中的检查点缓存
-    current_checkpoint: Arc<RwLock<Option<CheckpointRecord>>>,
+    // 内存中的多程序检查点缓存 (program_id -> CheckpointRecord)
+    program_checkpoints: Arc<RwLock<std::collections::HashMap<String, CheckpointRecord>>>,
 
     // 并发保存锁
     save_mutex: Arc<Mutex<()>>,
@@ -107,6 +108,53 @@ pub struct CheckpointStats {
     #[serde(skip)]
     pub last_save_time: Option<Instant>,
     pub checkpoint_exists: bool,
+    pub program_count: usize,
+    pub total_events_processed: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MultiProgramCheckpointStats {
+    pub is_running: bool,
+    pub program_stats: std::collections::HashMap<String, ProgramCheckpointStats>,
+    pub save_count: u64,
+    #[serde(skip)]
+    pub last_save_time: Option<Instant>,
+    pub total_events_processed: u64,
+    pub program_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ProgramCheckpointStats {
+    pub program_id: String,
+    pub last_signature: Option<String>,
+    pub last_slot: u64,
+    pub events_processed: u64,
+    pub last_processed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub checkpoint_exists: bool,
+}
+
+/// 健康状态详情
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HealthStatus {
+    /// 整体健康状态
+    pub is_healthy: bool,
+    /// 是否有检查点
+    pub has_checkpoints: bool,
+    /// 配置的程序总数
+    pub total_programs: usize,
+    /// 有检查点的程序数
+    pub checkpoint_programs: usize,
+    /// 缺失检查点的程序列表
+    pub missing_programs: Vec<String>,
+    /// 过期程序列表（超过1小时未更新）
+    pub stale_programs: Vec<String>,
+    /// 健康程序列表
+    pub healthy_programs: Vec<String>,
+    /// 是否有最近的保存活动
+    pub recent_save: bool,
+    /// 最后保存时间
+    #[serde(skip)]
+    pub last_save_time: Option<Instant>,
 }
 
 impl CheckpointManager {
@@ -124,7 +172,7 @@ impl CheckpointManager {
             config,
             collection,
             is_running: Arc::new(AtomicBool::new(false)),
-            current_checkpoint: Arc::new(RwLock::new(None)),
+            program_checkpoints: Arc::new(RwLock::new(std::collections::HashMap::new())),
             save_mutex: Arc::new(Mutex::new(())),
             save_count: Arc::new(RwLock::new(0)),
             last_save_time: Arc::new(RwLock::new(None)),
@@ -133,8 +181,8 @@ impl CheckpointManager {
         // 创建优化的索引
         manager.ensure_indexes().await?;
 
-        // 加载现有检查点
-        manager.load_checkpoint().await?;
+        // 加载所有程序的现有检查点
+        manager.load_all_checkpoints().await?;
 
         info!("✅ 检查点管理器初始化完成");
         Ok(manager)
@@ -223,92 +271,156 @@ impl CheckpointManager {
         Ok(())
     }
 
-    /// 加载现有检查点
-    async fn load_checkpoint(&self) -> Result<()> {
-        debug!("📥 加载检查点...");
+    /// 加载所有程序的现有检查点
+    async fn load_all_checkpoints(&self) -> Result<()> {
+        debug!("📥 加载所有程序的检查点...");
+        let mut checkpoints = self.program_checkpoints.write().await;
 
-        let checkpoint_id = CheckpointId {
-            program_id: self.config.solana.program_id.to_string(),
-            checkpoint_id: 1,
-        };
+        for program_id in &self.config.solana.program_ids {
+            let program_id_str = program_id.to_string();
+            
+            let checkpoint_id = CheckpointId {
+                program_id: program_id_str.clone(),
+                checkpoint_id: 1,
+            };
 
-        let filter = doc! {
-            "_id": mongodb::bson::to_bson(&checkpoint_id)
-                .map_err(|e| EventListenerError::Database(e.into()))?
-        };
+            let filter = doc! {
+                "_id": mongodb::bson::to_bson(&checkpoint_id)
+                    .map_err(|e| EventListenerError::Database(e.into()))?
+            };
 
-        match self.collection.find_one(filter, None).await {
-            Ok(Some(checkpoint)) => {
-                info!(
-                    "✅ 加载到现有检查点: slot={}, events={}, signature={:?}",
-                    checkpoint.last_slot, checkpoint.events_processed, checkpoint.last_signature
-                );
-
-                let mut current = self.current_checkpoint.write().await;
-                *current = Some(checkpoint);
-            }
-            Ok(None) => {
-                info!("ℹ️ 未找到现有检查点，将创建新的检查点");
-
-                let new_checkpoint = CheckpointRecord {
-                    id: CheckpointId {
-                        program_id: self.config.solana.program_id.to_string(),
-                        checkpoint_id: 1,
-                    },
-                    program_id: self.config.solana.program_id.to_string(),
-                    ..Default::default()
-                };
-
-                let mut current = self.current_checkpoint.write().await;
-                *current = Some(new_checkpoint);
-            }
-            Err(e) => {
-                error!("❌ 加载检查点失败: {}", e);
-                return Err(EventListenerError::Checkpoint(format!("加载检查点失败: {}", e)));
+            match self.collection.find_one(filter, None).await {
+                Ok(Some(checkpoint)) => {
+                    info!(
+                        "✅ 加载程序 {} 的现有检查点: slot={}, events={}, signature={:?}",
+                        program_id_str, checkpoint.last_slot, checkpoint.events_processed, checkpoint.last_signature
+                    );
+                    checkpoints.insert(program_id_str, checkpoint);
+                }
+                Ok(None) => {
+                    info!("ℹ️ 程序 {} 未找到现有检查点，将创建新的检查点", program_id_str);
+                    
+                    let new_checkpoint = CheckpointRecord {
+                        id: CheckpointId {
+                            program_id: program_id_str.clone(),
+                            checkpoint_id: 1,
+                        },
+                        program_id: program_id_str.clone(),
+                        ..Default::default()
+                    };
+                    
+                    checkpoints.insert(program_id_str, new_checkpoint);
+                }
+                Err(e) => {
+                    error!("❌ 加载程序 {} 的检查点失败: {}", program_id_str, e);
+                    return Err(EventListenerError::Checkpoint(format!("加载程序 {} 的检查点失败: {}", program_id_str, e)));
+                }
             }
         }
 
+        info!("✅ 已加载 {} 个程序的检查点", checkpoints.len());
         Ok(())
     }
 
-    /// 更新最后处理的事件信息
-    pub async fn update_last_processed(&self, signature: &str, slot: u64) -> Result<()> {
-        let mut current = self.current_checkpoint.write().await;
-
-        if let Some(ref mut checkpoint) = *current {
+    /// 更新最后处理的事件信息（支持程序ID）
+    pub async fn update_last_processed_for_program(&self, program_id: &str, signature: &str, slot: u64) -> Result<()> {
+        let mut checkpoints = self.program_checkpoints.write().await;
+        
+        if let Some(checkpoint) = checkpoints.get_mut(program_id) {
             checkpoint.last_signature = Some(signature.to_string());
             checkpoint.last_slot = slot;
             checkpoint.events_processed += 1;
             checkpoint.last_processed_at = chrono::Utc::now();
             checkpoint.updated_at = chrono::Utc::now();
-
-            debug!("📝 更新检查点: signature={}, slot={}, events={}", signature, slot, checkpoint.events_processed);
+            
+            debug!("📝 更新程序 {} 检查点: signature={}, slot={}, events={}", 
+                program_id, signature, slot, checkpoint.events_processed);
         } else {
-            warn!("⚠️ 检查点未初始化，无法更新");
-            return Err(EventListenerError::Checkpoint("检查点未初始化".to_string()));
+            warn!("⚠️ 程序 {} 的检查点未找到，尝试自动创建", program_id);
+            
+            // 自动创建新检查点
+            let mut new_checkpoint = CheckpointRecord {
+                id: CheckpointId {
+                    program_id: program_id.to_string(),
+                    checkpoint_id: 1,
+                },
+                program_id: program_id.to_string(),
+                ..Default::default()
+            };
+            
+            new_checkpoint.last_signature = Some(signature.to_string());
+            new_checkpoint.last_slot = slot;
+            new_checkpoint.events_processed = 1;
+            new_checkpoint.last_processed_at = chrono::Utc::now();
+            new_checkpoint.updated_at = chrono::Utc::now();
+            
+            checkpoints.insert(program_id.to_string(), new_checkpoint);
+            info!("✅ 自动创建程序 {} 的检查点", program_id);
         }
-
+        
         Ok(())
     }
 
-    /// 保存检查点到数据库（带并发控制和重试机制）
+    /// 更新最后处理的事件信息（向后兼容方法）
+    pub async fn update_last_processed(&self, signature: &str, slot: u64) -> Result<()> {
+        // 为了向后兼容，更新第一个程序的检查点
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.update_last_processed_for_program(&program_id, signature, slot).await
+    }
+
+    /// 保存所有程序的检查点到数据库（带并发控制和重试机制）
     pub async fn save_checkpoint(&self) -> Result<()> {
+        self.save_all_checkpoints().await
+    }
+
+    /// 保存所有程序的检查点
+    pub async fn save_all_checkpoints(&self) -> Result<()> {
         // 获取保存锁，防止并发保存
         let _lock = self.save_mutex.lock().await;
 
-        let checkpoint = {
-            let current = self.current_checkpoint.read().await;
-            match current.as_ref() {
-                Some(cp) => cp.clone(),
-                None => {
-                    debug!("ℹ️ 没有检查点需要保存");
-                    return Ok(());
-                }
-            }
+        let checkpoints = {
+            let program_checkpoints = self.program_checkpoints.read().await;
+            program_checkpoints.clone()
         };
 
-        debug!("💾 保存检查点到数据库: slot={}, events={}", checkpoint.last_slot, checkpoint.events_processed);
+        if checkpoints.is_empty() {
+            debug!("ℹ️ 没有检查点需要保存");
+            return Ok(());
+        }
 
+        debug!("💾 保存 {} 个程序的检查点到数据库", checkpoints.len());
+
+        let mut saved_count = 0;
+        for (program_id, checkpoint) in checkpoints {
+            if let Err(e) = self.save_single_checkpoint(&checkpoint).await {
+                error!("❌ 保存程序 {} 的检查点失败: {}", program_id, e);
+                return Err(e);
+            }
+            saved_count += 1;
+            debug!("✅ 程序 {} 检查点保存成功 (slot={}, events={})", 
+                program_id, checkpoint.last_slot, checkpoint.events_processed);
+        }
+
+        // 更新统计信息
+        {
+            let mut save_count = self.save_count.write().await;
+            *save_count += 1;
+        }
+        {
+            let mut last_save = self.last_save_time.write().await;
+            *last_save = Some(Instant::now());
+        }
+
+        info!("✅ 成功保存 {} 个程序的检查点", saved_count);
+        Ok(())
+    }
+
+    /// 保存单个检查点
+    async fn save_single_checkpoint(&self, checkpoint: &CheckpointRecord) -> Result<()> {
         let filter = doc! {
             "_id": mongodb::bson::to_bson(&checkpoint.id)
                 .map_err(|e| EventListenerError::Database(e.into()))?
@@ -320,19 +432,8 @@ impl CheckpointManager {
         const MAX_RETRIES: u32 = 3;
 
         loop {
-            match self.collection.replace_one(filter.clone(), &checkpoint, options.clone()).await {
+            match self.collection.replace_one(filter.clone(), checkpoint, options.clone()).await {
                 Ok(_) => {
-                    // 更新统计信息
-                    {
-                        let mut save_count = self.save_count.write().await;
-                        *save_count += 1;
-                    }
-                    {
-                        let mut last_save = self.last_save_time.write().await;
-                        *last_save = Some(Instant::now());
-                    }
-
-                    debug!("✅ 检查点保存成功");
                     break;
                 }
                 Err(e) => {
@@ -340,17 +441,15 @@ impl CheckpointManager {
                     if e.to_string().contains("E11000") || e.to_string().contains("duplicate key") {
                         retries += 1;
                         if retries >= MAX_RETRIES {
-                            error!("❌ 检查点保存失败，重试次数已用完: {}", e);
-                            return Err(EventListenerError::Checkpoint(format!("保存检查点失败，重试次数已用完: {}", e)));
+                            return Err(EventListenerError::Checkpoint(format!("保存程序 {} 检查点失败，重试次数已用完: {}", checkpoint.program_id, e)));
                         }
-                        warn!("⚠️ 检查点保存遇到重复键错误，第{}次重试", retries);
+                        warn!("⚠️ 程序 {} 检查点保存遇到重复键错误，第{}次重试", checkpoint.program_id, retries);
 
                         // 指数退避
                         tokio::time::sleep(Duration::from_millis(100 * (2_u64.pow(retries)))).await;
                         continue;
                     } else {
-                        error!("❌ 检查点保存失败: {}", e);
-                        return Err(EventListenerError::Checkpoint(format!("保存检查点失败: {}", e)));
+                        return Err(EventListenerError::Checkpoint(format!("保存程序 {} 检查点失败: {}", checkpoint.program_id, e)));
                     }
                 }
             }
@@ -359,92 +458,249 @@ impl CheckpointManager {
         Ok(())
     }
 
-    /// 获取当前检查点
+    /// 获取指定程序的当前检查点
+    pub async fn get_checkpoint_for_program(&self, program_id: &str) -> Option<CheckpointRecord> {
+        let checkpoints = self.program_checkpoints.read().await;
+        checkpoints.get(program_id).cloned()
+    }
+
+    /// 获取所有程序的检查点
+    pub async fn get_all_checkpoints(&self) -> std::collections::HashMap<String, CheckpointRecord> {
+        let checkpoints = self.program_checkpoints.read().await;
+        checkpoints.clone()
+    }
+
+    /// 获取当前检查点（向后兼容方法）
     pub async fn get_current_checkpoint(&self) -> Option<CheckpointRecord> {
-        let current = self.current_checkpoint.read().await;
-        current.clone()
+        // 为了向后兼容，返回第一个程序的检查点
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.get_checkpoint_for_program(&program_id).await
     }
 
-    /// 获取最后处理的签名
+    /// 获取指定程序的最后处理签名
+    pub async fn get_last_signature_for_program(&self, program_id: &str) -> Option<String> {
+        let checkpoints = self.program_checkpoints.read().await;
+        checkpoints.get(program_id)
+            .and_then(|cp| cp.last_signature.clone())
+    }
+
+    /// 获取最后处理的签名（向后兼容方法）
     pub async fn get_last_signature(&self) -> Option<String> {
-        let current = self.current_checkpoint.read().await;
-        current.as_ref().and_then(|cp| cp.last_signature.clone())
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.get_last_signature_for_program(&program_id).await
     }
 
-    /// 获取最后处理的区块高度
+    /// 获取指定程序的最后处理区块高度
+    pub async fn get_last_slot_for_program(&self, program_id: &str) -> u64 {
+        let checkpoints = self.program_checkpoints.read().await;
+        checkpoints.get(program_id)
+            .map(|cp| cp.last_slot)
+            .unwrap_or(0)
+    }
+
+    /// 获取最后处理的区块高度（向后兼容方法）
     pub async fn get_last_slot(&self) -> u64 {
-        let current = self.current_checkpoint.read().await;
-        current.as_ref().map(|cp| cp.last_slot).unwrap_or(0)
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.get_last_slot_for_program(&program_id).await
     }
 
-    /// 获取已处理的事件总数
+    /// 获取指定程序的已处理事件总数
+    pub async fn get_events_processed_for_program(&self, program_id: &str) -> u64 {
+        let checkpoints = self.program_checkpoints.read().await;
+        checkpoints.get(program_id)
+            .map(|cp| cp.events_processed)
+            .unwrap_or(0)
+    }
+
+    /// 获取已处理的事件总数（向后兼容方法）
     pub async fn get_events_processed(&self) -> u64 {
-        let current = self.current_checkpoint.read().await;
-        current.as_ref().map(|cp| cp.events_processed).unwrap_or(0)
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.get_events_processed_for_program(&program_id).await
     }
 
-    /// 重置检查点（谨慎使用）
-    pub async fn reset_checkpoint(&self) -> Result<()> {
-        warn!("⚠️ 重置检查点");
-
-        let new_checkpoint = CheckpointRecord {
-            id: CheckpointId {
-                program_id: self.config.solana.program_id.to_string(),
-                checkpoint_id: 1,
-            },
-            program_id: self.config.solana.program_id.to_string(),
-            ..Default::default()
-        };
-
-        {
-            let mut current = self.current_checkpoint.write().await;
-            *current = Some(new_checkpoint);
+    /// 重置所有程序的检查点（谨慎使用）
+    pub async fn reset_all_checkpoints(&self) -> Result<()> {
+        warn!("⚠️ 重置所有程序的检查点");
+        
+        let mut checkpoints = self.program_checkpoints.write().await;
+        checkpoints.clear();
+        
+        // 为每个配置的程序创建新检查点
+        for program_id in &self.config.solana.program_ids {
+            let program_id_str = program_id.to_string();
+            let new_checkpoint = CheckpointRecord {
+                id: CheckpointId {
+                    program_id: program_id_str.clone(),
+                    checkpoint_id: 1,
+                },
+                program_id: program_id_str.clone(),
+                ..Default::default()
+            };
+            
+            checkpoints.insert(program_id_str, new_checkpoint);
         }
-
-        self.save_checkpoint().await?;
-        info!("✅ 检查点已重置");
+        
+        // 释放写锁
+        drop(checkpoints);
+        
+        self.save_all_checkpoints().await?;
+        info!("✅ 所有程序的检查点已重置");
         Ok(())
     }
 
-    /// 检查管理器是否健康
-    pub async fn is_healthy(&self) -> bool {
-        // 检查检查点是否存在
-        let has_checkpoint = {
-            let current = self.current_checkpoint.read().await;
-            current.is_some()
-        };
+    /// 重置检查点（向后兼容方法）
+    pub async fn reset_checkpoint(&self) -> Result<()> {
+        self.reset_all_checkpoints().await
+    }
 
+    /// 检查管理器是否健康（多程序支持）
+    pub async fn is_healthy(&self) -> bool {
+        self.is_healthy_detailed().await.is_healthy
+    }
+    
+    /// 获取详细的健康状况
+    pub async fn is_healthy_detailed(&self) -> HealthStatus {
+        let checkpoints = self.program_checkpoints.read().await;
+        
+        // 检查所有程序的检查点是否存在
+        let has_checkpoints = !checkpoints.is_empty();
+        
+        // 检查是否所有配置的程序都有检查点
+        let configured_programs: std::collections::HashSet<String> = self.config.solana.program_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect();
+            
+        let checkpoint_programs: std::collections::HashSet<String> = checkpoints.keys().cloned().collect();
+        let missing_programs: Vec<String> = configured_programs
+            .difference(&checkpoint_programs)
+            .cloned()
+            .collect();
+        
         // 检查最近是否有保存活动
         let recent_save = {
             let last_save = self.last_save_time.read().await;
             match *last_save {
                 Some(time) => time.elapsed() < Duration::from_secs(300), // 5分钟内有保存
-                None => true,                                            // 如果从未保存，认为是健康的（刚启动）
+                None => true, // 如果从未保存，认为是健康的（刚启动）
             }
         };
-
-        has_checkpoint && recent_save
+        
+        // 检查各程序检查点的活跃度
+        let now = chrono::Utc::now();
+        let mut stale_programs = Vec::new();
+        let mut healthy_programs = Vec::new();
+        
+        for (program_id, checkpoint) in checkpoints.iter() {
+            let age = now - checkpoint.updated_at;
+            if age.num_seconds() > 3600 { // 超过1小时未更新
+                stale_programs.push(program_id.clone());
+            } else {
+                healthy_programs.push(program_id.clone());
+            }
+        }
+        
+        let is_healthy = has_checkpoints 
+            && missing_programs.is_empty() 
+            && recent_save 
+            && stale_programs.is_empty();
+        
+        HealthStatus {
+            is_healthy,
+            has_checkpoints,
+            total_programs: configured_programs.len(),
+            checkpoint_programs: checkpoint_programs.len(),
+            missing_programs,
+            stale_programs,
+            healthy_programs,
+            recent_save,
+            last_save_time: *self.last_save_time.read().await,
+        }
     }
 
-    /// 获取统计信息
-    pub async fn get_stats(&self) -> CheckpointStats {
-        let checkpoint = {
-            let current = self.current_checkpoint.read().await;
-            current.clone()
-        };
-
+    /// 获取多程序统计信息
+    pub async fn get_multi_program_stats(&self) -> MultiProgramCheckpointStats {
+        let checkpoints = self.program_checkpoints.read().await;
         let save_count = *self.save_count.read().await;
         let last_save_time = *self.last_save_time.read().await;
+        
+        let mut program_stats = std::collections::HashMap::new();
+        let mut total_events = 0;
+        
+        for (program_id, checkpoint) in checkpoints.iter() {
+            total_events += checkpoint.events_processed;
+            
+            let stats = ProgramCheckpointStats {
+                program_id: program_id.clone(),
+                last_signature: checkpoint.last_signature.clone(),
+                last_slot: checkpoint.last_slot,
+                events_processed: checkpoint.events_processed,
+                last_processed_at: Some(checkpoint.last_processed_at),
+                checkpoint_exists: true,
+            };
+            
+            program_stats.insert(program_id.clone(), stats);
+        }
+        
+        MultiProgramCheckpointStats {
+            is_running: self.is_running.load(Ordering::Relaxed),
+            program_stats,
+            save_count,
+            last_save_time,
+            total_events_processed: total_events,
+            program_count: checkpoints.len(),
+        }
+    }
+
+    /// 获取统计信息（向后兼容方法）
+    pub async fn get_stats(&self) -> CheckpointStats {
+        let checkpoints = self.program_checkpoints.read().await;
+        let save_count = *self.save_count.read().await;
+        let last_save_time = *self.last_save_time.read().await;
+        
+        // 为了向后兼容，返回第一个程序的统计信息，并添加汇总信息
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        let (checkpoint_exists, last_signature, last_slot, events_processed, last_processed_at) = 
+            if let Some(checkpoint) = checkpoints.get(&program_id) {
+                (true, checkpoint.last_signature.clone(), checkpoint.last_slot, 
+                 checkpoint.events_processed, Some(checkpoint.last_processed_at))
+            } else {
+                (false, None, 0, 0, None)
+            };
+        
+        let total_events: u64 = checkpoints.values().map(|cp| cp.events_processed).sum();
 
         CheckpointStats {
             is_running: self.is_running.load(Ordering::Relaxed),
-            last_signature: checkpoint.as_ref().and_then(|cp| cp.last_signature.clone()),
-            last_slot: checkpoint.as_ref().map(|cp| cp.last_slot).unwrap_or(0),
-            events_processed: checkpoint.as_ref().map(|cp| cp.events_processed).unwrap_or(0),
-            last_processed_at: checkpoint.as_ref().map(|cp| cp.last_processed_at),
+            last_signature,
+            last_slot,
+            events_processed,
+            last_processed_at,
             save_count,
             last_save_time,
-            checkpoint_exists: checkpoint.is_some(),
+            checkpoint_exists,
+            program_count: checkpoints.len(),
+            total_events_processed: total_events,
         }
     }
 
@@ -454,35 +710,119 @@ impl CheckpointManager {
         self.save_checkpoint().await
     }
 
-    /// 更新检查点元数据
+    /// 更新检查点元数据（向后兼容方法）
     pub async fn update_metadata(&self, metadata: serde_json::Value) -> Result<()> {
-        let mut current = self.current_checkpoint.write().await;
-
-        if let Some(ref mut checkpoint) = *current {
+        // 为了向后兼容，更新第一个程序的检查点元数据
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.update_metadata_for_program(&program_id, metadata).await
+    }
+    
+    /// 更新指定程序的检查点元数据
+    pub async fn update_metadata_for_program(&self, program_id: &str, metadata: serde_json::Value) -> Result<()> {
+        let mut checkpoints = self.program_checkpoints.write().await;
+        
+        if let Some(checkpoint) = checkpoints.get_mut(program_id) {
             checkpoint.metadata = metadata;
             checkpoint.updated_at = chrono::Utc::now();
-            debug!("📝 更新检查点元数据");
+            debug!("📝 更新程序 {} 的检查点元数据", program_id);
         } else {
-            return Err(EventListenerError::Checkpoint("检查点未初始化".to_string()));
+            return Err(EventListenerError::Checkpoint(format!("程序 {} 的检查点未初始化", program_id)));
         }
 
         Ok(())
     }
 
-    /// 获取检查点年龄（距离上次更新的时间）
+    /// 获取检查点年龄（距离上次更新的时间）- 向后兼容方法
     pub async fn get_checkpoint_age(&self) -> Option<Duration> {
-        let current = self.current_checkpoint.read().await;
-        current.as_ref().map(|cp| {
+        // 为了向后兼容，返回第一个程序的检查点年龄
+        let program_id = self.config.solana.program_ids
+            .first()
+            .unwrap_or(&solana_sdk::pubkey::Pubkey::default())
+            .to_string();
+            
+        self.get_checkpoint_age_for_program(&program_id).await
+    }
+    
+    /// 获取指定程序检查点的年龄（距离上次更新的时间）
+    pub async fn get_checkpoint_age_for_program(&self, program_id: &str) -> Option<Duration> {
+        let checkpoints = self.program_checkpoints.read().await;
+        checkpoints.get(program_id).map(|cp| {
             let now = chrono::Utc::now();
             let duration = now - cp.updated_at;
             Duration::from_secs(duration.num_seconds() as u64)
         })
     }
 
-    /// 诊断检查点冲突问题
+    /// 动态添加程序支持 - 为新程序创建检查点
+    pub async fn add_program_support(&self, program_id: &str) -> Result<()> {
+        let mut checkpoints = self.program_checkpoints.write().await;
+        
+        if checkpoints.contains_key(program_id) {
+            info!("✅ 程序 {} 已经有检查点支持", program_id);
+            return Ok(());
+        }
+        
+        // 创建新的检查点
+        let new_checkpoint = CheckpointRecord {
+            id: CheckpointId {
+                program_id: program_id.to_string(),
+                checkpoint_id: 1,
+            },
+            program_id: program_id.to_string(),
+            ..Default::default()
+        };
+        
+        checkpoints.insert(program_id.to_string(), new_checkpoint);
+        info!("✅ 为程序 {} 动态创建检查点", program_id);
+        
+        // 释放锁后保存到数据库
+        drop(checkpoints);
+        self.save_all_checkpoints().await?;
+        
+        Ok(())
+    }
+    
+    /// 移除程序支持 - 删除指定程序的检查点（谨慎使用）
+    pub async fn remove_program_support(&self, program_id: &str) -> Result<()> {
+        warn!("⚠️ 移除程序 {} 的检查点支持", program_id);
+        
+        let mut checkpoints = self.program_checkpoints.write().await;
+        checkpoints.remove(program_id);
+        
+        // 从数据库中删除
+        let checkpoint_id = CheckpointId {
+            program_id: program_id.to_string(),
+            checkpoint_id: 1,
+        };
+        
+        let filter = doc! {
+            "_id": mongodb::bson::to_bson(&checkpoint_id)
+                .map_err(|e| EventListenerError::Database(e.into()))?
+        };
+        
+        match self.collection.delete_one(filter, None).await {
+            Ok(result) => {
+                if result.deleted_count > 0 {
+                    info!("✅ 已从数据库删除程序 {} 的检查点", program_id);
+                } else {
+                    warn!("⚠️ 程序 {} 的检查点在数据库中未找到", program_id);
+                }
+            }
+            Err(e) => {
+                error!("❌ 删除程序 {} 检查点失败: {}", program_id, e);
+                return Err(EventListenerError::Database(e));
+            }
+        }
+        
+        Ok(())
+    }
     pub async fn diagnose_conflicts(&self) -> Result<serde_json::Value> {
         let checkpoint_id = CheckpointId {
-            program_id: self.config.solana.program_id.to_string(),
+            program_id: self.config.solana.program_ids.first().unwrap_or(&solana_sdk::pubkey::Pubkey::default()).to_string(),
             checkpoint_id: 1,
         };
 
@@ -505,7 +845,7 @@ impl CheckpointManager {
 
         let diagnostic = serde_json::json!({
             "target_checkpoint_id": checkpoint_id,
-            "current_program_id": self.config.solana.program_id.to_string(),
+            "current_program_id": self.config.solana.program_ids.first().unwrap_or(&solana_sdk::pubkey::Pubkey::default()).to_string(),
             "all_checkpoint_records": all_records,
             "total_records_found": all_records.len(),
             "timestamp": chrono::Utc::now()
@@ -522,7 +862,7 @@ impl Clone for CheckpointManager {
             config: Arc::clone(&self.config),
             collection: self.collection.clone(),
             is_running: Arc::clone(&self.is_running),
-            current_checkpoint: Arc::clone(&self.current_checkpoint),
+            program_checkpoints: Arc::clone(&self.program_checkpoints),
             save_mutex: Arc::clone(&self.save_mutex),
             save_count: Arc::clone(&self.save_count),
             last_save_time: Arc::clone(&self.last_save_time),
@@ -541,7 +881,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                program_ids: vec![solana_sdk::pubkey::Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {

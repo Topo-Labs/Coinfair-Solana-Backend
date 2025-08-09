@@ -38,7 +38,7 @@ fn create_complete_e2e_config() -> EventListenerConfig {
             commitment: "confirmed".to_string(),
             // 使用Raydium CLMM devnet程序ID
             // program_id: "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW".parse().unwrap(),
-            program_id: "devi51mZmdwUJGU9hjN27vEz64Gps7uUefqxg27EAtH".parse().unwrap(),
+            program_ids: vec!["devi51mZmdwUJGU9hjN27vEz64Gps7uUefqxg27EAtH".parse().unwrap()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {
@@ -163,7 +163,7 @@ async fn test_complete_e2e_flow() {
 
     // === 第6步：开始真实事件监听 ===
     info!("🎧 第6步：开始真实事件监听（30秒，专注测试）");
-    info!("   监听程序: {}", config.solana.program_id);
+    info!("   监听程序: {:?}", config.solana.program_ids);
     info!("   WebSocket: {}", config.solana.ws_url);
 
     let processed_events = Arc::new(AtomicU64::new(0));

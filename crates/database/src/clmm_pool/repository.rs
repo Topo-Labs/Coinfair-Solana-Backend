@@ -567,12 +567,26 @@ impl ClmmPoolRepository {
             "pool_address": &pool.pool_address
         };
         
-        let update = doc! {
-            "$set": mongodb::bson::to_document(&pool)?,
-            "$setOnInsert": {
-                "api_created_at": chrono::Utc::now().timestamp()
-            }
+        // 将池子对象转换为文档
+        let mut pool_doc = mongodb::bson::to_document(&pool)?;
+        
+        // 从$set中移除api_created_at，因为它会在$setOnInsert中处理
+        let api_created_at = pool_doc.remove("api_created_at");
+        
+        let mut update = doc! {
+            "$set": pool_doc,
         };
+        
+        // 只有在api_created_at存在时才添加到$setOnInsert
+        if let Some(created_at_value) = api_created_at {
+            update.insert("$setOnInsert", doc! {
+                "api_created_at": created_at_value
+            });
+        } else {
+            update.insert("$setOnInsert", doc! {
+                "api_created_at": chrono::Utc::now().timestamp()
+            });
+        }
         
         let options = UpdateOptions::builder()
             .upsert(true)
@@ -598,10 +612,10 @@ impl ClmmPoolRepository {
         
         // 添加版本控制条件
         if let Some(slot) = min_slot {
-            filter.insert("$or", doc! {
-                "event_updated_slot": { "$exists": false },
-                "event_updated_slot": { "$lte": slot as i64 }
-            });
+            filter.insert("$or", vec![
+                doc! { "event_updated_slot": { "$exists": false } },
+                doc! { "event_updated_slot": { "$lte": slot as i64 } }
+            ]);
         }
         
         let result = self.collection

@@ -37,68 +37,25 @@ pub struct TokenCreationEvent {
     pub created_at: i64,
 }
 
-/// Emitted by when a swap is performed for a pool
-/// 代币交换事件，仅用作测试
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct SwapEvent {
-    /// The pool for which token_0 and token_1 were swapped
-    pub pool_state: Pubkey,
-
-    /// The address that initiated the swap call, and that received the callback
-    pub sender: Pubkey,
-
-    /// The payer token account in zero for one swaps, or the recipient token account
-    /// in one for zero swaps
-    pub token_account_0: Pubkey,
-
-    /// The payer token account in one for zero swaps, or the recipient token account
-    /// in zero for one swaps
-    pub token_account_1: Pubkey,
-
-    /// The real delta amount of the token_0 of the pool or user
-    pub amount_0: u64,
-
-    /// The transfer fee charged by the withheld_amount of the token_0
-    pub transfer_fee_0: u64,
-
-    /// The real delta of the token_1 of the pool or user
-    pub amount_1: u64,
-
-    /// The transfer fee charged by the withheld_amount of the token_1
-    pub transfer_fee_1: u64,
-
-    /// if true, amount_0 is negtive and amount_1 is positive
-    pub zero_for_one: bool,
-
-    /// The sqrt(price) of the pool after the swap, as a Q64.64
-    pub sqrt_price_x64: u128,
-
-    /// The liquidity of the pool after the swap
-    pub liquidity: u128,
-
-    /// The log base 1.0001 of price of the pool after the swap
-    pub tick: i32,
-}
-
 /// 代币创建事件解析器
 pub struct TokenCreationParser {
     /// 事件的discriminator（8字节标识符）
     discriminator: [u8; 8],
+    /// 目标程序ID，指定此解析器处理哪个程序的事件
+    target_program_id: Pubkey,
     /// 数据库仓库
     token_repository: Option<Arc<TokenInfoRepository>>,
 }
 
 impl TokenCreationParser {
     /// 创建新的代币创建事件解析器
-    pub fn new(_config: &EventListenerConfig) -> Result<Self> {
+    pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // 代币创建事件的discriminator
-        // 注意：这个值需要从实际的智能合约IDL获取
-        // 这里使用示例值，实际部署时需要替换为正确的discriminator
-        // let discriminator = [142, 175, 175, 21, 74, 229, 126, 116];
-        let discriminator = [64, 198, 205, 232, 38, 8, 113, 226]; //暂时改成swap的discriminator
+        let discriminator = [142, 175, 175, 21, 74, 229, 126, 116];
 
         Ok(Self {
             discriminator,
+            target_program_id: program_id,
             token_repository: None,
         })
     }
@@ -158,72 +115,15 @@ impl TokenCreationParser {
             return Err(EventListenerError::DiscriminatorMismatch);
         }
 
-        info!("✅ Discriminator匹配，开始反序列化");
+        info!("✅ Discriminator匹配:{}，开始反序列化", self.get_event_type());
 
         // 反序列化事件数据
         let event_data = &data[8..];
         info!("🔍 事件数据长度: {} bytes", event_data.len());
 
-        // 首先尝试解析为SwapEvent（因为我们临时用的是swap discriminator）
-        let swap_event = SwapEvent::try_from_slice(event_data)?;
-        info!("🔍 swap_event: {:?}", swap_event);
         let token_create_event = TokenCreationEvent::try_from_slice(event_data)?;
         info!("🔍 token_create_event: {:?}", token_create_event);
         Ok(token_create_event)
-        // match SwapEvent::try_from_slice(event_data) {
-        //     Ok(swap_event) => {
-        //         info!("✅ 成功解析Swap事件！");
-        //         info!("🔍 Pool State: {}", swap_event.pool_state);
-        //         info!("🔍 Sender: {}", swap_event.sender);
-        //         info!("🔍 Token Account 1: {}", swap_event.token_account_0);
-        //         info!("🔍 Token Account 2: {}", swap_event.token_account_1);
-        //         info!("🔍 Amount 0: {}", swap_event.amount_0);
-        //         info!("🔍 Amount 1: {}", swap_event.amount_1);
-        //         info!("🔍 Zero for One: {}", swap_event.zero_for_one);
-        //         info!("🔍 Sqrt Price: {}", swap_event.sqrt_price_x64);
-        //         info!("🔍 Liquidity: {}", swap_event.liquidity);
-        //         info!("🔍 Tick: {}", swap_event.tick);
-
-        //         // 将解析信息写入文件
-        //         // let debug_info = format!(
-        //         //     "✅ 成功解析Swap事件！\nPool State: {}\nSender: {}\nAmount 0: {}\nAmount 1: {}\n",
-        //         //     swap_event.pool_state, swap_event.sender, swap_event.amount_0, swap_event.amount_1
-        //         // );
-        //         // if let Err(e) = std::fs::write("/tmp/swap_event_parsed.txt", debug_info) {
-        //         //     warn!("写入Swap事件文件失败: {}", e);
-        //         // }
-
-        //         // 由于我们现在解析的是SwapEvent，但函数期望TokenCreationEvent，这里创建一个假的TokenCreationEvent
-        //         let fake_token_event = TokenCreationEvent {
-        //             mint_address: swap_event.token_account_1, // 用pool_state作为mint_address
-        //             name: format!("Swap Event Token"),
-        //             symbol: format!("SWAP"),
-        //             uri: format!("https://swap-event.com"),
-        //             decimals: 9,
-        //             supply: swap_event.amount_0,
-        //             creator: swap_event.sender,
-        //             has_whitelist: false,
-        //             whitelist_deadline: 0,
-        //             created_at: chrono::Utc::now().timestamp(),
-        //         };
-        //         return Ok(fake_token_event);
-        //     }
-        //     Err(swap_err) => {
-        //         info!("❌ SwapEvent解析失败: {}", swap_err);
-        //         // 如果SwapEvent失败，尝试TokenCreationEvent
-        //         match TokenCreationEvent::try_from_slice(event_data) {
-        //             Ok(event) => {
-        //                 info!("✅ 成功解析代币创建事件: {}", event.symbol);
-        //                 Ok(event)
-        //             }
-        //             Err(token_err) => {
-        //                 let error_msg = format!("两种事件类型解析都失败: SwapEvent错误: {}, TokenCreationEvent错误: {}", swap_err, token_err);
-        //                 info!("❌ {}", error_msg);
-        //                 Err(EventListenerError::EventParsing(error_msg))
-        //             }
-        //         }
-        //     }
-        // }
     }
 
     /// 将原始事件转换为ParsedEvent
@@ -338,12 +238,20 @@ impl TokenCreationParser {
 
 #[async_trait]
 impl EventParser for TokenCreationParser {
+    fn get_program_id(&self) -> Pubkey {
+        self.target_program_id
+    }
+
     fn get_discriminator(&self) -> [u8; 8] {
         self.discriminator
     }
 
     fn get_event_type(&self) -> &'static str {
         "token_creation"
+    }
+
+    fn supports_program(&self, program_id: &Pubkey) -> Option<bool> {
+        Some(*program_id == self.target_program_id)
     }
 
     async fn parse_from_logs(&self, logs: &[String], signature: &str, slot: u64) -> Result<Option<ParsedEvent>> {
@@ -392,7 +300,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+                program_ids: vec![pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX")],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -437,17 +345,17 @@ mod tests {
     #[test]
     fn test_token_creation_parser_creation() {
         let config = create_test_config();
-        let parser = TokenCreationParser::new(&config).unwrap();
+        let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "token_creation");
         // assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
-        assert_eq!(parser.get_discriminator(), [64, 198, 205, 232, 38, 8, 113, 226]);
+        assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
     }
 
     #[test]
     fn test_convert_to_parsed_event() {
         let config = create_test_config();
-        let parser = TokenCreationParser::new(&config).unwrap();
+        let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
         let test_event = create_test_token_creation_event();
 
         let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345);
@@ -467,7 +375,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_token_creation() {
         let config = create_test_config();
-        let parser = TokenCreationParser::new(&config).unwrap();
+        let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let valid_event = TokenCreationEventData {
             mint_address: Pubkey::new_unique().to_string(),
@@ -513,7 +421,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_from_logs_no_program_data() {
         let config = create_test_config();
-        let parser = TokenCreationParser::new(&config).unwrap();
+        let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let logs = vec![
             "Program 11111111111111111111111111111111 invoke [1]".to_string(),
@@ -522,77 +430,5 @@ mod tests {
 
         let result = parser.parse_from_logs(&logs, "test_sig", 12345).await.unwrap();
         assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_manual_swap_event_parsing() {
-        let program_data_samples = vec![
-            "QMbN6CYIceLYWt2JzNsKKTAPtV/oBaglGsA+",
-            "QMbN6CYIceLpfBapKNrBCLczkFsCMcMXVzY8",
-            "skbjm6TRpbOn3y14ZZunvHo8oHVyJ1BvKyzl",
-        ];
-
-        let expected_swap_discriminator = [64, 198, 205, 232, 38, 8, 113, 226];
-
-        for (i, data_str) in program_data_samples.iter().enumerate() {
-            println!("=== 测试 Program data {} ===", i + 1);
-            println!("Base64数据: {}", data_str);
-
-            // 解码Base64数据
-            use base64::{engine::general_purpose, Engine as _};
-            match general_purpose::STANDARD.decode(data_str) {
-                Ok(data) => {
-                    println!("解码后数据长度: {} bytes", data.len());
-
-                    if data.len() < 8 {
-                        println!("❌ 数据长度不足，无法包含discriminator");
-                        continue;
-                    }
-
-                    // 检查discriminator
-                    let discriminator = &data[0..8];
-                    println!("实际discriminator: {:?}", discriminator);
-                    println!("期望discriminator: {:?}", expected_swap_discriminator);
-
-                    if discriminator == expected_swap_discriminator {
-                        println!("✅ Discriminator匹配，尝试解析SwapEvent");
-
-                        // 尝试解析SwapEvent
-                        let event_data = &data[8..];
-                        match SwapEvent::try_from_slice(event_data) {
-                            Ok(swap_event) => {
-                                println!("✅ 成功解析Swap事件！");
-                                println!("🔍 Pool State: {}", swap_event.pool_state);
-                                println!("🔍 Sender: {}", swap_event.sender);
-                                println!("🔍 Amount 0: {}", swap_event.amount_0);
-                                println!("🔍 Amount 1: {}", swap_event.amount_1);
-                                println!("🔍 Zero for One: {}", swap_event.zero_for_one);
-                                println!("🔍 Sqrt Price: {}", swap_event.sqrt_price_x64);
-                                println!("🔍 Liquidity: {}", swap_event.liquidity);
-                                println!("🔍 Tick: {}", swap_event.tick);
-
-                                // 验证关键字段合理性
-                                assert!(!swap_event.pool_state.to_string().is_empty());
-                                assert!(!swap_event.sender.to_string().is_empty());
-                                println!("✅ SwapEvent字段验证通过");
-                            }
-                            Err(e) => {
-                                println!("❌ SwapEvent解析失败: {}", e);
-                                println!("事件数据长度: {} bytes", event_data.len());
-                                // 打印前32字节的十六进制数据用于调试
-                                let hex_data = event_data.iter().take(32).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
-                                println!("事件数据前32字节: {}", hex_data);
-                            }
-                        }
-                    } else {
-                        println!("❌ Discriminator不匹配，跳过解析");
-                    }
-                }
-                Err(e) => {
-                    println!("❌ Base64解码失败: {}", e);
-                }
-            }
-            println!();
-        }
     }
 }

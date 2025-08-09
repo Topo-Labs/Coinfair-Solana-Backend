@@ -22,7 +22,7 @@ fn create_simple_e2e_config() -> EventListenerConfig {
             ws_url: "wss://api.devnet.solana.com".to_string(),
             commitment: "confirmed".to_string(),
             // 使用Raydium CLMM程序ID
-            program_id: "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".parse().unwrap(),
+            program_ids: vec!["CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".parse().unwrap()],
             private_key: None,
         },
         database: crate::config::settings::DatabaseConfig {

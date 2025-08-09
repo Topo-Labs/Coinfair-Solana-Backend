@@ -6,6 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
+use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
 /// NFT领取事件的原始数据结构（与智能合约保持一致）
@@ -39,16 +40,20 @@ pub struct NftClaimEvent {
 pub struct NftClaimParser {
     /// 事件的discriminator
     discriminator: [u8; 8],
+    /// 目标程序ID，指定此解析器处理哪个程序的事件
+    target_program_id: Pubkey,
 }
 
 impl NftClaimParser {
     /// 创建新的NFT领取事件解析器
-    pub fn new(_config: &EventListenerConfig) -> Result<Self> {
+    pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // NFT领取事件的discriminator
-        // 注意：实际部署时需要从智能合约IDL获取正确的discriminator
         let discriminator = [234, 123, 45, 67, 89, 101, 213, 42];
 
-        Ok(Self { discriminator })
+        Ok(Self {
+            discriminator,
+            target_program_id: program_id,
+        })
     }
 
     /// 从程序数据解析NFT领取事件
@@ -237,12 +242,20 @@ impl NftClaimParser {
 
 #[async_trait]
 impl EventParser for NftClaimParser {
+    fn get_program_id(&self) -> Pubkey {
+        self.target_program_id
+    }
+
     fn get_discriminator(&self) -> [u8; 8] {
         self.discriminator
     }
 
     fn get_event_type(&self) -> &'static str {
         "nft_claim"
+    }
+
+    fn supports_program(&self, program_id: &Pubkey) -> Option<bool> {
+        Some(*program_id == self.target_program_id)
     }
 
     async fn parse_from_logs(&self, logs: &[String], signature: &str, slot: u64) -> Result<Option<ParsedEvent>> {
@@ -297,7 +310,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+                program_ids: vec![pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX")],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -343,7 +356,7 @@ mod tests {
     #[test]
     fn test_nft_claim_parser_creation() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "nft_claim");
         assert_eq!(parser.get_discriminator(), [234, 123, 45, 67, 89, 101, 213, 42]);
@@ -352,7 +365,7 @@ mod tests {
     #[test]
     fn test_tier_bonus_calculation() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.calculate_tier_bonus(1), 1.0);
         assert_eq!(parser.calculate_tier_bonus(2), 1.2);
@@ -365,7 +378,7 @@ mod tests {
     #[test]
     fn test_tier_name_mapping() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_tier_name(1), "Bronze");
         assert_eq!(parser.get_tier_name(2), "Silver");
@@ -378,7 +391,7 @@ mod tests {
     #[test]
     fn test_convert_to_parsed_event() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
         let test_event = create_test_nft_claim_event();
 
         let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345);
@@ -404,7 +417,7 @@ mod tests {
     #[test]
     fn test_calculate_reward_metrics() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let event = NftClaimEvent {
             tier: 3, // Gold tier (1.5x bonus)
@@ -424,7 +437,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_nft_claim() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let valid_event = NftClaimEventData {
             nft_mint: Pubkey::new_unique().to_string(),
@@ -490,7 +503,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_from_logs_no_program_data() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let logs = vec![
             "Program 11111111111111111111111111111111 invoke [1]".to_string(),
@@ -504,7 +517,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_event() {
         let config = create_test_config();
-        let parser = NftClaimParser::new(&config).unwrap();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let event = ParsedEvent::NftClaim(NftClaimEventData {
             nft_mint: Pubkey::new_unique().to_string(),

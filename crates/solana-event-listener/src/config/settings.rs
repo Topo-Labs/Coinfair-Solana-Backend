@@ -26,8 +26,8 @@ pub struct SolanaConfig {
     pub ws_url: String,
     /// Commitment level (confirmed, finalized)
     pub commitment: String,
-    /// 目标程序ID (要监听的合约地址)
-    pub program_id: Pubkey,
+    /// 目标程序ID列表 (要监听的合约地址)
+    pub program_ids: Vec<Pubkey>,
     /// 签名者私钥 (可选，用于发送交易)
     pub private_key: Option<String>,
 }
@@ -116,8 +116,7 @@ impl EventListenerConfig {
             rpc_url: std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
             ws_url: Self::derive_ws_url(&std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()))?,
             commitment: std::env::var("SOLANA_COMMITMENT").unwrap_or_else(|_| "confirmed".to_string()),
-            program_id: Pubkey::from_str(&std::env::var("SUBSCRIBED_PROGRAM_ID").map_err(|_| EventListenerError::Config("RAYDIUM_PROGRAM_ID环境变量未设置".to_string()))?)
-                .map_err(|e| EventListenerError::Config(format!("解析RAYDIUM_PROGRAM_ID失败: {}", e)))?,
+            program_ids: Self::parse_program_ids()?,
             private_key: std::env::var("PRIVATE_KEY").ok(),
         };
 
@@ -172,12 +171,64 @@ impl EventListenerConfig {
         };
 
         info!("✅ Event-Listener配置加载完成");
-        info!("🔗 目标程序ID: {}", config.solana.program_id);
+        for (i, program_id) in config.solana.program_ids.iter().enumerate() {
+            info!("🔗 监听程序 {}: {}", i + 1, program_id);
+        }
         info!("🌐 RPC URL: {}", config.solana.rpc_url);
         info!("🔌 WebSocket URL: {}", config.solana.ws_url);
         info!("📊 数据库: {}", config.database.database_name);
 
         Ok(config)
+    }
+
+    /// 解析程序ID列表从环境变量
+    fn parse_program_ids() -> Result<Vec<Pubkey>> {
+        use std::collections::HashSet;
+        
+        // 1. 优先使用新格式 SUBSCRIBED_PROGRAM_IDS（逗号分隔）
+        if let Ok(ids_str) = std::env::var("SUBSCRIBED_PROGRAM_IDS") {
+            let ids: std::result::Result<Vec<Pubkey>, solana_sdk::pubkey::ParsePubkeyError> = ids_str
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|id| Pubkey::from_str(id))
+                .collect();
+            
+            match ids {
+                Ok(parsed_ids) => {
+                    if parsed_ids.is_empty() {
+                        return Err(EventListenerError::Config("SUBSCRIBED_PROGRAM_IDS不能为空".to_string()));
+                    }
+                    if parsed_ids.len() > 10 {
+                        return Err(EventListenerError::Config("最多支持10个程序ID".to_string()));
+                    }
+                    
+                    // 验证程序ID去重
+                    let mut unique_ids = HashSet::new();
+                    for id in &parsed_ids {
+                        if !unique_ids.insert(*id) {
+                            return Err(EventListenerError::Config(format!("程序ID重复: {}", id)));
+                        }
+                    }
+                    
+                    info!("📋 解析到{}个程序ID: {:?}", parsed_ids.len(), parsed_ids);
+                    return Ok(parsed_ids);
+                }
+                Err(e) => return Err(EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_IDS失败: {}", e))),
+            }
+        }
+        
+        // 2. 向后兼容：支持单个程序ID格式
+        if let Ok(id_str) = std::env::var("SUBSCRIBED_PROGRAM_ID") {
+            let id = Pubkey::from_str(&id_str)
+                .map_err(|e| EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_ID失败: {}", e)))?;
+            info!("📋 使用单程序ID（兼容模式）: {}", id);
+            return Ok(vec![id]);
+        }
+        
+        Err(EventListenerError::Config(
+            "必须设置SUBSCRIBED_PROGRAM_IDS（多个，逗号分隔）或SUBSCRIBED_PROGRAM_ID（单个）环境变量".to_string()
+        ))
     }
 
     /// 安全地加载环境配置文件，避免clap参数解析冲突
@@ -275,6 +326,24 @@ impl EventListenerConfig {
 
         if !self.solana.ws_url.starts_with("ws") {
             return Err(EventListenerError::Config("WebSocket URL必须以ws或wss开头".to_string()));
+        }
+
+        // 验证程序ID列表
+        if self.solana.program_ids.is_empty() {
+            return Err(EventListenerError::Config("至少需要配置一个程序ID".to_string()));
+        }
+        
+        if self.solana.program_ids.len() > 10 {
+            return Err(EventListenerError::Config("最多支持10个程序ID".to_string()));
+        }
+        
+        // 验证程序ID去重（双重保险）
+        use std::collections::HashSet;
+        let mut unique_ids = HashSet::new();
+        for id in &self.solana.program_ids {
+            if !unique_ids.insert(*id) {
+                return Err(EventListenerError::Config(format!("程序ID重复: {}", id)));
+            }
         }
 
         // 验证批量配置

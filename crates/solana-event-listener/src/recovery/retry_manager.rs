@@ -441,7 +441,7 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_id: solana_sdk::pubkey::Pubkey::new_unique(),
+                program_ids: vec![solana_sdk::pubkey::Pubkey::new_unique()],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {

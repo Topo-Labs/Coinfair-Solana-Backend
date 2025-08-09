@@ -1,7 +1,7 @@
+use ::utils::solana::swap_services::SwapV2InstructionBuilder;
+use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SwapConfig, SwapV2Service};
 use ::utils::AppConfig;
 use anyhow::Result;
-use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SwapConfig, SwapV2Service};
-use ::utils::solana::swap_services::SwapV2InstructionBuilder;
 use solana_client::rpc_client::RpcClient;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -158,7 +158,7 @@ impl SharedContext {
     }
 
     /// Create ServiceHelpers instance server::services::solana::shared::helpers
-    pub fn create_service_helpers(&self) -> ServiceHelpers {
+    pub fn create_service_helpers(&self) -> ServiceHelpers<'_> {
         ServiceHelpers::new(&self.rpc_client)
     }
 }

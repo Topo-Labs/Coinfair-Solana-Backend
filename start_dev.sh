@@ -14,8 +14,6 @@ LOG_FILE="logs/server_${TIMESTAMP}.log"
 export CARGO_ENV=development
 export MONGO_DB=coinfair_development
 
-# 显示日志文件位置
-echo "📝 日志文件: $LOG_FILE"
 
 # 启动程序
 # RUST_LOG=debug cargo run --bin coinfair 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$LOG_FILE" &

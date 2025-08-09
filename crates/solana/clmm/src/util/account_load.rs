@@ -15,18 +15,14 @@ pub struct AccountLoad<'info, T: ZeroCopy + Owner> {
 
 impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
     fn new(acc_info: AccountInfo<'info>) -> AccountLoad<'info, T> {
-        Self {
-            acc_info,
-            phantom: PhantomData,
-        }
+        Self { acc_info, phantom: PhantomData }
     }
 
     /// Constructs a new `Loader` from a previously initialized account.
     #[inline(never)]
     pub fn try_from(acc_info: &AccountInfo<'info>) -> Result<AccountLoad<'info, T>> {
         if acc_info.owner != &T::owner() {
-            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
-                .with_pubkeys((*acc_info.owner, T::owner())));
+            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, T::owner())));
         }
         let data: &[u8] = &acc_info.try_borrow_data()?;
         if data.len() < T::DISCRIMINATOR.len() {
@@ -43,20 +39,16 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
 
     /// Constructs a new `Loader` from an uninitialized account.
     #[inline(never)]
-    pub fn try_from_unchecked(
-        _program_id: &Pubkey,
-        acc_info: &AccountInfo<'info>,
-    ) -> Result<AccountLoad<'info, T>> {
+    pub fn try_from_unchecked(_program_id: &Pubkey, acc_info: &AccountInfo<'info>) -> Result<AccountLoad<'info, T>> {
         if acc_info.owner != &T::owner() {
-            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
-                .with_pubkeys((*acc_info.owner, T::owner())));
+            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, T::owner())));
         }
         Ok(AccountLoad::new(acc_info.clone()))
     }
 
     /// Returns a `RefMut` to the account data structure for reading or writing.
     /// Should only be called once, when the account is being initialized.
-    pub fn load_init(&self) -> Result<RefMut<T>> {
+    pub fn load_init(&self) -> Result<RefMut<'_, T>> {
         // AccountInfo api allows you to borrow mut even if the account isn't
         // writable, so add this check for a better dev experience.
         if !self.acc_info.is_writable {
@@ -76,9 +68,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         // write discriminator
         data[..8].copy_from_slice(&T::DISCRIMINATOR);
 
-        Ok(RefMut::map(data, |data| {
-            bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])
-        }))
+        Ok(RefMut::map(data, |data| bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])))
     }
 
     /// Returns a `RefMut` to the account data structure for reading or writing directly.
@@ -86,8 +76,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
     /// So it is necessary to check the owner
     pub fn load_data_mut<'a>(acc_info: &'a AccountInfo) -> Result<RefMut<'a, T>> {
         if acc_info.owner != &T::owner() {
-            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram)
-                .with_pubkeys((*acc_info.owner, T::owner())));
+            return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, T::owner())));
         }
         if !acc_info.is_writable {
             return Err(ErrorCode::AccountNotMutable.into());
@@ -103,13 +92,11 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
-        Ok(RefMut::map(data, |data| {
-            bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])
-        }))
+        Ok(RefMut::map(data, |data| bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])))
     }
 
     /// Returns a Ref to the account data structure for reading.
-    pub fn load(&self) -> Result<Ref<T>> {
+    pub fn load(&self) -> Result<Ref<'_, T>> {
         let data = self.acc_info.try_borrow_data()?;
         if data.len() < T::DISCRIMINATOR.len() {
             return Err(ErrorCode::AccountDiscriminatorNotFound.into());
@@ -120,13 +107,11 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
-        Ok(Ref::map(data, |data| {
-            bytemuck::from_bytes(&data[8..mem::size_of::<T>() + 8])
-        }))
+        Ok(Ref::map(data, |data| bytemuck::from_bytes(&data[8..mem::size_of::<T>() + 8])))
     }
 
     /// Returns a `RefMut` to the account data structure for reading or writing.
-    pub fn load_mut(&self) -> Result<RefMut<T>> {
+    pub fn load_mut(&self) -> Result<RefMut<'_, T>> {
         // AccountInfo api allows you to borrow mut even if the account isn't
         // writable, so add this check for a better dev experience.
         if !self.acc_info.is_writable {
@@ -143,9 +128,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
-        Ok(RefMut::map(data, |data| {
-            bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])
-        }))
+        Ok(RefMut::map(data, |data| bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])))
     }
 }
 
