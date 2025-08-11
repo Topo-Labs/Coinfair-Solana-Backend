@@ -1,7 +1,7 @@
 use crate::error::{EventListenerError, Result};
 use serde::{Deserialize, Serialize};
-use solana_sdk::pubkey::Pubkey;
-use std::{str::FromStr, time::Duration};
+use solana_sdk::pubkey::{ParsePubkeyError, Pubkey};
+use std::{collections::HashSet, env, path::Path, str::FromStr, time::Duration};
 use tracing::info;
 
 /// Event-Listener配置
@@ -113,8 +113,8 @@ impl EventListenerConfig {
 
         // 加载Solana配置
         let solana = SolanaConfig {
-            rpc_url: std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
-            ws_url: Self::derive_ws_url(&std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()))?,
+            rpc_url: std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
+            ws_url: Self::derive_ws_url(&std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()))?,
             commitment: std::env::var("SOLANA_COMMITMENT").unwrap_or_else(|_| "confirmed".to_string()),
             program_ids: Self::parse_program_ids()?,
             private_key: std::env::var("PRIVATE_KEY").ok(),
@@ -124,43 +124,91 @@ impl EventListenerConfig {
         let database = DatabaseConfig {
             uri: std::env::var("MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string()),
             database_name: std::env::var("MONGO_DB").unwrap_or_else(|_| "coinfair_development".to_string()),
-            max_connections: std::env::var("MONGO_MAX_CONNECTIONS").unwrap_or_else(|_| "10".to_string()).parse().unwrap_or(10),
-            min_connections: std::env::var("MONGO_MIN_CONNECTIONS").unwrap_or_else(|_| "2".to_string()).parse().unwrap_or(2),
+            max_connections: std::env::var("MONGO_MAX_CONNECTIONS")
+                .unwrap_or_else(|_| "10".to_string())
+                .parse()
+                .unwrap_or(10),
+            min_connections: std::env::var("MONGO_MIN_CONNECTIONS")
+                .unwrap_or_else(|_| "2".to_string())
+                .parse()
+                .unwrap_or(2),
         };
 
         // 加载监听器配置
         let listener = ListenerConfig {
-            batch_size: std::env::var("EVENT_BATCH_SIZE").unwrap_or_else(|_| "100".to_string()).parse().unwrap_or(100),
-            sync_interval_secs: std::env::var("EVENT_SYNC_INTERVAL_SECS").unwrap_or_else(|_| "30".to_string()).parse().unwrap_or(30),
-            max_retries: std::env::var("EVENT_MAX_RETRIES").unwrap_or_else(|_| "3".to_string()).parse().unwrap_or(3),
-            retry_delay_ms: std::env::var("EVENT_RETRY_DELAY_MS").unwrap_or_else(|_| "1000".to_string()).parse().unwrap_or(1000),
-            signature_cache_size: std::env::var("EVENT_SIGNATURE_CACHE_SIZE").unwrap_or_else(|_| "10000".to_string()).parse().unwrap_or(10000),
-            checkpoint_save_interval_secs: std::env::var("EVENT_CHECKPOINT_INTERVAL_SECS").unwrap_or_else(|_| "60".to_string()).parse().unwrap_or(60),
+            batch_size: std::env::var("EVENT_BATCH_SIZE")
+                .unwrap_or_else(|_| "100".to_string())
+                .parse()
+                .unwrap_or(100),
+            sync_interval_secs: std::env::var("EVENT_SYNC_INTERVAL_SECS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .unwrap_or(30),
+            max_retries: std::env::var("EVENT_MAX_RETRIES")
+                .unwrap_or_else(|_| "3".to_string())
+                .parse()
+                .unwrap_or(3),
+            retry_delay_ms: std::env::var("EVENT_RETRY_DELAY_MS")
+                .unwrap_or_else(|_| "1000".to_string())
+                .parse()
+                .unwrap_or(1000),
+            signature_cache_size: std::env::var("EVENT_SIGNATURE_CACHE_SIZE")
+                .unwrap_or_else(|_| "10000".to_string())
+                .parse()
+                .unwrap_or(10000),
+            checkpoint_save_interval_secs: std::env::var("EVENT_CHECKPOINT_INTERVAL_SECS")
+                .unwrap_or_else(|_| "60".to_string())
+                .parse()
+                .unwrap_or(60),
             backoff: BackoffConfig {
-                initial_delay_ms: std::env::var("EVENT_BACKOFF_INITIAL_MS").unwrap_or_else(|_| "1000".to_string()).parse().unwrap_or(1000),
-                max_delay_ms: std::env::var("EVENT_BACKOFF_MAX_MS").unwrap_or_else(|_| "300000".to_string()).parse().unwrap_or(300000),
-                multiplier: std::env::var("EVENT_BACKOFF_MULTIPLIER").unwrap_or_else(|_| "2.0".to_string()).parse().unwrap_or(2.0),
+                initial_delay_ms: std::env::var("EVENT_BACKOFF_INITIAL_MS")
+                    .unwrap_or_else(|_| "1000".to_string())
+                    .parse()
+                    .unwrap_or(1000),
+                max_delay_ms: std::env::var("EVENT_BACKOFF_MAX_MS")
+                    .unwrap_or_else(|_| "300000".to_string())
+                    .parse()
+                    .unwrap_or(300000),
+                multiplier: std::env::var("EVENT_BACKOFF_MULTIPLIER")
+                    .unwrap_or_else(|_| "2.0".to_string())
+                    .parse()
+                    .unwrap_or(2.0),
                 max_retries: std::env::var("EVENT_BACKOFF_MAX_RETRIES").ok().and_then(|s| s.parse().ok()),
             },
             batch_write: BatchWriteConfig {
-                batch_size: std::env::var("EVENT_BATCH_WRITE_SIZE").unwrap_or_else(|_| "50".to_string()).parse().unwrap_or(50),
-                max_wait_ms: std::env::var("EVENT_BATCH_WRITE_WAIT_MS").unwrap_or_else(|_| "5000".to_string()).parse().unwrap_or(5000),
+                batch_size: std::env::var("EVENT_BATCH_WRITE_SIZE")
+                    .unwrap_or_else(|_| "50".to_string())
+                    .parse()
+                    .unwrap_or(50),
+                max_wait_ms: std::env::var("EVENT_BATCH_WRITE_WAIT_MS")
+                    .unwrap_or_else(|_| "5000".to_string())
+                    .parse()
+                    .unwrap_or(5000),
                 buffer_size: std::env::var("EVENT_BATCH_WRITE_BUFFER_SIZE")
                     .unwrap_or_else(|_| "1000".to_string())
                     .parse()
                     .unwrap_or(1000),
-                concurrent_writers: std::env::var("EVENT_BATCH_WRITE_CONCURRENT").unwrap_or_else(|_| "4".to_string()).parse().unwrap_or(4),
+                concurrent_writers: std::env::var("EVENT_BATCH_WRITE_CONCURRENT")
+                    .unwrap_or_else(|_| "4".to_string())
+                    .parse()
+                    .unwrap_or(4),
             },
         };
 
         // 加载监控配置
         let monitoring = MonitoringConfig {
-            metrics_interval_secs: std::env::var("EVENT_METRICS_INTERVAL_SECS").unwrap_or_else(|_| "60".to_string()).parse().unwrap_or(60),
+            metrics_interval_secs: std::env::var("EVENT_METRICS_INTERVAL_SECS")
+                .unwrap_or_else(|_| "60".to_string())
+                .parse()
+                .unwrap_or(60),
             enable_performance_monitoring: std::env::var("EVENT_ENABLE_PERFORMANCE_MONITORING")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .unwrap_or(true),
-            health_check_interval_secs: std::env::var("EVENT_HEALTH_CHECK_INTERVAL_SECS").unwrap_or_else(|_| "30".to_string()).parse().unwrap_or(30),
+            health_check_interval_secs: std::env::var("EVENT_HEALTH_CHECK_INTERVAL_SECS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .unwrap_or(30),
         };
 
         let config = Self {
@@ -183,17 +231,15 @@ impl EventListenerConfig {
 
     /// 解析程序ID列表从环境变量
     fn parse_program_ids() -> Result<Vec<Pubkey>> {
-        use std::collections::HashSet;
-        
         // 1. 优先使用新格式 SUBSCRIBED_PROGRAM_IDS（逗号分隔）
         if let Ok(ids_str) = std::env::var("SUBSCRIBED_PROGRAM_IDS") {
-            let ids: std::result::Result<Vec<Pubkey>, solana_sdk::pubkey::ParsePubkeyError> = ids_str
+            let ids: std::result::Result<Vec<Pubkey>, ParsePubkeyError> = ids_str
                 .split(',')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(|id| Pubkey::from_str(id))
                 .collect();
-            
+
             match ids {
                 Ok(parsed_ids) => {
                     if parsed_ids.is_empty() {
@@ -202,7 +248,7 @@ impl EventListenerConfig {
                     if parsed_ids.len() > 10 {
                         return Err(EventListenerError::Config("最多支持10个程序ID".to_string()));
                     }
-                    
+
                     // 验证程序ID去重
                     let mut unique_ids = HashSet::new();
                     for id in &parsed_ids {
@@ -210,32 +256,28 @@ impl EventListenerConfig {
                             return Err(EventListenerError::Config(format!("程序ID重复: {}", id)));
                         }
                     }
-                    
+
                     info!("📋 解析到{}个程序ID: {:?}", parsed_ids.len(), parsed_ids);
                     return Ok(parsed_ids);
                 }
                 Err(e) => return Err(EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_IDS失败: {}", e))),
             }
         }
-        
+
         // 2. 向后兼容：支持单个程序ID格式
         if let Ok(id_str) = std::env::var("SUBSCRIBED_PROGRAM_ID") {
-            let id = Pubkey::from_str(&id_str)
-                .map_err(|e| EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_ID失败: {}", e)))?;
+            let id = Pubkey::from_str(&id_str).map_err(|e| EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_ID失败: {}", e)))?;
             info!("📋 使用单程序ID（兼容模式）: {}", id);
             return Ok(vec![id]);
         }
-        
+
         Err(EventListenerError::Config(
-            "必须设置SUBSCRIBED_PROGRAM_IDS（多个，逗号分隔）或SUBSCRIBED_PROGRAM_ID（单个）环境变量".to_string()
+            "必须设置SUBSCRIBED_PROGRAM_IDS（多个，逗号分隔）或SUBSCRIBED_PROGRAM_ID（单个）环境变量".to_string(),
         ))
     }
 
     /// 安全地加载环境配置文件，避免clap参数解析冲突
     fn load_env_file_safe() {
-        use std::env;
-        use std::path::Path;
-
         // 1. 获取环境变量 CARGO_ENV
         let cargo_env = env::var("CARGO_ENV").unwrap_or_else(|_| "development".to_string());
         info!("cargo_env: {}", cargo_env);
@@ -332,13 +374,12 @@ impl EventListenerConfig {
         if self.solana.program_ids.is_empty() {
             return Err(EventListenerError::Config("至少需要配置一个程序ID".to_string()));
         }
-        
+
         if self.solana.program_ids.len() > 10 {
             return Err(EventListenerError::Config("最多支持10个程序ID".to_string()));
         }
-        
+
         // 验证程序ID去重（双重保险）
-        use std::collections::HashSet;
         let mut unique_ids = HashSet::new();
         for id in &self.solana.program_ids {
             if !unique_ids.insert(*id) {
@@ -347,11 +388,11 @@ impl EventListenerConfig {
         }
 
         // 验证批量配置
-        if self.listener.batch_size == 0 {
+        if self.listener.batch_size <= 0 {
             return Err(EventListenerError::Config("批量大小必须大于0".to_string()));
         }
 
-        if self.listener.batch_write.batch_size == 0 {
+        if self.listener.batch_write.batch_size <= 0 {
             return Err(EventListenerError::Config("批量写入大小必须大于0".to_string()));
         }
 
@@ -393,8 +434,14 @@ mod tests {
 
     #[test]
     fn test_derive_ws_url() {
-        assert_eq!(EventListenerConfig::derive_ws_url("https://api.devnet.solana.com").unwrap(), "wss://api.devnet.solana.com");
-        assert_eq!(EventListenerConfig::derive_ws_url("http://localhost:8899").unwrap(), "ws://localhost:8899");
+        assert_eq!(
+            EventListenerConfig::derive_ws_url("https://api.devnet.solana.com").unwrap(),
+            "wss://api.devnet.solana.com"
+        );
+        assert_eq!(
+            EventListenerConfig::derive_ws_url("http://localhost:8899").unwrap(),
+            "ws://localhost:8899"
+        );
     }
 
     #[test]

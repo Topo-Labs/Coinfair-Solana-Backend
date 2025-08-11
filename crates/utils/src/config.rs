@@ -38,11 +38,8 @@ pub struct EnvLoader;
 impl EnvLoader {
     /// 根据 CARGO_ENV 加载对应的环境配置文件
     pub fn load_env_file() -> Result<(), Box<dyn std::error::Error>> {
-        use std::env;
-        use std::path::Path;
-
         // 1. 获取环境变量 CARGO_ENV development
-        let cargo_env = env::var("CARGO_ENV").unwrap_or_else(|_| "development".to_string());
+        let cargo_env = std::env::var("CARGO_ENV").unwrap_or_else(|_| "development".to_string());
         println!("cargo_env: {}", cargo_env);
         // 2. 构建配置文件路径
         let env_file = match cargo_env.as_str() {
@@ -56,10 +53,10 @@ impl EnvLoader {
         };
         println!("env_file: {}", env_file);
         // 3. 检查文件是否存在
-        if !Path::new(env_file).exists() {
+        if !std::path::Path::new(env_file).exists() {
             eprintln!("⚠️  配置文件 {} 不存在，尝试加载默认的 .env 文件", env_file);
             // 回退到默认的 .env 文件
-            if Path::new(".env").exists() {
+            if std::path::Path::new(".env").exists() {
                 dotenvy::from_filename(".env")?;
                 println!("✅ 已加载默认配置文件: .env");
             } else {
@@ -107,11 +104,11 @@ pub struct AppConfig {
 
     #[clap(long, env, default_value = "info")]
     pub rust_log: String,
-    
+
     /// 是否允许事件监听器插入新池子记录
     #[clap(long, env, default_value = "false")]
     pub enable_pool_event_insert: bool,
-    
+
     /// 事件监听器数据库操作模式
     #[clap(long, env, default_value = "update_only")]
     pub event_listener_db_mode: String,
@@ -141,11 +138,10 @@ impl AppConfig {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
-            event_listener_db_mode: std::env::var("EVENT_LISTENER_DB_MODE")
-                .unwrap_or_else(|_| "update_only".to_string()),
+            event_listener_db_mode: std::env::var("EVENT_LISTENER_DB_MODE").unwrap_or_else(|_| "update_only".to_string()),
         }
     }
-    
+
     /// 获取事件监听器数据库操作模式
     pub fn get_event_listener_db_mode(&self) -> EventListenerDbMode {
         EventListenerDbMode::from(self.event_listener_db_mode.as_str())

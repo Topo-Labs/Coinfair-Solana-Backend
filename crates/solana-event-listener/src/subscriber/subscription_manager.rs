@@ -20,7 +20,7 @@ use tokio::{sync::RwLock, time::interval};
 use tracing::{debug, error, info, warn};
 
 /// 订阅管理器
-/// 
+///
 /// 负责协调所有订阅相关的组件:
 /// - WebSocket连接管理
 /// - 事件过滤和路由
@@ -35,15 +35,15 @@ pub struct SubscriptionManager {
     checkpoint_manager: Arc<CheckpointManager>,
     metrics: Arc<MetricsCollector>,
     rpc_client: Arc<RpcClient>,
-    
+
     // 运行状态
     is_running: Arc<AtomicBool>,
-    
+
     // 统计信息
     processed_events: Arc<AtomicU64>,
     failed_events: Arc<AtomicU64>,
     last_activity: Arc<RwLock<Option<Instant>>>,
-    
+
     // 签名缓存（防重复处理）
     signature_cache: Arc<DashMap<String, Instant>>,
 }
@@ -69,18 +69,18 @@ impl SubscriptionManager {
         metrics: Arc<MetricsCollector>,
     ) -> Result<Self> {
         let config = Arc::new(config.clone());
-        
+
         // 创建RPC客户端
         let rpc_client = Arc::new(RpcClient::new(&config.solana.rpc_url));
-        
+
         // 创建WebSocket管理器
         let websocket_manager = Arc::new(WebSocketManager::new(Arc::clone(&config))?);
-        
+
         // 创建事件过滤器
         let event_filter = Arc::new(
-            EventFilter::accept_all(config.solana.program_ids.clone())  // 传递多个程序ID
+            EventFilter::accept_all(config.solana.program_ids.clone()) // 传递多个程序ID
                 .with_error_filtering(true) // 过滤失败的交易
-                .with_min_log_length(1)     // 至少要有一条日志
+                .with_min_log_length(1), // 至少要有一条日志
         );
 
         // 创建签名缓存
@@ -128,14 +128,14 @@ impl SubscriptionManager {
             tokio::spawn(async move {
                 let mut last_connected = false;
                 let mut connection_recorded = false;
-                
+
                 let mut interval = interval(Duration::from_secs(1));
                 loop {
                     interval.tick().await;
-                    
+
                     let stats = websocket_manager.get_stats().await;
                     let currently_connected = stats.is_connected;
-                    
+
                     // 检测到新连接
                     if currently_connected && !last_connected {
                         info!("✅ WebSocket连接建立，开始监听事件");
@@ -151,9 +151,9 @@ impl SubscriptionManager {
                     else if !currently_connected && last_connected {
                         warn!("❌ WebSocket连接断开");
                     }
-                    
+
                     last_connected = currently_connected;
-                    
+
                     // 如果订阅管理器停止运行，退出监控
                     if !stats.is_running {
                         break;
@@ -201,25 +201,25 @@ impl SubscriptionManager {
     pub async fn stop(&self) -> Result<()> {
         info!("🛑 停止订阅管理器");
         self.is_running.store(false, Ordering::Relaxed);
-        
+
         // 停止WebSocket管理器
         self.websocket_manager.stop().await?;
-        
+
         Ok(())
     }
 
     /// 事件处理主循环
     async fn event_processing_loop(&self) {
         info!("📡 启动事件处理循环");
-        
+
         let mut event_receiver = self.websocket_manager.subscribe();
         info!("📡 已订阅WebSocket事件，开始处理循环");
-        
+
         while self.is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), event_receiver.recv()).await {
                 Ok(Ok(log_response)) => {
                     info!("📨 订阅管理器接收到事件: {}", log_response.signature);
-                    
+
                     // 更新活动时间
                     {
                         let mut last_activity = self.last_activity.write().await;
@@ -262,18 +262,19 @@ impl SubscriptionManager {
     /// 获取当前slot
     async fn get_current_slot_internal(&self) -> Result<u64> {
         use crate::error::EventListenerError;
-        
+
         tokio::task::spawn_blocking({
             let rpc_client = Arc::clone(&self.rpc_client);
             move || {
-                rpc_client.get_slot()
+                rpc_client
+                    .get_slot()
                     .map_err(|e| EventListenerError::WebSocket(format!("获取当前slot失败: {}", e)))
             }
         })
         .await
         .map_err(|e| EventListenerError::Unknown(format!("异步任务执行失败: {}", e)))?
     }
-    
+
     /// 获取当前slot (测试可见)
     #[cfg(test)]
     pub async fn get_current_slot(&self) -> Result<u64> {
@@ -284,9 +285,9 @@ impl SubscriptionManager {
     /// 处理单个事件
     async fn process_event(&self, log_response: RpcLogsResponse) -> Result<()> {
         let signature = &log_response.signature;
-        
+
         info!("🔍 开始处理事件: {}", signature);
-        
+
         // 获取当前slot，如果失败则使用0作为备用值
         let slot = match self.get_current_slot_internal().await {
             Ok(slot) => slot,
@@ -313,28 +314,34 @@ impl SubscriptionManager {
         info!("🔍 事件通过过滤器，开始解析: {}", signature);
 
         // 尝试解析事件（使用智能路由）
-        match self.parser_registry.parse_event_with_context(&log_response.logs, signature, slot).await {
+        match self
+            .parser_registry
+            .parse_event_with_context(&log_response.logs, signature, slot, &self.config.solana.program_ids)
+            .await
+        {
             Ok(Some(parsed_event)) => {
                 info!("✅ 事件解析成功: {} -> {:?}", signature, parsed_event.event_type());
-                
+
                 // 尝试从日志中提取程序ID用于监控
                 let program_id = self.extract_program_id_from_logs(&log_response.logs);
-                
+
                 // 提交到批量写入器
                 self.batch_writer.submit_event(parsed_event).await?;
-                
+
                 // 更新检查点 - 使用程序特定的检查点更新
                 if let Some(ref prog_id_str) = program_id {
                     // 如果能提取到程序ID，使用程序特定的检查点更新
-                    self.checkpoint_manager.update_last_processed_for_program(prog_id_str, signature, slot).await?;
+                    self.checkpoint_manager
+                        .update_last_processed_for_program(prog_id_str, signature, slot)
+                        .await?;
                 } else {
                     // 回退到向后兼容的方法（更新第一个程序的检查点）
                     self.checkpoint_manager.update_last_processed(signature, slot).await?;
                 }
-                
+
                 // 标记为已处理
                 self.mark_signature_processed(signature);
-                
+
                 // 更新指标 - 包括程序特定的指标
                 self.metrics.record_event_processed().await?;
                 if let Some(prog_id) = program_id {
@@ -347,11 +354,11 @@ impl SubscriptionManager {
             }
             Err(e) => {
                 warn!("❌ 事件解析失败: {} - {}", signature, e);
-                
+
                 // 尝试从日志中提取程序ID用于错误监控
                 let program_id = self.extract_program_id_from_logs(&log_response.logs);
                 let error_type = self.classify_error(&e);
-                
+
                 self.failed_events.fetch_add(1, Ordering::Relaxed);
                 self.metrics.record_event_failed().await?;
                 if let Some(prog_id) = program_id {
@@ -387,7 +394,7 @@ impl SubscriptionManager {
     /// 将错误分类为监控类别
     fn classify_error(&self, error: &crate::error::EventListenerError) -> String {
         use crate::error::EventListenerError;
-        
+
         match error {
             EventListenerError::EventParsing(_) => "parse_error".to_string(),
             EventListenerError::Database(_) => "database_error".to_string(),
@@ -409,15 +416,15 @@ impl SubscriptionManager {
     /// 清理循环（定期清理缓存和过期数据）
     async fn cleanup_loop(&self) {
         info!("🧹 启动清理循环");
-        
+
         let mut cleanup_interval = interval(Duration::from_secs(300)); // 每5分钟清理一次
-        
+
         while self.is_running.load(Ordering::Relaxed) {
             cleanup_interval.tick().await;
-            
+
             // 清理签名缓存
             self.cleanup_signature_cache().await;
-            
+
             // 更新指标
             if let Err(e) = self.metrics.record_cleanup_cycle().await {
                 warn!("更新清理指标失败: {}", e);
@@ -449,7 +456,7 @@ impl SubscriptionManager {
         if current_size > max_size {
             let mut entries: Vec<_> = self.signature_cache.iter().collect();
             entries.sort_by_key(|entry| *entry.value());
-            
+
             let to_remove = current_size - max_size;
             for entry in entries.into_iter().take(to_remove) {
                 self.signature_cache.remove(entry.key());
@@ -477,12 +484,12 @@ impl SubscriptionManager {
         let websocket_healthy = self.websocket_manager.is_healthy().await;
         let batch_writer_healthy = self.batch_writer.is_healthy().await;
         let checkpoint_healthy = self.checkpoint_manager.is_healthy().await;
-        
+
         // 检查最近是否有活动
         let last_activity = *self.last_activity.read().await;
         let activity_healthy = match last_activity {
             Some(last) => last.elapsed() < Duration::from_secs(300), // 5分钟内有活动
-            None => true, // 刚启动时认为是健康的
+            None => true,                                            // 刚启动时认为是健康的
         };
 
         websocket_healthy && batch_writer_healthy && checkpoint_healthy && activity_healthy
@@ -493,11 +500,7 @@ impl SubscriptionManager {
         let processed = self.processed_events.load(Ordering::Relaxed);
         let failed = self.failed_events.load(Ordering::Relaxed);
         let total = processed + failed;
-        let success_rate = if total > 0 {
-            processed as f64 / total as f64
-        } else {
-            1.0
-        };
+        let success_rate = if total > 0 { processed as f64 / total as f64 } else { 1.0 };
 
         SubscriptionStats {
             is_running: self.is_running.load(Ordering::Relaxed),
@@ -552,7 +555,10 @@ mod tests {
                 rpc_url: "https://api.devnet.solana.com".to_string(),
                 ws_url: "wss://api.devnet.solana.com".to_string(),
                 commitment: "confirmed".to_string(),
-                program_ids: vec![solana_sdk::pubkey::Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap()],
+                program_ids: vec![
+                    solana_sdk::pubkey::Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap(),
+                    solana_sdk::pubkey::Pubkey::from_str("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK").unwrap(),
+                ],
                 private_key: None,
             },
             database: crate::config::settings::DatabaseConfig {
@@ -587,23 +593,19 @@ mod tests {
         let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(
-            &config,
-            parser_registry,
-            batch_writer,
-            checkpoint_manager,
-            metrics,
-        ).await.unwrap();
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+            .await
+            .unwrap();
 
         let test_signature = "test_signature_123";
-        
+
         // 初始状态：未处理
         assert!(!manager.is_signature_processed(test_signature));
-        
+
         // 标记为已处理
         manager.mark_signature_processed(test_signature);
         assert!(manager.is_signature_processed(test_signature));
-        
+
         // 获取统计信息
         let stats = manager.get_stats().await;
         assert_eq!(stats.cache_size, 1);
@@ -617,13 +619,9 @@ mod tests {
         let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(
-            &config,
-            parser_registry,
-            batch_writer,
-            checkpoint_manager,
-            metrics,
-        ).await.unwrap();
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+            .await
+            .unwrap();
 
         // 初始统计
         let initial_stats = manager.get_stats().await;
@@ -649,13 +647,9 @@ mod tests {
         let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(
-            &config,
-            parser_registry,
-            batch_writer,
-            checkpoint_manager,
-            metrics,
-        ).await.unwrap();
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+            .await
+            .unwrap();
 
         // 测试获取slot（注意：这会向真实的RPC端点发送请求）
         // 在测试环境中，我们期望这能成功获取到一个slot值
@@ -680,13 +674,9 @@ mod tests {
         let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(
-            &config,
-            parser_registry,
-            batch_writer,
-            checkpoint_manager,
-            metrics,
-        ).await.unwrap();
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+            .await
+            .unwrap();
 
         // 测试日志数据，包含程序调用信息
         let logs_with_program_invocation = vec![
@@ -697,13 +687,18 @@ mod tests {
         ];
 
         // 验证解析器注册表能够正确提取程序ID
-        let extracted_program_id = manager.parser_registry.extract_program_id_from_logs(&logs_with_program_invocation);
+        let extracted_program_id = manager
+            .parser_registry
+            .extract_program_id_from_logs(&logs_with_program_invocation, &manager.config.solana.program_ids);
         assert!(extracted_program_id.is_some(), "应该能从日志中提取到程序ID");
 
         // 测试智能路由是否正确调用parse_event_with_context
-        let result = manager.parser_registry.parse_event_with_context(&logs_with_program_invocation, "test_signature", 12345).await;
-        
-        // 验证调用成功（即使数据无效，智能路由流程应该正常工作）
+        let result = manager
+            .parser_registry
+            .parse_event_with_context(&logs_with_program_invocation, "test_signature", 12345, &manager.config.solana.program_ids)
+            .await;
+
+        // 验证调用成功（即使数据无效，智能路由流程应该正常工作
         match result {
             Ok(None) => {
                 // 这是预期结果：没有找到匹配的事件，但智能路由正常工作
