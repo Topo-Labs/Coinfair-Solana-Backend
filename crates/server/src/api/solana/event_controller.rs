@@ -1,5 +1,5 @@
 use crate::dtos::solana_dto::{
-    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimAdvancedQuery, NftClaimEventQuery, NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionEventQuery,
+    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimAdvancedQuery, NftClaimEventQuery, NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionAdvancedQuery, RewardDistributionEventQuery,
     RewardDistributionEventResponse, RewardStatsResponse, RewardTypeDistribution, TierDistribution, UserNftClaimSummaryResponse, UserRewardSummaryResponse,
 };
 use crate::services::solana::event::EventService;
@@ -29,6 +29,7 @@ impl EventController {
             .route("/nft-claims/summary/:address", get(get_user_nft_claim_summary))
             // ============ 奖励分发事件路由 ============
             .route("/rewards", get(get_reward_events))
+            .route("/rewards/advanced", get(get_reward_events_advanced))
             .route("/rewards/stats", get(get_reward_stats))
             .route("/rewards/by-recipient/:address", get(get_rewards_by_recipient))
             .route("/rewards/by-id/:id", get(get_reward_by_distribution_id))
@@ -410,6 +411,107 @@ pub async fn get_reward_events(
             let error_response = ErrorResponse {
                 code: "QUERY_REWARDS_FAILED".to_string(),
                 message: format!("查询奖励分发事件失败: {}", e),
+                details: None,
+                timestamp: chrono::Utc::now().timestamp(),
+            };
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+        }
+    }
+}
+
+/// 高级查询奖励分发事件列表
+///
+/// 支持分页和复杂过滤条件，包括推荐人地址、奖励金额范围等高级过滤
+///
+/// # 请求参数
+///
+/// - `page`: 页码（默认1）
+/// - `page_size`: 每页条数（默认20，最大100）
+/// - `is_locked`: 是否锁定
+/// - `reward_type`: 奖励类型
+/// - `reward_source`: 奖励来源
+/// - `is_referral_reward`: 是否为推荐奖励
+/// - `referrer`: 推荐人地址过滤
+/// - `recipient`: 接收者地址过滤
+/// - `reward_token_mint`: 奖励代币mint地址过滤
+/// - `reward_amount_min`: 最小奖励金额
+/// - `reward_amount_max`: 最大奖励金额
+/// - `distribution_id_min`: 最小分发ID
+/// - `distribution_id_max`: 最大分发ID
+/// - `reward_pool`: 奖励池地址过滤
+/// - `has_referrer`: 是否有推荐人
+/// - `is_high_value_reward`: 是否为高价值奖励
+/// - `lock_days_min`: 最小锁定天数
+/// - `lock_days_max`: 最大锁定天数
+/// - `multiplier_min`: 最小奖励倍率
+/// - `multiplier_max`: 最大奖励倍率
+/// - `related_address`: 相关地址过滤
+/// - `estimated_usd_min`: 最小预估USD价值
+/// - `estimated_usd_max`: 最大预估USD价值
+/// - `start_date`: 开始日期时间戳
+/// - `end_date`: 结束日期时间戳
+/// - `sort_by`: 排序字段
+/// - `sort_order`: 排序方向（asc/desc）
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/events/rewards/advanced",
+    params(RewardDistributionAdvancedQuery),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>),
+        (status = 400, description = "请求参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "服务器内部错误", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "事件查询"
+)]
+pub async fn get_reward_events_advanced(
+    Extension(services): Extension<Services>,
+    Query(params): Query<RewardDistributionAdvancedQuery>,
+) -> Result<Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    info!("🔍 高级查询奖励分发事件列表");
+
+    let event_service = EventService::new(services.database.clone());
+
+    match event_service
+        .get_reward_events_advanced(
+            Some(params.page),
+            Some(params.page_size),
+            params.is_locked,
+            params.reward_type,
+            params.reward_source,
+            params.is_referral_reward,
+            params.start_date,
+            params.end_date,
+            params.sort_by,
+            params.sort_order,
+            params.referrer,
+            params.recipient,
+            params.reward_token_mint,
+            params.reward_amount_min,
+            params.reward_amount_max,
+            params.distribution_id_min,
+            params.distribution_id_max,
+            params.reward_pool,
+            params.has_referrer,
+            params.is_high_value_reward,
+            params.lock_days_min,
+            params.lock_days_max,
+            params.multiplier_min,
+            params.multiplier_max,
+            params.related_address,
+            params.estimated_usd_min,
+            params.estimated_usd_max,
+        )
+        .await
+    {
+        Ok(result) => {
+            let response = convert_reward_paginated_response(result);
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => {
+            error!("❌ 高级查询奖励分发事件失败: {}", e);
+            let error_response = ErrorResponse {
+                code: "ADVANCED_QUERY_REWARDS_FAILED".to_string(),
+                message: format!("高级查询奖励分发事件失败: {}", e),
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };

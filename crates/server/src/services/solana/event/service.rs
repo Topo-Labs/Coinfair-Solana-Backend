@@ -438,6 +438,187 @@ impl EventService {
         })
     }
 
+    /// 高级分页查询所有奖励分发事件（支持复杂过滤条件）
+    pub async fn get_reward_events_advanced(
+        &self,
+        page: Option<u64>,
+        page_size: Option<u64>,
+        is_locked: Option<bool>,
+        reward_type: Option<u8>,
+        reward_source: Option<u8>,
+        is_referral_reward: Option<bool>,
+        start_date: Option<i64>,
+        end_date: Option<i64>,
+        sort_by: Option<String>,
+        sort_order: Option<String>,
+        referrer: Option<String>,
+        recipient: Option<String>,
+        reward_token_mint: Option<String>,
+        reward_amount_min: Option<u64>,
+        reward_amount_max: Option<u64>,
+        distribution_id_min: Option<u64>,
+        distribution_id_max: Option<u64>,
+        reward_pool: Option<String>,
+        has_referrer: Option<bool>,
+        is_high_value_reward: Option<bool>,
+        lock_days_min: Option<u64>,
+        lock_days_max: Option<u64>,
+        multiplier_min: Option<u16>,
+        multiplier_max: Option<u16>,
+        related_address: Option<String>,
+        estimated_usd_min: Option<f64>,
+        estimated_usd_max: Option<f64>,
+    ) -> Result<PaginatedResponse<RewardDistributionEvent>> {
+        info!("🔍 高级分页查询奖励分发事件");
+
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(20).min(100);
+        let skip = (page - 1) * page_size;
+        let sort_field = sort_by.unwrap_or_else(|| "distributed_at".to_string());
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+
+        // 构建高级过滤条件
+        let mut filter = Document::new();
+
+        // 基础过滤条件
+        if let Some(is_locked) = is_locked {
+            filter.insert("is_locked", is_locked);
+        }
+
+        if let Some(reward_type) = reward_type {
+            filter.insert("reward_type", reward_type as i32);
+        }
+
+        if let Some(reward_source) = reward_source {
+            filter.insert("reward_source", reward_source as i32);
+        }
+
+        if let Some(is_referral_reward) = is_referral_reward {
+            filter.insert("is_referral_reward", is_referral_reward);
+        }
+
+        // 日期范围过滤
+        if start_date.is_some() || end_date.is_some() {
+            let mut date_filter = Document::new();
+            if let Some(start) = start_date {
+                date_filter.insert("$gte", start);
+            }
+            if let Some(end) = end_date {
+                date_filter.insert("$lte", end);
+            }
+            filter.insert("distributed_at", date_filter);
+        }
+
+        // 高级过滤条件
+        if let Some(referrer) = referrer {
+            filter.insert("referrer", referrer);
+        }
+
+        if let Some(recipient) = recipient {
+            filter.insert("recipient", recipient);
+        }
+
+        if let Some(reward_token_mint) = reward_token_mint {
+            filter.insert("reward_token_mint", reward_token_mint);
+        }
+
+        if let Some(reward_pool) = reward_pool {
+            filter.insert("reward_pool", reward_pool);
+        }
+
+        if let Some(has_referrer) = has_referrer {
+            filter.insert("has_referrer", has_referrer);
+        }
+
+        if let Some(is_high_value_reward) = is_high_value_reward {
+            filter.insert("is_high_value_reward", is_high_value_reward);
+        }
+
+        if let Some(related_address) = related_address {
+            filter.insert("related_address", related_address);
+        }
+
+        // 奖励金额范围过滤
+        if reward_amount_min.is_some() || reward_amount_max.is_some() {
+            let mut amount_filter = Document::new();
+            if let Some(min) = reward_amount_min {
+                amount_filter.insert("$gte", min as i64);
+            }
+            if let Some(max) = reward_amount_max {
+                amount_filter.insert("$lte", max as i64);
+            }
+            filter.insert("reward_amount", amount_filter);
+        }
+
+        // 分发ID范围过滤
+        if distribution_id_min.is_some() || distribution_id_max.is_some() {
+            let mut id_filter = Document::new();
+            if let Some(min) = distribution_id_min {
+                id_filter.insert("$gte", min as i64);
+            }
+            if let Some(max) = distribution_id_max {
+                id_filter.insert("$lte", max as i64);
+            }
+            filter.insert("distribution_id", id_filter);
+        }
+
+        // 锁定天数范围过滤
+        if lock_days_min.is_some() || lock_days_max.is_some() {
+            let mut lock_filter = Document::new();
+            if let Some(min) = lock_days_min {
+                lock_filter.insert("$gte", min as i64);
+            }
+            if let Some(max) = lock_days_max {
+                lock_filter.insert("$lte", max as i64);
+            }
+            filter.insert("lock_days", lock_filter);
+        }
+
+        // 奖励倍率范围过滤
+        if multiplier_min.is_some() || multiplier_max.is_some() {
+            let mut multiplier_filter = Document::new();
+            if let Some(min) = multiplier_min {
+                multiplier_filter.insert("$gte", min as i32);
+            }
+            if let Some(max) = multiplier_max {
+                multiplier_filter.insert("$lte", max as i32);
+            }
+            filter.insert("multiplier", multiplier_filter);
+        }
+
+        // 预估USD价值范围过滤
+        if estimated_usd_min.is_some() || estimated_usd_max.is_some() {
+            let mut usd_filter = Document::new();
+            if let Some(min) = estimated_usd_min {
+                usd_filter.insert("$gte", min);
+            }
+            if let Some(max) = estimated_usd_max {
+                usd_filter.insert("$lte", max);
+            }
+            filter.insert("estimated_usd_value", usd_filter);
+        }
+
+        let sort = doc! { &sort_field: sort_direction };
+
+        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+
+        let total = self.database.reward_distribution_events.count_documents(filter.clone(), None).await? as u64;
+
+        let cursor = self.database.reward_distribution_events.find(filter, find_options).await?;
+
+        let items: Vec<RewardDistributionEvent> = cursor.try_collect().await?;
+
+        let total_pages = (total + page_size - 1) / page_size;
+
+        Ok(PaginatedResponse {
+            items,
+            total,
+            page,
+            page_size,
+            total_pages,
+        })
+    }
+
     /// 获取奖励分发统计信息
     pub async fn get_reward_stats(&self) -> Result<RewardStats> {
         info!("📊 获取奖励分发统计信息");

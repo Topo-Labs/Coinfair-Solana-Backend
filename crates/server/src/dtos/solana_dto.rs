@@ -2930,6 +2930,106 @@ pub struct RewardDistributionEventQuery {
     pub end_date: Option<i64>,
 }
 
+/// 奖励分发事件高级查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct RewardDistributionAdvancedQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+    
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+    
+    /// 排序字段
+    pub sort_by: Option<String>,
+    
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+    
+    /// 是否锁定
+    pub is_locked: Option<bool>,
+    
+    /// 奖励类型
+    pub reward_type: Option<u8>,
+    
+    /// 奖励来源
+    pub reward_source: Option<u8>,
+    
+    /// 是否为推荐奖励
+    pub is_referral_reward: Option<bool>,
+    
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+    
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+    
+    /// 推荐人地址过滤
+    pub referrer: Option<String>,
+    
+    /// 接收者地址过滤
+    pub recipient: Option<String>,
+    
+    /// 奖励代币mint地址过滤
+    pub reward_token_mint: Option<String>,
+    
+    /// 最小奖励金额过滤
+    #[validate(range(min = 0))]
+    pub reward_amount_min: Option<u64>,
+    
+    /// 最大奖励金额过滤
+    #[validate(range(min = 0))]
+    pub reward_amount_max: Option<u64>,
+    
+    /// 最小分发ID过滤
+    #[validate(range(min = 0))]
+    pub distribution_id_min: Option<u64>,
+    
+    /// 最大分发ID过滤
+    #[validate(range(min = 0))]
+    pub distribution_id_max: Option<u64>,
+    
+    /// 奖励池地址过滤
+    pub reward_pool: Option<String>,
+    
+    /// 是否有推荐人
+    pub has_referrer: Option<bool>,
+    
+    /// 是否为高价值奖励
+    pub is_high_value_reward: Option<bool>,
+    
+    /// 最小锁定天数
+    #[validate(range(min = 0))]
+    pub lock_days_min: Option<u64>,
+    
+    /// 最大锁定天数
+    #[validate(range(min = 0))]
+    pub lock_days_max: Option<u64>,
+    
+    /// 最小奖励倍率（基点）
+    #[validate(range(min = 0))]
+    pub multiplier_min: Option<u16>,
+    
+    /// 最大奖励倍率（基点）
+    #[validate(range(min = 0))]
+    pub multiplier_max: Option<u16>,
+    
+    /// 相关地址过滤
+    pub related_address: Option<String>,
+    
+    /// 最小预估USD价值
+    #[validate(range(min = 0.0))]
+    pub estimated_usd_min: Option<f64>,
+    
+    /// 最大预估USD价值
+    #[validate(range(min = 0.0))]
+    pub estimated_usd_max: Option<f64>,
+}
+
 /// 通用分页响应
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct EventPaginatedResponse<T> {

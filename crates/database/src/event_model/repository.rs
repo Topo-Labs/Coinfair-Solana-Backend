@@ -325,11 +325,88 @@ impl RewardDistributionEventRepository {
         // 创建锁定状态索引
         let locked_index = IndexModel::builder().keys(doc! { "is_locked": 1 }).build();
 
-        let indexes = vec![distribution_signature_index, recipient_index, distributed_at_index, reward_type_index, locked_index];
+        // ==================== 高级查询优化索引 ====================
+
+        // 创建推荐人索引（支持推荐人地址过滤）
+        let referrer_index = IndexModel::builder().keys(doc! { "referrer": 1 }).build();
+
+        // 创建复合索引：推荐人 + 时间戳（优化推荐人历史查询）
+        let referrer_distributed_at_index = IndexModel::builder()
+            .keys(doc! {
+                "referrer": 1,
+                "distributed_at": -1
+            })
+            .build();
+
+        // 创建奖励代币mint索引
+        let reward_token_mint_index = IndexModel::builder().keys(doc! { "reward_token_mint": 1 }).build();
+
+        // 创建奖励金额索引（支持金额范围过滤）
+        let reward_amount_index = IndexModel::builder().keys(doc! { "reward_amount": 1 }).build();
+
+        // 创建分发ID范围索引（已有distribution_signature_index包含了distribution_id）
+
+        // 创建奖励池地址索引
+        let reward_pool_index = IndexModel::builder().keys(doc! { "reward_pool": 1 }).build();
+
+        // 创建has_referrer索引（支持是否有推荐人过滤）
+        let has_referrer_index = IndexModel::builder().keys(doc! { "has_referrer": 1 }).build();
+
+        // 创建is_referral_reward索引
+        let is_referral_reward_index = IndexModel::builder().keys(doc! { "is_referral_reward": 1 }).build();
+
+        // 创建高价值奖励索引
+        let is_high_value_reward_index = IndexModel::builder().keys(doc! { "is_high_value_reward": 1 }).build();
+
+        // 创建锁定天数索引
+        let lock_days_index = IndexModel::builder().keys(doc! { "lock_days": 1 }).build();
+
+        // 创建奖励倍率索引
+        let multiplier_index = IndexModel::builder().keys(doc! { "multiplier": 1 }).build();
+
+        // 创建相关地址索引
+        let related_address_index = IndexModel::builder().keys(doc! { "related_address": 1 }).build();
+
+        // 创建预估USD价值索引
+        let estimated_usd_value_index = IndexModel::builder().keys(doc! { "estimated_usd_value": 1 }).build();
+
+        // 创建奖励来源索引
+        let reward_source_index = IndexModel::builder().keys(doc! { "reward_source": 1 }).build();
+
+        // 创建复合索引：接收者 + 时间戳（优化用户历史查询）
+        let recipient_distributed_at_index = IndexModel::builder()
+            .keys(doc! {
+                "recipient": 1,
+                "distributed_at": -1
+            })
+            .build();
+
+        let indexes = vec![
+            distribution_signature_index, 
+            recipient_index, 
+            distributed_at_index, 
+            reward_type_index, 
+            locked_index,
+            // 高级查询索引
+            referrer_index,
+            referrer_distributed_at_index,
+            reward_token_mint_index,
+            reward_amount_index,
+            reward_pool_index,
+            has_referrer_index,
+            is_referral_reward_index,
+            is_high_value_reward_index,
+            lock_days_index,
+            multiplier_index,
+            related_address_index,
+            estimated_usd_value_index,
+            reward_source_index,
+            recipient_distributed_at_index,
+        ];
 
         self.collection.create_indexes(indexes, None).await?;
 
-        info!("✅ RewardDistributionEvent数据库索引初始化完成");
+        info!("✅ RewardDistributionEvent数据库索引初始化完成（包含高级查询优化索引）");
         Ok(())
     }
 
