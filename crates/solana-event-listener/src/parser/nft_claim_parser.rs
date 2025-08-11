@@ -9,31 +9,17 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
-/// NFT领取事件的原始数据结构（与智能合约保持一致）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub struct NftClaimEvent {
-    /// NFT的mint地址
-    pub nft_mint: String,
-    /// 领取者钱包地址
-    pub claimer: String,
-    /// 推荐人地址（可选）
-    pub referrer: Option<String>,
-    /// NFT等级 (1-5级)
-    pub tier: u8,
-    /// 领取的代币数量（以最小单位计）
-    pub claim_amount: u64,
-    /// 代币mint地址
-    pub token_mint: String,
-    /// 奖励倍率 (基点，如10000表示1.0倍)
-    pub reward_multiplier: u16,
-    /// 领取类型 (0: 定期领取, 1: 一次性领取, 2: 紧急领取)
-    pub claim_type: u8,
-    /// 本次领取后的累计领取量
-    pub total_claimed: u64,
-    /// NFT所属的池子地址（可选）
-    pub pool_address: Option<String>,
-    /// 领取时间戳
-    pub claimed_at: i64,
+pub struct ClaimNFTEvent {
+    pub claimer: String,          // 领取者地址 -
+    pub upper: String,            // 上级地址 -
+    pub nft_mint: String,         // NFT mint 地址 -
+    pub claim_fee: u64,           // 支付的领取费用
+    pub upper_remain_mint: u64,   // 上级剩余可被领取的NFT数量
+    pub protocol_wallet: String,  // 协议费用接收钱包
+    pub nft_pool_account: String, // NFT池子账户 -
+    pub user_ata: String,         // 用户接收NFT的ATA账户
+    pub timestamp: i64,           // 领取时间戳 -
 }
 
 /// NFT领取事件解析器
@@ -48,7 +34,7 @@ impl NftClaimParser {
     /// 创建新的NFT领取事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // NFT领取事件的discriminator
-        let discriminator = [234, 123, 45, 67, 89, 101, 213, 42];
+        let discriminator = [0, 164, 135, 76, 199, 190, 102, 78];
 
         Ok(Self {
             discriminator,
@@ -57,7 +43,7 @@ impl NftClaimParser {
     }
 
     /// 从程序数据解析NFT领取事件
-    fn parse_program_data(&self, data_str: &str) -> Result<NftClaimEvent> {
+    fn parse_program_data(&self, data_str: &str) -> Result<ClaimNFTEvent> {
         // Base64解码
         let data = general_purpose::STANDARD
             .decode(data_str)
@@ -75,9 +61,12 @@ impl NftClaimParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = NftClaimEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        let event = ClaimNFTEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
 
-        debug!("✅ 成功解析NFT领取事件: NFT={}, 领取者={}, 数量={}", event.nft_mint, event.claimer, event.claim_amount);
+        debug!(
+            "✅ 成功解析NFT领取事件: NFT={}, 领取者={}, 领取费用={}",
+            event.nft_mint, event.claimer, event.claim_fee
+        );
         Ok(event)
     }
 
@@ -115,50 +104,87 @@ impl NftClaimParser {
         }
     }
 
-    /// 计算奖励相关指标
-    fn calculate_reward_metrics(&self, event: &NftClaimEvent) -> (f64, u64, f64) {
-        // 计算等级奖励倍率
-        let tier_bonus = self.calculate_tier_bonus(event.tier);
+    /// 根据领取费用估算NFT等级
+    fn estimate_tier_from_fee(&self, claim_fee: u64) -> u8 {
+        // 根据实际业务逻辑调整费用阈值
+        match claim_fee {
+            0..=50000 => 1,       // Bronze: 0-0.05 SOL
+            50001..=100000 => 2,  // Silver: 0.05-0.1 SOL
+            100001..=200000 => 3, // Gold: 0.1-0.2 SOL
+            200001..=500000 => 4, // Platinum: 0.2-0.5 SOL
+            _ => 5,               // Diamond: >0.5 SOL
+        }
+    }
 
-        // 计算实际奖励金额（包含倍率）
-        let actual_reward_multiplier = event.reward_multiplier as f64 / 10000.0;
-        let bonus_amount = (event.claim_amount as f64 * tier_bonus * actual_reward_multiplier) as u64;
+    /// 根据NFT等级计算奖励倍率
+    fn calculate_multiplier_from_tier(&self, tier: u8) -> u16 {
+        // 返回基点（10000 = 1.0倍）
+        match tier {
+            1 => 10000, // 1.0倍
+            2 => 12000, // 1.2倍
+            3 => 15000, // 1.5倍
+            4 => 20000, // 2.0倍
+            5 => 30000, // 3.0倍
+            _ => 10000, // 默认1.0倍
+        }
+    }
 
-        // 计算累计奖励进度
-        let progress_percentage = if event.total_claimed > 0 {
-            (event.claim_amount as f64 / event.total_claimed as f64) * 100.0
+    /// 计算领取进度百分比
+    fn calculate_claim_progress(&self, event: &ClaimNFTEvent) -> f64 {
+        // 基于上级剩余mint数量估算进度
+        // 假设初始总量为1000（根据实际业务调整）
+        let assumed_initial_total = 1000.0;
+        let remaining = event.upper_remain_mint as f64;
+        let claimed = assumed_initial_total - remaining;
+
+        if assumed_initial_total > 0.0 {
+            (claimed / assumed_initial_total * 100.0).min(100.0).max(0.0)
         } else {
-            100.0
-        };
+            0.0
+        }
+    }
 
-        (tier_bonus, bonus_amount, progress_percentage)
+    /// 估算USD价值
+    fn estimate_usd_value(&self, claim_amount: u64) -> f64 {
+        // 假设SOL价格为$100（实际应该从价格API获取）
+        let sol_price_usd = 100.0;
+        let sol_amount = claim_amount as f64 / 1_000_000_000.0; // lamports转SOL
+        sol_amount * sol_price_usd
     }
 
     /// 将原始事件转换为ParsedEvent
-    fn convert_to_parsed_event(&self, event: NftClaimEvent, signature: String, slot: u64) -> ParsedEvent {
-        let (tier_bonus_rate, bonus_amount, claim_progress) = self.calculate_reward_metrics(&event);
+    fn convert_to_parsed_event(&self, event: ClaimNFTEvent, signature: String, slot: u64) -> ParsedEvent {
+        // 根据claim_fee推算NFT等级 (简化逻辑，可根据实际业务调整)
+        let tier = self.estimate_tier_from_fee(event.claim_fee);
+        let tier_bonus_rate = self.calculate_tier_bonus(tier);
+
+        // 基于实际费用计算相关指标
+        let claim_amount = event.claim_fee; // 使用实际支付的费用作为领取数量
+        let reward_multiplier = self.calculate_multiplier_from_tier(tier);
+        let bonus_amount = (claim_amount as f64 * tier_bonus_rate) as u64;
+        let claim_progress = self.calculate_claim_progress(&event);
 
         ParsedEvent::NftClaim(NftClaimEventData {
-            nft_mint: event.nft_mint,
+            nft_mint: event.nft_mint.clone(),
             claimer: event.claimer,
-            referrer: event.referrer.clone(),
-            tier: event.tier,
-            tier_name: self.get_tier_name(event.tier),
+            referrer: Some(event.upper.clone()),
+            tier,
+            tier_name: self.get_tier_name(tier),
             tier_bonus_rate,
-            claim_amount: event.claim_amount,
-            token_mint: event.token_mint,
-            reward_multiplier: event.reward_multiplier,
-            reward_multiplier_percentage: event.reward_multiplier as f64 / 10000.0,
+            claim_amount,
+            token_mint: "So11111111111111111111111111111111111111112".to_string(), // SOL mint地址
+            reward_multiplier,
+            reward_multiplier_percentage: reward_multiplier as f64 / 10000.0,
             bonus_amount,
-            claim_type: event.claim_type,
-            claim_type_name: self.get_claim_type_name(event.claim_type),
-            total_claimed: event.total_claimed,
+            claim_type: 1, // 固定为一次性领取
+            claim_type_name: self.get_claim_type_name(1),
+            total_claimed: claim_amount, // 当前就是总的领取量
             claim_progress_percentage: claim_progress,
-            pool_address: event.pool_address,
-            has_referrer: event.referrer.is_some(),
-            is_emergency_claim: event.claim_type == 2,
-            estimated_usd_value: 0.0, // 需要通过价格预言机获取
-            claimed_at: event.claimed_at,
+            pool_address: Some(event.nft_pool_account),
+            has_referrer: true,        // 新结构总是有upper字段
+            is_emergency_claim: false, // 根据业务逻辑，一般NFT领取不是紧急领取
+            estimated_usd_value: self.estimate_usd_value(claim_amount),
+            claimed_at: event.timestamp,
             signature,
             slot,
             processed_at: chrono::Utc::now().to_rfc3339(),
@@ -211,7 +237,10 @@ impl NftClaimParser {
 
         // 验证累计领取量合理性
         if event.total_claimed < event.claim_amount {
-            warn!("❌ 累计领取量不能小于本次领取量: total={}, current={}", event.total_claimed, event.claim_amount);
+            warn!(
+                "❌ 累计领取量不能小于本次领取量: total={}, current={}",
+                event.total_claimed, event.claim_amount
+            );
             return Ok(false);
         }
 
@@ -232,7 +261,10 @@ impl NftClaimParser {
 
         // 验证奖励金额的合理性
         if event.bonus_amount > event.claim_amount * 10 {
-            warn!("❌ 奖励金额过大，可能有计算错误: bonus={}, base={}", event.bonus_amount, event.claim_amount);
+            warn!(
+                "❌ 奖励金额过大，可能有计算错误: bonus={}, base={}",
+                event.bonus_amount, event.claim_amount
+            );
             return Ok(false);
         }
 
@@ -265,12 +297,12 @@ impl EventParser for NftClaimParser {
                     match self.parse_program_data(data_part) {
                         Ok(event) => {
                             info!(
-                                "🎁 第{}行发现NFT领取事件: {} 领取 {} (等级: {} {})",
+                                "🎁 第{}行发现NFT领取事件: {} 推荐人 {} (nft mint: {} 领取费用: {})",
                                 index + 1,
                                 event.claimer,
-                                event.claim_amount,
-                                event.tier,
-                                self.get_tier_name(event.tier)
+                                event.upper,
+                                event.nft_mint,
+                                event.claim_fee
                             );
                             let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot);
                             return Ok(Some(parsed_event));
@@ -337,19 +369,17 @@ mod tests {
         }
     }
 
-    fn create_test_nft_claim_event() -> NftClaimEvent {
-        NftClaimEvent {
+    fn create_test_nft_claim_event() -> ClaimNFTEvent {
+        ClaimNFTEvent {
             nft_mint: Pubkey::new_unique().to_string(),
             claimer: Pubkey::new_unique().to_string(),
-            referrer: Some(Pubkey::new_unique().to_string()),
-            tier: 3,
-            claim_amount: 1000000, // 1 token with 6 decimals
-            token_mint: Pubkey::new_unique().to_string(),
-            reward_multiplier: 15000, // 1.5倍
-            claim_type: 0,            // 定期领取
-            total_claimed: 5000000,   // 总共领取了5个代币
-            pool_address: Some(Pubkey::new_unique().to_string()),
-            claimed_at: chrono::Utc::now().timestamp(),
+            upper: Pubkey::new_unique().to_string(),
+            claim_fee: 100,
+            upper_remain_mint: 100,
+            protocol_wallet: Pubkey::new_unique().to_string(),
+            nft_pool_account: Pubkey::new_unique().to_string(),
+            user_ata: Pubkey::new_unique().to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -359,7 +389,7 @@ mod tests {
         let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "nft_claim");
-        assert_eq!(parser.get_discriminator(), [234, 123, 45, 67, 89, 101, 213, 42]);
+        assert_eq!(parser.get_discriminator(), [0, 164, 135, 76, 199, 190, 102, 78]);
     }
 
     #[test]
@@ -400,38 +430,76 @@ mod tests {
             ParsedEvent::NftClaim(data) => {
                 assert_eq!(data.nft_mint, test_event.nft_mint);
                 assert_eq!(data.claimer, test_event.claimer);
-                assert_eq!(data.tier, test_event.tier);
-                assert_eq!(data.tier_name, "Gold");
-                assert_eq!(data.tier_bonus_rate, 1.5);
-                assert_eq!(data.claim_amount, test_event.claim_amount);
-                assert_eq!(data.reward_multiplier_percentage, 1.5);
+                assert_eq!(data.referrer, Some(test_event.upper));
+                assert_eq!(data.tier, 1); // claim_fee=100对应Bronze等级
+                assert_eq!(data.tier_name, "Bronze");
+                assert_eq!(data.tier_bonus_rate, 1.0);
+                assert_eq!(data.reward_multiplier, 10000); // 1.0倍 = 10000基点
+                assert_eq!(data.reward_multiplier_percentage, 1.0);
+                assert_eq!(data.claim_amount, test_event.claim_fee);
+                assert_eq!(data.total_claimed, test_event.claim_fee);
                 assert_eq!(data.has_referrer, true);
                 assert_eq!(data.is_emergency_claim, false);
+                assert_eq!(data.pool_address, Some(test_event.nft_pool_account));
                 assert_eq!(data.signature, "test_signature");
                 assert_eq!(data.slot, 12345);
+                assert_eq!(data.claimed_at, test_event.timestamp);
             }
             _ => panic!("期望NftClaim事件"),
         }
     }
 
     #[test]
-    fn test_calculate_reward_metrics() {
+    fn test_estimate_tier_from_fee() {
         let config = create_test_config();
         let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
-        let event = NftClaimEvent {
-            tier: 3, // Gold tier (1.5x bonus)
-            claim_amount: 1000000,
-            reward_multiplier: 12000, // 1.2x
-            total_claimed: 5000000,
-            ..create_test_nft_claim_event()
-        };
+        // 测试不同费用对应的等级
+        assert_eq!(parser.estimate_tier_from_fee(1000), 1); // Bronze
+        assert_eq!(parser.estimate_tier_from_fee(75000), 2); // Silver
+        assert_eq!(parser.estimate_tier_from_fee(150000), 3); // Gold
+        assert_eq!(parser.estimate_tier_from_fee(300000), 4); // Platinum
+        assert_eq!(parser.estimate_tier_from_fee(600000), 5); // Diamond
+    }
 
-        let (tier_bonus, bonus_amount, progress) = parser.calculate_reward_metrics(&event);
+    #[test]
+    fn test_calculate_multiplier_from_tier() {
+        let config = create_test_config();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
-        assert_eq!(tier_bonus, 1.5);
-        assert_eq!(bonus_amount, 1800000); // 1000000 * 1.5 * 1.2
-        assert_eq!(progress, 20.0); // 1000000 / 5000000 * 100
+        // 测试等级对应的倍率
+        assert_eq!(parser.calculate_multiplier_from_tier(1), 10000); // 1.0倍
+        assert_eq!(parser.calculate_multiplier_from_tier(2), 12000); // 1.2倍
+        assert_eq!(parser.calculate_multiplier_from_tier(3), 15000); // 1.5倍
+        assert_eq!(parser.calculate_multiplier_from_tier(4), 20000); // 2.0倍
+        assert_eq!(parser.calculate_multiplier_from_tier(5), 30000); // 3.0倍
+    }
+
+    #[test]
+    fn test_calculate_claim_progress() {
+        let config = create_test_config();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
+
+        let mut event = create_test_nft_claim_event();
+        event.upper_remain_mint = 200; // 剩余200个
+
+        let progress = parser.calculate_claim_progress(&event);
+        assert_eq!(progress, 80.0); // (1000-200)/1000 * 100 = 80%
+    }
+
+    #[test]
+    fn test_estimate_usd_value() {
+        let config = create_test_config();
+        let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
+
+        // 1 SOL = 1,000,000,000 lamports
+        let one_sol_lamports = 1_000_000_000;
+        let usd_value = parser.estimate_usd_value(one_sol_lamports);
+        assert_eq!(usd_value, 100.0); // 假设SOL价格$100
+
+        let half_sol_lamports = 500_000_000;
+        let half_sol_usd = parser.estimate_usd_value(half_sol_lamports);
+        assert_eq!(half_sol_usd, 50.0);
     }
 
     #[tokio::test]
@@ -493,11 +561,9 @@ mod tests {
         assert!(!serialized.is_empty());
 
         // 测试反序列化
-        let deserialized = NftClaimEvent::try_from_slice(&serialized).unwrap();
+        let deserialized = ClaimNFTEvent::try_from_slice(&serialized).unwrap();
         assert_eq!(deserialized.nft_mint, event.nft_mint);
         assert_eq!(deserialized.claimer, event.claimer);
-        assert_eq!(deserialized.claim_amount, event.claim_amount);
-        assert_eq!(deserialized.tier, event.tier);
     }
 
     #[tokio::test]

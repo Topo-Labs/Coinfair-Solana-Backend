@@ -8,37 +8,20 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
-/// 奖励发放事件的原始数据结构（与智能合约保持一致）
+/// 推荐奖励分发事件的原始数据结构（与智能合约保持一致）
+/// 新的ReferralRewardEvent结构体
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub struct RewardDistributionEvent {
-    /// 奖励分发ID（唯一标识符）
-    pub distribution_id: u64,
-    /// 奖励池地址
-    pub reward_pool: String,
-    /// 接收者钱包地址
-    pub recipient: String,
-    /// 推荐人地址（可选）
-    pub referrer: Option<String>,
-    /// 奖励代币mint地址
-    pub reward_token_mint: String,
-    /// 奖励数量（以最小单位计）
-    pub reward_amount: u64,
-    /// 奖励类型 (0: 交易奖励, 1: 推荐奖励, 2: 流动性奖励, 3: 治理奖励, 4: 空投奖励)
-    pub reward_type: u8,
-    /// 奖励来源 (0: DEX交易, 1: 流动性挖矿, 2: 推荐计划, 3: 治理投票, 4: 特殊活动)
-    pub reward_source: u8,
-    /// 相关的交易或池子地址（可选）
-    pub related_address: Option<String>,
-    /// 奖励倍率（基点，如10000表示1.0倍）
-    pub multiplier: u16,
-    /// 基础奖励金额（倍率计算前）
-    pub base_reward_amount: u64,
-    /// 是否已锁定（锁定期内不能提取）
-    pub is_locked: bool,
-    /// 锁定期结束时间戳（如果is_locked为true）
-    pub unlock_timestamp: Option<i64>,
-    /// 发放时间戳
-    pub distributed_at: i64,
+pub struct ReferralRewardEvent {
+    /// 付款人地址
+    pub from: String,
+    /// 接收者地址（上级或下级）
+    pub to: String,
+    /// 奖励的代币mint地址
+    pub mint: String,
+    /// 奖励数量
+    pub amount: u64,
+    /// 时间戳
+    pub timestamp: i64,
 }
 
 /// 奖励发放事件解析器
@@ -53,7 +36,8 @@ impl RewardDistributionParser {
     /// 创建新的奖励发放事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // 奖励发放事件的discriminator
-        let discriminator = [178, 95, 213, 88, 42, 167, 129, 77];
+        // let discriminator = [178, 95, 213, 88, 42, 167, 129, 77];
+        let discriminator = [88, 33, 159, 153, 151, 93, 111, 189];
 
         Ok(Self {
             discriminator,
@@ -61,8 +45,8 @@ impl RewardDistributionParser {
         })
     }
 
-    /// 从程序数据解析奖励发放事件
-    fn parse_program_data(&self, data_str: &str) -> Result<RewardDistributionEvent> {
+    /// 从程序数据解析推荐奖励事件
+    fn parse_program_data(&self, data_str: &str) -> Result<ReferralRewardEvent> {
         use base64::{engine::general_purpose, Engine as _};
 
         // Base64解码
@@ -82,13 +66,44 @@ impl RewardDistributionParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = RewardDistributionEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        let event =
+            ReferralRewardEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
 
-        debug!(
-            "✅ 成功解析奖励发放事件: ID={}, 接收者={}, 数量={}",
-            event.distribution_id, event.recipient, event.reward_amount
-        );
+        debug!("✅ 成功解析推荐奖励事件: 从={}, 到={}, 数量={}", event.from, event.to, event.amount);
         Ok(event)
+    }
+
+    /// 生成唯一的分发ID（基于事件内容）
+    fn generate_distribution_id(&self, event: &ReferralRewardEvent) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        event.from.hash(&mut hasher);
+        event.to.hash(&mut hasher);
+        event.mint.hash(&mut hasher);
+        event.amount.hash(&mut hasher);
+        event.timestamp.hash(&mut hasher);
+
+        hasher.finish()
+    }
+
+    /// 推断奖励来源（基于金额等特征）
+    fn infer_reward_source(&self, _event: &ReferralRewardEvent) -> u8 {
+        // 由于是ReferralRewardEvent，来源固定为推荐计划
+        2 // 推荐计划
+    }
+
+    /// 推断奖励类型
+    fn infer_reward_type(&self, _event: &ReferralRewardEvent) -> u8 {
+        // 由于是ReferralRewardEvent，类型固定为推荐奖励
+        1 // 推荐奖励
+    }
+
+    /// 计算默认倍率
+    fn calculate_default_multiplier(&self, _event: &ReferralRewardEvent) -> u16 {
+        // 默认1.0倍奖励
+        10000
     }
 
     /// 获取奖励类型名称
@@ -116,60 +131,54 @@ impl RewardDistributionParser {
     }
 
     /// 计算奖励相关指标
-    fn calculate_reward_metrics(&self, event: &RewardDistributionEvent) -> (f64, u64, u64, bool) {
-        // 奖励倍率
-        let multiplier_rate = event.multiplier as f64 / 10000.0;
+    fn calculate_reward_metrics(&self, event: &ReferralRewardEvent) -> (f64, u64, u64, bool) {
+        // 默认倍率 1.0x
+        let multiplier_rate = 1.0;
 
-        // 额外奖励金额（倍率产生的额外部分）
-        let bonus_amount = if event.reward_amount > event.base_reward_amount {
-            event.reward_amount - event.base_reward_amount
-        } else {
-            0
-        };
+        // 由于新结构没有base_reward_amount，假设全部为基础奖励，无额外奖励
+        let bonus_amount = 0u64;
 
-        // 计算锁定期（天数）
-        let lock_days = if event.is_locked && event.unlock_timestamp.is_some() {
-            let unlock_time = event.unlock_timestamp.unwrap();
-            let lock_duration = unlock_time - event.distributed_at;
-            (lock_duration / 86400) as u64 // 转换为天数
-        } else {
-            0
-        };
+        // 新结构没有锁定信息，默认为0天
+        let lock_days = 0u64;
 
-        // 是否为高价值奖励（大于等价1000 USDC）
-        let is_high_value = event.reward_amount >= 1_000_000_000; // 假设6位小数的代币
+        // 是否为高价值奖励（大于等价100 USDC）
+        let is_high_value = event.amount >= 100_000_000; // 假设6位小数的代币
 
         (multiplier_rate, bonus_amount, lock_days, is_high_value)
     }
 
     /// 将原始事件转换为ParsedEvent
-    fn convert_to_parsed_event(&self, event: RewardDistributionEvent, signature: String, slot: u64) -> ParsedEvent {
+    fn convert_to_parsed_event(&self, event: ReferralRewardEvent, signature: String, slot: u64) -> ParsedEvent {
         let (multiplier_percentage, bonus_amount, lock_days, is_high_value) = self.calculate_reward_metrics(&event);
+        let distribution_id = self.generate_distribution_id(&event);
+        let reward_type = self.infer_reward_type(&event);
+        let reward_source = self.infer_reward_source(&event);
+        let multiplier = self.calculate_default_multiplier(&event);
 
         ParsedEvent::RewardDistribution(RewardDistributionEventData {
-            distribution_id: event.distribution_id,
-            reward_pool: event.reward_pool,
-            recipient: event.recipient,
-            referrer: event.referrer.clone(),
-            reward_token_mint: event.reward_token_mint,
-            reward_amount: event.reward_amount,
-            base_reward_amount: event.base_reward_amount,
+            distribution_id,
+            reward_pool: event.from.clone(),    // 使用from作为奖励池地址
+            recipient: event.to.clone(),        // to对应recipient
+            referrer: Some(event.from.clone()), // from对应referrer
+            reward_token_mint: event.mint,      // mint对应reward_token_mint
+            reward_amount: event.amount,        // amount对应reward_amount
+            base_reward_amount: event.amount,   // 新结构没有base_reward，使用amount
             bonus_amount,
-            reward_type: event.reward_type,
-            reward_type_name: self.get_reward_type_name(event.reward_type),
-            reward_source: event.reward_source,
-            reward_source_name: self.get_reward_source_name(event.reward_source),
-            related_address: event.related_address,
-            multiplier: event.multiplier,
+            reward_type,
+            reward_type_name: self.get_reward_type_name(reward_type),
+            reward_source,
+            reward_source_name: self.get_reward_source_name(reward_source),
+            related_address: None, // 新结构没有此字段
+            multiplier,
             multiplier_percentage,
-            is_locked: event.is_locked,
-            unlock_timestamp: event.unlock_timestamp,
+            is_locked: false, // 新结构没有锁定信息，默认不锁定
+            unlock_timestamp: None,
             lock_days,
-            has_referrer: event.referrer.is_some(),
-            is_referral_reward: event.reward_type == 1,
+            has_referrer: true,       // 推荐奖励总是有推荐人
+            is_referral_reward: true, // 固定为推荐奖励
             is_high_value_reward: is_high_value,
-            estimated_usd_value: 0.0, // 需要通过价格预言机获取
-            distributed_at: event.distributed_at,
+            estimated_usd_value: 0.0,        // 需要通过价格预言机获取
+            distributed_at: event.timestamp, // timestamp对应distributed_at
             signature,
             slot,
             processed_at: chrono::Utc::now().to_rfc3339(),
@@ -216,7 +225,10 @@ impl RewardDistributionParser {
 
         // 验证奖励数量与基础数量的关系
         if event.reward_amount < event.base_reward_amount {
-            warn!("❌ 奖励数量不能小于基础奖励数量: reward={}, base={}", event.reward_amount, event.base_reward_amount);
+            warn!(
+                "❌ 奖励数量不能小于基础奖励数量: reward={}, base={}",
+                event.reward_amount, event.base_reward_amount
+            );
             return Ok(false);
         }
 
@@ -247,7 +259,10 @@ impl RewardDistributionParser {
         // 验证解锁时间合理性
         if let Some(unlock_time) = event.unlock_timestamp {
             if unlock_time <= event.distributed_at {
-                warn!("❌ 解锁时间不能早于或等于发放时间: unlock={}, distribute={}", unlock_time, event.distributed_at);
+                warn!(
+                    "❌ 解锁时间不能早于或等于发放时间: unlock={}, distribute={}",
+                    unlock_time, event.distributed_at
+                );
                 return Ok(false);
             }
 
@@ -316,13 +331,12 @@ impl EventParser for RewardDistributionParser {
                     match self.parse_program_data(data_part) {
                         Ok(event) => {
                             info!(
-                                "💰 第{}行发现奖励发放事件: ID={} 向 {} 发放 {} {} ({})",
+                                "💰 第{}行发现推荐奖励事件: 从 {} 向 {} 发放 {} {}",
                                 index + 1,
-                                event.distribution_id,
-                                event.recipient,
-                                event.reward_amount,
-                                self.get_reward_type_name(event.reward_type),
-                                if event.is_locked { "已锁定" } else { "可提取" }
+                                event.from,
+                                event.to,
+                                event.amount,
+                                "推荐奖励"
                             );
                             let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot);
                             return Ok(Some(parsed_event));
@@ -388,23 +402,13 @@ mod tests {
         }
     }
 
-    fn create_test_reward_distribution_event() -> RewardDistributionEvent {
-        let now = chrono::Utc::now().timestamp();
-        RewardDistributionEvent {
-            distribution_id: 12345,
-            reward_pool: Pubkey::new_unique().to_string(),
-            recipient: Pubkey::new_unique().to_string(),
-            referrer: Some(Pubkey::new_unique().to_string()),
-            reward_token_mint: Pubkey::new_unique().to_string(),
-            reward_amount: 1500000, // 1.5 tokens with 6 decimals
-            reward_type: 2,         // 流动性奖励
-            reward_source: 1,       // 流动性挖矿
-            related_address: Some(Pubkey::new_unique().to_string()),
-            multiplier: 15000,           // 1.5倍
-            base_reward_amount: 1000000, // 1 token基础奖励
-            is_locked: true,
-            unlock_timestamp: Some(now + 7 * 24 * 3600), // 7天后解锁
-            distributed_at: now,
+    fn create_test_referral_reward_event() -> ReferralRewardEvent {
+        ReferralRewardEvent {
+            from: "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string(), // 付款人
+            to: "fVNubV4Qdo94SBh1BML7zZqiXrvA4Q3exsT5cfYWHY8i".to_string(),   // 接收者
+            mint: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs".to_string(), // 代币mint
+            amount: 500000,                                                   // 0.5 tokens with 6 decimals
+            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 
@@ -414,7 +418,7 @@ mod tests {
         let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "reward_distribution");
-        assert_eq!(parser.get_discriminator(), [178, 95, 213, 88, 42, 167, 129, 77]);
+        assert_eq!(parser.get_discriminator(), [88, 33, 159, 153, 151, 93, 111, 189]);
     }
 
     #[test]
@@ -447,24 +451,29 @@ mod tests {
     fn test_convert_to_parsed_event() {
         let config = create_test_config();
         let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
-        let test_event = create_test_reward_distribution_event();
+        let test_event = create_test_referral_reward_event();
 
         let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345);
 
         match parsed {
             ParsedEvent::RewardDistribution(data) => {
-                assert_eq!(data.distribution_id, test_event.distribution_id);
-                assert_eq!(data.recipient, test_event.recipient);
-                assert_eq!(data.reward_amount, test_event.reward_amount);
-                assert_eq!(data.base_reward_amount, test_event.base_reward_amount);
-                assert_eq!(data.bonus_amount, 500000); // 1500000 - 1000000
-                assert_eq!(data.reward_type_name, "流动性奖励");
-                assert_eq!(data.reward_source_name, "流动性挖矿");
-                assert_eq!(data.multiplier_percentage, 1.5);
-                assert_eq!(data.is_locked, true);
-                assert_eq!(data.lock_days, 7);
+                assert_eq!(data.recipient, test_event.to);
+                assert_eq!(data.referrer, Some(test_event.from));
+                assert_eq!(data.reward_token_mint, test_event.mint);
+                assert_eq!(data.reward_amount, test_event.amount);
+                assert_eq!(data.base_reward_amount, test_event.amount);
+                assert_eq!(data.bonus_amount, 0); // 新结构默认无bonus
+                assert_eq!(data.reward_type, 1); // 推荐奖励
+                assert_eq!(data.reward_type_name, "推荐奖励");
+                assert_eq!(data.reward_source, 2); // 推荐计划
+                assert_eq!(data.reward_source_name, "推荐计划");
+                assert_eq!(data.multiplier, 10000); // 1.0x
+                assert_eq!(data.multiplier_percentage, 1.0);
+                assert_eq!(data.is_locked, false); // 新结构默认不锁定
+                assert_eq!(data.lock_days, 0);
                 assert_eq!(data.has_referrer, true);
-                assert_eq!(data.is_referral_reward, false);
+                assert_eq!(data.is_referral_reward, true);
+                assert_eq!(data.distributed_at, test_event.timestamp);
                 assert_eq!(data.signature, "test_signature");
                 assert_eq!(data.slot, 12345);
             }
@@ -473,26 +482,38 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_reward_metrics() {
+    fn test_generate_distribution_id() {
         let config = create_test_config();
         let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
+        let test_event = create_test_referral_reward_event();
 
-        let event = RewardDistributionEvent {
-            reward_amount: 1500000,
-            base_reward_amount: 1000000,
-            multiplier: 15000, // 1.5x
-            is_locked: true,
-            unlock_timestamp: Some(chrono::Utc::now().timestamp() + 7 * 24 * 3600),
-            distributed_at: chrono::Utc::now().timestamp(),
-            ..create_test_reward_distribution_event()
-        };
+        let id1 = parser.generate_distribution_id(&test_event);
+        let id2 = parser.generate_distribution_id(&test_event);
 
-        let (multiplier_rate, bonus_amount, lock_days, is_high_value) = parser.calculate_reward_metrics(&event);
+        // 相同事件应该生成相同ID
+        assert_eq!(id1, id2);
 
-        assert_eq!(multiplier_rate, 1.5);
-        assert_eq!(bonus_amount, 500000); // 1500000 - 1000000
-        assert_eq!(lock_days, 7);
-        assert_eq!(is_high_value, false); // 小于1000 USDC等值
+        // 不同事件应该生成不同ID
+        let mut different_event = test_event.clone();
+        different_event.amount = 999999;
+        let id3 = parser.generate_distribution_id(&different_event);
+        assert_ne!(id1, id3);
+    }
+
+    #[test]
+    fn test_infer_reward_properties() {
+        let config = create_test_config();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
+        let test_event = create_test_referral_reward_event();
+
+        // 测试奖励类型推断
+        assert_eq!(parser.infer_reward_type(&test_event), 1); // 推荐奖励
+
+        // 测试奖励来源推断
+        assert_eq!(parser.infer_reward_source(&test_event), 2); // 推荐计划
+
+        // 测试默认倍率
+        assert_eq!(parser.calculate_default_multiplier(&test_event), 10000); // 1.0x
     }
 
     #[tokio::test]
@@ -559,18 +580,17 @@ mod tests {
 
     #[test]
     fn test_borsh_serialization() {
-        let event = create_test_reward_distribution_event();
+        let event = create_test_referral_reward_event();
 
         // 测试序列化
         let serialized = borsh::to_vec(&event).unwrap();
         assert!(!serialized.is_empty());
 
         // 测试反序列化
-        let deserialized = RewardDistributionEvent::try_from_slice(&serialized).unwrap();
-        assert_eq!(deserialized.distribution_id, event.distribution_id);
-        assert_eq!(deserialized.recipient, event.recipient);
-        assert_eq!(deserialized.reward_amount, event.reward_amount);
-        assert_eq!(deserialized.reward_type, event.reward_type);
+        let deserialized = ReferralRewardEvent::try_from_slice(&serialized).unwrap();
+        assert_eq!(deserialized.from, event.from);
+        assert_eq!(deserialized.to, event.to);
+        assert_eq!(deserialized.amount, event.amount);
     }
 
     #[tokio::test]
