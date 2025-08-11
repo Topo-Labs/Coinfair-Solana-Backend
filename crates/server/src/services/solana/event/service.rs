@@ -164,6 +164,135 @@ impl EventService {
         })
     }
 
+    /// 高级分页查询所有NFT领取事件（支持复杂过滤条件）
+    pub async fn get_nft_claim_events_advanced(
+        &self,
+        page: Option<u64>,
+        page_size: Option<u64>,
+        tier: Option<u8>,
+        has_referrer: Option<bool>,
+        start_date: Option<i64>,
+        end_date: Option<i64>,
+        sort_by: Option<String>,
+        sort_order: Option<String>,
+        referrer: Option<String>,
+        claimer: Option<String>,
+        nft_mint: Option<String>,
+        claim_amount_min: Option<u64>,
+        claim_amount_max: Option<u64>,
+        claim_type: Option<u8>,
+        is_emergency_claim: Option<bool>,
+        pool_address: Option<String>,
+        token_mint: Option<String>,
+        reward_multiplier_min: Option<u16>,
+        reward_multiplier_max: Option<u16>,
+    ) -> Result<PaginatedResponse<NftClaimEvent>> {
+        info!("🔍 高级分页查询NFT领取事件");
+
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(20).min(100);
+        let skip = (page - 1) * page_size;
+        let sort_field = sort_by.unwrap_or_else(|| "claimed_at".to_string());
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+
+        // 构建高级过滤条件
+        let mut filter = Document::new();
+
+        // 基础过滤条件
+        if let Some(tier) = tier {
+            filter.insert("tier", tier as i32);
+        }
+
+        if let Some(has_referrer) = has_referrer {
+            filter.insert("has_referrer", has_referrer);
+        }
+
+        // 日期范围过滤
+        if start_date.is_some() || end_date.is_some() {
+            let mut date_filter = Document::new();
+            if let Some(start) = start_date {
+                date_filter.insert("$gte", start);
+            }
+            if let Some(end) = end_date {
+                date_filter.insert("$lte", end);
+            }
+            filter.insert("claimed_at", date_filter);
+        }
+
+        // 高级过滤条件
+        if let Some(referrer) = referrer {
+            filter.insert("referrer", referrer);
+        }
+
+        if let Some(claimer) = claimer {
+            filter.insert("claimer", claimer);
+        }
+
+        if let Some(nft_mint) = nft_mint {
+            filter.insert("nft_mint", nft_mint);
+        }
+
+        if let Some(pool_address) = pool_address {
+            filter.insert("pool_address", pool_address);
+        }
+
+        if let Some(token_mint) = token_mint {
+            filter.insert("token_mint", token_mint);
+        }
+
+        if let Some(claim_type) = claim_type {
+            filter.insert("claim_type", claim_type as i32);
+        }
+
+        if let Some(is_emergency_claim) = is_emergency_claim {
+            filter.insert("is_emergency_claim", is_emergency_claim);
+        }
+
+        // 奖励金额范围过滤
+        if claim_amount_min.is_some() || claim_amount_max.is_some() {
+            let mut amount_filter = Document::new();
+            if let Some(min) = claim_amount_min {
+                amount_filter.insert("$gte", min as i64);
+            }
+            if let Some(max) = claim_amount_max {
+                amount_filter.insert("$lte", max as i64);
+            }
+            filter.insert("claim_amount", amount_filter);
+        }
+
+        // 奖励倍率范围过滤
+        if reward_multiplier_min.is_some() || reward_multiplier_max.is_some() {
+            let mut multiplier_filter = Document::new();
+            if let Some(min) = reward_multiplier_min {
+                multiplier_filter.insert("$gte", min as i32);
+            }
+            if let Some(max) = reward_multiplier_max {
+                multiplier_filter.insert("$lte", max as i32);
+            }
+            filter.insert("reward_multiplier", multiplier_filter);
+        }
+
+        let sort = doc! { &sort_field: sort_direction };
+
+        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+
+        let total = self.database.nft_claim_events.count_documents(filter.clone(), None).await? as u64;
+
+        let cursor = self.database.nft_claim_events.find(filter, find_options).await?;
+
+        let items: Vec<NftClaimEvent> = cursor.try_collect().await?;
+
+        let total_pages = (total + page_size - 1) / page_size;
+
+        Ok(PaginatedResponse {
+            items,
+            total,
+            page,
+            page_size,
+            total_pages,
+        })
+    }
+
     /// 获取NFT领取统计信息
     pub async fn get_nft_claim_stats(&self) -> Result<NftClaimStats> {
         info!("📊 获取NFT领取统计信息");

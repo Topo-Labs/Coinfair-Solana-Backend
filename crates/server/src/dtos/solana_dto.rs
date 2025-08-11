@@ -2820,6 +2820,77 @@ pub struct NftClaimEventQuery {
     pub end_date: Option<i64>,
 }
 
+/// NFT领取事件高级查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct NftClaimAdvancedQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+    
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+    
+    /// 排序字段
+    pub sort_by: Option<String>,
+    
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+    
+    /// NFT等级过滤（1-5）
+    #[validate(range(min = 1, max = 5))]
+    pub tier: Option<u8>,
+    
+    /// 是否有推荐人
+    pub has_referrer: Option<bool>,
+    
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+    
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+    
+    /// 推荐人地址过滤
+    pub referrer: Option<String>,
+    
+    /// 领取者地址过滤
+    pub claimer: Option<String>,
+    
+    /// NFT mint地址过滤
+    pub nft_mint: Option<String>,
+    
+    /// 最小奖励金额过滤
+    #[validate(range(min = 0))]
+    pub claim_amount_min: Option<u64>,
+    
+    /// 最大奖励金额过滤
+    #[validate(range(min = 0))]
+    pub claim_amount_max: Option<u64>,
+    
+    /// 领取类型过滤
+    pub claim_type: Option<u8>,
+    
+    /// 是否为紧急领取
+    pub is_emergency_claim: Option<bool>,
+    
+    /// 池子地址过滤
+    pub pool_address: Option<String>,
+    
+    /// 代币mint地址过滤
+    pub token_mint: Option<String>,
+    
+    /// 最小奖励倍率过滤
+    #[validate(range(min = 0))]
+    pub reward_multiplier_min: Option<u16>,
+    
+    /// 最大奖励倍率过滤
+    #[validate(range(min = 0))]
+    pub reward_multiplier_max: Option<u16>,
+}
+
 /// 奖励分发事件查询参数
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
 pub struct RewardDistributionEventQuery {

@@ -1,5 +1,5 @@
 use crate::dtos::solana_dto::{
-    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimEventQuery, NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionEventQuery,
+    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimAdvancedQuery, NftClaimEventQuery, NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionEventQuery,
     RewardDistributionEventResponse, RewardStatsResponse, RewardTypeDistribution, TierDistribution, UserNftClaimSummaryResponse, UserRewardSummaryResponse,
 };
 use crate::services::solana::event::EventService;
@@ -22,6 +22,7 @@ impl EventController {
         Router::new()
             // ============ NFT领取事件路由 ============
             .route("/nft-claims", get(get_nft_claim_events))
+            .route("/nft-claims/advanced", get(get_nft_claim_events_advanced))
             .route("/nft-claims/stats", get(get_nft_claim_stats))
             .route("/nft-claims/by-claimer/:address", get(get_nft_claims_by_claimer))
             .route("/nft-claims/by-nft/:mint", get(get_nft_claims_by_nft))
@@ -92,6 +93,91 @@ pub async fn get_nft_claim_events(
             let error_response = ErrorResponse {
                 code: "QUERY_NFT_CLAIMS_FAILED".to_string(),
                 message: format!("查询NFT领取事件失败: {}", e),
+                details: None,
+                timestamp: chrono::Utc::now().timestamp(),
+            };
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+        }
+    }
+}
+
+/// 高级查询NFT领取事件列表
+///
+/// 支持分页和复杂过滤条件，包括推荐人地址、奖励金额范围等高级过滤
+///
+/// # 请求参数
+///
+/// - `page`: 页码（默认1）
+/// - `page_size`: 每页条数（默认20，最大100）
+/// - `tier`: NFT等级过滤（1-5）
+/// - `has_referrer`: 是否有推荐人
+/// - `referrer`: 推荐人地址过滤
+/// - `claimer`: 领取者地址过滤
+/// - `nft_mint`: NFT mint地址过滤
+/// - `claim_amount_min`: 最小奖励金额
+/// - `claim_amount_max`: 最大奖励金额
+/// - `claim_type`: 领取类型过滤
+/// - `is_emergency_claim`: 是否紧急领取
+/// - `pool_address`: 池子地址过滤
+/// - `token_mint`: 代币mint地址过滤
+/// - `reward_multiplier_min`: 最小奖励倍率
+/// - `reward_multiplier_max`: 最大奖励倍率
+/// - `start_date`: 开始日期时间戳
+/// - `end_date`: 结束日期时间戳
+/// - `sort_by`: 排序字段
+/// - `sort_order`: 排序方向（asc/desc）
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/events/nft-claims/advanced",
+    params(NftClaimAdvancedQuery),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>),
+        (status = 400, description = "请求参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "服务器内部错误", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "事件查询"
+)]
+pub async fn get_nft_claim_events_advanced(
+    Extension(services): Extension<Services>,
+    Query(params): Query<NftClaimAdvancedQuery>,
+) -> Result<Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    info!("🔍 高级查询NFT领取事件列表");
+
+    let event_service = EventService::new(services.database.clone());
+
+    match event_service
+        .get_nft_claim_events_advanced(
+            Some(params.page),
+            Some(params.page_size),
+            params.tier,
+            params.has_referrer,
+            params.start_date,
+            params.end_date,
+            params.sort_by,
+            params.sort_order,
+            params.referrer,
+            params.claimer,
+            params.nft_mint,
+            params.claim_amount_min,
+            params.claim_amount_max,
+            params.claim_type,
+            params.is_emergency_claim,
+            params.pool_address,
+            params.token_mint,
+            params.reward_multiplier_min,
+            params.reward_multiplier_max,
+        )
+        .await
+    {
+        Ok(result) => {
+            let response = convert_nft_claim_paginated_response(result);
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => {
+            error!("❌ 高级查询NFT领取事件失败: {}", e);
+            let error_response = ErrorResponse {
+                code: "ADVANCED_QUERY_NFT_CLAIMS_FAILED".to_string(),
+                message: format!("高级查询NFT领取事件失败: {}", e),
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };

@@ -168,11 +168,57 @@ impl NftClaimEventRepository {
         // 创建等级索引
         let tier_index = IndexModel::builder().keys(doc! { "tier": 1 }).build();
 
-        let indexes = vec![nft_signature_index, claimer_index, claimed_at_index, tier_index];
+        // 创建推荐人索引（支持推荐人地址过滤）
+        let referrer_index = IndexModel::builder().keys(doc! { "referrer": 1 }).build();
+
+        // 创建has_referrer索引（支持是否有推荐人过滤）
+        let has_referrer_index = IndexModel::builder().keys(doc! { "has_referrer": 1 }).build();
+
+        // 创建复合索引：推荐人 + 时间戳（优化推荐人历史查询）
+        let referrer_claimed_at_index = IndexModel::builder()
+            .keys(doc! {
+                "referrer": 1,
+                "claimed_at": -1
+            })
+            .build();
+
+        // 创建奖励金额索引（支持金额范围过滤）
+        let claim_amount_index = IndexModel::builder().keys(doc! { "claim_amount": 1 }).build();
+
+        // 创建领取类型索引
+        let claim_type_index = IndexModel::builder().keys(doc! { "claim_type": 1 }).build();
+
+        // 创建紧急领取索引
+        let emergency_claim_index = IndexModel::builder().keys(doc! { "is_emergency_claim": 1 }).build();
+
+        // 创建池子地址索引
+        let pool_address_index = IndexModel::builder().keys(doc! { "pool_address": 1 }).build();
+
+        // 创建代币mint索引
+        let token_mint_index = IndexModel::builder().keys(doc! { "token_mint": 1 }).build();
+
+        // 创建奖励倍率索引
+        let reward_multiplier_index = IndexModel::builder().keys(doc! { "reward_multiplier": 1 }).build();
+
+        let indexes = vec![
+            nft_signature_index, 
+            claimer_index, 
+            claimed_at_index, 
+            tier_index,
+            referrer_index,
+            has_referrer_index,
+            referrer_claimed_at_index,
+            claim_amount_index,
+            claim_type_index,
+            emergency_claim_index,
+            pool_address_index,
+            token_mint_index,
+            reward_multiplier_index,
+        ];
 
         self.collection.create_indexes(indexes, None).await?;
 
-        info!("✅ NftClaimEvent数据库索引初始化完成");
+        info!("✅ NftClaimEvent数据库索引初始化完成（包含高级查询优化索引）");
         Ok(())
     }
 
