@@ -43,7 +43,7 @@ futures = "0.3"
 
 # 添加缺失的依赖项用于SwapV2实现
 anchor-lang = "0.31.0"
-raydium-amm-v3 = { git = "https://github.com/raydium-io/raydium-clmm", features = [
+raydium-amm-v3 = { path = "../solana/clmm", features = [
       "no-entrypoint",
       "client",
 ] }

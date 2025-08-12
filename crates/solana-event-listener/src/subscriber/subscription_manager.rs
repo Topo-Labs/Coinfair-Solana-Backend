@@ -287,6 +287,7 @@ impl SubscriptionManager {
         let signature = &log_response.signature;
 
         info!("🔍 开始处理事件: {}", signature);
+        info!("🔍 事件日志: {:?}", log_response.logs);
 
         // 获取当前slot，如果失败则使用0作为备用值
         let slot = match self.get_current_slot_internal().await {

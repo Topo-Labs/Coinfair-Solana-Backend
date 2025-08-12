@@ -1,5 +1,6 @@
 use crate::dtos::solana_dto::{
-    ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse, TransactionStatus,
+    ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse,
+    TransactionStatus,
 };
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
@@ -193,6 +194,7 @@ impl NftService {
 
         // 获取签名密钥 - 注意：这里应该是下级用户的密钥
         let lower_keypair = ConfigManager::get_lower_keypair()?;
+        info!("🔑 下级用户私钥: {:?}", lower_keypair.to_base58_string());
 
         // 构建指令
         let instructions = self.build_claim_nft_instructions_internal(user_wallet, upper_wallet).await?;

@@ -108,7 +108,7 @@ async fn test_simple_e2e_flow() {
     
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     info!("✅ 解析器注册表: 已注册{}个解析器", parser_registry.parser_count());
-    assert_eq!(parser_registry.parser_count(), 4, "应该有4个解析器");
+    assert_eq!(parser_registry.parser_count(), 6, "应该有6个解析器");
 
     // === 步骤4：初始化指标收集 ===
     info!("📈 步骤4：初始化指标收集");
@@ -336,6 +336,11 @@ fn create_test_reward_event() -> crate::parser::event_parser::RewardDistribution
         recipient: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),
         reward_token_mint: "So11111111111111111111111111111111111111112".parse().unwrap(),
+        // 新增的代币元数据字段
+        reward_token_decimals: Some(9),
+        reward_token_name: Some("Wrapped SOL".to_string()),
+        reward_token_symbol: Some("WSOL".to_string()),
+        reward_token_logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png".to_string()),
         reward_amount: 2000000,
         base_reward_amount: 1500000,
         bonus_amount: 500000,

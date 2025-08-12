@@ -757,6 +757,11 @@ fn convert_reward_event_to_response(event: RewardDistributionEvent) -> RewardDis
         recipient: event.recipient.to_string(),
         referrer: event.referrer.map(|r| r.to_string()),
         reward_token_mint: event.reward_token_mint.to_string(),
+        // 新增的代币元数据字段
+        reward_token_decimals: event.reward_token_decimals,
+        reward_token_name: event.reward_token_name,
+        reward_token_symbol: event.reward_token_symbol,
+        reward_token_logo_uri: event.reward_token_logo_uri,
         reward_amount: event.reward_amount,
         reward_type_name: event.reward_type_name,
         is_locked: event.is_locked,

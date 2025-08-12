@@ -172,6 +172,18 @@ pub struct RewardDistributionEvent {
     /// 奖励代币mint地址
     pub reward_token_mint: String,
 
+    /// 奖励代币小数位数
+    pub reward_token_decimals: Option<u8>,
+
+    /// 奖励代币名称
+    pub reward_token_name: Option<String>,
+
+    /// 奖励代币符号
+    pub reward_token_symbol: Option<String>,
+
+    /// 奖励代币Logo URI
+    pub reward_token_logo_uri: Option<String>,
+
     /// 奖励数量
     pub reward_amount: u64,
 

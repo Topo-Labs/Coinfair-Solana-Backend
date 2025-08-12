@@ -1480,7 +1480,7 @@ dependencies = [
  "configparser",
  "hex",
  "mpl-token-metadata",
- "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-amm-v3",
  "referral",
  "regex",
  "serde_json",
@@ -5700,19 +5700,7 @@ dependencies = [
  "proptest",
  "quickcheck",
  "rand 0.8.5",
- "solana-security-txt",
- "uint 0.9.5 (git+https://github.com/raydium-io/parity-common)",
-]
-
-[[package]]
-name = "raydium-amm-v3"
-version = "0.1.0"
-source = "git+https://github.com/raydium-io/raydium-clmm#e358bedf7b8b2afdf771785982c0156c6a4a91bf"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "arrayref",
- "bytemuck",
+ "referral",
  "solana-security-txt",
  "uint 0.9.5 (git+https://github.com/raydium-io/parity-common)",
 ]
@@ -6724,7 +6712,7 @@ dependencies = [
  "num-traits",
  "pbkdf2 0.12.2",
  "rand 0.8.5",
- "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-amm-v3",
  "raydium-cp-swap 0.2.0",
  "redis",
  "reqwest",
@@ -6967,7 +6955,7 @@ dependencies = [
  "bs58",
  "client",
  "hex",
- "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-amm-v3",
  "reqwest",
  "serde",
  "serde_json",
@@ -7541,7 +7529,7 @@ dependencies = [
  "dotenvy",
  "futures",
  "mongodb",
- "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-amm-v3",
  "serde",
  "serde_json",
  "solana-client",
@@ -10799,7 +10787,7 @@ dependencies = [
  "jsonwebtoken 9.3.1",
  "mongodb",
  "mpl-token-metadata",
- "raydium-amm-v3 0.1.0 (git+https://github.com/raydium-io/raydium-clmm)",
+ "raydium-amm-v3",
  "raydium-cp-swap 0.2.0",
  "rayon",
  "reqwest",

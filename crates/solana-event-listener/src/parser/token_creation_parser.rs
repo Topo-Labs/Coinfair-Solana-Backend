@@ -16,7 +16,7 @@ use tracing::{debug, error, info, warn};
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct TokenCreationEvent {
     /// 代币的 Mint 地址
-    pub mint_address: String,
+    pub mint_address: Pubkey,
     /// 代币名称
     pub name: String,
     /// 代币符号
@@ -28,7 +28,7 @@ pub struct TokenCreationEvent {
     /// 供应量（以最小单位计）
     pub supply: u64,
     /// 创建者的钱包地址
-    pub creator: String,
+    pub creator: Pubkey,
     /// 是否支持白名单（true 表示有白名单机制）
     pub has_whitelist: bool,
     /// 白名单资格检查的时间戳（Unix 时间戳，0 表示无时间限制）
@@ -129,13 +129,13 @@ impl TokenCreationParser {
     /// 将原始事件转换为ParsedEvent
     fn convert_to_parsed_event(&self, event: TokenCreationEvent, signature: String, slot: u64) -> ParsedEvent {
         ParsedEvent::TokenCreation(TokenCreationEventData {
-            mint_address: event.mint_address,
+            mint_address: event.mint_address.to_string(),
             name: event.name,
             symbol: event.symbol,
             uri: event.uri,
             decimals: event.decimals,
             supply: event.supply,
-            creator: event.creator,
+            creator: event.creator.to_string(),
             has_whitelist: event.has_whitelist,
             whitelist_deadline: event.whitelist_deadline,
             created_at: event.created_at,
@@ -329,13 +329,13 @@ mod tests {
 
     fn create_test_token_creation_event() -> TokenCreationEvent {
         TokenCreationEvent {
-            mint_address: Pubkey::new_unique().to_string(),
+            mint_address: Pubkey::new_unique(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
             uri: "https://example.com/metadata.json".to_string(),
             decimals: 9,
             supply: 1000000,
-            creator: Pubkey::new_unique().to_string(),
+            creator: Pubkey::new_unique(),
             has_whitelist: false,
             whitelist_deadline: 0,
             created_at: 1234567890,
@@ -362,7 +362,7 @@ mod tests {
 
         match parsed {
             ParsedEvent::TokenCreation(data) => {
-                assert_eq!(data.mint_address, test_event.mint_address);
+                assert_eq!(data.mint_address, test_event.mint_address.to_string());
                 assert_eq!(data.name, test_event.name);
                 assert_eq!(data.symbol, test_event.symbol);
                 assert_eq!(data.signature, "test_signature");

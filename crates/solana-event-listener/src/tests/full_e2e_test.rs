@@ -289,9 +289,9 @@ async fn test_complete_e2e_flow() {
 
     // 检查3：组件初始化
     total_checks += 1;
-    if parser_registry.parser_count() == 4 {
+    if parser_registry.parser_count() == 6 {
         success_count += 1;
-        info!("✅ 检查3: 解析器组件正常 (4个解析器)");
+        info!("✅ 检查3: 解析器组件正常 (6个解析器)");
     } else {
         info!("❌ 检查3: 解析器组件异常");
     }
@@ -618,6 +618,11 @@ fn create_realistic_reward_event() -> crate::parser::event_parser::RewardDistrib
         recipient: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),
         reward_token_mint: "So11111111111111111111111111111111111111112".parse().unwrap(),
+        // 新增的代币元数据字段
+        reward_token_decimals: Some(9),
+        reward_token_name: Some("Wrapped SOL".to_string()),
+        reward_token_symbol: Some("WSOL".to_string()),
+        reward_token_logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png".to_string()),
         reward_amount: 2500000,      // 2.5 SOL
         base_reward_amount: 2000000, // 2 SOL base
         bonus_amount: 500000,        // 0.5 SOL bonus

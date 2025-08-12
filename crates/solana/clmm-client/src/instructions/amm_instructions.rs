@@ -198,7 +198,11 @@ pub fn open_position_instr(
     let program = client.program(config.raydium_v3_program)?;
     let nft_ata_token_account = spl_associated_token_account::get_associated_token_address(&program.payer(), &nft_mint_key);
     let (metadata_account_key, _bump) = Pubkey::find_program_address(
-        &[Metadata::PREFIX, mpl_token_metadata::ID.to_bytes().as_ref(), nft_mint_key.to_bytes().as_ref()],
+        &[
+            Metadata::PREFIX,
+            mpl_token_metadata::ID.to_bytes().as_ref(),
+            nft_mint_key.to_bytes().as_ref(),
+        ],
         &mpl_token_metadata::ID,
     );
     let (protocol_position_key, __bump) = Pubkey::find_program_address(
@@ -640,6 +644,78 @@ pub fn swap_v2_instr(
         })
         .accounts(remaining_accounts)
         .args(raydium_instruction::SwapV2 {
+            amount,
+            other_amount_threshold,
+            sqrt_price_limit_x64: sqrt_price_limit_x64.unwrap_or(0u128),
+            is_base_input,
+        })
+        .instructions()?;
+    Ok(instructions)
+}
+
+pub fn swap_v3_instr(
+    config: &ClientConfig,
+    amm_config: Pubkey,
+    pool_account_key: Pubkey,
+    input_vault: Pubkey,
+    output_vault: Pubkey,
+    observation_state: Pubkey,
+    user_input_token: Pubkey,
+    user_out_put_token: Pubkey,
+    input_vault_mint: Pubkey,
+    output_vault_mint: Pubkey,
+    remaining_accounts: Vec<AccountMeta>,
+    amount: u64,
+    other_amount_threshold: u64,
+    sqrt_price_limit_x64: Option<u128>,
+    is_base_input: bool,
+    // Add referral
+    input_mint: Pubkey,
+    payer_referral: Pubkey,
+    upper: Option<Pubkey>,
+    upper_token_account: Option<Pubkey>,
+    upper_referral: Option<Pubkey>,
+    upper_upper: Option<Pubkey>,
+    upper_upper_token_account: Option<Pubkey>,
+    project_token_account: Pubkey,
+    referral: Pubkey,
+) -> Result<Vec<Instruction>> {
+    let payer = read_keypair_file(&config.payer_path)?;
+    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
+    // Client.
+    let client = Client::new(url, Rc::new(payer));
+    let program = client.program(config.raydium_v3_program)?;
+
+    let instructions = program
+        .request()
+        .accounts(raydium_accounts::SwapSingleV3 {
+            payer: program.payer(),
+            input_mint,
+            payer_referral,
+            upper,
+            upper_token_account,
+            upper_referral,
+            upper_upper,
+            upper_upper_token_account,
+            project_token_account,
+            amm_config,
+            pool_state: pool_account_key,
+            input_token_account: user_input_token,
+            output_token_account: user_out_put_token,
+            input_vault,
+            output_vault,
+            observation_state,
+            token_program: spl_token::id(),
+            token_program_2022: spl_token_2022::id(),
+            memo_program: spl_memo::id(),
+            system_program: system_program::id(),
+            associated_token_program: spl_associated_token_account::id(),
+            referral,
+            input_vault_mint,
+            output_vault_mint,
+        })
+        .accounts(remaining_accounts)
+        .args(raydium_instruction::SwapV3 {
             amount,
             other_amount_threshold,
             sqrt_price_limit_x64: sqrt_price_limit_x64.unwrap_or(0u128),

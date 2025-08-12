@@ -11,15 +11,15 @@ use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ClaimNFTEvent {
-    pub claimer: String,          // 领取者地址 -
-    pub upper: String,            // 上级地址 -
-    pub nft_mint: String,         // NFT mint 地址 -
+    pub claimer: Pubkey,          // 领取者地址
+    pub upper: Pubkey,            // 上级地址
+    pub nft_mint: Pubkey,         // NFT mint 地址
     pub claim_fee: u64,           // 支付的领取费用
     pub upper_remain_mint: u64,   // 上级剩余可被领取的NFT数量
-    pub protocol_wallet: String,  // 协议费用接收钱包
-    pub nft_pool_account: String, // NFT池子账户 -
-    pub user_ata: String,         // 用户接收NFT的ATA账户
-    pub timestamp: i64,           // 领取时间戳 -
+    pub protocol_wallet: Pubkey,  // 协议费用接收钱包
+    pub nft_pool_account: Pubkey, // NFT池子账户
+    pub user_ata: Pubkey,         // 用户接收NFT的ATA账户
+    pub timestamp: i64,           // 领取时间戳
 }
 
 /// NFT领取事件解析器
@@ -34,6 +34,7 @@ impl NftClaimParser {
     /// 创建新的NFT领取事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // NFT领取事件的discriminator
+        // let discriminator = [92, 29, 201, 154, 132, 203, 150, 105];
         let discriminator = [0, 164, 135, 76, 199, 190, 102, 78];
 
         Ok(Self {
@@ -165,9 +166,9 @@ impl NftClaimParser {
         let claim_progress = self.calculate_claim_progress(&event);
 
         ParsedEvent::NftClaim(NftClaimEventData {
-            nft_mint: event.nft_mint.clone(),
-            claimer: event.claimer,
-            referrer: Some(event.upper.clone()),
+            nft_mint: event.nft_mint.to_string(),
+            claimer: event.claimer.to_string(),
+            referrer: Some(event.upper.to_string()),
             tier,
             tier_name: self.get_tier_name(tier),
             tier_bonus_rate,
@@ -180,7 +181,7 @@ impl NftClaimParser {
             claim_type_name: self.get_claim_type_name(1),
             total_claimed: claim_amount, // 当前就是总的领取量
             claim_progress_percentage: claim_progress,
-            pool_address: Some(event.nft_pool_account),
+            pool_address: Some(event.nft_pool_account.to_string()),
             has_referrer: true,        // 新结构总是有upper字段
             is_emergency_claim: false, // 根据业务逻辑，一般NFT领取不是紧急领取
             estimated_usd_value: self.estimate_usd_value(claim_amount),
@@ -312,7 +313,7 @@ impl EventParser for NftClaimParser {
                             continue;
                         }
                         Err(e) => {
-                            debug!("⚠️ 第{}行NFT领取事件解析失败: {}", index + 1, e);
+                            warn!("⚠️ 第{}行NFT领取事件解析失败: {}", index + 1, e);
                             continue;
                         }
                     }
@@ -371,14 +372,14 @@ mod tests {
 
     fn create_test_nft_claim_event() -> ClaimNFTEvent {
         ClaimNFTEvent {
-            nft_mint: Pubkey::new_unique().to_string(),
-            claimer: Pubkey::new_unique().to_string(),
-            upper: Pubkey::new_unique().to_string(),
+            nft_mint: Pubkey::new_unique(),
+            claimer: Pubkey::new_unique(),
+            upper: Pubkey::new_unique(),
             claim_fee: 100,
             upper_remain_mint: 100,
-            protocol_wallet: Pubkey::new_unique().to_string(),
-            nft_pool_account: Pubkey::new_unique().to_string(),
-            user_ata: Pubkey::new_unique().to_string(),
+            protocol_wallet: Pubkey::new_unique(),
+            nft_pool_account: Pubkey::new_unique(),
+            user_ata: Pubkey::new_unique(),
             timestamp: chrono::Utc::now().timestamp(),
         }
     }
@@ -428,9 +429,9 @@ mod tests {
 
         match parsed {
             ParsedEvent::NftClaim(data) => {
-                assert_eq!(data.nft_mint, test_event.nft_mint);
-                assert_eq!(data.claimer, test_event.claimer);
-                assert_eq!(data.referrer, Some(test_event.upper));
+                assert_eq!(data.nft_mint, test_event.nft_mint.to_string());
+                assert_eq!(data.claimer, test_event.claimer.to_string());
+                assert_eq!(data.referrer, Some(test_event.upper.to_string()));
                 assert_eq!(data.tier, 1); // claim_fee=100对应Bronze等级
                 assert_eq!(data.tier_name, "Bronze");
                 assert_eq!(data.tier_bonus_rate, 1.0);
@@ -440,7 +441,7 @@ mod tests {
                 assert_eq!(data.total_claimed, test_event.claim_fee);
                 assert_eq!(data.has_referrer, true);
                 assert_eq!(data.is_emergency_claim, false);
-                assert_eq!(data.pool_address, Some(test_event.nft_pool_account));
+                assert_eq!(data.pool_address, Some(test_event.nft_pool_account.to_string()));
                 assert_eq!(data.signature, "test_signature");
                 assert_eq!(data.slot, 12345);
                 assert_eq!(data.claimed_at, test_event.timestamp);

@@ -28,6 +28,7 @@ uint = { git = "https://github.com/raydium-io/parity-common", package = "uint" }
 bytemuck = { version = "1.19.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
 solana-security-txt = "1.1.1"
+referral = { path = "../referral", features = ["no-entrypoint"] }
 
 [dev-dependencies]
 quickcheck = "0.9"

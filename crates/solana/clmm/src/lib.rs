@@ -529,6 +529,32 @@ pub mod amm_v3 {
         )
     }
 
+    /// Swap token with referral support (V3)
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context of accounts
+    /// * `amount` - Token amount to be swapped
+    /// * `other_amount_threshold` - Panic if output amount is below minimum amount. For slippage.
+    /// * `sqrt_price_limit_x64` - Sqrt price limit as Q64.64
+    /// * `is_base_input` - Direction of the swap
+    ///
+    pub fn swap_v3<'a, 'b, 'c: 'info, 'info>(
+        ctx: Context<'a, 'b, 'c, 'info, SwapSingleV3<'info>>,
+        amount: u64,
+        other_amount_threshold: u64,
+        sqrt_price_limit_x64: u128,
+        is_base_input: bool,
+    ) -> Result<()> {
+        instructions::swap_v3(
+            ctx,
+            amount,
+            other_amount_threshold,
+            sqrt_price_limit_x64,
+            is_base_input,
+        )
+    }
+
     /// Swap token for as much as possible of another token across the path provided, base input
     ///
     /// # Arguments

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use tracing::info;
 
 /// 解析器复合键，用于精确路由
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,6 +225,14 @@ pub struct RewardDistributionEventData {
     pub referrer: Option<String>,
     /// 奖励代币mint地址
     pub reward_token_mint: String,
+    /// 奖励代币小数位数
+    pub reward_token_decimals: Option<u8>,
+    /// 奖励代币名称
+    pub reward_token_name: Option<String>,
+    /// 奖励代币符号
+    pub reward_token_symbol: Option<String>,
+    /// 奖励代币Logo URI
+    pub reward_token_logo_uri: Option<String>,
     /// 奖励数量
     pub reward_amount: u64,
     /// 基础奖励金额
@@ -425,30 +434,64 @@ impl EventParserRegistry {
 
         tracing::info!("🧠 智能路由启动 - 程序ID提示: {:?}", program_id_hint);
 
-        // 首先尝试找到程序数据日志
-        for log in logs {
+        let mut first_valid_event = None;
+        let mut program_data_count = 0;
+        let mut processed_count = 0;
+        let mut skipped_count = 0;
+
+        // 处理所有程序数据日志
+        for (index, log) in logs.iter().enumerate() {
             if log.starts_with("Program data: ") {
+                program_data_count += 1;
                 if let Some(data_part) = log.strip_prefix("Program data: ") {
-                    tracing::info!("📊 发现程序数据，开始智能解析");
-                    if let Some(event) = self.try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint).await? {
-                        tracing::info!("✅ 智能路由成功解析事件: {}", event.event_type());
-                        return Ok(Some(event));
+                    tracing::info!("📊 处理第{}个Program data (行{})", program_data_count, index + 1);
+                    
+                    match self.try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint).await? {
+                        Some(event) => {
+                            tracing::info!("✅ 第{}个事件解析成功: {}", program_data_count, event.event_type());
+                            processed_count += 1;
+                            if first_valid_event.is_none() {
+                                first_valid_event = Some(event);
+                            } else {
+                                tracing::info!("⏭️ 跳过第{}个事件（已有有效事件）: {}", program_data_count, event.event_type());
+                                skipped_count += 1;
+                            }
+                        },
+                        None => {
+                            // 这里包括了白名单过滤和解析失败的情况
+                            // 具体的跳过原因已经在try_parse_program_data_with_hint中记录
+                            skipped_count += 1;
+                        }
                     }
                 }
             }
         }
 
-        tracing::info!("🔄 程序数据解析失败，尝试通用解析器");
-        // 如果没有找到程序数据日志，尝试其他解析策略
-        for parser in self.parsers.values() {
-            if let Some(event) = parser.parse_from_logs(logs, signature, slot).await? {
-                tracing::info!("✅ 通用解析器成功: {}", parser.get_event_type());
-                return Ok(Some(event));
+        if program_data_count > 0 {
+            tracing::info!(
+                "📋 事件处理总结: 发现{}个Program data，处理{}个，跳过{}个", 
+                program_data_count, processed_count, skipped_count
+            );
+        }
+
+        // 如果没有找到任何事件，尝试通用解析器
+        if first_valid_event.is_none() {
+            tracing::info!("🔄 Program data解析未找到事件，尝试通用解析器");
+            for parser in self.parsers.values() {
+                if let Some(event) = parser.parse_from_logs(logs, signature, slot).await? {
+                    tracing::info!("✅ 通用解析器成功: {}", parser.get_event_type());
+                    return Ok(Some(event));
+                }
             }
         }
 
-        tracing::info!("❌ 智能路由未找到匹配的解析器");
-        Ok(None)
+        if first_valid_event.is_some() {
+            tracing::info!("✅ 智能路由成功解析事件: {:?}", first_valid_event.as_ref().unwrap().event_type());
+        } else {
+            tracing::info!("❌ 智能路由未找到匹配的解析器");
+        }
+
+        Ok(first_valid_event)
     }
 
     /// 从日志中提取程序ID（解析用）
@@ -637,34 +680,53 @@ impl EventParserRegistry {
         let discriminator: [u8; 8] = data[0..8]
             .try_into()
             .map_err(|_| EventListenerError::EventParsing("无法提取discriminator".to_string()))?;
+        info!("🔍 提取的discriminator: {:?}", discriminator);
 
+        // 白名单检查：检查是否为已注册的事件类型
+        if let Some(program_id) = program_id_hint {
+            let parser_key = ParserKey::for_program(program_id, discriminator);
+            let universal_key = ParserKey::universal(discriminator);
+            
+            // 检查是否在已注册的解析器中
+            if !self.parsers.contains_key(&parser_key) && !self.parsers.contains_key(&universal_key) {
+                tracing::info!(
+                    "⏭️ 跳过未注册事件: program={}, discriminator={:?} - 不在关心列表中", 
+                    program_id, discriminator
+                );
+                return Ok(None);
+            }
+        }
         // 使用智能解析器查找
         if let Some(parser) = self.find_best_parser(discriminator, program_id_hint) {
-            tracing::debug!(
+            tracing::info!(
                 "🔍 找到匹配的解析器: {} {} ({:?})",
                 parser.get_program_id(),
                 parser.get_event_type(),
                 discriminator
             );
             if let Some(prog_id) = program_id_hint {
-                tracing::debug!("🎯 使用程序特定路由: {:?}", prog_id);
+                tracing::info!("🎯 使用程序特定路由: {:?}", prog_id);
             } else {
-                tracing::debug!("🌐 使用通用路由");
+                tracing::info!("🌐 使用通用路由");
             }
 
             // 使用找到的解析器解析事件
+            tracing::info!("🔧 开始调用解析器: {} 处理数据: {}...", parser.get_event_type(), &data_str[..50.min(data_str.len())]);
             if let Some(event) = parser.parse_from_logs(&[format!("Program data: {}", data_str)], signature, slot).await? {
                 // 验证解析后的事件
+                tracing::info!("✅ 解析器返回了事件，开始验证");
                 if parser.validate_event(&event).await? {
                     return Ok(Some(event));
                 } else {
                     tracing::warn!("⚠️ 事件验证失败: {}", signature);
                 }
+            } else {
+                tracing::warn!("⚠️ 解析器返回了None: {} - {}", parser.get_event_type(), signature);
             }
         } else {
-            tracing::debug!("🤷 未找到匹配的解析器: {:?}", discriminator);
+            tracing::info!("🤷 未找到匹配的解析器: {:?}", discriminator);
             if let Some(prog_id) = program_id_hint {
-                tracing::debug!("🔍 未找到程序 {:?} 的解析器", prog_id);
+                tracing::info!("🔍 未找到程序 {:?} 的解析器", prog_id);
             }
         }
 

@@ -540,6 +540,11 @@ impl EventStorage {
             recipient: event.recipient.clone(),
             referrer: event.referrer.clone(),
             reward_token_mint: event.reward_token_mint.clone(),
+            // 新增的代币元数据字段
+            reward_token_decimals: event.reward_token_decimals,
+            reward_token_name: event.reward_token_name.clone(),
+            reward_token_symbol: event.reward_token_symbol.clone(),
+            reward_token_logo_uri: event.reward_token_logo_uri.clone(),
             reward_amount: event.reward_amount,
             base_reward_amount: event.base_reward_amount,
             bonus_amount: event.bonus_amount,
@@ -1164,6 +1169,11 @@ mod tests {
             recipient: Pubkey::new_unique().to_string(),
             referrer: Some(Pubkey::new_unique().to_string()),
             reward_token_mint: Pubkey::new_unique().to_string(),
+            // 新增的代币元数据字段
+            reward_token_decimals: Some(6),
+            reward_token_name: Some("Test Token".to_string()),
+            reward_token_symbol: Some("TEST".to_string()),
+            reward_token_logo_uri: Some("https://example.com/logo.png".to_string()),
             reward_amount: 1500000,
             base_reward_amount: 1000000,
             bonus_amount: 500000,

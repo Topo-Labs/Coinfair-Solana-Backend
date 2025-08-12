@@ -88,9 +88,7 @@ pub enum ErrorCode {
     InvalidRewardInputAccountNumber,
     #[msg("Invalid reward period")]
     InvalidRewardPeriod,
-    #[msg(
-        "Modification of emissiones is allowed within 72 hours from the end of the previous cycle"
-    )]
+    #[msg("Modification of emissiones is allowed within 72 hours from the end of the previous cycle")]
     NotApproveUpdateRewardEmissiones,
     #[msg("uninitialized reward info")]
     UnInitializedRewardInfo,
@@ -107,4 +105,19 @@ pub enum ErrorCode {
     CalculateOverflow,
     #[msg("TransferFee calculate not match")]
     TransferFeeCalculateNotMatch,
+
+    #[msg("swap_with_referral: upper account mismatch")]
+    UpperAccountMismatch,
+
+    #[msg("swap_with_referral: upper token account mismatch")]
+    UpperTokenAccountMismatch,
+
+    #[msg("swap_with_referral: upper upper mismatch")]
+    UpperUpperMismatch,
+
+    #[msg("swap_with_referral: upper upper token account mismatch")]
+    UpperUpperTokenAccountMismatch,
+
+    #[msg("swap_with_referral: project token account mismatch")]
+    ProjectTokenAccountMismatch,
 }
