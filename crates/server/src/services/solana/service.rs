@@ -1,12 +1,12 @@
 // Main SolanaService coordinator that delegates to specialized services
 
 use crate::dtos::solana_dto::{
-    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
+    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, ComputeSwapV3Request, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
     CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse,
     DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest, 
     IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
     NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PoolKeyResponse, PositionInfo, PriceQuoteRequest,
-    PriceQuoteResponse, SwapComputeV2Data, SwapRequest, SwapResponse, TransactionData, TransactionSwapV2Request, UserPositionsResponse, WalletInfo,
+    PriceQuoteResponse, SwapComputeV2Data, SwapComputeV3Data, SwapRequest, SwapResponse, SwapV3AndSendTransactionResponse, TransactionData, TransactionSwapV2Request, TransactionSwapV3Request, UserPositionsResponse, WalletInfo,
 };
 
 use super::amm_pool::AmmPoolService;
@@ -97,6 +97,15 @@ pub trait SolanaServiceTrait {
     async fn compute_swap_v2_base_out(&self, params: ComputeSwapV2Request) -> Result<SwapComputeV2Data>;
     async fn build_swap_v2_transaction_base_in(&self, request: TransactionSwapV2Request) -> Result<TransactionData>;
     async fn build_swap_v2_transaction_base_out(&self, request: TransactionSwapV2Request) -> Result<TransactionData>;
+
+    // SwapV3 operations (支持推荐系统)
+    async fn compute_swap_v3_base_in(&self, params: ComputeSwapV3Request) -> Result<SwapComputeV3Data>;
+    async fn compute_swap_v3_base_out(&self, params: ComputeSwapV3Request) -> Result<SwapComputeV3Data>;
+    async fn build_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<TransactionData>;
+    async fn build_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<TransactionData>;
+    // SwapV3 testing operations (本地签名测试方法)
+    async fn build_and_send_transaction_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse>;
+    async fn build_and_send_transaction_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -198,6 +207,32 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn build_swap_v2_transaction_base_out(&self, request: TransactionSwapV2Request) -> Result<TransactionData> {
         self.swap_service.build_swap_v2_transaction_base_out(request).await
+    }
+
+    // SwapV3 operations - delegate to swap_service
+    async fn compute_swap_v3_base_in(&self, params: ComputeSwapV3Request) -> Result<SwapComputeV3Data> {
+        self.swap_service.compute_swap_v3_base_in(params).await
+    }
+
+    async fn compute_swap_v3_base_out(&self, params: ComputeSwapV3Request) -> Result<SwapComputeV3Data> {
+        self.swap_service.compute_swap_v3_base_out(params).await
+    }
+
+    async fn build_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<TransactionData> {
+        self.swap_service.build_swap_v3_transaction_base_in(request).await
+    }
+
+    async fn build_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<TransactionData> {
+        self.swap_service.build_swap_v3_transaction_base_out(request).await
+    }
+
+    // SwapV3 testing operations - delegate to swap_service
+    async fn build_and_send_transaction_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse> {
+        self.swap_service.build_and_send_transaction_swap_v3_transaction_base_in(request).await
+    }
+
+    async fn build_and_send_transaction_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse> {
+        self.swap_service.build_and_send_transaction_swap_v3_transaction_base_out(request).await
     }
 
     // Position operations - delegate to position_service

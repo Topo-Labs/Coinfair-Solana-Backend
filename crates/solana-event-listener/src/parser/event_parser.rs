@@ -28,7 +28,10 @@ impl Hash for ParserKey {
 impl ParserKey {
     /// 创建程序特定的解析器键
     pub fn for_program(program_id: Pubkey, discriminator: [u8; 8]) -> Self {
-        Self { program_id, discriminator }
+        Self {
+            program_id,
+            discriminator,
+        }
     }
 
     /// 创建通用解析器键（适用于所有程序）
@@ -355,26 +358,40 @@ pub struct EventParserRegistry {
 impl EventParserRegistry {
     /// 创建新的解析器注册表
     pub fn new(config: &EventListenerConfig) -> Result<Self> {
-        let mut registry = Self { parsers: HashMap::new() };
+        let mut registry = Self {
+            parsers: HashMap::new(),
+        };
 
         // 交换事件解析器
-        let swap_parser = Box::new(SwapParser::new(config, pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"))?);
+        let swap_parser = Box::new(SwapParser::new(
+            config,
+            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+        )?);
         registry.register_program_parser(swap_parser)?;
 
         // 交换事件解析器
-        let swap_parser = Box::new(SwapParser::new(config, pubkey!("devi51mZmdwUJGU9hjN27vEz64Gps7uUefqxg27EAtH"))?);
-        registry.register_program_parser(swap_parser)?;
+        // let swap_parser = Box::new(SwapParser::new(config, pubkey!("devi51mZmdwUJGU9hjN27vEz64Gps7uUefqxg27EAtH"))?);
+        // registry.register_program_parser(swap_parser)?;
 
         // 代币创建事件解析器
-        let token_creation_parser = Box::new(TokenCreationParser::new(config, pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"))?);
+        let token_creation_parser = Box::new(TokenCreationParser::new(
+            config,
+            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+        )?);
         registry.register_program_parser(token_creation_parser)?;
 
         // 池子创建事件解析器
-        let pool_creation_parser = Box::new(PoolCreationParser::new(config, pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"))?);
+        let pool_creation_parser = Box::new(PoolCreationParser::new(
+            config,
+            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+        )?);
         registry.register_program_parser(pool_creation_parser)?;
 
         // NFT领取事件解析器
-        let nft_claim_parser = Box::new(NftClaimParser::new(config, pubkey!("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL"))?);
+        let nft_claim_parser = Box::new(NftClaimParser::new(
+            config,
+            pubkey!("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL"),
+        )?);
         registry.register_program_parser(nft_claim_parser)?;
 
         // 奖励分发事件解析器
@@ -395,11 +412,19 @@ impl EventParserRegistry {
         let parser_key = ParserKey::for_program(program_id, discriminator);
 
         if self.parsers.contains_key(&parser_key) {
-            return Err(EventListenerError::EventParsing(format!("解析器键 {:?} 已注册", parser_key)));
+            return Err(EventListenerError::EventParsing(format!(
+                "解析器键 {:?} 已注册",
+                parser_key
+            )));
         }
 
         self.parsers.insert(parser_key.clone(), parser);
-        tracing::info!("✅ 注册程序特定解析器: {} ({:?}) -> {:?}", program_id, event_type, discriminator,);
+        tracing::info!(
+            "✅ 注册程序特定解析器: {} ({:?}) -> {:?}",
+            program_id,
+            event_type,
+            discriminator,
+        );
         Ok(())
     }
 
@@ -411,7 +436,10 @@ impl EventParserRegistry {
 
         // 检查是否已存在通用解析器
         if self.parsers.contains_key(&parser_key) {
-            return Err(EventListenerError::EventParsing(format!("通用解析器键 {:?} 已注册", parser_key)));
+            return Err(EventListenerError::EventParsing(format!(
+                "通用解析器键 {:?} 已注册",
+                parser_key
+            )));
         }
 
         // 注册到新的复合键映射
@@ -445,18 +473,25 @@ impl EventParserRegistry {
                 program_data_count += 1;
                 if let Some(data_part) = log.strip_prefix("Program data: ") {
                     tracing::info!("📊 处理第{}个Program data (行{})", program_data_count, index + 1);
-                    
-                    match self.try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint).await? {
+
+                    match self
+                        .try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint)
+                        .await?
+                    {
                         Some(event) => {
                             tracing::info!("✅ 第{}个事件解析成功: {}", program_data_count, event.event_type());
                             processed_count += 1;
                             if first_valid_event.is_none() {
                                 first_valid_event = Some(event);
                             } else {
-                                tracing::info!("⏭️ 跳过第{}个事件（已有有效事件）: {}", program_data_count, event.event_type());
+                                tracing::info!(
+                                    "⏭️ 跳过第{}个事件（已有有效事件）: {}",
+                                    program_data_count,
+                                    event.event_type()
+                                );
                                 skipped_count += 1;
                             }
-                        },
+                        }
                         None => {
                             // 这里包括了白名单过滤和解析失败的情况
                             // 具体的跳过原因已经在try_parse_program_data_with_hint中记录
@@ -469,8 +504,10 @@ impl EventParserRegistry {
 
         if program_data_count > 0 {
             tracing::info!(
-                "📋 事件处理总结: 发现{}个Program data，处理{}个，跳过{}个", 
-                program_data_count, processed_count, skipped_count
+                "📋 事件处理总结: 发现{}个Program data，处理{}个，跳过{}个",
+                program_data_count,
+                processed_count,
+                skipped_count
             );
         }
 
@@ -486,7 +523,10 @@ impl EventParserRegistry {
         }
 
         if first_valid_event.is_some() {
-            tracing::info!("✅ 智能路由成功解析事件: {:?}", first_valid_event.as_ref().unwrap().event_type());
+            tracing::info!(
+                "✅ 智能路由成功解析事件: {:?}",
+                first_valid_event.as_ref().unwrap().event_type()
+            );
         } else {
             tracing::info!("❌ 智能路由未找到匹配的解析器");
         }
@@ -569,7 +609,11 @@ impl EventParserRegistry {
 
             // 如果找到了当前活跃的订阅程序，返回它
             if let Some(program_id) = current_program_id {
-                tracing::info!("🎯 基于调用栈确定第{}行Program data的程序: {}", data_index + 1, program_id);
+                tracing::info!(
+                    "🎯 基于调用栈确定第{}行Program data的程序: {}",
+                    data_index + 1,
+                    program_id
+                );
                 return Some(program_id);
             }
         }
@@ -594,16 +638,26 @@ impl EventParserRegistry {
             "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
         ];
 
-        SYSTEM_PROGRAMS.iter().any(|&sys_prog| program_id.to_string() == sys_prog)
+        SYSTEM_PROGRAMS
+            .iter()
+            .any(|&sys_prog| program_id.to_string() == sys_prog)
     }
 
     /// 智能查找解析器（利用supports_program方法）
-    fn find_best_parser(&self, discriminator: [u8; 8], program_id_hint: Option<Pubkey>) -> Option<&Box<dyn EventParser>> {
+    fn find_best_parser(
+        &self,
+        discriminator: [u8; 8],
+        program_id_hint: Option<Pubkey>,
+    ) -> Option<&Box<dyn EventParser>> {
         // 策略1：如果有程序ID提示，优先查找程序特定解析器
         if let Some(program_id) = program_id_hint {
             let parser_key = ParserKey::for_program(program_id, discriminator);
             if let Some(parser) = self.parsers.get(&parser_key) {
-                tracing::debug!("🎯 找到程序特定解析器: {} for {:?}", parser.get_event_type(), program_id);
+                tracing::debug!(
+                    "🎯 找到程序特定解析器: {} for {:?}",
+                    parser.get_event_type(),
+                    program_id
+                );
                 return Some(parser);
             }
         }
@@ -615,11 +669,19 @@ impl EventParserRegistry {
             if let Some(program_id) = program_id_hint {
                 match parser.supports_program(&program_id) {
                     Some(true) => {
-                        tracing::debug!("🌐 通用解析器支持程序: {} for {:?}", parser.get_event_type(), program_id);
+                        tracing::debug!(
+                            "🌐 通用解析器支持程序: {} for {:?}",
+                            parser.get_event_type(),
+                            program_id
+                        );
                         return Some(parser);
                     }
                     Some(false) => {
-                        tracing::debug!("🚫 通用解析器不支持程序: {} for {:?}", parser.get_event_type(), program_id);
+                        tracing::debug!(
+                            "🚫 通用解析器不支持程序: {} for {:?}",
+                            parser.get_event_type(),
+                            program_id
+                        );
                         return None;
                     }
                     None => {
@@ -639,7 +701,11 @@ impl EventParserRegistry {
                 if parser.get_discriminator() == discriminator {
                     match parser.supports_program(&program_id) {
                         Some(true) => {
-                            tracing::debug!("🔍 找到支持程序的解析器: {} for {:?}", parser.get_event_type(), program_id);
+                            tracing::debug!(
+                                "🔍 找到支持程序的解析器: {} for {:?}",
+                                parser.get_event_type(),
+                                program_id
+                            );
                             return Some(parser);
                         }
                         None => {
@@ -686,12 +752,13 @@ impl EventParserRegistry {
         if let Some(program_id) = program_id_hint {
             let parser_key = ParserKey::for_program(program_id, discriminator);
             let universal_key = ParserKey::universal(discriminator);
-            
+
             // 检查是否在已注册的解析器中
             if !self.parsers.contains_key(&parser_key) && !self.parsers.contains_key(&universal_key) {
                 tracing::info!(
-                    "⏭️ 跳过未注册事件: program={}, discriminator={:?} - 不在关心列表中", 
-                    program_id, discriminator
+                    "⏭️ 跳过未注册事件: program={}, discriminator={:?} - 不在关心列表中",
+                    program_id,
+                    discriminator
                 );
                 return Ok(None);
             }
@@ -711,8 +778,15 @@ impl EventParserRegistry {
             }
 
             // 使用找到的解析器解析事件
-            tracing::info!("🔧 开始调用解析器: {} 处理数据: {}...", parser.get_event_type(), &data_str[..50.min(data_str.len())]);
-            if let Some(event) = parser.parse_from_logs(&[format!("Program data: {}", data_str)], signature, slot).await? {
+            tracing::info!(
+                "🔧 开始调用解析器: {} 处理数据: {}...",
+                parser.get_event_type(),
+                &data_str[..50.min(data_str.len())]
+            );
+            if let Some(event) = parser
+                .parse_from_logs(&[format!("Program data: {}", data_str)], signature, slot)
+                .await?
+            {
                 // 验证解析后的事件
                 tracing::info!("✅ 解析器返回了事件，开始验证");
                 if parser.validate_event(&event).await? {
@@ -747,7 +821,11 @@ impl EventParserRegistry {
             .iter()
             .map(|(key, parser)| {
                 let program_id = if key.is_universal() { None } else { Some(key.program_id) };
-                (parser.get_event_type().to_string(), parser.get_discriminator(), program_id)
+                (
+                    parser.get_event_type().to_string(),
+                    parser.get_discriminator(),
+                    program_id,
+                )
             })
             .collect()
     }
@@ -1218,7 +1296,8 @@ mod tests {
         ];
 
         // 验证能够从日志中提取程序ID
-        let extracted_program_id = registry.extract_program_id_from_logs(&logs_with_raydium_program, &config.solana.program_ids);
+        let extracted_program_id =
+            registry.extract_program_id_from_logs(&logs_with_raydium_program, &config.solana.program_ids);
         assert!(extracted_program_id.is_some(), "应该能够从日志中提取Raydium程序ID");
 
         let program_id = extracted_program_id.unwrap();
@@ -1230,7 +1309,12 @@ mod tests {
 
         // 测试智能路由的三层策略
         let result = registry
-            .parse_event_with_context(&logs_with_raydium_program, "test_sig", 12345, &config.solana.program_ids)
+            .parse_event_with_context(
+                &logs_with_raydium_program,
+                "test_sig",
+                12345,
+                &config.solana.program_ids,
+            )
             .await;
 
         // 验证智能路由正常工作（即使数据无效）

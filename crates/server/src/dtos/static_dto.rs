@@ -294,6 +294,57 @@ pub struct MintPriceResponse {
     pub data: Vec<PriceData>,
 }
 
+/// 代币 ID 查询响应（用于批量查询）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TokenIdResponse {
+    /// 链 ID
+    #[serde(rename = "chainId")]
+    pub chain_id: u32,
+
+    /// 代币地址
+    pub address: String,
+
+    /// 程序 ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+
+    /// 图标 URI
+    #[serde(rename = "logoURI")]
+    pub logo_uri: String,
+
+    /// 代币符号
+    pub symbol: String,
+
+    /// 代币名称
+    pub name: String,
+
+    /// 小数位数
+    pub decimals: u8,
+
+    /// 标签
+    pub tags: Vec<String>,
+
+    /// 扩展信息
+    pub extensions: serde_json::Value,
+}
+
+impl TokenIdResponse {
+    /// 从 TokenInfo 创建 TokenIdResponse
+    pub fn from_token_info(token: TokenInfo) -> Self {
+        Self {
+            chain_id: 101, // Solana mainnet
+            address: token.address,
+            program_id: token.program_id,
+            logo_uri: token.logo_uri,
+            symbol: token.symbol,
+            name: token.name,
+            decimals: token.decimals,
+            tags: token.tags,
+            extensions: token.extensions,
+        }
+    }
+}
+
 /// 系统信息响应
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InfoResponse {

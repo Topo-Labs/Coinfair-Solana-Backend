@@ -103,6 +103,37 @@ impl ConfigManager {
 
         Ok(keypair)
     }
+
+    /// 获取推荐系统程序ID
+    pub fn get_referral_program_id() -> Result<Pubkey> {
+        let program_id_str = std::env::var("REFERRAL_PROGRAM_ID")
+            .unwrap_or_else(|_| constants::DEFAULT_REFERRAL_PROGRAM_ID.to_string());
+        Pubkey::from_str(&program_id_str).map_err(Into::into)
+    }
+
+    /// 获取项目方钱包地址
+    pub fn get_project_wallet() -> Result<Pubkey> {
+        let wallet_str = std::env::var("PROJECT_WALLET")
+            .or_else(|_| std::env::var("ADMIN_WALLET"))
+            .map_err(|_| anyhow::anyhow!("未找到项目方钱包地址，请设置 PROJECT_WALLET 或 ADMIN_WALLET 环境变量"))?;
+        Pubkey::from_str(&wallet_str).map_err(Into::into)
+    }
+
+    /// 获取交换手续费率（基点，例如25 = 0.25%）
+    pub fn get_swap_fee_rate_bps() -> u16 {
+        std::env::var("SWAP_FEE_RATE_BPS")
+            .unwrap_or_else(|_| "25".to_string()) // 0.25%
+            .parse()
+            .unwrap_or(25)
+    }
+
+    /// 获取推荐系统手续费率（基点，例如10 = 0.1%）
+    pub fn get_referral_fee_rate_bps() -> u16 {
+        std::env::var("REFERRAL_FEE_RATE_BPS")
+            .unwrap_or_else(|_| "10".to_string()) // 0.1% - 应该小于交换费率
+            .parse()
+            .unwrap_or(10)
+    }
 }
 
 #[cfg(test)]

@@ -6,6 +6,9 @@ use tracing::{error, info, warn};
 
 use crate::ErrorHandler;
 
+// 导入SwapV2Service用于transfer fee和mint信息计算
+use super::swap_services::SwapV2Service;
+
 use super::{ConfigManager, LogUtils, PDACalculator, PoolInfoManager, SwapCalculator, TokenUtils};
 
 /// 服务层辅助工具 - 抽取服务层的通用逻辑
@@ -60,7 +63,10 @@ impl<'a> ServiceHelpers<'a> {
             .await
         {
             Ok((output_amount, other_amount_threshold)) => {
-                info!("  ✅ CLI逻辑计算成功: {} -> {} (阈值: {})", input_amount, output_amount, other_amount_threshold);
+                info!(
+                    "  ✅ CLI逻辑计算成功: {} -> {} (阈值: {})",
+                    input_amount, output_amount, other_amount_threshold
+                );
                 Ok((output_amount, other_amount_threshold, pool_address))
             }
             Err(e) => {
@@ -174,7 +180,7 @@ impl<'a> ServiceHelpers<'a> {
             "input_mint": input_mint.clone(),
             "output_mint": output_mint.clone(),
             "fee_mint": input_mint, // 通常手续费使用输入代币
-            "fee_rate": 25,         // 0.25% 手续费率（Raydium标准）
+            "fee_rate": ConfigManager::get_swap_fee_rate_bps(), // 从配置获取手续费率
             "fee_amount": fee_amount.to_string(),
             "remaining_accounts": remaining_accounts,
             "last_pool_price_x64": last_pool_price_x64,
@@ -263,7 +269,9 @@ impl<'a> ServiceHelpers<'a> {
         // 使用统一的错误处理
         let amm_config_account = accounts[2].as_ref().ok_or_else(|| ErrorHandler::handle_account_load_error("AMM配置"))?;
         let pool_account = accounts[3].as_ref().ok_or_else(|| ErrorHandler::handle_account_load_error("池子"))?;
-        let tickarray_bitmap_extension_account = accounts[4].as_ref().ok_or_else(|| ErrorHandler::handle_account_load_error("bitmap扩展"))?;
+        let tickarray_bitmap_extension_account = accounts[4]
+            .as_ref()
+            .ok_or_else(|| ErrorHandler::handle_account_load_error("bitmap扩展"))?;
 
         // 反序列化关键状态
         let amm_config_state: raydium_amm_v3::states::AmmConfig = self.deserialize_anchor_account(amm_config_account)?;
@@ -319,7 +327,14 @@ impl<'a> ServiceHelpers<'a> {
     }
 
     /// 计算价格影响
-    pub async fn calculate_price_impact(&self, input_mint: &str, output_mint: &str, input_amount: u64, output_amount: u64, pool_address: &str) -> Result<f64> {
+    pub async fn calculate_price_impact(
+        &self,
+        input_mint: &str,
+        output_mint: &str,
+        input_amount: u64,
+        output_amount: u64,
+        pool_address: &str,
+    ) -> Result<f64> {
         self.swap_calculator
             .calculate_price_impact(input_mint, output_mint, input_amount, output_amount, pool_address)
             .await
@@ -365,4 +380,358 @@ impl<'a> ServiceHelpers<'a> {
             )
         }
     }
+}
+
+/// SwapV3服务辅助工具 - 专门处理SwapV3推荐系统相关逻辑
+pub struct SwapV3ServiceHelper<'a> {
+    rpc_client: &'a RpcClient,
+    service_helper: ServiceHelpers<'a>,
+    swap_v2_service: SwapV2Service,
+}
+
+impl<'a> SwapV3ServiceHelper<'a> {
+    pub fn new(rpc_client: &'a RpcClient) -> Self {
+        // 从环境变量获取RPC URL来创建SwapV2Service
+        let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        
+        Self {
+            rpc_client,
+            service_helper: ServiceHelpers::new(rpc_client),
+            swap_v2_service: SwapV2Service::new(&rpc_url),
+        }
+    }
+
+    /// 基于输入金额计算输出（带推荐系统支持）
+    pub async fn calculate_output_for_input_with_referral(
+        &self,
+        input_mint: &str,
+        output_mint: &str,
+        input_amount: u64,
+        slippage_bps: u16,
+        referral_account: Option<&str>,
+        enable_referral_rewards: bool,
+    ) -> Result<SwapV3ComputeResult> {
+        LogUtils::log_operation_start(
+            "SwapV3计算输出",
+            &format!(
+                "输入: {}, 推荐账户: {:?}, 启用奖励: {}",
+                input_amount, referral_account, enable_referral_rewards
+            ),
+        );
+
+        // 使用基础的V2计算逻辑
+        let (output_amount, other_amount_threshold, pool_address) = self
+            .service_helper
+            .calculate_output_for_input_with_slippage(input_mint, output_mint, input_amount, slippage_bps)
+            .await?;
+
+        // 如果启用推荐系统，计算推荐相关信息
+        let (referral_info, reward_distribution) = if enable_referral_rewards && referral_account.is_some() {
+            let referral_info = self.get_referral_info(referral_account.unwrap()).await?;
+            let reward_distribution = self.calculate_reward_distribution(input_amount).await?;
+            (Some(referral_info), Some(reward_distribution))
+        } else {
+            (None, None)
+        };
+
+        // 计算转账费用信息
+        let transfer_fee_info = self
+            .calculate_transfer_fee_info(input_mint, output_mint, input_amount, output_amount)
+            .await?;
+
+        // 计算价格影响
+        let price_impact_pct = self
+            .service_helper
+            .calculate_price_impact(input_mint, output_mint, input_amount, output_amount, &pool_address)
+            .await?;
+
+        let result = SwapV3ComputeResult {
+            swap_type: "BaseInV3".to_string(),
+            input_mint: input_mint.to_string(),
+            input_amount: input_amount.to_string(),
+            output_mint: output_mint.to_string(),
+            output_amount: output_amount.to_string(),
+            other_amount_threshold: other_amount_threshold.to_string(),
+            slippage_bps,
+            price_impact_pct,
+            referrer_amount: "0".to_string(), // 推荐人费用
+            route_plan: vec![],               // 需要实现
+            transfer_fee_info,
+            amount_specified: Some(input_amount.to_string()),
+            epoch: None, // 需要获取
+            referral_info,
+            reward_distribution,
+        };
+
+        LogUtils::log_operation_success("SwapV3计算输出", &format!("输出: {}", output_amount));
+        Ok(result)
+    }
+
+    /// 获取推荐系统信息
+    async fn get_referral_info(&self, referral_account: &str) -> Result<SwapV3ReferralInfo> {
+        LogUtils::log_operation_start("获取推荐信息", referral_account);
+
+        // 解析推荐账户地址
+        let referral_pda = Pubkey::from_str(referral_account)?;
+
+        // 模拟推荐系统数据查询（实际应该从链上查询）
+        let referral_info = SwapV3ReferralInfo {
+            upper: None,       // 需要从链上查询
+            upper_upper: None, // 需要从链上查询
+            project_account: ConfigManager::get_project_wallet()?.to_string(),
+            referral_program: ConfigManager::get_referral_program_id()?.to_string(),
+            payer_referral: referral_pda.to_string(),
+            upper_referral: None, // 需要计算
+        };
+
+        LogUtils::log_operation_success("获取推荐信息", "推荐信息已获取");
+        Ok(referral_info)
+    }
+
+    /// 计算奖励分配
+    async fn calculate_reward_distribution(&self, input_amount: u64) -> Result<SwapV3RewardDistribution> {
+        LogUtils::log_operation_start("计算奖励分配", &format!("输入金额: {}", input_amount));
+
+        // 计算总手续费（假设为0.25%）
+        let total_fee = input_amount * 25 / 10000; // 0.25%
+
+        // 使用推荐管理器计算分配
+        let distribution = super::ReferralManager::calculate_reward_distribution(total_fee);
+
+        let result = SwapV3RewardDistribution {
+            total_reward_fee: distribution.total_reward_fee,
+            project_reward: distribution.project_reward,
+            upper_reward: distribution.upper_reward,
+            upper_upper_reward: distribution.upper_upper_reward,
+            distribution_ratios: SwapV3RewardDistributionRatios {
+                project_ratio: distribution.distribution_ratios.project_ratio,
+                upper_ratio: distribution.distribution_ratios.upper_ratio,
+                upper_upper_ratio: distribution.distribution_ratios.upper_upper_ratio,
+            },
+        };
+
+        LogUtils::log_operation_success("计算奖励分配", &format!("总奖励: {}", total_fee));
+        Ok(result)
+    }
+
+    /// 计算转账费用信息
+    async fn calculate_transfer_fee_info(
+        &self,
+        input_mint: &str,
+        output_mint: &str,
+        input_amount: u64,
+        output_amount: u64,
+    ) -> Result<Option<SwapV3TransferFeeInfo>> {
+        // 获取代币信息
+        let input_mint_pubkey = Pubkey::from_str(input_mint)?;
+        let output_mint_pubkey = Pubkey::from_str(output_mint)?;
+
+        // 使用SwapV2Service获取实际的transfer fee计算
+        let input_transfer_fee_result = self.swap_v2_service.get_transfer_fee(&input_mint_pubkey, input_amount)?;
+        let output_transfer_fee_result = self.swap_v2_service.get_transfer_fee(&output_mint_pubkey, output_amount)?;
+        
+        // 使用SwapV2Service获取实际的mint信息
+        let input_mint_info = self.swap_v2_service.load_mint_info(&input_mint_pubkey)?;
+        let output_mint_info = self.swap_v2_service.load_mint_info(&output_mint_pubkey)?;
+
+        Ok(Some(SwapV3TransferFeeInfo {
+            input_transfer_fee: input_transfer_fee_result.transfer_fee,
+            output_transfer_fee: output_transfer_fee_result.transfer_fee,
+            input_mint_decimals: input_mint_info.decimals,
+            output_mint_decimals: output_mint_info.decimals,
+        }))
+    }
+
+    /// 构建SwapV3指令
+    pub async fn build_swap_v3_instruction(
+        &self,
+        user_wallet: &Pubkey,
+        input_mint: &str,
+        output_mint: &str,
+        amount: u64,
+        other_amount_threshold: u64,
+        sqrt_price_limit_x64: Option<u128>,
+        is_base_input: bool,
+        referral_accounts: Option<SwapV3ReferralAccounts>,
+    ) -> Result<solana_sdk::instruction::Instruction> {
+        LogUtils::log_operation_start("构建SwapV3指令", &format!("用户: {}", user_wallet));
+
+        let pool_address = self.service_helper.calculate_pool_address_pda(input_mint, output_mint)?;
+        let pool_pubkey = Pubkey::from_str(&pool_address)?;
+        let input_mint_pubkey = Pubkey::from_str(input_mint)?;
+        let output_mint_pubkey = Pubkey::from_str(output_mint)?;
+
+        // 获取必要的程序ID和配置
+        let raydium_program_id = ConfigManager::get_raydium_program_id()?;
+        let referral_program_id = ConfigManager::get_referral_program_id()?;
+        let amm_config_index = ConfigManager::get_amm_config_index();
+
+        // 计算各种PDA地址
+        let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
+        let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_pubkey);
+
+        // 获取用户代币账户
+        let input_token_account = spl_associated_token_account::get_associated_token_address(user_wallet, &input_mint_pubkey);
+        let output_token_account = spl_associated_token_account::get_associated_token_address(user_wallet, &output_mint_pubkey);
+
+        // 获取池子状态来确定vault地址
+        let pool_account = self.rpc_client.get_account(&pool_pubkey)?;
+        let pool_state: raydium_amm_v3::states::PoolState = self.service_helper.deserialize_anchor_account(&pool_account)?;
+
+        let (input_vault, output_vault, input_vault_mint, output_vault_mint) = self.service_helper.build_vault_info(&pool_state, &input_mint_pubkey);
+
+        // 计算推荐系统相关地址
+        let (payer_referral, _) = super::ReferralManager::calculate_referral_pda(&referral_program_id, user_wallet)?;
+
+        // 处理推荐账户
+        let (upper, upper_token_account, upper_referral, upper_upper, upper_upper_token_account, project_token_account) =
+            if let Some(ref accounts) = referral_accounts {
+                let upper = accounts.upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let upper_token_account = accounts.upper_token_account.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let upper_referral = accounts.upper_referral.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let upper_upper = accounts.upper_upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let upper_upper_token_account = accounts.upper_upper_token_account.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let project_token_account = Pubkey::from_str(&accounts.project_token_account)?;
+
+                (
+                    upper,
+                    upper_token_account,
+                    upper_referral,
+                    upper_upper,
+                    upper_upper_token_account,
+                    project_token_account,
+                )
+            } else {
+                // 默认项目方账户
+                let project_wallet = ConfigManager::get_project_wallet()?;
+                let project_token_account = super::ReferralManager::get_project_token_account(&project_wallet, &input_mint_pubkey)?;
+                (None, None, None, None, None, project_token_account)
+            };
+
+        // 获取remaining accounts
+        let remaining_accounts = self
+            .get_remaining_accounts_for_swap_v3(&pool_address, input_mint, output_mint, amount)
+            .await?;
+
+        // 使用SwapV3指令构建器
+        let instruction = super::SwapV3InstructionBuilder::build_swap_v3_instruction(
+            &raydium_program_id,
+            &raydium_program_id,
+            &referral_program_id,
+            &amm_config_key,
+            &pool_pubkey,
+            user_wallet,
+            &input_token_account,
+            &output_token_account,
+            &input_vault,
+            &output_vault,
+            &input_vault_mint,
+            &output_vault_mint,
+            &observation_key,
+            remaining_accounts,
+            amount,
+            other_amount_threshold,
+            sqrt_price_limit_x64,
+            is_base_input,
+            &input_mint_pubkey,
+            &payer_referral,
+            upper.as_ref(),
+            upper_token_account.as_ref(),
+            upper_referral.as_ref(),
+            upper_upper.as_ref(),
+            upper_upper_token_account.as_ref(),
+            &project_token_account,
+        )?;
+
+        LogUtils::log_operation_success("构建SwapV3指令", "指令构建完成");
+        Ok(instruction)
+    }
+
+    /// 获取SwapV3的remaining accounts
+    async fn get_remaining_accounts_for_swap_v3(
+        &self,
+        pool_address: &str,
+        input_mint: &str,
+        output_mint: &str,
+        amount: u64,
+    ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
+        let (remaining_account_addresses, _) = self
+            .service_helper
+            .get_remaining_accounts_and_pool_price(pool_address, input_mint, output_mint, amount)
+            .await?;
+
+        let remaining_accounts = super::AccountMetaBuilder::create_remaining_accounts(&remaining_account_addresses, true)?;
+        Ok(remaining_accounts)
+    }
+}
+
+/// SwapV3推荐账户信息（内部使用）
+#[derive(Debug, Clone)]
+pub struct SwapV3ReferralAccounts {
+    pub payer_referral: String,
+    pub upper: Option<String>,
+    pub upper_token_account: Option<String>,
+    pub upper_referral: Option<String>,
+    pub upper_upper: Option<String>,
+    pub upper_upper_token_account: Option<String>,
+    pub project_token_account: String,
+    pub referral_program: String,
+}
+
+/// SwapV3计算结果（简化的内部结构体）
+#[derive(Debug, Clone)]
+pub struct SwapV3ComputeResult {
+    pub swap_type: String,
+    pub input_mint: String,
+    pub input_amount: String,
+    pub output_mint: String,
+    pub output_amount: String,
+    pub other_amount_threshold: String,
+    pub slippage_bps: u16,
+    pub price_impact_pct: f64,
+    pub referrer_amount: String,
+    pub route_plan: Vec<serde_json::Value>,
+    pub transfer_fee_info: Option<SwapV3TransferFeeInfo>,
+    pub amount_specified: Option<String>,
+    pub epoch: Option<u64>,
+    pub referral_info: Option<SwapV3ReferralInfo>,
+    pub reward_distribution: Option<SwapV3RewardDistribution>,
+}
+
+/// SwapV3推荐系统信息（简化的内部结构体）
+#[derive(Debug, Clone)]
+pub struct SwapV3ReferralInfo {
+    pub upper: Option<String>,
+    pub upper_upper: Option<String>,
+    pub project_account: String,
+    pub referral_program: String,
+    pub payer_referral: String,
+    pub upper_referral: Option<String>,
+}
+
+/// SwapV3奖励分配信息（简化的内部结构体）
+#[derive(Debug, Clone)]
+pub struct SwapV3RewardDistribution {
+    pub total_reward_fee: u64,
+    pub project_reward: u64,
+    pub upper_reward: u64,
+    pub upper_upper_reward: u64,
+    pub distribution_ratios: SwapV3RewardDistributionRatios,
+}
+
+/// SwapV3奖励分配比例（简化的内部结构体）
+#[derive(Debug, Clone)]
+pub struct SwapV3RewardDistributionRatios {
+    pub project_ratio: f64,
+    pub upper_ratio: f64,
+    pub upper_upper_ratio: f64,
+}
+
+/// SwapV3转账费用信息（简化的内部结构体）
+#[derive(Debug, Clone)]
+pub struct SwapV3TransferFeeInfo {
+    pub input_transfer_fee: u64,
+    pub output_transfer_fee: u64,
+    pub input_mint_decimals: u8,
+    pub output_mint_decimals: u8,
 }

@@ -1600,7 +1600,7 @@ fn main() -> Result<()> {
             let output_token = get_associated_token_address_with_program_id(&payer_key, &output, &token_program_id);
 
             let temp_upper = Pubkey::from_str("UppTZXjtcogbquYMDca315Z1p8yN1pyEGbRVULaN8Vx").expect("upper key error");
-            let upper_token_account = get_associated_token_address_with_program_id(&temp_upper, &input, &token_program_id);
+            let _upper_token_account = get_associated_token_address_with_program_id(&temp_upper, &input, &token_program_id);
 
             let mut upper: Option<Pubkey> = None;
             let mut upper_token_account: Option<Pubkey> = None;
@@ -1803,9 +1803,9 @@ fn main() -> Result<()> {
             let recent_hash = rpc_client.get_latest_blockhash()?;
             let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             if simulate {
-                let ret = simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
+                let _ret = simulate_transaction(&rpc_client, &txn, true, CommitmentConfig::confirmed())?;
             } else {
-                let signature = send_txn(&rpc_client, &txn, true)?;
+                let _signature = send_txn(&rpc_client, &txn, true)?;
             }
         }
         CommandsName::PPositionByOwner { user_wallet } => {

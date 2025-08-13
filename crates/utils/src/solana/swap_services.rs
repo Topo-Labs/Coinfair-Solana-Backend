@@ -4,6 +4,7 @@ pub use crate::solana::solana_client::*;
 
 use anyhow::Result;
 use solana_sdk::account::Account;
+use solana_sdk::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signer;
 use spl_token_2022::extension::transfer_fee::TransferFeeConfig;
@@ -44,12 +45,25 @@ impl RaydiumSwap {
         Ok((1000000000, 1000000)) // 1 SOL, 1 USDC
     }
 
-    pub async fn swap_tokens(&self, _from_token: &str, _to_token: &str, _pool_address: &str, _amount: u64, _minimum_amount_out: u64) -> anyhow::Result<String> {
+    pub async fn swap_tokens(
+        &self,
+        _from_token: &str,
+        _to_token: &str,
+        _pool_address: &str,
+        _amount: u64,
+        _minimum_amount_out: u64,
+    ) -> anyhow::Result<String> {
         // 简化实现，返回模拟签名
         Ok("simulation_signature".to_string())
     }
 
-    pub async fn get_pool_price_and_estimate_direct(&self, pool_address: &str, from_token: &str, to_token: &str, amount: u64) -> anyhow::Result<u64> {
+    pub async fn get_pool_price_and_estimate_direct(
+        &self,
+        pool_address: &str,
+        from_token: &str,
+        to_token: &str,
+        amount: u64,
+    ) -> anyhow::Result<u64> {
         // 使用简化计算
         calculate_swap_output_with_api(pool_address, amount, from_token, to_token, self.client.get_rpc_client()).await
     }
@@ -62,7 +76,9 @@ impl RaydiumSwap {
         input_amount: u64,
         slippage: Option<f64>,
     ) -> anyhow::Result<SwapEstimateResult> {
-        let estimated_output = self.get_pool_price_and_estimate_direct(pool_address, input_mint, output_mint, input_amount).await?;
+        let estimated_output = self
+            .get_pool_price_and_estimate_direct(pool_address, input_mint, output_mint, input_amount)
+            .await?;
         let slippage_rate = slippage.unwrap_or(0.005);
         let min_output_with_slippage = (estimated_output as f64 * (1.0 - slippage_rate)) as u64;
 
@@ -109,7 +125,9 @@ pub struct TokenAccountInfo {
 
 impl SwapV2Service {
     pub fn new(rpc_url: &str) -> Self {
-        Self { rpc_url: rpc_url.to_string() }
+        Self {
+            rpc_url: rpc_url.to_string(),
+        }
     }
 
     pub fn get_current_epoch(&self) -> anyhow::Result<u64> {
@@ -166,20 +184,48 @@ impl SwapV2Service {
         }
     }
 
-    pub fn load_mint_info(&self, _mint: &solana_sdk::pubkey::Pubkey) -> anyhow::Result<MintInfo> {
+    pub fn load_mint_info(&self, mint: &solana_sdk::pubkey::Pubkey) -> anyhow::Result<MintInfo> {
+        let rpc_client = solana_client::rpc_client::RpcClient::new(&self.rpc_url);
+        // 获取mint账户信息
+        let account_data = rpc_client
+            .get_account_data(mint)
+            .map_err(|e| anyhow::anyhow!("获取mint账户失败: {}", e))?;
+
+        // 解析mint账户数据
+        let mint_info = Mint::unpack(&account_data).map_err(|e| anyhow::anyhow!("解析mint账户失败: {}", e))?;
+
         Ok(MintInfo {
-            decimals: 9, // 简化处理
+            decimals: mint_info.decimals,
+        })
+    }
+
+    pub fn load_pool_info(&self, mint: &solana_sdk::pubkey::Pubkey) -> anyhow::Result<MintInfo> {
+        let rpc_client = solana_client::rpc_client::RpcClient::new(&self.rpc_url);
+        // 获取mint账户信息
+        let account_data = rpc_client
+            .get_account_data(mint)
+            .map_err(|e| anyhow::anyhow!("获取mint账户失败: {}", e))?;
+
+        // 解析mint账户数据
+        let mint_info = Mint::unpack(&account_data).map_err(|e| anyhow::anyhow!("解析mint账户失败: {}", e))?;
+
+        Ok(MintInfo {
+            decimals: mint_info.decimals,
         })
     }
 
     /// 验证SwapV2账户信息的完整性
     pub fn validate_swap_v2_accounts(&self, accounts: &SwapV2AccountsInfo) -> Result<()> {
         // 验证输入和输出代币账户的有效性
-        if accounts.input_token_account.owner != spl_token::id() && accounts.input_token_account.owner != spl_token_2022::id() {
+        if accounts.input_token_account.owner != spl_token::id()
+            && accounts.input_token_account.owner != spl_token_2022::id()
+        {
             return Err(anyhow::anyhow!("无效的输入代币账户"));
         }
 
-        if accounts.output_token_account.owner != spl_token::id() && accounts.output_token_account.owner != spl_token_2022::id() {
+        if accounts.output_token_account.owner != spl_token::id()
+            && accounts.output_token_account.owner != spl_token_2022::id()
+        {
             return Err(anyhow::anyhow!("无效的输出代币账户"));
         }
 
@@ -216,8 +262,12 @@ impl SwapV2Service {
         let accounts = rpc_client.get_multiple_accounts(&load_accounts)?;
         let epoch = self.get_current_epoch()?;
 
-        let mint0_account = accounts[0].as_ref().ok_or_else(|| anyhow::anyhow!("Failed to load mint0 account"))?;
-        let mint1_account = accounts[1].as_ref().ok_or_else(|| anyhow::anyhow!("Failed to load mint1 account"))?;
+        let mint0_account = accounts[0]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Failed to load mint0 account"))?;
+        let mint1_account = accounts[1]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Failed to load mint1 account"))?;
 
         // 计算mint0的inverse transfer fee
         let transfer_fee_0 = self.calculate_inverse_transfer_fee_from_account(mint0, mint0_account, epoch, amount0)?;
@@ -250,7 +300,13 @@ impl SwapV2Service {
     }
 
     /// 从已加载的账户计算inverse transfer fee（内部辅助方法）
-    fn calculate_inverse_transfer_fee_from_account(&self, mint: &Pubkey, account: &Account, epoch: u64, post_fee_amount: u64) -> Result<u64> {
+    fn calculate_inverse_transfer_fee_from_account(
+        &self,
+        mint: &Pubkey,
+        account: &Account,
+        epoch: u64,
+        post_fee_amount: u64,
+    ) -> Result<u64> {
         // 如果是标准Token程序，没有transfer fee
         if account.owner == spl_token::id() {
             return Ok(0);
@@ -283,7 +339,13 @@ impl SwapV2Service {
     }
 
     /// 从已加载的账户计算transfer fee（内部辅助方法）
-    fn _calculate_transfer_fee_from_account(&self, mint: &Pubkey, account: &Account, epoch: u64, amount: u64) -> Result<u64> {
+    fn _calculate_transfer_fee_from_account(
+        &self,
+        mint: &Pubkey,
+        account: &Account,
+        epoch: u64,
+        amount: u64,
+    ) -> Result<u64> {
         // 如果是标准Token程序，没有transfer fee
         if account.owner == spl_token::id() {
             return Ok(0);

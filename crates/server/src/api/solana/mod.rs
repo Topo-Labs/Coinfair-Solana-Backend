@@ -12,6 +12,7 @@ pub mod referral_controller;
 pub mod static_config_controller;
 pub mod swap_controller;
 pub mod swap_v2_controller;
+pub mod swap_v3_controller;
 pub mod token_controller;
 
 use crate::auth::SolanaMiddlewareBuilder;
@@ -89,6 +90,7 @@ impl SolanaController {
             // 合并swap相关路由
             .merge(swap_controller::SwapController::routes())
             .merge(swap_v2_controller::SwapV2Controller::routes())
+            .merge(swap_v3_controller::SwapV3Controller::routes())
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }
 

@@ -17,4 +17,4 @@ export MONGO_DB=coinfair_development
 
 # 启动程序
 # RUST_LOG=debug cargo run --bin coinfair 2>&1 | sed 's/\x1b\[[0-9;]*m//g' > "$LOG_FILE" &
-RUST_LOG=debug cargo run --bin coinfair
+RUST_LOG=info cargo run --bin coinfair

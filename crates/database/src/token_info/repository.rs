@@ -1,5 +1,6 @@
 use super::model::*;
 use chrono::Utc;
+use futures::TryStreamExt;
 use mongodb::{
     bson::{doc, Document},
     options::{FindOptions, IndexOptions, UpdateOptions},
@@ -616,6 +617,32 @@ impl TokenInfoRepository {
 
         while cursor.advance().await? {
             tokens.push(cursor.deserialize_current()?);
+        }
+
+        Ok(tokens)
+    }
+
+    /// 根据地址列表批量查询代币信息
+    pub async fn find_by_addresses(&self, addresses: &[String]) -> AppResult<Vec<TokenInfo>> {
+        if addresses.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let filter = doc! {
+            "address": {
+                "$in": addresses
+            }
+        };
+
+        let options = FindOptions::builder()
+            .sort(doc! { "daily_volume": -1 }) // 按交易量降序排序
+            .build();
+
+        let mut cursor = self.collection.find(filter, options).await?;
+        let mut tokens = Vec::new();
+
+        while let Some(token) = cursor.try_next().await? {
+            tokens.push(token);
         }
 
         Ok(tokens)

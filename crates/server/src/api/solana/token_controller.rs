@@ -1,8 +1,8 @@
-use crate::auth::{AuthUser, require_admin};
-use crate::dtos::static_dto::{ApiResponse, MintListResponse};
+use crate::auth::{require_admin, AuthUser};
+use crate::dtos::static_dto::{ApiResponse, MintListResponse, MintPriceResponse, PriceData};
 use crate::services::Services;
 use axum::{
-    extract::{Query, Extension, Path},
+    extract::{Extension, Path, Query},
     middleware,
     response::Json,
     routing::{get, post},
@@ -11,8 +11,8 @@ use axum::{
 use database::token_info::{TokenListQuery, TokenListResponse, TokenPushRequest, TokenPushResponse};
 use serde::Deserialize;
 use tracing::{info, warn};
-use utoipa::{IntoParams, ToSchema};
 use utils::AppResult;
+use utoipa::{IntoParams, ToSchema};
 
 /// 代币搜索查询参数
 #[derive(Debug, Deserialize, ToSchema, IntoParams)]
@@ -21,6 +21,12 @@ pub struct TokenSearchQuery {
     pub keyword: String,
     /// 返回结果数量限制 (默认20，最大100)
     pub limit: Option<i64>,
+}
+
+/// 查询参数结构体
+#[derive(Debug, Deserialize)]
+pub struct MintPriceQuery {
+    pub mints: String,
 }
 
 /// 代币地址路径参数
@@ -40,7 +46,6 @@ impl TokenController {
         let public_routes = Router::new()
             // 代币推送接口
             .route("/push", post(push_token))
-            
             // 查询接口
             .route("/list", get(get_token_list))
             .route("/query", get(query_tokens))
@@ -48,15 +53,15 @@ impl TokenController {
             .route("/trending", get(get_trending_tokens))
             .route("/new", get(get_new_tokens))
             .route("/stats", get(get_token_stats))
-            .route("/info/:address", get(get_token_by_address));
-            
+            .route("/info/:address", get(get_token_by_address))
+            .route("/price", get(get_mint_price));
         // 管理员路由（需要管理员权限）
         let admin_routes = Router::new()
             .route("/status/:address", post(update_token_status))
             .route("/verification/:address", post(update_token_verification))
             .route("/delete/:address", post(delete_token))
             .layer(middleware::from_fn(require_admin));
-            
+
         // 合并路由
         public_routes.nest("/admin", admin_routes)
     }
@@ -519,7 +524,7 @@ pub async fn get_new_tokens(
 }
 
 /// 获取代币统计信息
-/// 
+///
 /// 返回系统中代币的统计数据，包括总数、活跃数、验证数等
 #[utoipa::path(
     get,
@@ -592,7 +597,10 @@ pub async fn update_token_status(
     Path(address): Path<String>,
     Json(status): Json<database::token_info::TokenStatus>,
 ) -> AppResult<Json<ApiResponse<bool>>> {
-    warn!("🔄 管理员更新代币状态: {} -> {:?} (操作员: {})", address, status, user.user_id);
+    warn!(
+        "🔄 管理员更新代币状态: {} -> {:?} (操作员: {})",
+        address, status, user.user_id
+    );
 
     // 验证地址格式
     services.token.validate_token_address(&address)?;
@@ -607,7 +615,7 @@ pub async fn update_token_status(
 }
 
 /// 管理员功能：更新代币验证状态
-/// 
+///
 /// 仅限管理员使用，用于更新代币的验证状态（未验证、已验证、社区验证、严格验证）
 #[utoipa::path(
     post,
@@ -634,7 +642,10 @@ pub async fn update_token_verification(
     Path(address): Path<String>,
     Json(verification): Json<database::token_info::VerificationStatus>,
 ) -> AppResult<Json<ApiResponse<bool>>> {
-    warn!("🔄 管理员更新代币验证状态: {} -> {:?} (操作员: {})", address, verification, user.user_id);
+    warn!(
+        "🔄 管理员更新代币验证状态: {} -> {:?} (操作员: {})",
+        address, verification, user.user_id
+    );
 
     // 验证地址格式
     services.token.validate_token_address(&address)?;
@@ -707,4 +718,57 @@ pub async fn delete_token(
     }
 
     Ok(Json(ApiResponse::success(deleted)))
+}
+
+/// 获取代币价格
+///
+/// 根据提供的代币mint地址列表查询价格
+///
+/// # 查询参数
+///
+/// - mints: 代币mint地址列表，用逗号分隔
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "fe1955f5-91ba-43c6-8d14-cc0588bb71db",
+///   "success": true,
+///   "data": {
+///     "data": [
+///       {
+///         "mint": "So11111111111111111111111111111111111111112",
+///         "price": "0"
+///       }
+///     ]
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/mint/price",
+    params(
+        ("mints" = String, Query, description = "代币mint地址列表，用逗号分隔")
+    ),
+    responses(
+        (status = 200, description = "代币价格查询成功", body = ApiResponse<MintPriceResponse>)
+    ),
+    tag = "代币信息"
+)]
+pub async fn get_mint_price(Query(params): Query<MintPriceQuery>) -> Json<ApiResponse<MintPriceResponse>> {
+    info!("💰 获取代币价格，mints: {}", params.mints);
+
+    let mint_addresses: Vec<&str> = params.mints.split(',').collect();
+
+    let mut price_data = Vec::new();
+    for mint in mint_addresses {
+        price_data.push(PriceData {
+            mint: mint.to_string(),
+            price: "0".to_string(), // 按照文档要求，全部返回0
+        });
+    }
+
+    let response = MintPriceResponse { data: price_data };
+
+    Json(ApiResponse::success(response))
 }

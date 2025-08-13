@@ -23,6 +23,8 @@ mod discriminator_tests;
 mod test_discriminator_consistency;
 #[cfg(test)]
 mod verify_discriminators;
+#[cfg(test)]
+mod tests;
 
 pub use account_loader::*;
 pub use builders::*;

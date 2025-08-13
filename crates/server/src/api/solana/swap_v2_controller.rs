@@ -1,5 +1,8 @@
 use crate::{
-    dtos::solana_dto::{ComputeSwapV2Request, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, TransactionData, TransactionSwapV2Request},
+    dtos::solana_dto::{
+        ComputeSwapV2Request, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, TransactionData,
+        TransactionSwapV2Request, TransactionSwapV3Request,
+    },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
 };
@@ -20,8 +23,10 @@ impl SwapV2Controller {
             // ============ SwapV2 API兼容路由（支持转账费） ============
             .route("/compute/swap-base-in", get(compute_swap_v2_base_in))
             .route("/compute/swap-base-out", get(compute_swap_v2_base_out))
-            .route("/transaction/swap-base-in", post(transaction_swap_v2_base_in))
-            .route("/transaction/swap-base-out", post(transaction_swap_v2_base_out))
+            // .route("/transaction/swap-base-in", post(transaction_swap_v2_base_in))
+            .route("/transaction/swap-base-in", post(transaction_swap_v3_base_in))
+            // .route("/transaction/swap-base-out", post(transaction_swap_v2_base_out))
+            .route("/transaction/swap-base-out", post(transaction_swap_v3_base_out))
     }
 }
 
@@ -315,6 +320,152 @@ pub async fn transaction_swap_v2_base_out(
             error!("❌ swap-base-out交易构建失败: {:?}", e);
             let error_response = RaydiumErrorResponse::new(&format!("交易构建失败: {}", e));
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)))
+        }
+    }
+}
+
+/// 构建swap-v3-base-in交易数据
+///
+/// 为SwapV3 BaseIn交换构建未签名的交易数据，支持推荐系统
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "wallet": "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy",
+///   "computeUnitPriceMicroLamports": "1000000",
+///   "swapResponse": {
+///     "id": "uuid-here",
+///     "success": true,
+///     "version": "V1",
+///     "data": {
+///       "swapType": "BaseInV3",
+///       "inputMint": "So11111111111111111111111111111111111111112",
+///       "inputAmount": "1000000000",
+///       "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+///       "outputAmount": "1500000",
+///       "otherAmountThreshold": "1485000",
+///       "slippageBps": 100,
+///       "referralInfo": {...},
+///       "rewardDistribution": {...}
+///     }
+///   },
+///   "txVersion": "V0",
+///   "wrapSol": true
+/// }
+/// ```
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "uuid-here",
+///   "success": true,
+///   "version": "V1",
+///   "data": {
+///     "transaction": "base64-encoded-transaction-data"
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/transaction/swap-v3-base-in",
+    request_body = TransactionSwapV3Request,
+    responses(
+        (status = 200, description = "交易构建成功", body = RaydiumResponse<TransactionData>),
+        (status = 400, description = "请求参数无效", body = RaydiumErrorResponse),
+        (status = 500, description = "内部服务器错误", body = RaydiumErrorResponse)
+    ),
+    tag = "SwapV3"
+)]
+pub async fn transaction_swap_v3_base_in(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<TransactionSwapV3Request>,
+) -> Result<Json<RaydiumResponse<Vec<TransactionData>>>, StatusCode> {
+    info!("🔨 构建SwapV3 BaseIn交易: 钱包={}", request.wallet);
+
+    match services.solana.build_swap_v3_transaction_base_in(request).await {
+        Ok(data) => {
+            info!("✅ SwapV3 BaseIn交易构建成功");
+            let response = RaydiumResponse::success(vec![data]);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ SwapV3 BaseIn交易构建失败: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// 构建swap-v3-base-out交易数据
+///
+/// 为SwapV3 BaseOut交换构建未签名的交易数据，支持推荐系统
+///
+/// # 请求体
+///
+/// ```json
+/// {
+///   "wallet": "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy",
+///   "computeUnitPriceMicroLamports": "1000000",
+///   "swapResponse": {
+///     "id": "uuid-here",
+///     "success": true,
+///     "version": "V1",
+///     "data": {
+///       "swapType": "BaseOutV3",
+///       "inputMint": "So11111111111111111111111111111111111111112",
+///       "inputAmount": "1005000000",
+///       "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+///       "outputAmount": "1500000",
+///       "otherAmountThreshold": "1015000000",
+///       "slippageBps": 100,
+///       "referralInfo": {...},
+///       "rewardDistribution": {...}
+///     }
+///   },
+///   "txVersion": "V0",
+///   "wrapSol": true
+/// }
+/// ```
+///
+/// # 响应示例
+///
+/// ```json
+/// {
+///   "id": "uuid-here",
+///   "success": true,
+///   "version": "V1",
+///   "data": {
+///     "transaction": "base64-encoded-transaction-data"
+///   }
+/// }
+/// ```
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/transaction/swap-v3-base-out",
+    request_body = TransactionSwapV3Request,
+    responses(
+        (status = 200, description = "交易构建成功", body = RaydiumResponse<TransactionData>),
+        (status = 400, description = "请求参数无效", body = RaydiumErrorResponse),
+        (status = 500, description = "内部服务器错误", body = RaydiumErrorResponse)
+    ),
+    tag = "SwapV3"
+)]
+pub async fn transaction_swap_v3_base_out(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<TransactionSwapV3Request>,
+) -> Result<Json<RaydiumResponse<Vec<TransactionData>>>, StatusCode> {
+    info!("🔨 构建SwapV3 BaseOut交易: 钱包={}", request.wallet);
+
+    match services.solana.build_swap_v3_transaction_base_out(request).await {
+        Ok(data) => {
+            info!("✅ SwapV3 BaseOut交易构建成功");
+            let response = RaydiumResponse::success(vec![data]);
+            Ok(Json(response))
+        }
+        Err(e) => {
+            error!("❌ SwapV3 BaseOut交易构建失败: {:?}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }

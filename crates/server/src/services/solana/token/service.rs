@@ -1,4 +1,4 @@
-use crate::dtos::static_dto::{MintListResponse, TokenInfo as DtoTokenInfo};
+use crate::dtos::static_dto::{MintListResponse, TokenInfo as DtoTokenInfo, TokenIdResponse};
 use database::token_info::{
     TokenInfo, TokenListQuery, TokenListResponse, TokenPushRequest, TokenPushResponse,
     TokenInfoRepository, TokenStats, StaticTokenInfo,
@@ -416,5 +416,34 @@ impl TokenService {
         }
 
         Ok(())
+    }
+
+    /// 根据地址列表批量查询代币信息
+    pub async fn get_tokens_by_addresses(&self, addresses: &[String]) -> AppResult<Vec<TokenIdResponse>> {
+        info!("🔍 批量查询代币信息: {} 个地址", addresses.len());
+
+        // 验证地址数量限制
+        if addresses.len() > 50 {
+            return Err(utils::AppError::BadRequest(
+                "单次查询地址数量不能超过50个".to_string()
+            ));
+        }
+
+        // 验证每个地址格式
+        for address in addresses {
+            self.validate_token_address(address)?;
+        }
+
+        // 执行批量查询
+        let tokens = self.get_repository().find_by_addresses(addresses).await?;
+
+        // 转换为响应格式
+        let responses: Vec<TokenIdResponse> = tokens
+            .into_iter()
+            .map(|token| TokenIdResponse::from_token_info(self.static_to_dto(token.to_static_dto())))
+            .collect();
+
+        info!("✅ 批量查询完成: 找到 {} 个代币", responses.len());
+        Ok(responses)
     }
 }

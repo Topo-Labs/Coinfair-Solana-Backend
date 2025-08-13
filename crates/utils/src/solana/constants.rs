@@ -13,8 +13,11 @@ pub const DEFAULT_AMM_CONFIG_INDEX: u16 = 1;
 pub const DEFAULT_FEE_RATE: u64 = 400; // 0.25%
 
 // Raydium V2 (Classic AMM) 常量
-pub const DEFAULT_RAYDIUM_V2_AMM_PROGRAM_ID: &str = "CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW";
+pub const DEFAULT_RAYDIUM_V2_AMM_PROGRAM_ID: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
 pub const DEFAULT_V2_AMM_OPEN_TIME: u64 = 0;
+
+// 推荐系统常量
+pub const DEFAULT_REFERRAL_PROGRAM_ID: &str = "REFRpo1ievaQhpSLR8uDwCzjfUDJ8xGsBmNn8J5fC2q";
 
 pub const DEFAULT_SOL_PRICE_USDC: f64 = 100.0;
 

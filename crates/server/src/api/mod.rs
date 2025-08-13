@@ -1,8 +1,8 @@
 pub mod auth_controller;
 pub mod dev_auth_controller;
+pub mod permission_management_controller;
 pub mod refer_controller;
 pub mod reward_controller;
-pub mod permission_management_controller;
 pub mod solana;
 // pub mod solana_controller;
 pub mod static_controller;
@@ -31,13 +31,16 @@ pub async fn health() -> &'static str {
 
 pub fn app() -> Router {
     Router::new()
-        .route("/", get(health))
+        .route("/health", get(health))
         .nest("/user", user_controller::UserController::app())
         .nest("/refer", refer_controller::ReferController::app())
         .nest("/reward", reward_controller::RewardController::app())
         .nest("/solana", solana::SolanaController::app())
-        .nest("/solana/mint", static_controller::StaticController::app())
+        .nest("/mint", static_controller::StaticController::app())
         .nest("", auth_controller::AuthController::app())
-        .nest("/admin/permissions", permission_management_controller::PermissionManagementController::routes())
+        .nest(
+            "/admin/permissions",
+            permission_management_controller::PermissionManagementController::routes(),
+        )
         .nest("", dev_auth_controller::DevAuthController::routes())
 }

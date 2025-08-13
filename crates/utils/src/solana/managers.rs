@@ -4,6 +4,129 @@ use std::str::FromStr;
 
 use super::{constants, ConfigManager, PDACalculator, TokenUtils};
 
+/// 推荐系统管理器 - 统一管理推荐系统相关逻辑
+pub struct ReferralManager;
+
+impl ReferralManager {
+    /// 计算推荐账户PDA地址
+    pub fn calculate_referral_pda(
+        referral_program_id: &Pubkey,
+        user: &Pubkey,
+    ) -> Result<(Pubkey, u8)> {
+        let seeds = &[b"referral", user.as_ref()];
+        let (pda, bump) = Pubkey::find_program_address(seeds, referral_program_id);
+        Ok((pda, bump))
+    }
+
+    /// 查询用户的推荐关系信息
+    pub async fn get_referral_info(
+        user: &Pubkey,
+        referral_program_id: &Pubkey,
+    ) -> Result<Option<ReferralInfo>> {
+        let (_referral_pda, _) = Self::calculate_referral_pda(referral_program_id, user)?;
+        
+        // 这里应该是从链上查询实际数据的逻辑
+        // 为了示例，返回None表示没有推荐关系
+        Ok(None)
+    }
+
+    /// 验证推荐系统账户的有效性
+    pub fn validate_referral_accounts(
+        payer: &Pubkey,
+        payer_referral: &Pubkey,
+        upper: Option<&Pubkey>,
+        upper_referral: Option<&Pubkey>,
+        _upper_upper: Option<&Pubkey>,
+        referral_program_id: &Pubkey,
+    ) -> Result<bool> {
+        // 验证payer_referral PDA是否正确
+        let (expected_payer_referral, _) = Self::calculate_referral_pda(referral_program_id, payer)?;
+        if *payer_referral != expected_payer_referral {
+            return Ok(false);
+        }
+
+        // 如果有upper，验证upper_referral PDA是否正确
+        if let (Some(upper_pubkey), Some(upper_referral_pubkey)) = (upper, upper_referral) {
+            let (expected_upper_referral, _) = Self::calculate_referral_pda(referral_program_id, upper_pubkey)?;
+            if *upper_referral_pubkey != expected_upper_referral {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// 计算推荐奖励分配
+    pub fn calculate_reward_distribution(total_fee: u64) -> RewardDistribution {
+        let project_reward = total_fee / 2; // 50%给项目方
+        let upper_total_reward = total_fee - project_reward; // 50%给推荐人系统
+
+        RewardDistribution {
+            total_reward_fee: total_fee,
+            project_reward,
+            upper_reward: upper_total_reward * 5 / 6, // 约41.67%总费用
+            upper_upper_reward: upper_total_reward / 6, // 约8.33%总费用
+            distribution_ratios: RewardDistributionRatios {
+                project_ratio: 50.0,
+                upper_ratio: 41.67,
+                upper_upper_ratio: 8.33,
+            },
+        }
+    }
+
+    /// 获取项目方代币账户地址
+    pub fn get_project_token_account(
+        pool_owner: &Pubkey,
+        token_mint: &Pubkey,
+    ) -> Result<Pubkey> {
+        // 使用关联代币账户
+        let project_token_account = spl_associated_token_account::get_associated_token_address(
+            pool_owner,
+            token_mint,
+        );
+        Ok(project_token_account)
+    }
+
+    /// 获取上级用户的代币账户地址
+    pub fn get_upper_token_account(
+        upper: &Pubkey,
+        token_mint: &Pubkey,
+    ) -> Result<Pubkey> {
+        let upper_token_account = spl_associated_token_account::get_associated_token_address(
+            upper,
+            token_mint,
+        );
+        Ok(upper_token_account)
+    }
+}
+
+/// 推荐信息结构体
+#[derive(Debug, Clone)]
+pub struct ReferralInfo {
+    pub user: Pubkey,
+    pub upper: Option<Pubkey>,
+    pub upper_upper: Option<Pubkey>,
+    pub nft_mint: Pubkey,
+}
+
+/// 奖励分配信息
+#[derive(Debug, Clone)]
+pub struct RewardDistribution {
+    pub total_reward_fee: u64,
+    pub project_reward: u64,
+    pub upper_reward: u64,
+    pub upper_upper_reward: u64,
+    pub distribution_ratios: RewardDistributionRatios,
+}
+
+/// 奖励分配比例
+#[derive(Debug, Clone)]
+pub struct RewardDistributionRatios {
+    pub project_ratio: f64,
+    pub upper_ratio: f64,
+    pub upper_upper_ratio: f64,
+}
+
 /// 池子信息管理器 - 统一管理池子相关信息
 pub struct PoolInfoManager;
 

@@ -124,7 +124,7 @@ use utoipa::OpenApi;
         // Liquidity Line endpoints
         crate::api::solana::liquidity_line_controller::get_pool_liquidity_line,
         // Static Price endpoint
-        crate::api::static_controller::get_mint_price,
+        crate::api::static_controller::get_tokens_by_ids,
     ),
     components(
         schemas(
