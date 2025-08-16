@@ -158,7 +158,7 @@ pub struct RewardDistributionEvent {
     pub id: Option<ObjectId>,
 
     /// 奖励分发ID
-    pub distribution_id: u64,
+    pub distribution_id: i64,
 
     /// 奖励池地址
     pub reward_pool: String,

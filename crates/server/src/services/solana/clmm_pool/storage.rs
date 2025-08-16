@@ -3,11 +3,10 @@
 //! 负责将池子创建后的元数据存储到MongoDB数据库中
 
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
-use crate::services::metaplex_service::TokenMetadata;
 use database::clmm_pool::{ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo};
 use mongodb::Collection;
 use tracing::{debug, error, info, warn};
-use utils::AppResult;
+use utils::{AppResult, TokenMetadata};
 
 /// CLMM池子存储服务
 pub struct ClmmPoolStorageService {

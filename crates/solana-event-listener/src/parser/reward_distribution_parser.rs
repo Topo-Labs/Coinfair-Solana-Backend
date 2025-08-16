@@ -6,27 +6,31 @@ use crate::{
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_sdk::pubkey::Pubkey;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, error, info, warn};
 
 // 添加元数据相关的导入
-use std::sync::Arc;
-use solana_client::rpc_client::RpcClient;
-use spl_token::state::Mint;
-use solana_sdk::program_pack::Pack;
 use database::{
+    token_info::{DataSource, TokenPushRequest},
     Database,
-    token_info::{TokenPushRequest, DataSource},
 };
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::program_pack::Pack;
+use spl_token::state::Mint;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// 简化的代币元数据结构
-#[derive(Debug, Clone)]
-pub struct TokenMetadata {
-    pub decimals: u8,
-    pub name: Option<String>,
-    pub symbol: Option<String>,
-    pub logo_uri: Option<String>,
-}
+// 使用 utils 中的共享类型
+use utils::{ExternalTokenMetadata, TokenMetadata as UtilsTokenMetadata, TokenMetadataProvider};
+
+#[cfg(test)]
+use utils::ExternalTokenAttribute;
+
+// 导入MetaplexService相关类型
+// 注意：这里使用trait抽象来避免直接依赖server包
+
+// 使用utils中的共享TokenMetadata结构
+// 为了保持向后兼容，保留原有的TokenMetadata别名
+type TokenMetadata = UtilsTokenMetadata;
 
 /// 推荐奖励分发事件的原始数据结构（与智能合约保持一致）
 /// 新的ReferralRewardEvent结构体
@@ -54,6 +58,8 @@ pub struct RewardDistributionParser {
     rpc_client: Option<Arc<RpcClient>>,
     /// 数据库连接，用于TokenInfo缓存
     database: Option<Arc<Database>>,
+    /// 代币元数据提供者（抽象的MetaplexService）
+    metadata_provider: Option<Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>>>,
     /// 元数据缓存，避免重复查询
     metadata_cache: Arc<RwLock<std::collections::HashMap<String, TokenMetadata>>>,
 }
@@ -62,8 +68,7 @@ impl RewardDistributionParser {
     /// 创建新的奖励发放事件解析器
     pub fn new(config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // 奖励发放事件的discriminator
-        // let discriminator = [178, 95, 213, 88, 42, 167, 129, 77];
-        let discriminator = [88, 33, 159, 153, 151, 93, 111, 189];
+        let discriminator = [47, 6, 18, 225, 99, 16, 211, 7];
 
         // 初始化RPC客户端
         let rpc_client = if !config.solana.rpc_url.is_empty() {
@@ -86,6 +91,7 @@ impl RewardDistributionParser {
             target_program_id: program_id,
             rpc_client,
             database,
+            metadata_provider: None, // 通过setter方法注入
             metadata_cache,
         })
     }
@@ -100,7 +106,9 @@ impl RewardDistributionParser {
             .map_err(|e| EventListenerError::EventParsing(format!("Base64解码失败: {}", e)))?;
 
         if data.len() < 8 {
-            return Err(EventListenerError::EventParsing("数据长度不足，无法包含discriminator".to_string()));
+            return Err(EventListenerError::EventParsing(
+                "数据长度不足，无法包含discriminator".to_string(),
+            ));
         }
 
         // 验证discriminator
@@ -111,15 +119,15 @@ impl RewardDistributionParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event =
-            ReferralRewardEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        let event = ReferralRewardEvent::try_from_slice(event_data)
+            .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
 
-        debug!("✅ 成功解析推荐奖励事件: 从={}, 到={}, 数量={}", event.from, event.to, event.amount);
+        info!("✅ event{:#?}", event);
         Ok(event)
     }
 
     /// 生成唯一的分发ID（基于事件内容）
-    fn generate_distribution_id(&self, event: &ReferralRewardEvent) -> u64 {
+    fn generate_distribution_id(&self, event: &ReferralRewardEvent) -> i64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -130,7 +138,9 @@ impl RewardDistributionParser {
         event.amount.hash(&mut hasher);
         event.timestamp.hash(&mut hasher);
 
-        hasher.finish()
+        // 确保返回值在i64范围内
+        let hash = hasher.finish();
+        (hash as i64).abs()
     }
 
     /// 推断奖励来源（基于金额等特征）
@@ -201,35 +211,40 @@ impl RewardDistributionParser {
         let multiplier = self.calculate_default_multiplier(&event);
 
         // 尝试获取代币元数据
-        let (token_decimals, token_name, token_symbol, token_logo_uri) = match self.fetch_token_metadata(&event.mint).await {
-            Ok(metadata) => {
-                debug!("✅ 成功获取代币元数据: {} ({})", event.mint, metadata.symbol.as_deref().unwrap_or("UNK"));
-                (
-                    Some(metadata.decimals),
-                    metadata.name,
-                    metadata.symbol,
-                    metadata.logo_uri,
-                )
-            }
-            Err(e) => {
-                warn!("⚠️ 获取代币元数据失败: {} - {}", event.mint, e);
-                (None, None, None, None)
-            }
-        };
+        let (token_decimals, token_name, token_symbol, token_logo_uri) =
+            match self.fetch_token_metadata(&event.mint).await {
+                Ok(metadata) => {
+                    debug!(
+                        "✅ 成功获取代币元数据: {} ({})",
+                        event.mint,
+                        metadata.symbol.as_deref().unwrap_or("UNK")
+                    );
+                    (
+                        Some(metadata.decimals),
+                        metadata.name,
+                        metadata.symbol,
+                        metadata.logo_uri,
+                    )
+                }
+                Err(e) => {
+                    warn!("⚠️ 获取代币元数据失败: {} - {}", event.mint, e);
+                    (None, None, None, None)
+                }
+            };
 
         ParsedEvent::RewardDistribution(RewardDistributionEventData {
             distribution_id,
-            reward_pool: event.from.to_string(),    // 使用from作为奖励池地址
-            recipient: event.to.to_string(),        // to对应recipient
-            referrer: Some(event.from.to_string()), // from对应referrer
-            reward_token_mint: event.mint.to_string(),      // mint对应reward_token_mint
+            reward_pool: event.from.to_string(),       // 使用from作为奖励池地址
+            recipient: event.to.to_string(),           // to对应recipient
+            referrer: Some(event.from.to_string()),    // from对应referrer
+            reward_token_mint: event.mint.to_string(), // mint对应reward_token_mint
             // 新增的代币元数据字段
             reward_token_decimals: token_decimals,
             reward_token_name: token_name,
             reward_token_symbol: token_symbol,
             reward_token_logo_uri: token_logo_uri,
-            reward_amount: event.amount,        // amount对应reward_amount
-            base_reward_amount: event.amount,   // 新结构没有base_reward，使用amount
+            reward_amount: event.amount,      // amount对应reward_amount
+            base_reward_amount: event.amount, // 新结构没有base_reward，使用amount
             bonus_amount,
             reward_type,
             reward_type_name: self.get_reward_type_name(reward_type),
@@ -342,11 +357,11 @@ impl RewardDistributionParser {
         }
 
         // 验证时间戳合理性
-        let now = chrono::Utc::now().timestamp();
-        if event.distributed_at > now || event.distributed_at < (now - 86400) {
-            warn!("❌ 发放时间戳异常: {}", event.distributed_at);
-            return Ok(false);
-        }
+        // let now = chrono::Utc::now().timestamp();
+        // if event.distributed_at > now || event.distributed_at < (now - 86400) {
+        //     warn!("❌ 发放时间戳异常: {}", event.distributed_at);
+        //     return Ok(false);
+        // }
 
         // 验证推荐人不能是自己
         if let Some(referrer) = &event.referrer {
@@ -378,29 +393,49 @@ impl RewardDistributionParser {
         info!("✅ RewardDistributionParser 数据库连接已设置");
     }
 
+    /// 设置代币元数据提供者（抽象的MetaplexService）
+    pub fn set_metadata_provider(&mut self, provider: Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>>) {
+        self.metadata_provider = Some(provider);
+        info!("✅ RewardDistributionParser 代币元数据提供者已设置");
+    }
+
+    /// 将外部元数据转换为utils的TokenMetadata
+    fn convert_external_metadata(external_metadata: ExternalTokenMetadata, decimals: u8) -> TokenMetadata {
+        external_metadata.to_token_metadata(decimals)
+    }
+
     /// 查询代币元数据（先查缓存，再查TokenInfo表，最后查链上）
     async fn fetch_token_metadata(&self, mint_address: &Pubkey) -> Result<TokenMetadata> {
         let mint_str = mint_address.to_string();
-        
+
         // 1. 先检查内存缓存
         {
             let cache = self.metadata_cache.read().await;
             if let Some(metadata) = cache.get(&mint_str) {
-                debug!("✅ 从内存缓存获取代币元数据: {}", mint_str);
+                info!("✅ 从内存缓存获取代币元数据: {}", mint_str);
                 return Ok(metadata.clone());
             }
         }
 
         // 2. 查询TokenInfo表
         if let Some(db) = &self.database {
-            debug!("🔍 从TokenInfo表查询代币元数据: {}", mint_str);
+            info!("🔍 从TokenInfo表查询代币元数据: {}", mint_str);
             match db.token_info_repository.find_by_address(&mint_str).await {
                 Ok(Some(token_info)) => {
                     let metadata = TokenMetadata {
+                        address: mint_str.clone(),
                         decimals: token_info.decimals,
                         name: Some(token_info.name.clone()),
                         symbol: Some(token_info.symbol.clone()),
-                        logo_uri: if token_info.logo_uri.is_empty() { None } else { Some(token_info.logo_uri.clone()) },
+                        logo_uri: if token_info.logo_uri.is_empty() {
+                            None
+                        } else {
+                            Some(token_info.logo_uri.clone())
+                        },
+                        description: None,
+                        external_url: None,
+                        attributes: None,
+                        tags: vec!["database".to_string()],
                     };
 
                     // 更新内存缓存
@@ -413,7 +448,7 @@ impl RewardDistributionParser {
                     return Ok(metadata);
                 }
                 Ok(None) => {
-                    debug!("❌ TokenInfo表中未找到代币: {}", mint_str);
+                    info!("❌ TokenInfo表中未找到代币: {}", mint_str);
                 }
                 Err(e) => {
                     warn!("⚠️ 查询TokenInfo表失败: {} - {}", mint_str, e);
@@ -421,15 +456,15 @@ impl RewardDistributionParser {
             }
         }
 
-        // 3. 查询链上数据
-        let metadata = self.fetch_onchain_metadata(mint_address).await?;
+        // 3. 查询链上数据（带有完整的fallback链）
+        let metadata = self.fetch_complete_metadata(mint_address).await;
 
         // 4. 异步保存到TokenInfo表
         if let Some(db) = &self.database {
             let db_clone = db.clone();
             let mint_clone = mint_str.clone();
             let metadata_clone = metadata.clone();
-            
+
             tokio::spawn(async move {
                 match Self::save_to_token_info(db_clone, &mint_clone, &metadata_clone).await {
                     Ok(_) => {
@@ -451,15 +486,56 @@ impl RewardDistributionParser {
         Ok(metadata)
     }
 
-    /// 从链上获取代币元数据
+    /// 从链上获取代币元数据（集成MetaplexService）
     async fn fetch_onchain_metadata(&self, mint_address: &Pubkey) -> Result<TokenMetadata> {
-        let rpc_client = self.rpc_client.as_ref()
+        let mint_str = mint_address.to_string();
+
+        // 优先尝试使用代币元数据提供者获取完整元数据
+        if let Some(metadata_provider) = &self.metadata_provider {
+            info!("🔍 使用代币元数据提供者获取代币元数据: {}", mint_str);
+
+            let mut provider = metadata_provider.lock().await;
+            match provider.get_token_metadata(&mint_str).await {
+                Ok(Some(external_metadata)) => {
+                    info!(
+                        "✅ 代币元数据提供者成功获取元数据: {} ({})",
+                        mint_str,
+                        external_metadata.symbol.as_deref().unwrap_or("UNK")
+                    );
+
+                    // 需要获取decimals信息（外部元数据可能没有decimals）
+                    let decimals = self.fetch_mint_decimals(mint_address).await.unwrap_or(6);
+                    let converted_metadata = Self::convert_external_metadata(external_metadata, decimals);
+
+                    return Ok(converted_metadata);
+                }
+                Ok(None) => {
+                    info!("⚠️ 代币元数据提供者未找到元数据，回退到链上查询: {}", mint_str);
+                }
+                Err(e) => {
+                    warn!("⚠️ 代币元数据提供者查询失败，回退到链上查询: {} - {}", mint_str, e);
+                }
+            }
+        } else {
+            info!("⚠️ 代币元数据提供者未设置，使用基础链上查询: {}", mint_str);
+        }
+
+        // 回退到原始的链上查询方法（仅获取decimals）
+        self.fetch_basic_onchain_metadata(mint_address).await
+    }
+
+    /// 获取基础的链上元数据（仅decimals）
+    async fn fetch_basic_onchain_metadata(&self, mint_address: &Pubkey) -> Result<TokenMetadata> {
+        let rpc_client = self
+            .rpc_client
+            .as_ref()
             .ok_or_else(|| EventListenerError::EventParsing("RPC客户端未初始化".to_string()))?;
 
-        debug!("🔗 从链上获取代币元数据: {}", mint_address);
+        debug!("🔗 从链上获取基础代币元数据: {}", mint_address);
 
         // 获取mint账户数据
-        let account_data = rpc_client.get_account_data(mint_address)
+        let account_data = rpc_client
+            .get_account_data(mint_address)
             .map_err(|e| EventListenerError::EventParsing(format!("获取mint账户数据失败: {} - {}", mint_address, e)))?;
 
         // 解析mint数据获取decimals
@@ -467,22 +543,164 @@ impl RewardDistributionParser {
             .map_err(|e| EventListenerError::EventParsing(format!("解析mint数据失败: {} - {}", mint_address, e)))?;
 
         let metadata = TokenMetadata {
+            address: mint_address.to_string(),
             decimals: mint.decimals,
-            name: None, // 链上mint账户不包含名称信息
-            symbol: None, // 链上mint账户不包含符号信息
+            name: None,     // 链上mint账户不包含名称信息
+            symbol: None,   // 链上mint账户不包含符号信息
             logo_uri: None, // 链上mint账户不包含logo信息
+            description: Some(format!("Token with {} decimals", mint.decimals)),
+            external_url: None,
+            attributes: None,
+            tags: vec!["onchain-basic".to_string()],
         };
 
-        info!("✅ 从链上获取代币元数据: {} (decimals: {})", mint_address, mint.decimals);
+        info!(
+            "✅ 从链上获取基础代币元数据: {} (decimals: {})",
+            mint_address, mint.decimals
+        );
         Ok(metadata)
     }
 
+    /// 获取mint的decimals信息
+    async fn fetch_mint_decimals(&self, mint_address: &Pubkey) -> Result<u8> {
+        let rpc_client = self
+            .rpc_client
+            .as_ref()
+            .ok_or_else(|| EventListenerError::EventParsing("RPC客户端未初始化".to_string()))?;
+
+        let account_data = rpc_client
+            .get_account_data(mint_address)
+            .map_err(|e| EventListenerError::EventParsing(format!("获取mint账户数据失败: {}", e)))?;
+
+        let mint = Mint::unpack(&account_data)
+            .map_err(|e| EventListenerError::EventParsing(format!("解析mint数据失败: {}", e)))?;
+
+        Ok(mint.decimals)
+    }
+
+    /// 创建默认的回退元数据
+    fn create_fallback_metadata(&self, mint_address: &str, decimals: Option<u8>) -> TokenMetadata {
+        let default_decimals = decimals.unwrap_or(6); // 默认6位小数
+
+        // 为一些知名代币提供硬编码信息
+        match mint_address {
+            "So11111111111111111111111111111111111111112" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 9,
+                symbol: Some("WSOL".to_string()),
+                name: Some("Wrapped SOL".to_string()),
+                logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png".to_string()),
+                description: Some("Wrapped Solana".to_string()),
+                external_url: Some("https://solana.com".to_string()),
+                attributes: None,
+                tags: vec!["fallback".to_string(), "wrapped-sol".to_string()],
+            },
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 6,
+                symbol: Some("USDC".to_string()),
+                name: Some("USD Coin".to_string()),
+                logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png".to_string()),
+                description: Some("USD Coin".to_string()),
+                external_url: Some("https://www.centre.io".to_string()),
+                attributes: None,
+                tags: vec!["fallback".to_string(), "stablecoin".to_string()],
+            },
+            "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 6,
+                symbol: Some("RAY".to_string()),
+                name: Some("Raydium".to_string()),
+                logo_uri: Some("https://img-v1.raydium.io/icon/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R.png".to_string()),
+                description: Some("Raydium Protocol Token".to_string()),
+                external_url: Some("https://raydium.io".to_string()),
+                attributes: None,
+                tags: vec!["fallback".to_string(), "defi".to_string()],
+            },
+            _ => {
+                // 默认情况：仅包含地址和decimals
+                debug!("🔄 创建基础回退元数据: {}", mint_address);
+                TokenMetadata {
+                    address: mint_address.to_string(),
+                    decimals: default_decimals,
+                    symbol: None,
+                    name: None,
+                    logo_uri: None,
+                    description: Some(format!("Token with {} decimals (no metadata found)", default_decimals)),
+                    external_url: None,
+                    attributes: None,
+                    tags: vec!["fallback".to_string(), "unknown".to_string()],
+                }
+            }
+        }
+    }
+
+    /// 获取完整的代币元数据（带有完整的fallback链）
+    async fn fetch_complete_metadata(&self, mint_address: &Pubkey) -> TokenMetadata {
+        let mint_str = mint_address.to_string();
+
+        // 1. 先尝试正常的元数据获取
+        match self.fetch_onchain_metadata(mint_address).await {
+            Ok(metadata) => {
+                info!("✅ 获取元数据成功: {}", mint_str);
+                metadata
+            }
+            Err(e) => {
+                warn!("⚠️ 获取元数据失败，使用fallback: {} - {}", mint_str, e);
+
+                // 2. 尝试获取decimals信息
+                let decimals = self.fetch_mint_decimals(mint_address).await.ok();
+
+                // 3. 创建fallback元数据
+                self.create_fallback_metadata(&mint_str, decimals)
+            }
+        }
+    }
+
+    /// 检查是否有代币元数据提供者可用
+    pub fn has_metadata_provider(&self) -> bool {
+        self.metadata_provider.is_some()
+    }
+
+    /// 检查是否有RPC客户端可用
+    pub fn has_rpc_client(&self) -> bool {
+        self.rpc_client.is_some()
+    }
+
+    /// 检查是否有数据库连接可用
+    pub fn has_database(&self) -> bool {
+        self.database.is_some()
+    }
+
+    /// 获取当前支持的元数据源列表
+    pub fn get_available_metadata_sources(&self) -> Vec<&'static str> {
+        let mut sources = Vec::new();
+
+        if self.has_metadata_provider() {
+            sources.extend_from_slice(&[
+                "external-provider",
+                "token-2022",
+                "jupiter-token-list",
+                "solana-token-list",
+            ]);
+        }
+
+        if self.has_database() {
+            sources.push("database");
+        }
+
+        if self.has_rpc_client() {
+            sources.push("onchain-basic");
+        }
+
+        sources.push("fallback");
+        sources.push("cache");
+
+        sources
+    }
+
     /// 异步保存代币元数据到TokenInfo表
-    async fn save_to_token_info(
-        database: Arc<Database>,
-        mint_address: &str,
-        metadata: &TokenMetadata,
-    ) -> Result<()> {
+    async fn save_to_token_info(database: Arc<Database>, mint_address: &str, metadata: &TokenMetadata) -> Result<()> {
         let push_request = TokenPushRequest {
             address: mint_address.to_string(),
             program_id: Some("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string()),
@@ -490,7 +708,7 @@ impl RewardDistributionParser {
             symbol: metadata.symbol.clone().unwrap_or_else(|| "UNK".to_string()),
             decimals: metadata.decimals,
             logo_uri: metadata.logo_uri.clone().unwrap_or_else(|| "".to_string()),
-            tags: Some(vec!["event_listener".to_string()]),
+            tags: Some(metadata.tags.clone()),
             daily_volume: Some(0.0),
             freeze_authority: None,
             mint_authority: None,
@@ -646,7 +864,7 @@ mod tests {
         let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "reward_distribution");
-        assert_eq!(parser.get_discriminator(), [88, 33, 159, 153, 151, 93, 111, 189]);
+        assert_eq!(parser.get_discriminator(), [47, 6, 18, 225, 99, 16, 211, 7]);
     }
 
     #[test]
@@ -679,13 +897,15 @@ mod tests {
     async fn test_convert_to_parsed_event() {
         let config = create_test_config();
         let mut parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
-        
+
         // 不设置RPC客户端，避免实际的网络调用
         parser.rpc_client = None;
-        
+
         let test_event = create_test_referral_reward_event();
 
-        let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345).await;
+        let parsed = parser
+            .convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345)
+            .await;
 
         match parsed {
             ParsedEvent::RewardDistribution(data) => {
@@ -708,7 +928,7 @@ mod tests {
                 assert_eq!(data.distributed_at, test_event.timestamp);
                 assert_eq!(data.signature, "test_signature");
                 assert_eq!(data.slot, 12345);
-                
+
                 // 新的代币元数据字段（在没有RPC和数据库的情况下应该为None）
                 assert_eq!(data.reward_token_decimals, None);
                 assert_eq!(data.reward_token_name, None);
@@ -890,5 +1110,181 @@ mod tests {
         });
 
         assert!(parser.validate_event(&event).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_metadata_provider_integration() {
+        let config = create_test_config();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
+
+        // 初始状态：没有代币元数据提供者
+        assert!(!parser.has_metadata_provider());
+        assert!(parser.has_rpc_client()); // 应该有RPC客户端
+
+        // 测试支持的元数据源
+        let sources = parser.get_available_metadata_sources();
+        println!("支持的元数据源: {:?}", sources);
+
+        // 没有代币元数据提供者时，应该有这些源
+        assert!(sources.contains(&"onchain-basic"));
+        assert!(sources.contains(&"fallback"));
+        assert!(sources.contains(&"cache"));
+        assert!(!sources.contains(&"external-provider"));
+    }
+
+    #[tokio::test]
+    async fn test_fallback_metadata_creation() {
+        let config = create_test_config();
+        let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
+
+        // 测试知名代币的fallback元数据
+        let wsol_metadata = parser.create_fallback_metadata("So11111111111111111111111111111111111111112", Some(9));
+
+        assert_eq!(wsol_metadata.symbol, Some("WSOL".to_string()));
+        assert_eq!(wsol_metadata.name, Some("Wrapped SOL".to_string()));
+        assert_eq!(wsol_metadata.decimals, 9);
+        assert!(wsol_metadata.tags.contains(&"fallback".to_string()));
+        assert!(wsol_metadata.tags.contains(&"wrapped-sol".to_string()));
+
+        // 测试未知代币的fallback元数据
+        let unknown_metadata = parser.create_fallback_metadata("UnknownTokenAddress123456789", Some(6));
+
+        assert_eq!(unknown_metadata.symbol, None);
+        assert_eq!(unknown_metadata.name, None);
+        assert_eq!(unknown_metadata.decimals, 6);
+        assert!(unknown_metadata.tags.contains(&"fallback".to_string()));
+        assert!(unknown_metadata.tags.contains(&"unknown".to_string()));
+
+        // 测试没有decimals时的默认值
+        let default_metadata = parser.create_fallback_metadata("AnotherUnknownToken123456789", None);
+
+        assert_eq!(default_metadata.decimals, 6); // 默认6位小数
+    }
+
+    #[tokio::test]
+    async fn test_external_metadata_conversion() {
+        // 测试外部元数据转换为utils的TokenMetadata
+        let external_metadata = ExternalTokenMetadata {
+            address: "test123".to_string(),
+            symbol: Some("TEST".to_string()),
+            name: Some("Test Token".to_string()),
+            logo_uri: Some("https://example.com/logo.png".to_string()),
+            description: Some("A test token".to_string()),
+            external_url: Some("https://example.com".to_string()),
+            attributes: Some(vec![ExternalTokenAttribute {
+                trait_type: "rarity".to_string(),
+                value: "common".to_string(),
+            }]),
+            tags: vec!["test".to_string()],
+        };
+
+        let converted = RewardDistributionParser::convert_external_metadata(external_metadata, 9);
+
+        assert_eq!(converted.address, "test123");
+        assert_eq!(converted.decimals, 9);
+        assert_eq!(converted.symbol, Some("TEST".to_string()));
+        assert_eq!(converted.name, Some("Test Token".to_string()));
+        assert_eq!(converted.logo_uri, Some("https://example.com/logo.png".to_string()));
+        assert_eq!(converted.description, Some("A test token".to_string()));
+        assert_eq!(converted.external_url, Some("https://example.com".to_string()));
+        assert_eq!(converted.tags, vec!["test".to_string()]);
+
+        // 测试属性转换
+        let attributes = converted.attributes.unwrap();
+        assert_eq!(attributes.len(), 1);
+        assert_eq!(attributes[0].trait_type, "rarity");
+        assert_eq!(attributes[0].value, "common");
+    }
+
+    #[tokio::test]
+    async fn test_token_metadata_utilities() {
+        // 测试新的TokenMetadata功能
+        let mut metadata = utils::TokenMetadata::new("test123".to_string(), 6);
+
+        // 测试基础检查
+        assert!(metadata.is_basic());
+        assert!(!metadata.is_complete());
+
+        // 添加元数据
+        metadata.symbol = Some("TEST".to_string());
+        metadata.name = Some("Test Token".to_string());
+        metadata.logo_uri = Some("https://example.com/logo.png".to_string());
+
+        assert!(!metadata.is_basic());
+        assert!(metadata.is_complete());
+
+        // 测试显示名称
+        assert_eq!(metadata.display_name(), "Test Token");
+        assert_eq!(metadata.display_symbol(), "TEST");
+
+        // 测试标签和属性添加
+        metadata.add_tag("test".to_string());
+        metadata.add_tag("example".to_string());
+        metadata.add_tag("test".to_string()); // 重复标签不应该被添加
+
+        assert_eq!(metadata.tags.len(), 2);
+        assert!(metadata.tags.contains(&"test".to_string()));
+        assert!(metadata.tags.contains(&"example".to_string()));
+
+        metadata.add_attribute("type".to_string(), "utility".to_string());
+        metadata.add_attribute("rarity".to_string(), "common".to_string());
+
+        let attributes = metadata.attributes.as_ref().unwrap();
+        assert_eq!(attributes.len(), 2);
+
+        // 测试属性更新
+        metadata.add_attribute("type".to_string(), "governance".to_string());
+        let updated_attributes = metadata.attributes.as_ref().unwrap();
+        assert_eq!(updated_attributes.len(), 2); // 长度不变
+        assert_eq!(updated_attributes[0].value, "governance"); // 值被更新
+    }
+
+    #[tokio::test]
+    async fn test_metadata_merge() {
+        let base = utils::TokenMetadata {
+            address: "test123".to_string(),
+            decimals: 6,
+            symbol: Some("TEST".to_string()),
+            name: None,
+            logo_uri: None,
+            description: None,
+            external_url: None,
+            attributes: None,
+            tags: vec!["base".to_string()],
+        };
+
+        let additional = utils::TokenMetadata {
+            address: "test123".to_string(),
+            decimals: 6,
+            symbol: Some("OVERRIDE".to_string()), // 不会被使用，因为base已有symbol
+            name: Some("Test Token".to_string()), // 会被使用，因为base没有name
+            logo_uri: Some("https://example.com/logo.png".to_string()),
+            description: Some("A test token".to_string()),
+            external_url: Some("https://example.com".to_string()),
+            attributes: Some(vec![utils::TokenAttribute {
+                trait_type: "source".to_string(),
+                value: "additional".to_string(),
+            }]),
+            tags: vec!["additional".to_string(), "base".to_string()], // base标签不会重复
+        };
+
+        let merged = base.merge_with(additional);
+
+        assert_eq!(merged.symbol, Some("TEST".to_string())); // 保持原值
+        assert_eq!(merged.name, Some("Test Token".to_string())); // 使用新值
+        assert_eq!(merged.logo_uri, Some("https://example.com/logo.png".to_string()));
+        assert_eq!(merged.description, Some("A test token".to_string()));
+        assert_eq!(merged.external_url, Some("https://example.com".to_string()));
+
+        // 测试标签合并
+        assert_eq!(merged.tags.len(), 2); // 去重后只有两个标签
+        assert!(merged.tags.contains(&"base".to_string()));
+        assert!(merged.tags.contains(&"additional".to_string()));
+
+        // 测试属性合并
+        let attributes = merged.attributes.unwrap();
+        assert_eq!(attributes.len(), 1);
+        assert_eq!(attributes[0].trait_type, "source");
+        assert_eq!(attributes[0].value, "additional");
     }
 }

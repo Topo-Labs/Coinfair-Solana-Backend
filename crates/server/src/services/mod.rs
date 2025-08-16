@@ -8,7 +8,10 @@
 //////////////////////////////////////////////////////////////////////
 
 pub mod data_transform;
-pub mod metaplex_service;
+#[cfg(test)]
+pub mod data_transform_optimization_tests;
+#[cfg(test)]
+pub mod config_fix_verification_tests;
 pub mod position_storage;
 pub mod refer_service;
 pub mod reward_service;
@@ -48,7 +51,9 @@ impl Services {
                 info!("🧠 Services initialized from environment variables");
 
                 // 初始化数据库服务（包括运行迁移）
-                if let Err(e) = tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(services.init_database_service())) {
+                if let Err(e) = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(services.init_database_service())
+                }) {
                     error!("❌ 数据库服务初始化失败: {}", e);
                     warn!("⚠️ 继续启动服务，但某些功能可能不可用");
                 }
@@ -73,7 +78,8 @@ impl Services {
                 };
 
                 // 创建权限服务
-                let solana_permission = Arc::new(SolanaPermissionService::with_database(database.clone())) as DynSolanaPermissionService;
+                let solana_permission =
+                    Arc::new(SolanaPermissionService::with_database(database.clone())) as DynSolanaPermissionService;
 
                 // 创建代币服务
                 let token = Arc::new(TokenService::new(database.clone()));
@@ -89,7 +95,9 @@ impl Services {
                 };
 
                 // 初始化数据库服务（包括运行迁移）
-                if let Err(e) = tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(services.init_database_service())) {
+                if let Err(e) = tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(services.init_database_service())
+                }) {
                     error!("❌ 数据库服务初始化失败: {}", e);
                     warn!("⚠️ 继续启动服务，但某些功能可能不可用");
                 }
@@ -112,7 +120,8 @@ impl Services {
         let solana = Arc::new(SolanaService::with_database(db)?) as DynSolanaService;
 
         // 创建权限服务
-        let solana_permission = Arc::new(SolanaPermissionService::with_database(database.clone())) as DynSolanaPermissionService;
+        let solana_permission =
+            Arc::new(SolanaPermissionService::with_database(database.clone())) as DynSolanaPermissionService;
 
         // 创建代币服务
         let token = Arc::new(TokenService::new(database.clone()));
@@ -217,7 +226,11 @@ impl Services {
         info!("🔧 初始化权限服务...");
 
         // 将权限服务向下转型为具体类型以调用 init_from_database 方法
-        if let Some(concrete_service) = self.solana_permission.as_any().downcast_ref::<SolanaPermissionService>() {
+        if let Some(concrete_service) = self
+            .solana_permission
+            .as_any()
+            .downcast_ref::<SolanaPermissionService>()
+        {
             match concrete_service.init_from_database().await {
                 Ok(_) => {
                     info!("✅ 权限服务初始化完成");
@@ -259,7 +272,10 @@ impl Services {
         let migration = PoolTypeMigration;
 
         // 获取MongoDB数据库实例
-        let mongo_client = mongodb::Client::with_uri_str(&std::env::var("MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string())).await?;
+        let mongo_client = mongodb::Client::with_uri_str(
+            &std::env::var("MONGO_URI").unwrap_or_else(|_| "mongodb://localhost:27017".to_string()),
+        )
+        .await?;
         let db_name = std::env::var("MONGO_DB").unwrap_or_else(|_| "coinfair".to_string());
         let mongo_db = mongo_client.database(&db_name);
 

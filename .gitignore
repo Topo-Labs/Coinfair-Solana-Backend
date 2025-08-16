@@ -74,5 +74,7 @@ screenshots/
 tests/*
 .claude/*
 lower-wallet.json
+upper-upper-wallet.json
 /references
 script/*
+mongodb-query/*

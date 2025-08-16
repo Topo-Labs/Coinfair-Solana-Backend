@@ -4,7 +4,6 @@
 
 use super::super::shared::SharedContext;
 use super::storage::ClmmPoolStorageService;
-use crate::services::metaplex_service::MetaplexService;
 use database::clmm_pool::{ClmmPool, SyncStatus};
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey};
 use spl_token::state::Mint;
@@ -13,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
-use utils::AppResult;
+use utils::{AppResult, MetaplexService};
 
 /// 数据同步服务配置
 #[derive(Debug, Clone)]
@@ -286,8 +285,8 @@ impl ClmmPoolSyncService {
         let mut updated_count = 0u64;
 
         // 逐个更新数据库中的代币信息
-        for (mint_address, metadata) in metadata_map {
-            match self.storage.update_token_metadata(&mint_address, &metadata).await {
+        for (mint_address, metadata) in metadata_map.iter() {
+            match self.storage.update_token_metadata(mint_address, metadata).await {
                 Ok(true) => {
                     updated_count += 1;
                     debug!("✅ 代币元数据已更新: {} - {}", mint_address, metadata.symbol.as_deref().unwrap_or("Unknown"));

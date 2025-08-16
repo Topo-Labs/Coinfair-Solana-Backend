@@ -88,6 +88,10 @@ pub struct BackoffConfig {
     pub multiplier: f64,
     /// 最大重试次数
     pub max_retries: Option<u32>,
+    /// 是否启用简单重连模式（固定间隔，无限重试）
+    pub enable_simple_reconnect: bool,
+    /// 简单重连间隔（毫秒）
+    pub simple_reconnect_interval_ms: u64,
 }
 
 /// 批量写入配置
@@ -114,7 +118,7 @@ impl EventListenerConfig {
         // 加载Solana配置
         let solana = SolanaConfig {
             rpc_url: std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()),
-            ws_url: Self::derive_ws_url(&std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string()))?,
+            ws_url: std::env::var("WS_URL").unwrap_or_else(|_| "wss://api.devnet.solana.com".to_string()),
             commitment: std::env::var("SOLANA_COMMITMENT").unwrap_or_else(|_| "confirmed".to_string()),
             program_ids: Self::parse_program_ids()?,
             private_key: std::env::var("PRIVATE_KEY").ok(),
@@ -173,7 +177,17 @@ impl EventListenerConfig {
                     .unwrap_or_else(|_| "2.0".to_string())
                     .parse()
                     .unwrap_or(2.0),
-                max_retries: std::env::var("EVENT_BACKOFF_MAX_RETRIES").ok().and_then(|s| s.parse().ok()),
+                max_retries: std::env::var("EVENT_BACKOFF_MAX_RETRIES")
+                    .ok()
+                    .and_then(|s| s.parse().ok()),
+                enable_simple_reconnect: std::env::var("WEBSOCKET_SIMPLE_RECONNECT")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+                simple_reconnect_interval_ms: std::env::var("WEBSOCKET_RECONNECT_INTERVAL_MS")
+                    .unwrap_or_else(|_| "500".to_string())
+                    .parse()
+                    .unwrap_or(500),
             },
             batch_write: BatchWriteConfig {
                 batch_size: std::env::var("EVENT_BATCH_WRITE_SIZE")
@@ -260,13 +274,19 @@ impl EventListenerConfig {
                     info!("📋 解析到{}个程序ID: {:?}", parsed_ids.len(), parsed_ids);
                     return Ok(parsed_ids);
                 }
-                Err(e) => return Err(EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_IDS失败: {}", e))),
+                Err(e) => {
+                    return Err(EventListenerError::Config(format!(
+                        "解析SUBSCRIBED_PROGRAM_IDS失败: {}",
+                        e
+                    )))
+                }
             }
         }
 
         // 2. 向后兼容：支持单个程序ID格式
         if let Ok(id_str) = std::env::var("SUBSCRIBED_PROGRAM_ID") {
-            let id = Pubkey::from_str(&id_str).map_err(|e| EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_ID失败: {}", e)))?;
+            let id = Pubkey::from_str(&id_str)
+                .map_err(|e| EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_ID失败: {}", e)))?;
             info!("📋 使用单程序ID（兼容模式）: {}", id);
             return Ok(vec![id]);
         }
@@ -319,7 +339,7 @@ impl EventListenerConfig {
     }
 
     /// 从RPC URL推导WebSocket URL
-    fn derive_ws_url(rpc_url: &str) -> Result<String> {
+    fn _derive_ws_url(rpc_url: &str) -> Result<String> {
         let ws_url = rpc_url.replace("https://", "wss://").replace("http://", "ws://");
         Ok(ws_url)
     }
@@ -412,6 +432,8 @@ impl Default for BackoffConfig {
             max_delay_ms: 300000,
             multiplier: 2.0,
             max_retries: None,
+            enable_simple_reconnect: true,
+            simple_reconnect_interval_ms: 500,
         }
     }
 }
@@ -435,11 +457,11 @@ mod tests {
     #[test]
     fn test_derive_ws_url() {
         assert_eq!(
-            EventListenerConfig::derive_ws_url("https://api.devnet.solana.com").unwrap(),
+            EventListenerConfig::_derive_ws_url("https://api.devnet.solana.com").unwrap(),
             "wss://api.devnet.solana.com"
         );
         assert_eq!(
-            EventListenerConfig::derive_ws_url("http://localhost:8899").unwrap(),
+            EventListenerConfig::_derive_ws_url("http://localhost:8899").unwrap(),
             "ws://localhost:8899"
         );
     }
@@ -451,6 +473,8 @@ mod tests {
         assert_eq!(config.max_delay_ms, 300000);
         assert_eq!(config.multiplier, 2.0);
         assert_eq!(config.max_retries, None);
+        assert_eq!(config.enable_simple_reconnect, true);
+        assert_eq!(config.simple_reconnect_interval_ms, 500);
     }
 
     #[test]

@@ -314,20 +314,23 @@ impl SubscriptionManager {
 
         info!("🔍 事件通过过滤器，开始解析: {}", signature);
 
-        // 尝试解析事件（使用智能路由）
+        // 尝试解析所有事件（使用智能路由多事件处理）
         match self
             .parser_registry
-            .parse_event_with_context(&log_response.logs, signature, slot, &self.config.solana.program_ids)
+            .parse_all_events_with_context(&log_response.logs, signature, slot, &self.config.solana.program_ids)
             .await
         {
-            Ok(Some(parsed_event)) => {
-                info!("✅ 事件解析成功: {} -> {:?}", signature, parsed_event.event_type());
+            Ok(parsed_events) if !parsed_events.is_empty() => {
+                info!("✅ 事件解析成功: {} -> 发现{}个事件: {:?}", 
+                      signature, 
+                      parsed_events.len(),
+                      parsed_events.iter().map(|e| e.event_type()).collect::<Vec<_>>());
 
                 // 尝试从日志中提取程序ID用于监控
                 let program_id = self.extract_program_id_from_logs(&log_response.logs);
 
-                // 提交到批量写入器
-                self.batch_writer.submit_event(parsed_event).await?;
+                // 批量提交所有解析的事件到写入器
+                self.batch_writer.submit_events(parsed_events.clone()).await?;
 
                 // 更新检查点 - 使用程序特定的检查点更新
                 if let Some(ref prog_id_str) = program_id {
@@ -343,14 +346,22 @@ impl SubscriptionManager {
                 // 标记为已处理
                 self.mark_signature_processed(signature);
 
-                // 更新指标 - 包括程序特定的指标
-                self.metrics.record_event_processed().await?;
-                if let Some(prog_id) = program_id {
-                    self.metrics.record_event_processed_for_program(&prog_id).await?;
+                // 更新指标 - 按实际处理的事件数量更新
+                let event_count = parsed_events.len();
+                for _ in 0..event_count {
+                    self.metrics.record_event_processed().await?;
                 }
-                self.processed_events.fetch_add(1, Ordering::Relaxed);
+                if let Some(prog_id) = program_id {
+                    for _ in 0..event_count {
+                        self.metrics.record_event_processed_for_program(&prog_id).await?;
+                    }
+                }
+                self.processed_events.fetch_add(event_count as u64, Ordering::Relaxed);
+                
+                info!("📊 事务处理完成: {} -> 成功处理{}个事件", signature, event_count);
             }
-            Ok(None) => {
+            Ok(_) => {
+                // 这个分支覆盖了 Ok(parsed_events) if parsed_events.is_empty() 的情况
                 info!("ℹ️ 事件无法识别，跳过: {}", signature);
             }
             Err(e) => {
@@ -714,5 +725,68 @@ mod tests {
                 println!("⚠️ 意外解析成功，可能是测试数据问题");
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_parse_all_events_integration() {
+        let config = create_test_config();
+        
+        // 创建所有必需的组件
+        let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
+        let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
+        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
+        let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
+
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+            .await
+            .unwrap();
+
+        // 模拟包含多个Program data的日志
+        let logs_with_multiple_program_data = vec![
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
+            "Program data: dGVzdF9kYXRhXzE=".to_string(), // base64编码的"test_data_1"
+            "Program data: dGVzdF9kYXRhXzI=".to_string(), // base64编码的"test_data_2"
+            "Program data: dGVzdF9kYXRhXzM=".to_string(), // base64编码的"test_data_3"
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
+        ];
+
+        // 测试新的 parse_all_events_with_context 方法
+        let all_events_result = manager
+            .parser_registry
+            .parse_all_events_with_context(&logs_with_multiple_program_data, "test_signature", 12345, &manager.config.solana.program_ids)
+            .await;
+
+        // 验证方法调用成功
+        match all_events_result {
+            Ok(events) => {
+                println!("✅ parse_all_events_with_context 调用成功，返回{}个事件", events.len());
+                // 由于测试数据是无效的，预期返回空列表
+                // 但重要的是验证方法能够正常调用并处理多个 Program data
+            }
+            Err(e) => {
+                println!("✅ parse_all_events_with_context 调用成功，数据解析失败（预期结果）: {}", e);
+                // 这也是预期的，因为测试数据是无效的
+            }
+        }
+
+        // 对比测试：验证原有的 parse_event_with_context 仍然正常工作
+        let single_event_result = manager
+            .parser_registry
+            .parse_event_with_context(&logs_with_multiple_program_data, "test_signature", 12345, &manager.config.solana.program_ids)
+            .await;
+
+        match single_event_result {
+            Ok(event) => {
+                match event {
+                    Some(_) => println!("✅ parse_event_with_context 返回了1个事件"),
+                    None => println!("✅ parse_event_with_context 没有找到有效事件"),
+                }
+            }
+            Err(e) => {
+                println!("✅ parse_event_with_context 数据解析失败（预期结果）: {}", e);
+            }
+        }
+
+        println!("🎉 多事件处理集成测试完成");
     }
 }

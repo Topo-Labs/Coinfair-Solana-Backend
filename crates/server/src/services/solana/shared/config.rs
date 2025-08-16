@@ -9,6 +9,7 @@ use tracing::info;
 
 /// ConfigurationManager handles all configuration-related operations
 /// and provides centralized access to RPC clients and API clients
+#[derive(Clone)]
 pub struct ConfigurationManager {
     app_config: AppConfig,
 }

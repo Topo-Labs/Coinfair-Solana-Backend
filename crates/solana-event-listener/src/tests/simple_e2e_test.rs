@@ -331,7 +331,7 @@ fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
 fn create_test_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
     let now = chrono::Utc::now();
     crate::parser::event_parser::RewardDistributionEventData {
-        distribution_id: now.timestamp_millis() as u64,
+        distribution_id: now.timestamp_millis(),
         reward_pool: Pubkey::new_unique().to_string(),
         recipient: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),

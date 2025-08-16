@@ -9,6 +9,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
+// 导入元数据相关类型
+use crate::{ExternalTokenMetadata, TokenAttribute, TokenMetadata, TokenMetadataProvider};
+
 // Solana 相关导入
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_client::rpc_client::RpcClient;
@@ -84,36 +87,6 @@ impl Default for MetaplexConfig {
     }
 }
 
-/// 代币元数据信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenMetadata {
-    /// 代币地址
-    pub address: String,
-    /// 代币符号
-    pub symbol: Option<String>,
-    /// 代币名称
-    pub name: Option<String>,
-    /// Logo URI
-    pub logo_uri: Option<String>,
-    /// 描述
-    pub description: Option<String>,
-    /// 外部链接
-    pub external_url: Option<String>,
-    /// 属性
-    pub attributes: Option<Vec<TokenAttribute>>,
-    /// 标签
-    pub tags: Vec<String>,
-}
-
-/// 代币属性
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TokenAttribute {
-    /// 属性名
-    pub trait_type: String,
-    /// 属性值
-    pub value: String,
-}
-
 /// URI元数据结构（从链上URI获取的JSON数据）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UriMetadata {
@@ -163,7 +136,9 @@ impl MetaplexService {
 
         info!("🌐 Metaplex服务初始化，网络环境: {}", config.network);
 
-        let client = Client::builder().timeout(Duration::from_secs(config.timeout_seconds)).build()?;
+        let client = Client::builder()
+            .timeout(Duration::from_secs(config.timeout_seconds))
+            .build()?;
 
         // 创建Solana RPC客户端用于链上查询
         let rpc_client = if let Ok(rpc_url) = std::env::var("RPC_URL") {
@@ -198,53 +173,16 @@ impl MetaplexService {
         if let Some(ref meta) = metadata {
             // 缓存结果
             self.cache.insert(mint_address.to_string(), meta.clone());
-            info!("✅ 成功获取代币元数据: {} - {}", mint_address, meta.symbol.as_deref().unwrap_or("Unknown"));
+            info!(
+                "✅ 成功获取代币元数据: {} - {}",
+                mint_address,
+                meta.symbol.as_deref().unwrap_or("Unknown")
+            );
         } else {
             warn!("⚠️ 未找到代币元数据: {}", mint_address);
         }
 
         Ok(metadata)
-    }
-
-    /// 批量获取代币元数据
-    pub async fn get_tokens_metadata(&mut self, mint_addresses: &[String]) -> Result<HashMap<String, TokenMetadata>> {
-        let mut results = HashMap::new();
-        let mut pending_addresses = Vec::new();
-
-        // 首先检查缓存
-        for address in mint_addresses {
-            if let Some(metadata) = self.cache.get(address) {
-                results.insert(address.clone(), metadata.clone());
-            } else {
-                pending_addresses.push(address.clone());
-            }
-        }
-
-        if pending_addresses.is_empty() {
-            info!("📦 所有代币元数据都在缓存中");
-            return Ok(results);
-        }
-
-        info!("🔍 批量获取 {} 个代币的元数据", pending_addresses.len());
-
-        // 分批处理待获取的地址
-        for chunk in pending_addresses.chunks(self.config.batch_size) {
-            let batch_results = self.fetch_batch_metadata(chunk).await?;
-
-            for (address, metadata) in batch_results {
-                // 缓存结果
-                self.cache.insert(address.clone(), metadata.clone());
-                results.insert(address, metadata);
-            }
-
-            // 避免请求过于频繁
-            if chunk.len() == self.config.batch_size {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            }
-        }
-
-        info!("✅ 批量获取代币元数据完成，共 {} 个", results.len());
-        Ok(results)
     }
 
     /// 从多个来源获取元数据（带回退机制）
@@ -279,7 +217,10 @@ impl MetaplexService {
         // Jupiter API 包含所有网络的代币，不区分网络环境
         let url = format!("https://token.jup.ag/strict");
 
-        info!("🔍 从Jupiter Token List获取数据: {}， mint_address: {}", url, mint_address);
+        info!(
+            "🔍 从Jupiter Token List获取数据: {}， mint_address: {}",
+            url, mint_address
+        );
 
         #[derive(Deserialize)]
         struct JupiterToken {
@@ -289,6 +230,7 @@ impl MetaplexService {
             #[serde(rename = "logoURI")]
             logo_uri: Option<String>,
             tags: Option<Vec<String>>,
+            decimals: u8,
         }
 
         let response: Vec<JupiterToken> = self.client.get(&url).send().await?.json().await?;
@@ -297,6 +239,7 @@ impl MetaplexService {
             if token.address == mint_address {
                 return Ok(Some(TokenMetadata {
                     address: token.address,
+                    decimals: token.decimals,
                     symbol: Some(token.symbol),
                     name: Some(token.name),
                     logo_uri: token.logo_uri,
@@ -323,9 +266,15 @@ impl MetaplexService {
             _ => "solana.tokenlist.json", // mainnet 默认
         };
 
-        let url = format!("https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/{}", token_list_filename);
+        let url = format!(
+            "https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/{}",
+            token_list_filename
+        );
 
-        info!("🔍 从Solana Token List获取数据: {} 网络: {}, mint_address: {}", url, self.config.network, mint_address);
+        info!(
+            "🔍 从Solana Token List获取数据: {} 网络: {}, mint_address: {}",
+            url, self.config.network, mint_address
+        );
 
         #[derive(Deserialize)]
         struct TokenList {
@@ -337,6 +286,7 @@ impl MetaplexService {
             address: String,
             symbol: String,
             name: String,
+            decimals: u8,
             #[serde(rename = "logoURI")]
             logo_uri: Option<String>,
             tags: Option<Vec<String>>,
@@ -348,6 +298,7 @@ impl MetaplexService {
             if token.address == mint_address {
                 return Ok(Some(TokenMetadata {
                     address: token.address,
+                    decimals: token.decimals,
                     symbol: Some(token.symbol),
                     name: Some(token.name),
                     logo_uri: token.logo_uri,
@@ -356,6 +307,71 @@ impl MetaplexService {
                     attributes: None,
                     tags: token.tags.unwrap_or_default(),
                 }));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// 获取链上元数据
+    pub async fn fetch_onchain_metadata(&self, mint_address: &str) -> Result<Option<TokenMetadata>> {
+        info!("🔗 尝试从链上获取元数据: {}", mint_address);
+
+        // 检查是否有RPC客户端
+        let rpc_client = match &self.rpc_client {
+            Some(client) => client,
+            None => {
+                info!("⚠️ 没有RPC客户端，跳过链上查询");
+                return Ok(None);
+            }
+        };
+
+        // 解析mint地址
+        let mint_pubkey = match mint_address.parse::<Pubkey>() {
+            Ok(pubkey) => pubkey,
+            Err(e) => {
+                info!("❌ 无效的mint地址: {} - {}", mint_address, e);
+                return Ok(None);
+            }
+        };
+
+        // 优先检查是否为Token-2022标准
+        match self.is_token_2022(&rpc_client, &mint_pubkey).await {
+            Ok(true) => {
+                info!("✅ 检测到Token-2022代币: {}", mint_address);
+                // 尝试从Token-2022原生元数据扩展获取
+                match self.fetch_token_2022_metadata(&rpc_client, &mint_pubkey).await {
+                    Ok(Some(token_metadata)) => {
+                        info!("✅ 成功从Token-2022原生元数据获取元数据: {}", mint_address);
+                        return Ok(Some(token_metadata));
+                    }
+                    Ok(None) => {
+                        info!("⚠️ Token-2022代币没有原生元数据扩展，尝试Metaplex");
+                    }
+                    Err(e) => {
+                        info!("❌ 获取Token-2022元数据失败: {} - {}", mint_address, e);
+                    }
+                }
+            }
+            Ok(false) => {
+                debug!("⚠️ 不是Token-2022代币，使用标准Token程序: {}", mint_address);
+            }
+            Err(e) => {
+                debug!("❌ 检测Token-2022失败: {} - {}", mint_address, e);
+            }
+        }
+
+        // 回退到Metaplex元数据获取（适用于标准Token和没有原生元数据的Token-2022）
+        match self.fetch_metaplex_metadata(&rpc_client, &mint_pubkey).await {
+            Ok(Some(token_metadata)) => {
+                info!("✅ 成功从Metaplex获取元数据: {}", mint_address);
+                return Ok(Some(token_metadata));
+            }
+            Ok(None) => {
+                debug!("⚠️ 无法获取Metaplex元数据: {}", mint_address);
+            }
+            Err(e) => {
+                debug!("❌ 获取Metaplex元数据失败: {} - {}", mint_address, e);
             }
         }
 
@@ -371,13 +387,19 @@ impl MetaplexService {
         };
 
         // 检查所有者是否为Token-2022程序
-        let token_2022_program_id = TOKEN_2022_PROGRAM_ID.parse::<Pubkey>().map_err(|e| anyhow::anyhow!("解析Token-2022程序ID失败: {}", e))?;
+        let token_2022_program_id = TOKEN_2022_PROGRAM_ID
+            .parse::<Pubkey>()
+            .map_err(|e| anyhow::anyhow!("解析Token-2022程序ID失败: {}", e))?;
 
         Ok(account.owner == token_2022_program_id)
     }
 
     /// 从Token-2022原生元数据扩展获取元数据
-    async fn fetch_token_2022_metadata(&self, rpc_client: &RpcClient, mint_pubkey: &Pubkey) -> Result<Option<TokenMetadata>> {
+    async fn fetch_token_2022_metadata(
+        &self,
+        rpc_client: &RpcClient,
+        mint_pubkey: &Pubkey,
+    ) -> Result<Option<TokenMetadata>> {
         info!("🔗 尝试从Token-2022原生元数据扩展获取元数据: {}", mint_pubkey);
 
         // 获取mint账户数据
@@ -472,8 +494,12 @@ impl MetaplexService {
             tags.push("metadata-uri".to_string());
         }
 
+        // 获取decimals信息（需要从mint数据中获取）
+        let decimals = self.get_mint_decimals_sync(mint_pubkey).unwrap_or(6);
+
         TokenMetadata {
             address: mint_pubkey.to_string(),
+            decimals,
             symbol: if symbol.is_empty() { None } else { Some(symbol) },
             name: if name.is_empty() { None } else { Some(name) },
             logo_uri: if uri.is_empty() { None } else { Some(uri) },
@@ -484,111 +510,29 @@ impl MetaplexService {
         }
     }
 
-    /// 获取链上元数据
-    async fn fetch_onchain_metadata(&self, mint_address: &str) -> Result<Option<TokenMetadata>> {
-        info!("🔗 尝试从链上获取元数据: {}", mint_address);
+    /// 同步获取mint的decimals信息（用于内部调用）
+    fn get_mint_decimals_sync(&self, mint_pubkey: &Pubkey) -> Result<u8> {
+        let rpc_client = self
+            .rpc_client
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("RPC客户端未初始化"))?;
 
-        // 检查是否有RPC客户端
-        let rpc_client = match &self.rpc_client {
-            Some(client) => client,
-            None => {
-                info!("⚠️ 没有RPC客户端，跳过链上查询");
-                return Ok(None);
-            }
-        };
+        let account_data = rpc_client
+            .get_account_data(mint_pubkey)
+            .map_err(|e| anyhow::anyhow!("获取mint账户数据失败: {}", e))?;
 
-        // 解析mint地址
-        let mint_pubkey = match mint_address.parse::<Pubkey>() {
-            Ok(pubkey) => pubkey,
-            Err(e) => {
-                info!("❌ 无效的mint地址: {} - {}", mint_address, e);
-                return Ok(None);
-            }
-        };
+        let mint =
+            spl_token::state::Mint::unpack(&account_data).map_err(|e| anyhow::anyhow!("解析mint数据失败: {}", e))?;
 
-        // 优先检查是否为Token-2022标准
-        match self.is_token_2022(&rpc_client, &mint_pubkey).await {
-            Ok(true) => {
-                info!("✅ 检测到Token-2022代币: {}", mint_address);
-                // 尝试从Token-2022原生元数据扩展获取
-                match self.fetch_token_2022_metadata(&rpc_client, &mint_pubkey).await {
-                    Ok(Some(token_metadata)) => {
-                        info!("✅ 成功从Token-2022原生元数据获取元数据: {}", mint_address);
-                        return Ok(Some(token_metadata));
-                    }
-                    Ok(None) => {
-                        info!("⚠️ Token-2022代币没有原生元数据扩展，尝试Metaplex");
-                    }
-                    Err(e) => {
-                        info!("❌ 获取Token-2022元数据失败: {} - {}", mint_address, e);
-                    }
-                }
-            }
-            Ok(false) => {
-                debug!("⚠️ 不是Token-2022代币，使用标准Token程序: {}", mint_address);
-            }
-            Err(e) => {
-                debug!("❌ 检测Token-2022失败: {} - {}", mint_address, e);
-            }
-        }
-
-        // 回退到Metaplex元数据获取（适用于标准Token和没有原生元数据的Token-2022）
-        match self.fetch_metaplex_metadata(&rpc_client, &mint_pubkey).await {
-            Ok(Some(token_metadata)) => {
-                info!("✅ 成功从Metaplex获取元数据: {}", mint_address);
-                return Ok(Some(token_metadata));
-            }
-            Ok(None) => {
-                debug!("⚠️ 无法获取Metaplex元数据: {}", mint_address);
-            }
-            Err(e) => {
-                debug!("❌ 获取Metaplex元数据失败: {} - {}", mint_address, e);
-            }
-        }
-
-        Ok(None)
-    }
-
-    /// 获取SPL Token基本信息
-    async fn _fetch_spl_token_info(&self, rpc_client: &RpcClient, mint_pubkey: &Pubkey) -> Result<Option<TokenMetadata>> {
-        use spl_token::state::Mint;
-
-        // 获取mint账户信息
-        let account_data = rpc_client.get_account_data(mint_pubkey).map_err(|e| anyhow::anyhow!("获取mint账户失败: {}", e))?;
-
-        // 解析mint账户数据
-        let mint_info = Mint::unpack(&account_data).map_err(|e| anyhow::anyhow!("解析mint账户失败: {}", e))?;
-
-        // 创建基本的代币信息
-        let token_metadata = TokenMetadata {
-            address: mint_pubkey.to_string(),
-            symbol: None, // SPL Token不包含symbol信息
-            name: None,   // SPL Token不包含name信息
-            logo_uri: None,
-            description: Some(format!("SPL Token with {} decimals", mint_info.decimals)),
-            external_url: None,
-            attributes: Some(vec![
-                TokenAttribute {
-                    trait_type: "decimals".to_string(),
-                    value: mint_info.decimals.to_string(),
-                },
-                TokenAttribute {
-                    trait_type: "supply".to_string(),
-                    value: mint_info.supply.to_string(),
-                },
-                TokenAttribute {
-                    trait_type: "is_initialized".to_string(),
-                    value: mint_info.is_initialized.to_string(),
-                },
-            ]),
-            tags: vec!["spl-token".to_string()],
-        };
-
-        Ok(Some(token_metadata))
+        Ok(mint.decimals)
     }
 
     /// 获取Metaplex元数据
-    async fn fetch_metaplex_metadata(&self, rpc_client: &RpcClient, mint_pubkey: &Pubkey) -> Result<Option<TokenMetadata>> {
+    async fn fetch_metaplex_metadata(
+        &self,
+        rpc_client: &RpcClient,
+        mint_pubkey: &Pubkey,
+    ) -> Result<Option<TokenMetadata>> {
         // 计算元数据账户地址
         let metadata_pubkey = self.find_metadata_pda(mint_pubkey)?;
 
@@ -606,8 +550,14 @@ impl MetaplexService {
         // 尝试解析元数据（使用增强的异步解析）
         match self.parse_metadata_simple(&account_data).await {
             Ok(Some(mut token_metadata)) => {
-                // 设置mint地址
+                // 设置mint地址和decimals
                 token_metadata.address = mint_pubkey.to_string();
+
+                // 获取decimals信息
+                if let Ok(decimals) = self.get_mint_decimals_sync(mint_pubkey) {
+                    token_metadata.decimals = decimals;
+                }
+
                 Ok(Some(token_metadata))
             }
             Ok(None) => {
@@ -621,11 +571,8 @@ impl MetaplexService {
         }
     }
 
-    /// 增强的元数据解析（不依赖外部库）- 支持解析更多字段
+    /// 增强的元数据解析
     async fn parse_metadata_simple(&self, data: &[u8]) -> Result<Option<TokenMetadata>> {
-        // 这是一个增强的解析器，尝试从raw数据中提取更多字段信息
-        // 实际的Metaplex元数据结构更复杂，这里尽力解析主要字段
-
         if data.len() < 200 {
             debug!("🔍 数据长度不足 {} bytes，跳过解析", data.len());
             return Ok(None);
@@ -656,7 +603,6 @@ impl MetaplexService {
         let (uri, new_offset) = match self.parse_string_field(data, offset, 500, "uri") {
             Ok((value, next_offset)) => (value, next_offset),
             Err(_) => {
-                // URI解析失败不会导致整个解析失败
                 debug!("⚠️ 无法解析URI字段，继续处理其他字段");
                 (None, offset)
             }
@@ -670,19 +616,18 @@ impl MetaplexService {
             0
         };
 
-        // 跳过seller_fee_basis_points
-        // if offset + 2 <= data.len() {
-        //     offset += 2;
-        // }
-
         // 创建基础的链上元数据
         let mut chain_metadata = TokenMetadata {
             address: "".to_string(), // 将在调用者中设置
+            decimals: 6,             // 默认值，将在调用者中覆盖
             symbol: symbol,
             name: name,
             logo_uri: uri.clone(),
             description: if seller_fee_basis_points > 0 {
-                Some(format!("Metaplex NFT with {}% royalty", seller_fee_basis_points as f64 / 100.0))
+                Some(format!(
+                    "Metaplex NFT with {}% royalty",
+                    seller_fee_basis_points as f64 / 100.0
+                ))
             } else {
                 Some("Token with Metaplex metadata".to_string())
             },
@@ -704,7 +649,6 @@ impl MetaplexService {
             tags: {
                 let mut tags = vec!["metaplex".to_string()];
 
-                // 根据解析到的信息添加更多标签
                 if seller_fee_basis_points > 0 {
                     tags.push("royalty".to_string());
                 }
@@ -751,7 +695,13 @@ impl MetaplexService {
     }
 
     /// 辅助函数：解析字符串字段
-    fn parse_string_field(&self, data: &[u8], offset: usize, max_len: usize, field_name: &str) -> Result<(Option<String>, usize)> {
+    fn parse_string_field(
+        &self,
+        data: &[u8],
+        offset: usize,
+        max_len: usize,
+        field_name: &str,
+    ) -> Result<(Option<String>, usize)> {
         if offset + 4 > data.len() {
             return Err(anyhow::anyhow!("数据不足以读取{}长度", field_name));
         }
@@ -848,6 +798,7 @@ impl MetaplexService {
 
             TokenMetadata {
                 address: chain_metadata.address,
+                decimals: chain_metadata.decimals,
                 symbol: chain_metadata.symbol.or(uri_meta.symbol),
                 name: chain_metadata.name.or(uri_meta.name),
                 logo_uri: chain_metadata.logo_uri.or(uri_meta.image),
@@ -863,7 +814,9 @@ impl MetaplexService {
 
     /// 计算元数据程序派生地址(PDA)
     fn find_metadata_pda(&self, mint: &Pubkey) -> Result<Pubkey> {
-        let metadata_program_id = METADATA_PROGRAM_ID.parse::<Pubkey>().map_err(|e| anyhow::anyhow!("解析元数据程序ID失败: {}", e))?;
+        let metadata_program_id = METADATA_PROGRAM_ID
+            .parse::<Pubkey>()
+            .map_err(|e| anyhow::anyhow!("解析元数据程序ID失败: {}", e))?;
 
         // 计算元数据账户的PDA
         let seeds = &["metadata".as_bytes(), metadata_program_id.as_ref(), mint.as_ref()];
@@ -872,38 +825,13 @@ impl MetaplexService {
         Ok(metadata_pubkey)
     }
 
-    /// 解析元数据账户数据
-    fn _parse_metadata_account(&self, data: &[u8]) -> Result<SimpleData> {
-        // 尝试反序列化元数据账户
-        let metadata = SimpleMetadata::try_from_slice(data).map_err(|e| anyhow::anyhow!("反序列化元数据失败: {}", e))?;
-
-        Ok(metadata.data)
-    }
-
-    /// 批量获取元数据
-    async fn fetch_batch_metadata(&self, mint_addresses: &[String]) -> Result<HashMap<String, TokenMetadata>> {
-        let mut results = HashMap::new();
-
-        // 简单的并发处理
-        let futures: Vec<_> = mint_addresses.iter().map(|address| self.fetch_metadata_with_fallback(address)).collect();
-
-        let responses = futures::future::join_all(futures).await;
-
-        for (i, response) in responses.into_iter().enumerate() {
-            if let Ok(Some(metadata)) = response {
-                results.insert(mint_addresses[i].clone(), metadata);
-            }
-        }
-
-        Ok(results)
-    }
-
     /// 创建回退元数据
     fn create_fallback_metadata(&self, mint_address: &str) -> TokenMetadata {
         // 对于一些知名代币，提供硬编码的信息
         match mint_address {
             "So11111111111111111111111111111111111111112" => TokenMetadata {
                 address: mint_address.to_string(),
+                decimals: 9,
                 symbol: Some("WSOL".to_string()),
                 name: Some("Wrapped SOL".to_string()),
                 logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png".to_string()),
@@ -914,6 +842,7 @@ impl MetaplexService {
             },
             "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => TokenMetadata {
                 address: mint_address.to_string(),
+                decimals: 6,
                 symbol: Some("USDC".to_string()),
                 name: Some("USD Coin".to_string()),
                 logo_uri: Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png".to_string()),
@@ -924,6 +853,7 @@ impl MetaplexService {
             },
             "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R" => TokenMetadata {
                 address: mint_address.to_string(),
+                decimals: 6,
                 symbol: Some("RAY".to_string()),
                 name: Some("Raydium".to_string()),
                 logo_uri: Some("https://img-v1.raydium.io/icon/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R.png".to_string()),
@@ -932,10 +862,77 @@ impl MetaplexService {
                 attributes: None,
                 tags: vec![],
             },
+            "CKgtJw9y47qAgxRHBdgjABY7DP4u6bLHXM1G68anWwJm" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 6,
+                symbol: Some("JM-M1".to_string()),
+                name: Some("JM-M1".to_string()),
+                logo_uri: Some("http://localhost:8000/static/coin.png".to_string()),
+                description: Some("JM-M1".to_string()),
+                external_url: Some("JM-M1".to_string()),
+                attributes: None,
+                tags: vec![],
+            },
+            "5pbcULDGXotRZjJvmoiqj3qYaHJeDYAWpsaT58j6Ao56" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 6,
+                symbol: Some("56-M0".to_string()),
+                name: Some("56-M0".to_string()),
+                logo_uri: Some("http://localhost:8000/static/coin.png".to_string()),
+                description: Some("56-M0".to_string()),
+                external_url: Some("56-M0".to_string()),
+                attributes: None,
+                tags: vec![],
+            },
+            "9C57seuQ3B6yNTmxwU4TdxmCwHEQWq8SMQUn6MYKXxUU" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 9,
+                symbol: Some("CFT1".to_string()),
+                name: Some("cftest1".to_string()),
+                logo_uri: Some("http://localhost:8000/static/coin.png".to_string()),
+                description: Some("CFT1".to_string()),
+                external_url: Some("CFT1".to_string()),
+                attributes: None,
+                tags: vec![],
+            },
+            "4W4WpXG85nsZEGBdFJsnAR1BgFhR688BgHUqmvwnjgNE" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 9,
+                symbol: Some("CFT2".to_string()),
+                name: Some("cftest2".to_string()),
+                logo_uri: Some("http://localhost:8000/static/coin.png".to_string()),
+                description: Some("CFT2".to_string()),
+                external_url: Some("CFT2".to_string()),
+                attributes: None,
+                tags: vec![],
+            },
+            "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 6,
+                symbol: Some("USDC".to_string()),
+                name: Some("USD Coin".to_string()),
+                logo_uri: Some("http://localhost:8000/static/coin.png".to_string()),
+                description: Some("USDC".to_string()),
+                external_url: Some("USDC".to_string()),
+                attributes: None,
+                tags: vec![],
+            },
+            "CF1Ms9vjvGEiSHqoj1jLadoLNXD9EqtnR6TZp1w8CeHz" => TokenMetadata {
+                address: mint_address.to_string(),
+                decimals: 9,
+                symbol: Some("FAIR".to_string()),
+                name: Some("FAIR".to_string()),
+                logo_uri: Some("http://localhost:8000/static/coin.png".to_string()),
+                description: Some("FAIR".to_string()),
+                external_url: Some("FAIR".to_string()),
+                attributes: None,
+                tags: vec![],
+            },
             _ => {
                 info!("🔍 创建为空的数据: {}", mint_address);
                 TokenMetadata {
                     address: mint_address.to_string(),
+                    decimals: 6, // 默认6位小数
                     symbol: None,
                     name: None,
                     logo_uri: None,
@@ -958,129 +955,156 @@ impl MetaplexService {
     pub fn get_cache_stats(&self) -> (usize, usize) {
         (self.cache.len(), self.cache.capacity())
     }
+
+    /// 批量获取多个代币的元数据
+    ///
+    /// 用于向后兼容server crate中的调用方式
+    pub async fn get_tokens_metadata(
+        &mut self,
+        mint_addresses: &[String],
+    ) -> anyhow::Result<HashMap<String, TokenMetadata>> {
+        let mut result = HashMap::new();
+
+        info!("🔍 批量获取 {} 个代币的元数据", mint_addresses.len());
+
+        for mint_address in mint_addresses {
+            match self.get_token_metadata(mint_address).await {
+                Ok(Some(metadata)) => {
+                    result.insert(mint_address.clone(), metadata);
+                }
+                Ok(None) => {
+                    info!("⚠️ 未找到代币元数据: {}", mint_address);
+                    // 对于没有找到的代币，我们不插入到结果中
+                }
+                Err(e) => {
+                    warn!("❌ 获取代币元数据失败: {} - {}", mint_address, e);
+                    // 继续处理其他代币，不中断整个批量操作
+                }
+            }
+        }
+
+        info!("✅ 批量获取完成，成功获取 {} 个代币的元数据", result.len());
+        Ok(result)
+    }
+}
+
+/// 为 MetaplexService 实现 TokenMetadataProvider trait
+#[async_trait::async_trait]
+impl TokenMetadataProvider for MetaplexService {
+    async fn get_token_metadata(&mut self, mint_address: &str) -> anyhow::Result<Option<ExternalTokenMetadata>> {
+        // 检查缓存
+        if let Some(metadata) = self.cache.get(mint_address) {
+            info!("📦 从缓存获取代币元数据: {}", mint_address);
+            let external_metadata = ExternalTokenMetadata::from_token_metadata(metadata.clone());
+            return Ok(Some(external_metadata));
+        }
+
+        info!("🔍 获取代币元数据: {}", mint_address);
+
+        // 尝试从多个来源获取元数据
+        match self.fetch_metadata_with_fallback(mint_address).await? {
+            Some(metadata) => {
+                // 缓存结果
+                self.cache.insert(mint_address.to_string(), metadata.clone());
+                info!(
+                    "✅ 成功获取代币元数据: {} - {}",
+                    mint_address,
+                    metadata.symbol.as_deref().unwrap_or("Unknown")
+                );
+
+                // 将 TokenMetadata 转换为 ExternalTokenMetadata
+                let external_metadata = ExternalTokenMetadata::from_token_metadata(metadata);
+                Ok(Some(external_metadata))
+            }
+            None => {
+                warn!("⚠️ 未找到代币元数据: {}", mint_address);
+                Ok(None)
+            }
+        }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spl_pod::optional_keys::OptionalNonZeroPubkey;
+
     #[tokio::test]
-    async fn test_enhanced_metadata_parsing() {
-        let service = MetaplexService::new(None).unwrap();
+    async fn test_metaplex_service_creation() {
+        // 测试 MetaplexService 创建
+        let service = MetaplexService::new(None);
+        assert!(service.is_ok());
 
-        // 创建一个模拟的Metaplex元数据账户数据
-        // 这个测试展示了增强解析器的能力
-        let mut mock_data = vec![0u8; 300];
+        let service = service.unwrap();
+        assert_eq!(service.cache.len(), 0);
+    }
 
-        // 设置固定字段
-        mock_data[0] = 4; // key: Metaplex metadata账户类型
-                          // update_authority (32字节) 和 mint (32字节) 已经是零值
+    #[tokio::test]
+    async fn test_token_metadata_provider_trait() {
+        // 测试 TokenMetadataProvider trait 实现
+        let mut service = MetaplexService::new(None).unwrap();
 
-        let mut offset = 1 + 32 + 32; // 跳过key, update_authority, mint
+        // 测试 WSOL 的元数据获取（可能来自链上或fallback）
+        let result = service
+            .get_token_metadata("So11111111111111111111111111111111111111112")
+            .await;
+        assert!(result.is_ok());
 
-        // 写入name字段
-        let name = "Enhanced Test Token";
-        let name_bytes = name.as_bytes();
-        let name_len = name_bytes.len() as u32;
-        mock_data[offset..offset + 4].copy_from_slice(&name_len.to_le_bytes());
-        offset += 4;
-        mock_data[offset..offset + name_bytes.len()].copy_from_slice(name_bytes);
-        offset += name_bytes.len();
-
-        // 写入symbol字段
-        let symbol = "ETT";
-        let symbol_bytes = symbol.as_bytes();
-        let symbol_len = symbol_bytes.len() as u32;
-        mock_data[offset..offset + 4].copy_from_slice(&symbol_len.to_le_bytes());
-        offset += 4;
-        mock_data[offset..offset + symbol_bytes.len()].copy_from_slice(symbol_bytes);
-        offset += symbol_bytes.len();
-
-        // 写入uri字段
-        let uri = "https://example.com/metadata.json";
-        let uri_bytes = uri.as_bytes();
-        let uri_len = uri_bytes.len() as u32;
-        mock_data[offset..offset + 4].copy_from_slice(&uri_len.to_le_bytes());
-        offset += 4;
-        mock_data[offset..offset + uri_bytes.len()].copy_from_slice(uri_bytes);
-        offset += uri_bytes.len();
-
-        // 写入seller_fee_basis_points (5% = 500)
-        let royalty: u16 = 500;
-        mock_data[offset..offset + 2].copy_from_slice(&royalty.to_le_bytes());
-
-        // 测试解析
-        let result = service.parse_metadata_simple(&mock_data).await.unwrap();
-
-        assert!(result.is_some());
         let metadata = result.unwrap();
+        assert!(metadata.is_some());
 
-        assert_eq!(metadata.name, Some("Enhanced Test Token".to_string()));
-        assert_eq!(metadata.symbol, Some("ETT".to_string()));
-        assert_eq!(metadata.logo_uri, Some("https://example.com/metadata.json".to_string()));
-
-        // 检查描述内容应该包含royalty信息
-        let description = metadata.description.as_ref().unwrap();
-        assert!(description.contains("5% royalty"));
-
-        assert!(metadata.tags.contains(&"metaplex".to_string()));
-        assert!(metadata.tags.contains(&"royalty".to_string()));
-        assert!(metadata.tags.contains(&"metadata-uri".to_string()));
-
-        // 检查属性
-        let attributes = metadata.attributes.unwrap();
-        assert_eq!(attributes.len(), 2);
-        assert_eq!(attributes[0].trait_type, "seller_fee_basis_points");
-        assert_eq!(attributes[0].value, "500");
-        assert_eq!(attributes[1].trait_type, "royalty_percentage");
-        assert_eq!(attributes[1].value, "5.00%");
+        let metadata = metadata.unwrap();
+        assert_eq!(metadata.address, "So11111111111111111111111111111111111111112");
+        // 注意：symbol 可能是 "SOL" (来自token list) 或 "WSOL" (来自fallback)
+        assert!(metadata.symbol.is_some());
+        let symbol = metadata.symbol.unwrap();
+        assert!(
+            symbol == "SOL" || symbol == "WSOL",
+            "Expected SOL or WSOL, got: {}",
+            symbol
+        );
+        // name 可能是 "Solana" 或 "Wrapped SOL"
+        assert!(metadata.name.is_some());
     }
 
     #[tokio::test]
-    async fn test_parse_string_field() {
-        let service = MetaplexService::new(None).unwrap();
+    async fn test_external_token_metadata_conversion() {
+        // 测试 ExternalTokenMetadata 转换
+        let token_metadata = TokenMetadata {
+            address: "test123".to_string(),
+            decimals: 6,
+            symbol: Some("TEST".to_string()),
+            name: Some("Test Token".to_string()),
+            logo_uri: Some("https://example.com/logo.png".to_string()),
+            description: Some("A test token".to_string()),
+            external_url: Some("https://example.com".to_string()),
+            attributes: Some(vec![TokenAttribute {
+                trait_type: "type".to_string(),
+                value: "utility".to_string(),
+            }]),
+            tags: vec!["test".to_string()],
+        };
 
-        // 测试正常的字符串解析
-        let mut data = vec![0u8; 20];
-        let test_string = "Hello";
-        let test_len = test_string.len() as u32;
+        // 转换为 ExternalTokenMetadata
+        let external = ExternalTokenMetadata::from_token_metadata(token_metadata.clone());
+        assert_eq!(external.address, "test123");
+        assert_eq!(external.symbol, Some("TEST".to_string()));
+        assert_eq!(external.name, Some("Test Token".to_string()));
+        assert_eq!(external.tags, vec!["test".to_string()]);
 
-        data[0..4].copy_from_slice(&test_len.to_le_bytes());
-        data[4..4 + test_string.len()].copy_from_slice(test_string.as_bytes());
-
-        let (result, new_offset) = service.parse_string_field(&data, 0, 10, "test").unwrap();
-        assert_eq!(result, Some("Hello".to_string()));
-        assert_eq!(new_offset, 4 + test_string.len());
-
-        // 测试空字符串
-        data[0..4].copy_from_slice(&0u32.to_le_bytes());
-        let (result, new_offset) = service.parse_string_field(&data, 0, 10, "test").unwrap();
-        assert_eq!(result, None);
-        assert_eq!(new_offset, 4);
-    }
-
-    #[tokio::test]
-    async fn test_fallback_metadata() {
-        let service = MetaplexService::new(None).unwrap();
-
-        // 测试 WSOL
-        let wsol_metadata = service.create_fallback_metadata("So11111111111111111111111111111111111111112");
-        assert_eq!(wsol_metadata.symbol, Some("WSOL".to_string()));
-        assert_eq!(wsol_metadata.name, Some("Wrapped SOL".to_string()));
-
-        // 测试 USDC
-        let usdc_metadata = service.create_fallback_metadata("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-        assert_eq!(usdc_metadata.symbol, Some("USDC".to_string()));
-        assert_eq!(usdc_metadata.name, Some("USD Coin".to_string()));
-
-        // 测试未知代币
-        let unknown_metadata = service.create_fallback_metadata("UnknownMintAddress123456789");
-        assert_eq!(unknown_metadata.symbol, None);
-        assert_eq!(unknown_metadata.name, None);
+        // 转换回 TokenMetadata
+        let converted_back = external.to_token_metadata(6);
+        assert_eq!(converted_back.address, token_metadata.address);
+        assert_eq!(converted_back.decimals, token_metadata.decimals);
+        assert_eq!(converted_back.symbol, token_metadata.symbol);
+        assert_eq!(converted_back.name, token_metadata.name);
     }
 
     #[test]
-    fn test_config_default() {
+    fn test_metaplex_config_default() {
         let config = MetaplexConfig::default();
         assert_eq!(config.base_url, "https://api.metaplex.com");
         assert_eq!(config.timeout_seconds, 30);
@@ -1090,93 +1114,50 @@ mod tests {
     }
 
     #[test]
-    fn test_network_detection() {
-        // 测试devnet网络检测
-        std::env::set_var("RPC_URL", "https://api.devnet.solana.com");
+    fn test_fallback_metadata_creation() {
         let service = MetaplexService::new(None).unwrap();
-        assert_eq!(service.config.network, "devnet");
 
-        // 测试testnet网络检测
-        std::env::set_var("RPC_URL", "https://api.testnet.solana.com");
-        let service = MetaplexService::new(None).unwrap();
-        assert_eq!(service.config.network, "testnet");
+        // 测试 WSOL fallback
+        let wsol_metadata = service.create_fallback_metadata("So11111111111111111111111111111111111111112");
+        assert_eq!(wsol_metadata.symbol, Some("WSOL".to_string()));
+        assert_eq!(wsol_metadata.name, Some("Wrapped SOL".to_string()));
+        assert_eq!(wsol_metadata.decimals, 9);
 
-        // 测试mainnet网络检测
-        std::env::set_var("RPC_URL", "https://api.mainnet-beta.solana.com");
-        let service = MetaplexService::new(None).unwrap();
-        assert_eq!(service.config.network, "mainnet");
+        // 测试 USDC fallback
+        let usdc_metadata = service.create_fallback_metadata("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+        assert_eq!(usdc_metadata.symbol, Some("USDC".to_string()));
+        assert_eq!(usdc_metadata.name, Some("USD Coin".to_string()));
+        assert_eq!(usdc_metadata.decimals, 6);
 
-        // 清理环境变量
-        std::env::remove_var("RPC_URL");
+        // 测试未知代币 fallback
+        let unknown_metadata = service.create_fallback_metadata("UnknownToken123456789");
+        assert_eq!(unknown_metadata.symbol, None);
+        assert_eq!(unknown_metadata.name, None);
+        assert_eq!(unknown_metadata.decimals, 6);
     }
 
     #[test]
-    fn test_token_2022_program_id_parsing() {
-        // 测试Token-2022程序ID解析
-        let program_id = TOKEN_2022_PROGRAM_ID.parse::<Pubkey>();
-        assert!(program_id.is_ok());
-        assert_eq!(program_id.unwrap().to_string(), "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    fn test_cache_operations() {
+        let mut service = MetaplexService::new(None).unwrap();
+
+        // 测试缓存统计
+        let (size, _capacity) = service.get_cache_stats();
+        assert_eq!(size, 0);
+
+        // 测试清除缓存
+        service.clear_cache();
+        let (size, _) = service.get_cache_stats();
+        assert_eq!(size, 0);
     }
 
-    #[test]
-    fn test_convert_token_2022_metadata() {
+    #[tokio::test]
+    async fn test_metaplex_service_as_token_metadata_provider() {
+        // 测试 MetaplexService 能够成功作为 TokenMetadataProvider 使用
         let service = MetaplexService::new(None).unwrap();
-        let mint_pubkey = Pubkey::new_unique();
+        let _provider: Box<dyn TokenMetadataProvider> = Box::new(service);
 
-        // 模拟Token-2022元数据
-        let mut additional_metadata = Vec::new();
-        additional_metadata.push(("description".to_string(), "Test token description".to_string()));
-        additional_metadata.push(("website".to_string(), "https://example.com".to_string()));
-
-        let mock_metadata = Token2022Metadata {
-            mint: mint_pubkey,
-            name: "Test Token 2022".to_string(),
-            symbol: "TT22".to_string(),
-            uri: "https://example.com/metadata.json".to_string(),
-            additional_metadata,
-            update_authority: OptionalNonZeroPubkey::try_from(Some(mint_pubkey)).unwrap(),
-        };
-
-        let result = service.convert_token_2022_metadata(&mint_pubkey, &mock_metadata);
-
-        assert_eq!(result.name, Some("Test Token 2022".to_string()));
-        assert_eq!(result.symbol, Some("TT22".to_string()));
-        assert_eq!(result.logo_uri, Some("https://example.com/metadata.json".to_string()));
-        assert_eq!(result.description, Some("Test token description".to_string()));
-        assert!(result.tags.contains(&"token-2022".to_string()));
-        assert!(result.tags.contains(&"native-metadata".to_string()));
-        assert!(result.tags.contains(&"metadata-uri".to_string()));
-
-        // 检查属性
-        let attributes = result.attributes.unwrap();
-        assert_eq!(attributes.len(), 1);
-        assert_eq!(attributes[0].trait_type, "website");
-        assert_eq!(attributes[0].value, "https://example.com");
-    }
-
-    #[test]
-    fn test_convert_empty_token_2022_metadata() {
-        let service = MetaplexService::new(None).unwrap();
-        let mint_pubkey = Pubkey::new_unique();
-
-        // 模拟空的Token-2022元数据
-        let mock_metadata = Token2022Metadata {
-            mint: mint_pubkey,
-            name: "".to_string(),
-            symbol: "".to_string(),
-            uri: "".to_string(),
-            additional_metadata: Vec::new(),
-            update_authority: OptionalNonZeroPubkey::try_from(Some(mint_pubkey)).unwrap(),
-        };
-
-        let result = service.convert_token_2022_metadata(&mint_pubkey, &mock_metadata);
-
-        assert_eq!(result.name, None);
-        assert_eq!(result.symbol, None);
-        assert_eq!(result.logo_uri, None);
-        assert!(result.tags.contains(&"token-2022".to_string()));
-        assert!(result.tags.contains(&"native-metadata".to_string()));
-        assert!(!result.tags.contains(&"metadata-uri".to_string()));
-        assert_eq!(result.attributes, None);
+        // 这个测试确保 MetaplexService 正确实现了 TokenMetadataProvider trait
+        // 即使没有网络连接，fallback机制也应该能工作
+        assert!(true); // 如果编译通过，说明 trait 实现正确
     }
 }

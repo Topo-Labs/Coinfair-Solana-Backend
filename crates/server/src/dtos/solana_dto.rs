@@ -2987,11 +2987,11 @@ pub struct RewardDistributionAdvancedQuery {
     
     /// 最小分发ID过滤
     #[validate(range(min = 0))]
-    pub distribution_id_min: Option<u64>,
+    pub distribution_id_min: Option<i64>,
     
     /// 最大分发ID过滤
     #[validate(range(min = 0))]
-    pub distribution_id_max: Option<u64>,
+    pub distribution_id_max: Option<i64>,
     
     /// 奖励池地址过滤
     pub reward_pool: Option<String>,
@@ -3090,7 +3090,7 @@ pub struct NftClaimEventResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RewardDistributionEventResponse {
     /// 奖励分发ID
-    pub distribution_id: u64,
+    pub distribution_id: i64,
     
     /// 接收者钱包地址
     pub recipient: String,

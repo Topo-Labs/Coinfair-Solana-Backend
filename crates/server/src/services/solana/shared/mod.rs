@@ -6,6 +6,7 @@ use solana_client::rpc_client::RpcClient;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use utils::ServiceHelpers;
+use crate::services::data_transform::DataTransformService;
 
 pub mod config;
 pub mod helpers;
@@ -25,6 +26,8 @@ pub struct SharedContext {
     pub swap_v2_service: Arc<SwapV2Service>,
     pub swap_v2_builder: Arc<SwapV2InstructionBuilder>,
     pub config_manager: ConfigurationManager,
+    /// 共享的数据转换服务，包含AMM配置缓存
+    pub data_transform_service: Arc<Mutex<DataTransformService>>,
 }
 
 impl SharedContext {
@@ -39,6 +42,9 @@ impl SharedContext {
 
         let swap_config = config_manager.get_config()?;
 
+        // 创建共享的数据转换服务（带RPC客户端以支持链上查询）
+        let data_transform_service = DataTransformService::new_with_rpc(rpc_client.clone())?;
+
         Ok(Self {
             rpc_client,
             app_config,
@@ -48,6 +54,7 @@ impl SharedContext {
             swap_v2_service: Arc::new(swap_v2_service),
             swap_v2_builder: Arc::new(swap_v2_builder),
             config_manager,
+            data_transform_service: Arc::new(Mutex::new(data_transform_service)),
         })
     }
 
@@ -69,6 +76,9 @@ impl SharedContext {
             config_manager.get_config()?
         };
 
+        // 创建共享的数据转换服务（带RPC客户端以支持链上查询）
+        let data_transform_service = DataTransformService::new_with_rpc(rpc_client.clone())?;
+
         Ok(Self {
             rpc_client,
             app_config: AppConfig::default(), // Use default for now since we have the config_manager
@@ -78,6 +88,7 @@ impl SharedContext {
             swap_v2_service: Arc::new(swap_v2_service),
             swap_v2_builder: Arc::new(swap_v2_builder),
             config_manager,
+            data_transform_service: Arc::new(Mutex::new(data_transform_service)),
         })
     }
 

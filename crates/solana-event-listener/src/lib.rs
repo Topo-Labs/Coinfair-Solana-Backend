@@ -22,6 +22,7 @@ use crate::{
 use std::sync::Arc;
 use tokio::signal;
 use tracing::{error, info, warn};
+use utils::{MetaplexService, TokenMetadataProvider};
 
 /// Event-Listener 主服务
 /// 
@@ -52,7 +53,24 @@ impl EventListenerService {
         let metrics = Arc::new(MetricsCollector::new(&config)?);
         let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await?);
         let batch_writer = Arc::new(BatchWriter::new(&config).await?);
-        let parser_registry = Arc::new(EventParserRegistry::new(&config)?);
+        
+        // 创建 MetaplexService 作为代币元数据提供者
+        let metadata_provider = match MetaplexService::new(None) {
+            Ok(service) => {
+                info!("✅ 成功创建代币元数据提供者");
+                let provider: Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>> = 
+                    Arc::new(tokio::sync::Mutex::new(service));
+                Some(provider)
+            }
+            Err(e) => {
+                warn!("⚠️ 创建代币元数据提供者失败: {}, 将使用基础链上查询", e);
+                None
+            }
+        };
+        
+        // 使用带有元数据提供者的EventParserRegistry
+        let parser_registry = Arc::new(EventParserRegistry::new_with_metadata_provider(&config, metadata_provider)?);
+        
         let subscription_manager = Arc::new(
             SubscriptionManager::new(
                 &config,

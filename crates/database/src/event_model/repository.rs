@@ -430,8 +430,8 @@ impl RewardDistributionEventRepository {
     }
 
     /// 根据分发ID查找事件
-    pub async fn find_by_distribution_id(&self, distribution_id: u64) -> AppResult<Option<RewardDistributionEvent>> {
-        let filter = doc! { "distribution_id": distribution_id as i64 };
+    pub async fn find_by_distribution_id(&self, distribution_id: i64) -> AppResult<Option<RewardDistributionEvent>> {
+        let filter = doc! { "distribution_id": distribution_id };
         self.collection.find_one(filter, None).await.map_err(Into::into)
     }
 

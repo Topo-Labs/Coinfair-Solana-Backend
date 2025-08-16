@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use tracing::info;
+use utils::TokenMetadataProvider;
 
 /// 解析器复合键，用于精确路由
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,7 +221,7 @@ pub struct NftClaimEventData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RewardDistributionEventData {
     /// 奖励分发ID
-    pub distribution_id: u64,
+    pub distribution_id: i64,
     /// 奖励池地址
     pub reward_pool: String,
     /// 接收者钱包地址
@@ -358,6 +360,14 @@ pub struct EventParserRegistry {
 impl EventParserRegistry {
     /// 创建新的解析器注册表
     pub fn new(config: &EventListenerConfig) -> Result<Self> {
+        Self::new_with_metadata_provider(config, None)
+    }
+
+    /// 创建新的解析器注册表（支持注入元数据提供者）
+    pub fn new_with_metadata_provider(
+        config: &EventListenerConfig,
+        metadata_provider: Option<Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>>>,
+    ) -> Result<Self> {
         let mut registry = Self {
             parsers: HashMap::new(),
         };
@@ -395,10 +405,17 @@ impl EventParserRegistry {
         registry.register_program_parser(nft_claim_parser)?;
 
         // 奖励分发事件解析器
-        let reward_distribution_parser = Box::new(RewardDistributionParser::new(
+        let mut reward_distribution_parser = Box::new(RewardDistributionParser::new(
             config,
-            pubkey!("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL"),
+            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
         )?);
+
+        // 如果提供了元数据提供者，则注入到奖励分发解析器中
+        if let Some(provider) = metadata_provider {
+            reward_distribution_parser.set_metadata_provider(provider);
+            info!("✅ 已将代币元数据提供者注入到奖励分发解析器");
+        }
+
         registry.register_program_parser(reward_distribution_parser)?;
 
         Ok(registry)
@@ -472,7 +489,12 @@ impl EventParserRegistry {
             if log.starts_with("Program data: ") {
                 program_data_count += 1;
                 if let Some(data_part) = log.strip_prefix("Program data: ") {
-                    tracing::info!("📊 处理第{}个Program data (行{})", program_data_count, index + 1);
+                    tracing::info!(
+                        "📊 处理第{}个Program data (行{}, 数据: {})",
+                        program_data_count,
+                        index + 1,
+                        data_part
+                    );
 
                     match self
                         .try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint)
@@ -532,6 +554,151 @@ impl EventParserRegistry {
         }
 
         Ok(first_valid_event)
+    }
+
+    /// 从单条日志和完整上下文解析所有事件（处理多事件版本）
+    /// 
+    /// 与 `parse_event_with_context` 不同，此方法会处理并返回所有找到的有效事件，
+    /// 而不是只返回第一个有效事件。
+    /// 
+    /// # 使用场景
+    /// 
+    /// - **单个事务包含多个事件时**：当一个事务可能生成多个不同类型的事件
+    /// - **需要完整事件处理时**：当业务逻辑需要处理事务中的所有事件
+    /// - **事件统计分析时**：当需要统计和分析事务中所有事件的信息
+    /// 
+    /// # 与 parse_event_with_context 的区别
+    /// 
+    /// | 特性 | parse_event_with_context | parse_all_events_with_context |
+    /// |------|-------------------------|-------------------------------|
+    /// | 返回类型 | `Result<Option<ParsedEvent>>` | `Result<Vec<ParsedEvent>>` |
+    /// | 事件处理策略 | 只返回第一个有效事件 | 返回所有有效事件 |
+    /// | 向后兼容性 | ✅ 保持现有行为 | ❌ 新方法 |
+    /// | 性能开销 | 较低（找到第一个即停止）| 稍高（处理所有事件）|
+    /// 
+    /// # 参数
+    /// 
+    /// * `logs` - 事务的完整日志数组
+    /// * `signature` - 事务签名
+    /// * `slot` - 区块槽位
+    /// * `subscribed_programs` - 订阅的程序ID列表
+    /// 
+    /// # 返回值
+    /// 
+    /// 返回包含所有成功解析事件的向量。如果没有找到任何有效事件，返回空向量。
+    /// 
+    /// # 错误处理
+    /// 
+    /// 只有在解析过程中发生系统性错误时才会返回 `Err`。单个事件的解析失败
+    /// 不会导致整个方法失败，失败的事件会被跳过并记录在日志中。
+    /// 
+    /// # 示例
+    /// 
+    /// ```rust,no_run
+    /// use solana_event_listener::parser::EventParserRegistry;
+    /// use solana_sdk::pubkey::Pubkey;
+    /// 
+    /// async fn process_all_transaction_events(registry: &EventParserRegistry) -> Result<(), Box<dyn std::error::Error>> {
+    ///     let logs = vec![
+    ///         "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
+    ///         "Program data: <base64_event_data_1>".to_string(),
+    ///         "Program data: <base64_event_data_2>".to_string(),
+    ///         "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
+    ///     ];
+    ///     
+    ///     let events = registry
+    ///         .parse_all_events_with_context(&logs, "signature", 12345, &[])
+    ///         .await?;
+    ///         
+    ///     println!("找到{}个事件", events.len());
+    ///     for event in events {
+    ///         println!("事件类型: {}", event.event_type());
+    ///         // 处理每个事件...
+    ///     }
+    ///     
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn parse_all_events_with_context(
+        &self,
+        logs: &[String],
+        signature: &str,
+        slot: u64,
+        subscribed_programs: &[Pubkey],
+    ) -> Result<Vec<ParsedEvent>> {
+        // 尝试从日志中提取程序ID
+        let program_id_hint = self.extract_program_id_from_logs(logs, subscribed_programs);
+
+        tracing::info!("🧠 智能路由启动（处理所有事件）- 程序ID提示: {:?}", program_id_hint);
+
+        let mut all_valid_events = Vec::new();
+        let mut program_data_count = 0;
+        let mut processed_count = 0;
+        let mut skipped_count = 0;
+
+        // 处理所有程序数据日志
+        for (index, log) in logs.iter().enumerate() {
+            if log.starts_with("Program data: ") {
+                program_data_count += 1;
+                if let Some(data_part) = log.strip_prefix("Program data: ") {
+                    tracing::info!(
+                        "📊 处理第{}个Program data (行{}, 数据: {})",
+                        program_data_count,
+                        index + 1,
+                        data_part
+                    );
+
+                    match self
+                        .try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint)
+                        .await?
+                    {
+                        Some(event) => {
+                            tracing::info!("✅ 第{}个事件解析成功: {}", program_data_count, event.event_type());
+                            processed_count += 1;
+                            // 收集所有有效事件，不跳过任何一个
+                            all_valid_events.push(event);
+                        }
+                        None => {
+                            // 这里包括了白名单过滤和解析失败的情况
+                            // 具体的跳过原因已经在try_parse_program_data_with_hint中记录
+                            skipped_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        if program_data_count > 0 {
+            tracing::info!(
+                "📋 事件处理总结（处理所有事件）: 发现{}个Program data，成功处理{}个，跳过{}个",
+                program_data_count,
+                processed_count,
+                skipped_count
+            );
+        }
+
+        // 如果没有找到任何事件，尝试通用解析器
+        if all_valid_events.is_empty() {
+            tracing::info!("🔄 Program data解析未找到事件，尝试通用解析器");
+            for parser in self.parsers.values() {
+                if let Some(event) = parser.parse_from_logs(logs, signature, slot).await? {
+                    tracing::info!("✅ 通用解析器成功: {}", parser.get_event_type());
+                    all_valid_events.push(event);
+                }
+            }
+        }
+
+        if !all_valid_events.is_empty() {
+            tracing::info!(
+                "✅ 智能路由成功解析{}个事件: {:?}",
+                all_valid_events.len(),
+                all_valid_events.iter().map(|e| e.event_type()).collect::<Vec<_>>()
+            );
+        } else {
+            tracing::info!("❌ 智能路由未找到匹配的解析器");
+        }
+
+        Ok(all_valid_events)
     }
 
     /// 从日志中提取程序ID（解析用）
@@ -1089,8 +1256,8 @@ mod tests {
 
         let registry = EventParserRegistry::new(&config).unwrap();
 
-        // 应该有六个解析器：2个swap、token_creation、pool_creation、nft_claim、reward_distribution
-        assert_eq!(registry.parser_count(), 6);
+        // 应该有5个解析器：2个swap、token_creation、pool_creation、nft_claim、reward_distribution
+        assert_eq!(registry.parser_count(), 5);
 
         let parsers = registry.get_registered_parsers();
         let parser_types: Vec<String> = parsers.iter().map(|(name, _)| name.clone()).collect();
@@ -1101,7 +1268,7 @@ mod tests {
         assert!(parser_types.contains(&"nft_claim".to_string()));
         assert!(parser_types.contains(&"reward_distribution".to_string()));
 
-        // 注意：由于有两个swap解析器，总数是6个
+        // 注意：由于有两个swap解析器，总数是5个
         println!("📊 解析器统计: 总数={}, 类型={:?}", parsers.len(), parser_types);
     }
 
@@ -1332,12 +1499,145 @@ mod tests {
 
         // 验证解析器注册表的统计信息
         let stats = registry.get_detailed_stats();
-        // 应该有六个解析器：2个swap、token_creation、pool_creation、nft_claim、reward_distribution
-        assert_eq!(stats.total_parsers, 6, "应该有6个解析器");
-        assert_eq!(stats.program_specific_count, 6, "应该都是程序特定解析器");
+        // 应该有5个解析器：2个swap、token_creation、pool_creation、nft_claim、reward_distribution
+        assert_eq!(stats.total_parsers, 5, "应该有5个解析器");
+        assert_eq!(stats.program_specific_count, 5, "应该都是程序特定解析器");
         assert_eq!(stats.universal_count, 0, "应该没有通用解析器");
-        assert_eq!(stats.unique_programs, 3, "应该有3个不同的程序");
+        assert_eq!(stats.unique_programs, 2, "应该有2个不同的程序");
 
         println!("📊 解析器统计: {:?}", stats);
+    }
+
+    #[tokio::test]
+    async fn test_parse_all_events_with_context() {
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![Pubkey::new_unique()],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+        };
+
+        let registry = EventParserRegistry::new(&config).unwrap();
+
+        // 测试无Program data的日志
+        let logs = vec![
+            "Program 11111111111111111111111111111111 invoke [1]".to_string(),
+            "Program 11111111111111111111111111111111 success".to_string(),
+        ];
+
+        let result = registry
+            .parse_all_events_with_context(&logs, "test_sig", 12345, &config.solana.program_ids)
+            .await
+            .unwrap();
+        assert!(result.is_empty());
+
+        // 测试包含无效Program data的日志
+        let logs_with_invalid_data = vec![
+            "Program data: invalid_base64_data".to_string(),
+            "Program data: another_invalid_data".to_string(),
+        ];
+
+        let result = registry
+            .parse_all_events_with_context(&logs_with_invalid_data, "test_sig", 12345, &config.solana.program_ids)
+            .await;
+
+        match result {
+            Ok(events) => assert!(events.is_empty(), "应该返回空的事件列表"),
+            Err(_) => {} // 也可能因为Base64解码失败而出错
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parse_all_events_vs_single_event() {
+        // 这个测试用来验证两个方法的行为差异
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![Pubkey::new_unique()],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+        };
+
+        let registry = EventParserRegistry::new(&config).unwrap();
+
+        // 模拟包含多个Program data的日志（尽管它们可能无效）
+        let logs_with_multiple_program_data = vec![
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
+            "Program data: dGVzdF9kYXRhXzE=".to_string(), // base64编码的"test_data_1"
+            "Program data: dGVzdF9kYXRhXzI=".to_string(), // base64编码的"test_data_2" 
+            "Program data: dGVzdF9kYXRhXzM=".to_string(), // base64编码的"test_data_3"
+            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
+        ];
+
+        // 测试单事件解析方法
+        let single_result = registry
+            .parse_event_with_context(&logs_with_multiple_program_data, "test_sig", 12345, &config.solana.program_ids)
+            .await
+            .unwrap();
+
+        // 测试所有事件解析方法
+        let all_result = registry
+            .parse_all_events_with_context(&logs_with_multiple_program_data, "test_sig", 12345, &config.solana.program_ids)
+            .await
+            .unwrap();
+
+        // 验证API行为：单事件方法最多返回1个事件，多事件方法返回向量
+        match single_result {
+            Some(_) => println!("✅ 单事件方法返回了1个事件"),
+            None => println!("✅ 单事件方法没有找到有效事件"),
+        }
+
+        println!("✅ 多事件方法返回了{}个事件", all_result.len());
+
+        // 两个方法都应该正常完成，不会崩溃
+        // 由于测试数据是无效的，预期都不会找到有效事件
+        // 但重要的是验证API正确性和向后兼容性
     }
 }

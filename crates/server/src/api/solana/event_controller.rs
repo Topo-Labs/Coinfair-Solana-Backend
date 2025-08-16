@@ -627,7 +627,7 @@ pub async fn get_rewards_by_recipient(
 )]
 pub async fn get_reward_by_distribution_id(
     Extension(services): Extension<Services>,
-    Path(id): Path<u64>,
+    Path(id): Path<i64>,
 ) -> Result<Json<ApiResponse<RewardDistributionEventResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔍 查询分发ID {} 的奖励事件", id);
 

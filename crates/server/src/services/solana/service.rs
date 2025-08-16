@@ -23,6 +23,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 
+use tokio::sync::Mutex;
+use crate::services::data_transform::DataTransformService;
+
 pub type DynSolanaService = Arc<dyn SolanaServiceTrait + Send + Sync>;
 
 /// Main SolanaService struct that coordinates all specialized services
@@ -58,16 +61,36 @@ impl SolanaService {
         let config_service = ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone());
         let config_service_arc = Arc::new(config_service);
 
+        // 创建优化版本的 DataTransformService，注入 ClmmConfigService
+        let optimized_transform_service = DataTransformService::new_optimized(
+            Some(shared_context.rpc_client.clone()),
+            Some(config_service_arc.clone() as Arc<dyn ClmmConfigServiceTrait>),
+        )?;
+
+        // 创建新的 SharedContext 实例，使用优化的 DataTransformService
+        let optimized_shared_context = SharedContext {
+            rpc_client: shared_context.rpc_client.clone(),
+            app_config: shared_context.app_config.clone(), // 保持原有配置
+            swap_config: shared_context.swap_config.clone(),
+            raydium_swap: shared_context.raydium_swap.clone(),
+            api_client: shared_context.api_client.clone(),
+            swap_v2_service: shared_context.swap_v2_service.clone(),
+            swap_v2_builder: shared_context.swap_v2_builder.clone(),
+            config_manager: shared_context.config_manager.clone(), // 保持原有配置
+            data_transform_service: Arc::new(Mutex::new(optimized_transform_service)),
+        };
+        let optimized_shared_context = Arc::new(optimized_shared_context);
+
         Ok(Self {
-            swap_service: SwapService::new(shared_context.clone()),
-            position_service: PositionService::with_database(shared_context.clone(), Arc::new(database.clone())),
-            clmm_pool_service: ClmmPoolService::new(shared_context.clone(), &database, config_service_arc.clone()),
-            amm_pool_service: AmmPoolService::new(shared_context.clone()),
-            config_service: ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()),
-            liquidity_line_service: LiquidityLineService::new(shared_context.rpc_client.clone(), Arc::new(database)),
-            nft: NftService::new(shared_context.clone()),
-            referral: ReferralService::new(shared_context.clone()),
-            shared_context,
+            swap_service: SwapService::new(optimized_shared_context.clone()),
+            position_service: PositionService::with_database(optimized_shared_context.clone(), Arc::new(database.clone())),
+            clmm_pool_service: ClmmPoolService::new(optimized_shared_context.clone(), &database, config_service_arc.clone()),
+            amm_pool_service: AmmPoolService::new(optimized_shared_context.clone()),
+            config_service: ClmmConfigService::new(Arc::new(database.clone()), optimized_shared_context.rpc_client.clone()),
+            liquidity_line_service: LiquidityLineService::new(optimized_shared_context.rpc_client.clone(), Arc::new(database)),
+            nft: NftService::new(optimized_shared_context.clone()),
+            referral: ReferralService::new(optimized_shared_context.clone()),
+            shared_context: optimized_shared_context,
         })
     }
 }
@@ -291,26 +314,22 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse> {
-        use crate::services::data_transform::DataTransformService;
-
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
 
-        // 使用数据转换服务转换为新格式
-        let mut transform_service = DataTransformService::new()?;
+        // 使用共享的数据转换服务（包含持久化缓存）
+        let mut transform_service = self.shared_context.data_transform_service.lock().await;
         let new_response = transform_service.transform_pool_list_response(old_response, params).await?;
 
         Ok(new_response)
     }
 
     async fn query_pools_with_new_format2(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse2> {
-        use crate::services::data_transform::DataTransformService;
-
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
 
-        // 使用数据转换服务转换为新格式
-        let mut transform_service = DataTransformService::new()?;
+        // 使用共享的数据转换服务（包含持久化缓存）
+        let mut transform_service = self.shared_context.data_transform_service.lock().await;
         let new_response = transform_service.transform_pool_list_response2(old_response, params).await?;
 
         Ok(new_response)

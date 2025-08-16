@@ -356,7 +356,7 @@ impl EventService {
     }
 
     /// 根据分发ID查询奖励事件
-    pub async fn get_reward_event_by_distribution_id(&self, distribution_id: u64) -> Result<Option<RewardDistributionEvent>> {
+    pub async fn get_reward_event_by_distribution_id(&self, distribution_id: i64) -> Result<Option<RewardDistributionEvent>> {
         info!("🔍 查询分发ID {} 的奖励事件", distribution_id);
 
         let event = self.database.reward_distribution_event_repository.find_by_distribution_id(distribution_id).await?;
@@ -456,8 +456,8 @@ impl EventService {
         reward_token_mint: Option<String>,
         reward_amount_min: Option<u64>,
         reward_amount_max: Option<u64>,
-        distribution_id_min: Option<u64>,
-        distribution_id_max: Option<u64>,
+        distribution_id_min: Option<i64>,
+        distribution_id_max: Option<i64>,
         reward_pool: Option<String>,
         has_referrer: Option<bool>,
         is_high_value_reward: Option<bool>,

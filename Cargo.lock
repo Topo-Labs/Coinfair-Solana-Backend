@@ -10778,6 +10778,7 @@ version = "0.1.0"
 dependencies = [
  "anchor-lang",
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.21.7",
  "bincode",
@@ -10802,6 +10803,7 @@ dependencies = [
  "spl-memo 6.0.0",
  "spl-token 7.0.0",
  "spl-token-2022 7.0.0",
+ "spl-token-metadata-interface 0.6.0",
  "thiserror 1.0.69",
  "time",
  "tokio",

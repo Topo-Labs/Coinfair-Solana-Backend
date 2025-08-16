@@ -83,37 +83,64 @@ impl WebSocketManager {
         self.is_running.store(true, Ordering::Relaxed);
         info!("🔌 启动WebSocket连接管理器，监听{}个程序: {:?}", self.program_ids.len(), self.program_ids);
 
-        // 使用指数退避重连策略
-        let backoff = ExponentialBackoff {
-            initial_interval: self.config.get_initial_backoff_delay(),
-            max_interval: self.config.get_max_backoff_delay(),
-            multiplier: self.config.listener.backoff.multiplier,
-            max_elapsed_time: None,
-            ..Default::default()
-        };
-
-        let manager = self.clone();
-        retry(backoff, || async {
-            if !manager.is_running.load(Ordering::Relaxed) {
-                return Err(backoff::Error::permanent(EventListenerError::WebSocket(
-                    "WebSocket管理器已停止".to_string(),
-                )));
-            }
-
-            match manager.connect_and_subscribe().await {
-                Ok(()) => {
-                    info!("✅ WebSocket连接建立成功");
-                    Ok(())
+        // 根据配置选择重连策略
+        if self.config.listener.backoff.enable_simple_reconnect {
+            info!("🔄 使用简单重连策略: {}ms间隔, 无限重试", self.config.listener.backoff.simple_reconnect_interval_ms);
+            
+            // 创建简单的固定间隔重连循环
+            let manager = self.clone();
+            loop {
+                if !manager.is_running.load(Ordering::Relaxed) {
+                    break;
                 }
-                Err(e) => {
-                    error!("❌ WebSocket连接失败: {}", e);
-                    manager.is_connected.store(false, Ordering::Relaxed);
-                    Err(backoff::Error::transient(e))
+
+                match manager.connect_and_subscribe().await {
+                    Ok(()) => {
+                        info!("✅ WebSocket连接建立成功");
+                        break; // 连接成功，退出重连循环
+                    }
+                    Err(e) => {
+                        error!("❌ WebSocket连接失败: {}", e);
+                        manager.is_connected.store(false, Ordering::Relaxed);
+                        
+                        // 固定间隔延迟
+                        sleep(Duration::from_millis(self.config.listener.backoff.simple_reconnect_interval_ms)).await;
+                    }
                 }
             }
-        })
-        .await
-        .map_err(|e| EventListenerError::WebSocket(format!("连接重试失败: {:?}", e)))?;
+        } else {
+            info!("🔄 使用指数退避重连策略");
+            let exponential_backoff = ExponentialBackoff {
+                initial_interval: self.config.get_initial_backoff_delay(),
+                max_interval: self.config.get_max_backoff_delay(),
+                multiplier: self.config.listener.backoff.multiplier,
+                max_elapsed_time: None,
+                ..Default::default()
+            };
+
+            let manager = self.clone();
+            retry(exponential_backoff, || async {
+                if !manager.is_running.load(Ordering::Relaxed) {
+                    return Err(backoff::Error::permanent(EventListenerError::WebSocket(
+                        "WebSocket管理器已停止".to_string(),
+                    )));
+                }
+
+                match manager.connect_and_subscribe().await {
+                    Ok(()) => {
+                        info!("✅ WebSocket连接建立成功");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        error!("❌ WebSocket连接失败: {}", e);
+                        manager.is_connected.store(false, Ordering::Relaxed);
+                        Err(backoff::Error::transient(e))
+                    }
+                }
+            })
+            .await
+            .map_err(|e| EventListenerError::WebSocket(format!("连接重试失败: {:?}", e)))?;
+        }
 
         Ok(())
     }

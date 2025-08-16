@@ -13,7 +13,7 @@ use base64::Engine;
 
 /// CLMM配置服务trait
 #[async_trait]
-pub trait ClmmConfigServiceTrait {
+pub trait ClmmConfigServiceTrait: Send + Sync {
     /// 获取CLMM配置列表
     async fn get_clmm_configs(&self) -> Result<ClmmConfigResponse>;
 
@@ -31,6 +31,12 @@ pub trait ClmmConfigServiceTrait {
 
     /// 创建新的AMM配置并发送交易（用于测试）
     async fn create_amm_config_and_send_transaction(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigAndSendTransactionResponse>;
+
+    /// 根据配置地址获取单个配置
+    async fn get_config_by_address(&self, config_address: &str) -> Result<Option<ClmmConfig>>;
+
+    /// 根据配置地址列表批量获取配置
+    async fn get_configs_by_addresses(&self, config_addresses: &[String]) -> Result<Vec<ClmmConfig>>;
 }
 
 /// CLMM配置服务实现
@@ -490,6 +496,83 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
             timestamp: now,
         })
     }
+
+    async fn get_config_by_address(&self, config_address: &str) -> Result<Option<ClmmConfig>> {
+        info!("🔍 根据地址查询CLMM配置: {}", config_address);
+
+        let repository = self.get_repository();
+
+        match repository.get_config_by_address(config_address).await {
+            Ok(Some(config)) => {
+                info!("✅ 找到配置: {}", config_address);
+                Ok(Some(ClmmConfig {
+                    id: config.config_id,
+                    index: config.index,
+                    protocol_fee_rate: config.protocol_fee_rate,
+                    trade_fee_rate: config.trade_fee_rate,
+                    tick_spacing: config.tick_spacing,
+                    fund_fee_rate: config.fund_fee_rate,
+                    default_range: config.default_range,
+                    default_range_point: config.default_range_point,
+                }))
+            }
+            Ok(None) => {
+                info!("🔍 配置不存在: {}", config_address);
+                Ok(None)
+            }
+            Err(e) => {
+                error!("❌ 查询配置失败 {}: {}", config_address, e);
+                Err(e)
+            }
+        }
+    }
+
+    async fn get_configs_by_addresses(&self, config_addresses: &[String]) -> Result<Vec<ClmmConfig>> {
+        let start_time = std::time::Instant::now();
+        info!("🔍 批量查询CLMM配置，数量: {}", config_addresses.len());
+
+        if config_addresses.is_empty() {
+            info!("📋 配置地址列表为空，返回空结果");
+            return Ok(Vec::new());
+        }
+
+        let repository = self.get_repository();
+        
+        // 使用真正的批量查询 (MongoDB $in 操作符)
+        match repository.get_configs_by_addresses_batch(config_addresses).await {
+            Ok(configs) => {
+                let results: Vec<ClmmConfig> = configs
+                    .into_iter()
+                    .map(|config| ClmmConfig {
+                        id: config.config_id,
+                        index: config.index,
+                        protocol_fee_rate: config.protocol_fee_rate,
+                        trade_fee_rate: config.trade_fee_rate,
+                        tick_spacing: config.tick_spacing,
+                        fund_fee_rate: config.fund_fee_rate,
+                        default_range: config.default_range,
+                        default_range_point: config.default_range_point,
+                    })
+                    .collect();
+
+                let duration = start_time.elapsed();
+                info!("✅ 批量查询完成，查询{}个地址，找到{}个配置，总耗时{:?}", 
+                      config_addresses.len(), results.len(), duration);
+
+                // 性能监控：如果总耗时超过200ms，记录警告
+                if duration.as_millis() > 200 {
+                    tracing::warn!("⚠️ 服务层批量查询耗时较长: {:?}", duration);
+                }
+
+                Ok(results)
+            }
+            Err(e) => {
+                let duration = start_time.elapsed();
+                error!("❌ 批量查询失败: {}，耗时{:?}", e, duration);
+                Err(e)
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -561,5 +644,79 @@ mod tests {
         assert_ne!(config_id0, config_id1);
         assert_ne!(config_id1, config_id2);
         assert_ne!(config_id0, config_id2);
+    }
+
+    #[tokio::test]
+    async fn test_batch_query_performance() {
+        let service = create_test_service().await;
+        
+        // 测试批量查询方法
+        let test_addresses = vec![
+            "Address1".to_string(),
+            "Address2".to_string(), 
+            "Address3".to_string(),
+        ];
+
+        let start_time = std::time::Instant::now();
+        let result = service.get_configs_by_addresses(&test_addresses).await;
+        let duration = start_time.elapsed();
+
+        // 应该成功返回结果（即使数据库中没有这些配置）
+        assert!(result.is_ok());
+        let configs = result.unwrap();
+        
+        // 由于测试数据库中没有配置，应该返回空结果
+        assert_eq!(configs.len(), 0);
+        
+        // 性能检查：批量查询应该很快完成（小于100ms）
+        assert!(duration.as_millis() < 100, "批量查询耗时过长: {:?}", duration);
+        
+        println!("✅ 批量查询性能测试通过，耗时: {:?}", duration);
+    }
+
+    #[tokio::test]
+    async fn test_empty_batch_query() {
+        let service = create_test_service().await;
+        
+        // 测试空地址列表
+        let empty_addresses: Vec<String> = vec![];
+        let result = service.get_configs_by_addresses(&empty_addresses).await;
+        
+        assert!(result.is_ok());
+        let configs = result.unwrap();
+        assert_eq!(configs.len(), 0);
+        
+        println!("✅ 空批量查询测试通过");
+    }
+
+    #[tokio::test]
+    async fn test_batch_vs_individual_query_consistency() {
+        let service = create_test_service().await;
+        
+        // 准备测试地址
+        let test_addresses = vec![
+            "TestConfig1".to_string(),
+            "TestConfig2".to_string(),
+        ];
+
+        // 测试批量查询
+        let batch_result = service.get_configs_by_addresses(&test_addresses).await;
+        assert!(batch_result.is_ok());
+        let batch_configs = batch_result.unwrap();
+
+        // 测试单个查询
+        let mut individual_configs = Vec::new();
+        for address in &test_addresses {
+            let individual_result = service.get_config_by_address(address).await;
+            assert!(individual_result.is_ok());
+            if let Some(config) = individual_result.unwrap() {
+                individual_configs.push(config);
+            }
+        }
+
+        // 结果应该一致
+        assert_eq!(batch_configs.len(), individual_configs.len());
+        
+        println!("✅ 批量查询与单个查询一致性测试通过");
     }
 }

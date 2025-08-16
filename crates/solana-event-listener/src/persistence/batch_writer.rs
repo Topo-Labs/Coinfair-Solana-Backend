@@ -181,6 +181,43 @@ impl BatchWriter {
         Ok(())
     }
 
+    /// 批量提交多个事件到写入队列
+    /// 
+    /// 这个方法比多次调用 submit_event 更高效，因为它减少了通道操作的开销
+    /// 
+    /// # 参数
+    /// * `events` - 要提交的事件向量
+    /// 
+    /// # 返回值
+    /// 如果所有事件都成功提交则返回 Ok(())，否则返回第一个遇到的错误
+    /// 
+    /// # 注意
+    /// 如果在提交过程中遇到错误，已提交的事件不会回滚
+    pub async fn submit_events(&self, events: Vec<ParsedEvent>) -> Result<()> {
+        if events.is_empty() {
+            return Ok(());
+        }
+
+        if !self.is_running.load(Ordering::Relaxed) {
+            return Err(EventListenerError::Persistence("批量写入器未运行".to_string()));
+        }
+
+        let event_count = events.len();
+        
+        // 批量发送所有事件
+        for event in events {
+            self.event_sender
+                .send(event)
+                .map_err(|_| EventListenerError::Persistence("批量事件提交失败：通道已关闭".to_string()))?;
+        }
+
+        // 更新统计计数器
+        self.events_queued.fetch_add(event_count as u64, Ordering::Relaxed);
+        
+        debug!("📦 批量提交{}个事件到写入队列", event_count);
+        Ok(())
+    }
+
     /// 事件收集循环
     async fn event_collection_loop(&self) {
         info!("📥 启动事件收集循环");
@@ -620,6 +657,44 @@ mod tests {
 
         let stats = writer.get_stats().await;
         assert_eq!(stats.events_queued, 1);
+    }
+
+    #[tokio::test]
+    async fn test_submit_events() {
+        let config = create_test_config();
+        let writer = BatchWriter::new(&config).await.unwrap();
+
+        // 启动批量写入器
+        writer.is_running.store(true, Ordering::Relaxed);
+
+        // 创建多个测试事件
+        let events = vec![
+            create_test_event(),
+            create_test_event(),
+            create_test_event(),
+        ];
+        let event_count = events.len();
+
+        writer.submit_events(events).await.unwrap();
+
+        let stats = writer.get_stats().await;
+        assert_eq!(stats.events_queued, event_count as u64);
+    }
+
+    #[tokio::test]
+    async fn test_submit_empty_events() {
+        let config = create_test_config();
+        let writer = BatchWriter::new(&config).await.unwrap();
+
+        // 启动批量写入器
+        writer.is_running.store(true, Ordering::Relaxed);
+
+        // 提交空的事件向量应该成功但不改变统计
+        let events: Vec<ParsedEvent> = vec![];
+        writer.submit_events(events).await.unwrap();
+
+        let stats = writer.get_stats().await;
+        assert_eq!(stats.events_queued, 0);
     }
 
     #[tokio::test]

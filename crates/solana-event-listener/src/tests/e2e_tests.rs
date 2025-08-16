@@ -294,7 +294,7 @@ fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
 /// 辅助函数：创建测试奖励事件
 fn create_test_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
     crate::parser::event_parser::RewardDistributionEventData {
-        distribution_id: chrono::Utc::now().timestamp_millis() as u64,
+        distribution_id: chrono::Utc::now().timestamp_millis(),
         reward_pool: Pubkey::new_unique().to_string(),
         recipient: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),

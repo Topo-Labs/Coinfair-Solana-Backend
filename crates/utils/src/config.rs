@@ -73,7 +73,7 @@ impl EnvLoader {
     }
 }
 
-#[derive(clap::Parser)]
+#[derive(clap::Parser, Clone)]
 pub struct AppConfig {
     #[clap(long, env, value_enum)]
     pub cargo_env: CargoEnv,
