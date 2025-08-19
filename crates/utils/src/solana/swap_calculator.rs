@@ -633,7 +633,7 @@ impl<'a> SwapCalculator<'a> {
 
         info!("💰 swap_accounts: {:?}", swap_accounts.pool_state);
         let liquidity = swap_accounts.pool_state.liquidity;
-        if liquidity <= 0 {
+        if liquidity == 0 {
             bail!("Liquidity insuffient! Available:{:?}", liquidity);
         }
 

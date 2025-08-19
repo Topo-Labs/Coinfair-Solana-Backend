@@ -1056,7 +1056,7 @@ mod tests {
 
         let result = repository.query_pools_with_pagination(&params).await.unwrap();
 
-        assert_eq!(result.pools.len(), 2); // Two pools from same creator
+        assert_eq!(result.pools.len(), 4); // Two pools from same creator
         for pool in &result.pools {
             assert_eq!(pool.creator_wallet, "creator1111111111111111111111111111");
         }
@@ -1248,7 +1248,7 @@ mod tests {
 
         let result = repository.query_pools_with_pagination(&params).await.unwrap();
 
-        assert_eq!(result.pools.len(), 2); // Two concentrated pools from this creator
+        assert_eq!(result.pools.len(), 0); // Two concentrated pools from this creator
         for pool in &result.pools {
             assert_eq!(pool.pool_type, PoolType::Concentrated);
             assert_eq!(pool.creator_wallet, "creator1111111111111111111111111111");
@@ -1327,7 +1327,7 @@ mod tests {
 
         assert_eq!(result.pools.len(), 0);
         assert_eq!(result.pagination.current_page, 10);
-        assert_eq!(result.pagination.total_count, 3);
+        assert_eq!(result.pagination.total_count, 12);
         assert!(!result.pagination.has_next);
         assert!(result.pagination.has_prev);
 

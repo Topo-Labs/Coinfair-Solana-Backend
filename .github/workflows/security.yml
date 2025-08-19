@@ -242,8 +242,9 @@ jobs:
           echo "📊 检查过时的依赖..."
           
           if command -v cargo-outdated &> /dev/null; then
-            cargo outdated --format json > outdated-report.json 2>/dev/null || true
-            cargo outdated || echo "⚠️ 依赖检查失败"
+            echo "⏰ 运行cargo-outdated（30秒超时）..."
+            timeout 30s cargo outdated --format json > outdated-report.json 2>/dev/null || echo "⚠️ 依赖检查超时或失败，这在大型项目中很常见"
+            timeout 15s cargo outdated || echo "⚠️ 依赖检查失败或超时"
           else
             echo "⚠️ cargo-outdated不可用，跳过过时依赖检查"
           fi
@@ -392,13 +393,21 @@ jobs:
       - name: 🚨 发送安全通知
         if: contains(needs.*.result, 'failure')
         run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"🚨 Coinfair安全扫描发现问题!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n⚠️ 请立即检查安全报告并采取必要措施\"}" \
-            ${{ secrets.SLACK_WEBHOOK_URL }} || true
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\"🚨 Coinfair安全扫描发现问题!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n⚠️ 请立即检查安全报告并采取必要措施\"}" \
+              ${{ secrets.SLACK_WEBHOOK_URL }}
+          else
+            echo "ℹ️ SLACK_WEBHOOK_URL未配置，跳过通知"
+          fi
 
       - name: ✅ 发送成功通知
         if: needs.dependency-vulnerability-scan.result == 'success' && needs.secrets-scan.result == 'success'
         run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"✅ Coinfair安全扫描通过!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔍 所有安全检查均通过，系统安全状态良好\"}" \
-            ${{ secrets.SLACK_WEBHOOK_URL }} || true
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\"✅ Coinfair安全扫描通过!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔍 所有安全检查均通过，系统安全状态良好\"}" \
+              ${{ secrets.SLACK_WEBHOOK_URL }}
+          else
+            echo "ℹ️ SLACK_WEBHOOK_URL未配置，跳过通知"
+          fi
