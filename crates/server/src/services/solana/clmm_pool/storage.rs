@@ -1,0 +1,644 @@
+//! CLMM池子存储服务
+//!
+//! 负责将池子创建后的元数据存储到MongoDB数据库中
+
+use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
+use database::clmm_pool::{
+    ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
+    TransactionInfo, TransactionStatus, VaultInfo,
+};
+use mongodb::Collection;
+use tracing::{debug, error, info, warn};
+use utils::{AppResult, TokenMetadata};
+
+/// CLMM池子存储服务
+pub struct ClmmPoolStorageService {
+    repository: ClmmPoolRepository,
+}
+
+impl ClmmPoolStorageService {
+    /// 创建新的存储服务实例
+    pub fn new(collection: Collection<ClmmPool>) -> Self {
+        let repository = ClmmPoolRepository::new(collection);
+        Self { repository }
+    }
+
+    /// 获取底层的 MongoDB collection
+    pub fn get_collection(&self) -> &Collection<ClmmPool> {
+        self.repository.get_collection()
+    }
+
+    /// 初始化数据库索引
+    pub async fn init_indexes(&self) -> AppResult<()> {
+        self.repository.init_indexes().await
+    }
+
+    /// 健康检查 - 验证数据库连接和基本功能
+    pub async fn health_check(&self) -> AppResult<HealthCheckResult> {
+        let start_time = std::time::Instant::now();
+
+        // 1. 测试基本查询
+        let query_result = self.repository.get_pool_stats().await;
+        let query_duration = start_time.elapsed();
+
+        let mut issues = Vec::new();
+        let mut is_healthy = true;
+
+        match query_result {
+            Ok(_) => {
+                if query_duration.as_millis() > 5000 {
+                    issues.push("数据库查询响应时间过长".to_string());
+                    is_healthy = false;
+                }
+            }
+            Err(e) => {
+                issues.push(format!("数据库查询失败: {}", e));
+                is_healthy = false;
+            }
+        }
+
+        // 2. 检查索引状态 (简化版本)
+        // TODO: 实际项目中可以检查具体的索引状态
+
+        Ok(HealthCheckResult {
+            is_healthy,
+            response_time_ms: query_duration.as_millis() as u64,
+            issues,
+            timestamp: chrono::Utc::now().timestamp() as u64,
+        })
+    }
+
+    /// 存储池子创建响应数据 (仅构建交易，未发送)
+    pub async fn store_pool_creation(
+        &self,
+        request: &CreatePoolRequest,
+        response: &CreatePoolResponse,
+    ) -> AppResult<String> {
+        info!("💾 存储池子创建数据: {}", response.pool_address);
+
+        // 检查池子是否已存在
+        if let Ok(Some(existing)) = self.repository.find_by_pool_address(&response.pool_address).await {
+            // 如果已存在且已被链上确认，拒绝覆盖
+            if existing.chain_confirmed {
+                warn!("⚠️ 池子已被链上确认，拒绝API覆盖: {}", response.pool_address);
+                return Err(anyhow::anyhow!("池子已存在且已被链上确认: {}", response.pool_address).into());
+            }
+            warn!("⚠️ 池子已存在（未确认），将更新: {}", response.pool_address);
+        }
+
+        let now = chrono::Utc::now().timestamp() as u64;
+
+        // 获取当前slot（这里简化处理，实际应该从RPC获取）
+        let api_slot = self.get_current_slot().await.unwrap_or(0);
+
+        // 解析mint地址，确保顺序正确
+        let mut mint0_addr = request.mint0.clone();
+        let mut mint1_addr = request.mint1.clone();
+        // let mut price = request.price;
+
+        // 如果mint0 > mint1，需要交换顺序
+        if mint0_addr > mint1_addr {
+            std::mem::swap(&mut mint0_addr, &mut mint1_addr);
+            // price = 1.0 / price;
+        }
+
+        let pool = ClmmPool {
+            id: None,
+            pool_address: response.pool_address.clone(),
+            amm_config_address: response.amm_config_address.clone(),
+            config_index: request.config_index,
+
+            mint0: TokenInfo {
+                mint_address: mint0_addr,
+                decimals: 0,          // 需要从链上获取，暂时设为0
+                owner: String::new(), // 需要从链上获取
+                symbol: None,
+                name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
+            },
+
+            mint1: TokenInfo {
+                mint_address: mint1_addr,
+                decimals: 0,          // 需要从链上获取，暂时设为0
+                owner: String::new(), // 需要从链上获取
+                symbol: None,
+                name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
+            },
+
+            price_info: PriceInfo {
+                initial_price: response.initial_price,
+                sqrt_price_x64: response.sqrt_price_x64.clone(),
+                initial_tick: response.initial_tick,
+                current_price: Some(response.initial_price),
+                current_tick: Some(response.initial_tick),
+            },
+
+            vault_info: VaultInfo {
+                token_vault_0: response.token_vault_0.clone(),
+                token_vault_1: response.token_vault_1.clone(),
+            },
+
+            extension_info: ExtensionInfo {
+                observation_address: response.observation_address.clone(),
+                tickarray_bitmap_extension: response.tickarray_bitmap_extension.clone(),
+            },
+
+            creator_wallet: request.user_wallet.clone(),
+            open_time: request.open_time,
+
+            // 新字段
+            api_created_at: now,
+            api_created_slot: Some(api_slot),
+            updated_at: now,
+
+            // 链上事件字段（初始为空）
+            event_signature: None,
+            event_updated_slot: None,
+            event_confirmed_at: None,
+            event_updated_at: None,
+
+            transaction_info: None, // 仅构建交易时为空
+            status: PoolStatus::Created,
+
+            sync_status: SyncStatus {
+                last_sync_at: now,
+                sync_version: 1,
+                needs_sync: true, // 新创建的池子需要同步链上数据
+                sync_error: None,
+            },
+
+            pool_type: database::clmm_pool::model::PoolType::Concentrated,
+
+            // 新增状态字段
+            data_source: DataSource::ApiCreated,
+            chain_confirmed: false,
+        };
+
+        // 使用upsert操作
+        self.repository.upsert_pool(pool).await?;
+        info!("✅ 池子创建数据存储成功: {}", response.pool_address);
+
+        Ok(response.pool_address.clone())
+    }
+
+    /// 获取当前slot（简化实现）
+    async fn get_current_slot(&self) -> AppResult<u64> {
+        // TODO: 实际应该从RPC client获取
+        // 这里返回一个基于时间戳的模拟值
+        Ok(chrono::Utc::now().timestamp() as u64 / 10)
+    }
+
+    /// 存储池子创建并发送交易的响应数据
+    pub async fn store_pool_creation_with_transaction(
+        &self,
+        request: &CreatePoolRequest,
+        response: &CreatePoolAndSendTransactionResponse,
+    ) -> AppResult<String> {
+        info!("💾 存储池子创建和交易数据: {}", response.pool_address);
+
+        let now = chrono::Utc::now().timestamp() as u64;
+        let api_slot = self.get_current_slot().await.unwrap_or(0);
+
+        // 解析mint地址，确保顺序正确
+        let mut mint0_addr = request.mint0.clone();
+        let mut mint1_addr = request.mint1.clone();
+        // let mut price = request.price;
+
+        // 如果mint0 > mint1，需要交换顺序
+        if mint0_addr > mint1_addr {
+            std::mem::swap(&mut mint0_addr, &mut mint1_addr);
+            // price = 1.0 / price;
+        }
+
+        let transaction_info = TransactionInfo {
+            signature: response.signature.clone(),
+            status: match response.status {
+                crate::dtos::solana_dto::TransactionStatus::Finalized => TransactionStatus::Finalized,
+                _ => TransactionStatus::Confirmed,
+            },
+            explorer_url: response.explorer_url.clone(),
+            confirmed_at: now,
+        };
+
+        let pool = ClmmPool {
+            id: None,
+            pool_address: response.pool_address.clone(),
+            amm_config_address: response.amm_config_address.clone(),
+            config_index: request.config_index,
+
+            mint0: TokenInfo {
+                mint_address: mint0_addr,
+                decimals: 0,          // 需要从链上获取，暂时设为0
+                owner: String::new(), // 需要从链上获取
+                symbol: None,
+                name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
+            },
+
+            mint1: TokenInfo {
+                mint_address: mint1_addr,
+                decimals: 0,          // 需要从链上获取，暂时设为0
+                owner: String::new(), // 需要从链上获取
+                symbol: None,
+                name: None,
+                log_uri: None,
+                description: None,
+                external_url: None,
+                tags: None,
+                attributes: None,
+            },
+
+            price_info: PriceInfo {
+                initial_price: response.initial_price,
+                sqrt_price_x64: response.sqrt_price_x64.clone(),
+                initial_tick: response.initial_tick,
+                current_price: Some(response.initial_price),
+                current_tick: Some(response.initial_tick),
+            },
+
+            vault_info: VaultInfo {
+                token_vault_0: response.token_vault_0.clone(),
+                token_vault_1: response.token_vault_1.clone(),
+            },
+
+            extension_info: ExtensionInfo {
+                observation_address: response.observation_address.clone(),
+                tickarray_bitmap_extension: response.tickarray_bitmap_extension.clone(),
+            },
+
+            creator_wallet: request.user_wallet.clone(),
+            open_time: request.open_time,
+
+            // 新字段
+            api_created_at: now,
+            api_created_slot: Some(api_slot),
+            updated_at: now,
+
+            // 交易已发送，可以填充事件字段
+            event_signature: Some(response.signature.clone()),
+            event_updated_slot: Some(api_slot), // 暂时使用同一个slot
+            event_confirmed_at: Some(now),
+            event_updated_at: Some(now),
+
+            transaction_info: Some(transaction_info),
+            status: PoolStatus::Active, // 交易已确认，状态为活跃
+
+            sync_status: SyncStatus {
+                last_sync_at: now,
+                sync_version: 1,
+                needs_sync: true, // 需要同步完整的链上数据
+                sync_error: None,
+            },
+
+            pool_type: database::clmm_pool::model::PoolType::Concentrated,
+
+            // 状态字段
+            data_source: DataSource::ApiCreated,
+            chain_confirmed: true, // 交易已发送并确认
+        };
+
+        // 使用upsert操作
+        self.repository.upsert_pool(pool).await?;
+        info!("✅ 池子创建和交易数据存储成功: {}", response.pool_address);
+
+        Ok(response.pool_address.clone())
+    }
+
+    /// 直接存储池子数据 (用于测试)
+    pub async fn store_pool(&self, pool: &ClmmPool) -> AppResult<String> {
+        info!("💾 直接存储池子数据: {}", pool.pool_address);
+        let pool_id = self.repository.create_pool(pool).await?;
+        info!("✅ 池子数据存储成功，ID: {}", pool_id);
+        Ok(pool_id)
+    }
+
+    /// 更新池子的链上数据 (用于数据同步)
+    pub async fn update_pool_onchain_data(
+        &self,
+        pool_address: &str,
+        mint0_info: Option<(u8, String)>, // (decimals, owner)
+        mint1_info: Option<(u8, String)>, // (decimals, owner)
+        current_price: Option<f64>,
+        current_tick: Option<i32>,
+    ) -> AppResult<bool> {
+        info!("🔄 更新池子链上数据: {}", pool_address);
+
+        let mut update_doc = mongodb::bson::Document::new();
+
+        // 更新mint0信息
+        if let Some((decimals, owner)) = mint0_info {
+            update_doc.insert("mint0.decimals", decimals as i32);
+            update_doc.insert("mint0.owner", owner);
+        }
+
+        // 更新mint1信息
+        if let Some((decimals, owner)) = mint1_info {
+            update_doc.insert("mint1.decimals", decimals as i32);
+            update_doc.insert("mint1.owner", owner);
+        }
+
+        // 更新当前价格信息
+        if let Some(price) = current_price {
+            update_doc.insert("price_info.current_price", price);
+        }
+
+        if let Some(tick) = current_tick {
+            update_doc.insert("price_info.current_tick", tick);
+        }
+
+        // 更新同步状态
+        let now = chrono::Utc::now().timestamp() as u64;
+        update_doc.insert("sync_status.last_sync_at", now as f64);
+        update_doc.insert("sync_status.needs_sync", false);
+        update_doc.insert("sync_status.sync_error", mongodb::bson::Bson::Null);
+
+        let updated = self.repository.update_pool(pool_address, update_doc).await?;
+
+        if updated {
+            info!("✅ 池子链上数据更新成功: {}", pool_address);
+        } else {
+            warn!("⚠️ 池子链上数据更新失败，池子不存在: {}", pool_address);
+        }
+
+        Ok(updated)
+    }
+
+    /// 标记池子同步失败
+    pub async fn mark_sync_failed(&self, pool_address: &str, error_msg: &str) -> AppResult<bool> {
+        error!("❌ 池子同步失败: {} - {}", pool_address, error_msg);
+
+        let sync_status = SyncStatus {
+            last_sync_at: chrono::Utc::now().timestamp() as u64,
+            sync_version: 1,
+            needs_sync: true, // 保持需要同步状态
+            sync_error: Some(error_msg.to_string()),
+        };
+
+        self.repository.update_sync_status(pool_address, &sync_status).await
+    }
+
+    /// 获取需要同步的池子列表
+    pub async fn get_pools_need_sync(&self, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
+        self.repository.get_pools_need_sync(limit).await
+    }
+
+    /// 获取池子信息 (对外查询接口)
+    pub async fn get_pool_by_address(&self, pool_address: &str) -> AppResult<Option<ClmmPool>> {
+        self.repository.find_by_pool_address(pool_address).await
+    }
+
+    /// 根据代币地址查询池子列表
+    pub async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
+        self.repository.find_by_mint_address(mint_address, limit).await
+    }
+
+    /// 根据创建者查询池子列表
+    pub async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
+        self.repository.find_by_creator(creator_wallet, limit).await
+    }
+
+    /// 获取池子统计信息
+    pub async fn get_pool_statistics(&self) -> AppResult<database::clmm_pool::PoolStats> {
+        self.repository.get_pool_stats().await
+    }
+
+    /// 复杂查询接口
+    pub async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> AppResult<Vec<ClmmPool>> {
+        self.repository.query_pools(params).await
+    }
+
+    /// 分页查询池子列表
+    pub async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> AppResult<database::clmm_pool::model::PoolListResponse> {
+        self.repository.query_pools_with_pagination(params).await
+    }
+
+    /// 更新同步状态
+    pub async fn update_sync_status(&self, pool_address: &str, sync_status: &SyncStatus) -> AppResult<bool> {
+        self.repository.update_sync_status(pool_address, sync_status).await
+    }
+
+    /// 批量标记池子需要同步
+    pub async fn mark_pools_for_sync(&self, pool_addresses: &[String]) -> AppResult<u64> {
+        if pool_addresses.is_empty() {
+            return Ok(0);
+        }
+
+        info!("🔄 批量标记 {} 个池子需要同步", pool_addresses.len());
+        let result = self.repository.mark_pools_for_sync(pool_addresses).await?;
+        info!("✅ 成功标记 {} 个池子需要同步", result);
+        Ok(result)
+    }
+
+    /// 批量更新池子链上数据
+    pub async fn batch_update_pool_onchain_data(
+        &self,
+        updates: &[(
+            String,
+            Option<(u8, String)>,
+            Option<(u8, String)>,
+            Option<f64>,
+            Option<i32>,
+        )],
+    ) -> AppResult<u64> {
+        if updates.is_empty() {
+            return Ok(0);
+        }
+
+        info!("🔄 批量更新 {} 个池子的链上数据", updates.len());
+        let mut success_count = 0u64;
+
+        for (pool_address, mint0_info, mint1_info, current_price, current_tick) in updates {
+            match self
+                .update_pool_onchain_data(
+                    pool_address,
+                    mint0_info.to_owned(),
+                    mint1_info.to_owned(),
+                    *current_price,
+                    *current_tick,
+                )
+                .await
+            {
+                Ok(true) => {
+                    success_count += 1;
+                }
+                Ok(false) => {
+                    warn!("⚠️ 池子不存在，跳过更新: {}", pool_address);
+                }
+                Err(e) => {
+                    error!("❌ 池子数据更新失败: {} - {}", pool_address, e);
+                }
+            }
+        }
+
+        info!("✅ 批量更新完成，成功更新 {} 个池子", success_count);
+        Ok(success_count)
+    }
+
+    /// 更新代币元数据信息
+    pub async fn update_token_metadata(&self, mint_address: &str, metadata: &TokenMetadata) -> AppResult<bool> {
+        use mongodb::bson::{doc, Document};
+
+        let mut total_updated = 0u64;
+
+        // 准备更新字段
+        let mut mint_update_fields = Document::new();
+
+        // 基础字段
+        if let Some(symbol) = &metadata.symbol {
+            mint_update_fields.insert("symbol", symbol);
+        }
+        if let Some(name) = &metadata.name {
+            mint_update_fields.insert("name", name);
+        }
+
+        // 新增的元数据字段
+        if let Some(log_uri) = &metadata.logo_uri {
+            mint_update_fields.insert("log_uri", log_uri);
+        }
+        if let Some(description) = &metadata.description {
+            mint_update_fields.insert("description", description);
+        }
+        if let Some(external_url) = &metadata.external_url {
+            mint_update_fields.insert("external_url", external_url);
+        }
+
+        // 处理 tags 数组字段
+        if !metadata.tags.is_empty() {
+            mint_update_fields.insert("tags", &metadata.tags);
+        }
+
+        // 处理 attributes 数组字段
+        if let Some(attributes) = &metadata.attributes {
+            if !attributes.is_empty() {
+                // 将 TokenAttribute 转换为 BSON 文档
+                let attr_docs: Vec<Document> = attributes
+                    .iter()
+                    .map(|attr| {
+                        doc! {
+                            "trait_type": &attr.trait_type,
+                            "value": &attr.value
+                        }
+                    })
+                    .collect();
+                mint_update_fields.insert("attributes", attr_docs);
+            }
+        }
+
+        if mint_update_fields.is_empty() {
+            info!("⚠️ 没有可更新的元数据字段: {}", mint_address);
+            return Ok(false);
+        }
+
+        // 更新mint0字段
+        let filter_mint0 = doc! {
+            "mint0.mint_address": mint_address
+        };
+        let mut update_mint0_doc = Document::new();
+        for (key, value) in &mint_update_fields {
+            update_mint0_doc.insert(format!("mint0.{}", key), value);
+        }
+        let update_mint0 = doc! {
+            "$set": update_mint0_doc
+        };
+
+        match self
+            .repository
+            .get_collection()
+            .update_many(filter_mint0, update_mint0, None)
+            .await
+        {
+            Ok(result) => {
+                total_updated += result.modified_count;
+                if result.modified_count > 0 {
+                    debug!(
+                        "✅ 更新了 {} 个池子的mint0元数据: {}",
+                        result.modified_count, mint_address
+                    );
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 更新mint0元数据失败: {} - {}", mint_address, e);
+            }
+        }
+
+        // 更新mint1字段
+        let filter_mint1 = doc! {
+            "mint1.mint_address": mint_address
+        };
+        let mut update_mint1_doc = Document::new();
+        for (key, value) in &mint_update_fields {
+            update_mint1_doc.insert(format!("mint1.{}", key), value);
+        }
+        let update_mint1 = doc! {
+            "$set": update_mint1_doc
+        };
+
+        match self
+            .repository
+            .get_collection()
+            .update_many(filter_mint1, update_mint1, None)
+            .await
+        {
+            Ok(result) => {
+                total_updated += result.modified_count;
+                if result.modified_count > 0 {
+                    debug!(
+                        "✅ 更新了 {} 个池子的mint1元数据: {}",
+                        result.modified_count, mint_address
+                    );
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 更新mint1元数据失败: {} - {}", mint_address, e);
+            }
+        }
+
+        if total_updated > 0 {
+            info!(
+                "🔄 代币元数据更新完成: {} (更新了 {} 个池子)",
+                mint_address, total_updated
+            );
+        }
+
+        Ok(total_updated > 0)
+    }
+}
+
+/// 健康检查结果
+#[derive(Debug, Clone)]
+pub struct HealthCheckResult {
+    /// 是否健康
+    pub is_healthy: bool,
+    /// 响应时间 (毫秒)
+    pub response_time_ms: u64,
+    /// 问题列表
+    pub issues: Vec<String>,
+    /// 检查时间戳
+    pub timestamp: u64,
+}
+
+/// 存储服务构建器
+pub struct ClmmPoolStorageBuilder;
+
+impl ClmmPoolStorageBuilder {
+    /// 从数据库实例创建存储服务
+    pub fn from_database(db: &database::Database) -> ClmmPoolStorageService {
+        ClmmPoolStorageService::new(db.clmm_pools.clone())
+    }
+}

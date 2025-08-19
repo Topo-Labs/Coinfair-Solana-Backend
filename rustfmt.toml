@@ -1,2 +1,14 @@
-imports_granularity = "Crate"
-group_imports = "One"
+# 使用stable工具链兼容的配置
+max_width = 120
+tab_spaces = 4
+hard_tabs = false
+newline_style = "Unix"
+use_small_heuristics = "Default"
+reorder_imports = true
+reorder_modules = true
+remove_nested_parens = true
+edition = "2021"
+
+# 以下选项需要nightly版本，在stable版本中被注释
+# imports_granularity = "Crate"  # 需要nightly
+# group_imports = "One"          # 需要nightly

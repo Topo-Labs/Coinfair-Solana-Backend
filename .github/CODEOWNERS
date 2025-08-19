@@ -1,0 +1,154 @@
+# 🔒 Coinfair代码所有者配置文件
+# 此文件定义了代码库中不同部分的所有者和审查者
+# 当创建pull request时，相关所有者将自动被请求进行代码审查
+
+# ============ 全局规则 ============
+# 默认情况下，以下用户对所有代码有审查权
+* @project-owner @tech-lead
+
+# ============ 核心架构 ============
+# 主要配置文件和架构决策需要架构师审查
+/Cargo.toml @tech-lead @rust-expert
+/Cargo.lock @tech-lead @rust-expert  
+/rustfmt.toml @tech-lead @rust-expert
+/Makefile @devops-lead @tech-lead
+/docker-compose.yaml @devops-lead @tech-lead
+/.env.* @security-lead @devops-lead @tech-lead
+/CLAUDE.md @tech-lead @project-owner
+
+# ============ 主应用程序 ============
+# 主要应用程序入口和协调逻辑
+/crates/coinfair/ @tech-lead @rust-expert
+/crates/utils/ @rust-expert @backend-dev
+
+# ============ 数据库层 ============
+# 数据模型、仓库模式和数据库迁移
+/crates/database/ @database-expert @backend-dev
+/migrations/ @database-expert @tech-lead
+/schema/ @database-expert @tech-lead
+
+# ============ API服务器 ============
+# Web服务器、控制器、服务层和DTO
+/crates/server/ @backend-dev @api-expert
+/crates/server/src/api/ @api-expert @backend-dev
+/crates/server/src/services/ @backend-dev @business-logic-expert
+/crates/server/src/dto/ @api-expert @backend-dev
+
+# ============ Solana区块链集成 ============
+# Solana相关代码需要区块链专家审查
+/crates/solana/ @solana-expert @blockchain-dev @tech-lead
+/crates/solana/clmm/ @solana-expert @defi-expert
+/crates/solana/clmm-client/ @solana-expert @blockchain-dev
+/crates/solana/cpmm/ @solana-expert @defi-expert  
+/crates/solana/cpmm-client/ @solana-expert @blockchain-dev
+/crates/solana/referral/ @solana-expert @business-logic-expert
+
+# ============ DeFi功能 ============
+# DeFi业务逻辑和交换功能
+/crates/dex/ @defi-expert @business-logic-expert @solana-expert
+
+# ============ 事件监听器 ============
+# 区块链事件监听和处理
+/crates/solana-event-listener/ @solana-expert @blockchain-dev @backend-dev
+
+# ============ 监控和定时器 ============
+# 系统监控和定时任务
+/crates/monitor/ @backend-dev @devops-lead
+/crates/timer/ @backend-dev @business-logic-expert
+
+# ============ Telegram机器人 ============
+# Telegram集成和用户界面
+/crates/telegram/ @frontend-dev @api-expert
+
+# ============ 安全相关 ============
+# 安全配置和认证相关代码需要安全团队审查
+**/auth* @security-lead @backend-dev
+**/security* @security-lead @tech-lead
+**/jwt* @security-lead @backend-dev
+**/*auth* @security-lead @backend-dev
+**/*security* @security-lead @tech-lead
+
+# ============ CI/CD和DevOps ============
+# 构建、部署和CI/CD配置
+/.github/ @devops-lead @tech-lead
+/.github/workflows/ @devops-lead @tech-lead @security-lead
+/Dockerfile @devops-lead @backend-dev
+/scripts/ @devops-lead @tech-lead
+/deploy/ @devops-lead @tech-lead @security-lead
+
+# ============ 测试文件 ============
+# 测试代码和测试脚本
+/tests/ @qa-lead @backend-dev
+/**/test_*.sh @qa-lead @devops-lead
+/**/tests/ @qa-lead @backend-dev
+/**/*test*.rs @qa-lead @backend-dev
+
+# ============ 文档 ============
+# 文档和README文件
+/docs/ @tech-writer @tech-lead
+/README.md @tech-writer @tech-lead @project-owner
+/**/*.md @tech-writer
+
+# ============ 配置文件 ============
+# 各种配置文件需要相应专家审查
+*.toml @rust-expert @tech-lead
+*.yaml @devops-lead @backend-dev
+*.yml @devops-lead @backend-dev
+*.json @backend-dev
+*.env @security-lead @devops-lead
+
+# ============ 特殊业务逻辑 ============
+# 关键业务逻辑需要业务专家和技术负责人共同审查
+**/swap* @defi-expert @solana-expert @business-logic-expert
+**/pool* @defi-expert @solana-expert @business-logic-expert  
+**/liquidity* @defi-expert @solana-expert @business-logic-expert
+**/reward* @business-logic-expert @defi-expert
+**/referral* @business-logic-expert @defi-expert
+**/clmm* @solana-expert @defi-expert @tech-lead
+**/amm* @solana-expert @defi-expert @tech-lead
+
+# ============ 性能关键代码 ============
+# 性能敏感的代码需要性能专家审查
+**/optimized* @performance-expert @rust-expert
+**/performance* @performance-expert @backend-dev
+**/batch* @performance-expert @backend-dev
+**/cache* @performance-expert @backend-dev
+
+# ============ 数据迁移和恢复 ============
+# 数据迁移脚本需要数据库专家和安全团队审查
+/Recover.md @database-expert @security-lead @tech-lead
+**/migration* @database-expert @tech-lead
+**/backup* @database-expert @devops-lead
+**/restore* @database-expert @devops-lead
+
+# ============ 第三方集成 ============
+# 第三方服务集成需要安全审查
+**/jupiter* @solana-expert @security-lead
+**/raydium* @solana-expert @defi-expert
+**/metaplex* @solana-expert @blockchain-dev
+
+# ============ 团队成员说明 ============
+# 以下是团队成员角色说明，实际使用时请替换为真实的GitHub用户名：
+#
+# @project-owner - 项目负责人
+# @tech-lead - 技术负责人  
+# @rust-expert - Rust专家
+# @solana-expert - Solana区块链专家
+# @defi-expert - DeFi领域专家
+# @backend-dev - 后端开发工程师
+# @blockchain-dev - 区块链开发工程师
+# @database-expert - 数据库专家
+# @security-lead - 安全负责人
+# @devops-lead - DevOps负责人
+# @api-expert - API设计专家
+# @business-logic-expert - 业务逻辑专家
+# @performance-expert - 性能优化专家
+# @qa-lead - 测试负责人
+# @tech-writer - 技术文档专家
+# @frontend-dev - 前端开发工程师
+#
+# 使用说明：
+# 1. 将上述占位符替换为实际的GitHub用户名
+# 2. 根据团队结构调整审查规则
+# 3. 可以使用团队名称 (如 @org/backend-team) 替代个人用户名
+# 4. 规则从上到下匹配，后面的规则会覆盖前面的规则

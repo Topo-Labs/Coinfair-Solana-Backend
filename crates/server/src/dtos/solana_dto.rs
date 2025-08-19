@@ -1,0 +1,3564 @@
+use database::clmm_pool::model::ClmmPool;
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
+use validator::Validate;
+
+/// 交换请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct SwapRequest {
+    /// 输入代币mint地址
+    #[validate(custom = "validate_token_type")]
+    pub from_token: String,
+
+    /// 输出代币mint地址
+    #[validate(custom = "validate_token_type")]
+    pub to_token: String,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 输入金额（以最小单位计算：SOL为lamports，USDC为micro-USDC）
+    #[validate(range(min = 1000))] // 最小0.000001 SOL 或 0.001 USDC
+    pub amount: u64,
+
+    /// 最小输出金额（滑点保护）
+    #[validate(range(min = 0))]
+    pub minimum_amount_out: u64,
+
+    /// 最大滑点百分比（0-100）
+    #[validate(range(min = 0.0, max = 50.0))]
+    pub max_slippage_percent: f64,
+}
+
+/// 交换响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 输入代币类型
+    pub from_token: String,
+
+    /// 输出代币类型
+    pub to_token: String,
+
+    /// 实际输入金额
+    pub amount_in: u64,
+
+    /// 预期输出金额
+    pub amount_out_expected: u64,
+
+    /// 实际输出金额（交易确认后更新）
+    pub amount_out_actual: Option<u64>,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// Solana Explorer链接
+    pub explorer_url: String,
+
+    /// 交易时间戳
+    pub timestamp: i64,
+}
+
+/// 余额查询响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct BalanceResponse {
+    /// SOL余额（lamports）
+    pub sol_balance_lamports: u64,
+
+    /// SOL余额（SOL）
+    pub sol_balance: f64,
+
+    /// USDC余额（micro-USDC）
+    pub usdc_balance_micro: u64,
+
+    /// USDC余额（USDC）
+    pub usdc_balance: f64,
+
+    /// 钱包地址
+    pub wallet_address: String,
+
+    /// 查询时间戳
+    pub timestamp: i64,
+}
+
+/// 价格查询请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct PriceQuoteRequest {
+    /// 输入代币mint地址
+    #[validate(custom = "validate_token_type")]
+    pub from_token: String,
+
+    /// 输出代币mint地址
+    #[validate(custom = "validate_token_type")]
+    pub to_token: String,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 输入金额
+    #[validate(range(min = 1))]
+    pub amount: u64,
+}
+
+/// 价格查询响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PriceQuoteResponse {
+    /// 输入代币类型
+    pub from_token: String,
+
+    /// 输出代币类型
+    pub to_token: String,
+
+    /// 输入金额
+    pub amount_in: u64,
+
+    /// 预期输出金额
+    pub amount_out: u64,
+
+    /// 价格（输出代币/输入代币）
+    pub price: f64,
+
+    /// 价格影响百分比
+    pub price_impact_percent: f64,
+
+    /// 建议最小输出金额（考虑5%滑点）
+    pub minimum_amount_out: u64,
+
+    /// 查询时间戳
+    pub timestamp: i64,
+}
+
+/// 交易状态枚举
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub enum TransactionStatus {
+    /// 已发送，等待确认
+    Pending,
+    /// 已确认
+    Confirmed,
+    /// 已完成
+    Finalized,
+    /// 失败
+    Failed,
+    /// 模拟交易
+    Simulated,
+}
+
+/// 钱包信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct WalletInfo {
+    /// 钱包地址
+    pub address: String,
+
+    /// 网络类型
+    pub network: String,
+
+    /// 是否已连接
+    pub connected: bool,
+}
+
+/// 交换历史记录DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapHistory {
+    /// 交易签名
+    pub signature: String,
+
+    /// 输入代币
+    pub from_token: String,
+
+    /// 输出代币
+    pub to_token: String,
+
+    /// 输入金额
+    pub amount_in: u64,
+
+    /// 输出金额
+    pub amount_out: u64,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 交易时间
+    pub timestamp: i64,
+
+    /// Gas费用（lamports）
+    pub fee: u64,
+}
+
+/// 验证代币类型
+fn validate_token_type(token: &str) -> Result<(), validator::ValidationError> {
+    // 只支持实际的mint地址
+    match token {
+        // SOL的native mint地址
+        "So11111111111111111111111111111111111111112" => Ok(()),
+
+        // USDC mint地址（支持多个常见的USDC地址）
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" | // 标准USDC
+        "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" | // 配置中的USDC
+        "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM" => Ok(()), // 其他USDC变体
+
+        _ => {
+            let mut error = validator::ValidationError::new("invalid_token");
+            error.message = Some("必须使用有效的代币mint地址".into());
+            Err(error)
+        }
+    }
+}
+
+/// 错误响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ErrorResponse {
+    /// 错误代码
+    pub code: String,
+
+    /// 错误消息
+    pub message: String,
+
+    /// 详细信息（可选）
+    pub details: Option<String>,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+impl ErrorResponse {
+    pub fn new(code: &str, message: &str) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.to_string(),
+            details: None,
+            timestamp: chrono::Utc::now().timestamp(),
+        }
+    }
+
+    pub fn with_details(mut self, details: &str) -> Self {
+        self.details = Some(details.to_string());
+        self
+    }
+}
+
+/// API成功响应包装器
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ApiResponse<T> {
+    pub id: String,
+    /// 是否成功
+    pub success: bool,
+
+    /// 响应数据
+    pub data: Option<T>,
+}
+
+impl<T> ApiResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            success: true,
+            data: Some(data),
+        }
+    }
+
+    pub fn error(_error: ErrorResponse) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            success: false,
+            data: None,
+        }
+    }
+}
+
+// ============ Raydium API 兼容格式 ============
+
+/// Raydium计算交换请求参数（GET查询参数）
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ComputeSwapRequest {
+    /// 输入代币的mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输出代币的mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 输入或输出金额（以最小单位计算）
+    #[validate(length(min = 1))]
+    pub amount: String,
+
+    /// 滑点容忍度（基点，如50表示0.5%）
+    #[serde(rename = "slippageBps")]
+    #[validate(range(min = 1, max = 10000))]
+    pub slippage_bps: u16,
+
+    /// 交易版本（V0或V1）
+    #[serde(rename = "txVersion")]
+    pub tx_version: String,
+}
+
+/// SwapV2计算交换请求参数（支持转账费）
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ComputeSwapV2Request {
+    /// 输入代币的mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输出代币的mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 输入或输出金额（以最小单位计算）
+    #[validate(length(min = 1))]
+    pub amount: String,
+
+    /// 滑点容忍度（基点，如50表示0.5%）
+    #[serde(rename = "slippageBps")]
+    #[validate(range(min = 1, max = 10000))]
+    pub slippage_bps: u16,
+
+    /// 限价（可选）
+    #[serde(rename = "limitPrice")]
+    pub limit_price: Option<f64>,
+
+    /// 是否启用转账费计算（默认为true）
+    #[serde(rename = "enableTransferFee")]
+    pub enable_transfer_fee: Option<bool>,
+
+    /// 交易版本（V0或V1）
+    #[serde(rename = "txVersion")]
+    pub tx_version: String,
+}
+
+/// Raydium标准响应格式包装器
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RaydiumResponse<T> {
+    /// 请求唯一标识符
+    pub id: String,
+
+    /// 请求是否成功
+    pub success: bool,
+
+    /// API版本
+    pub version: String,
+
+    /// 响应数据
+    pub data: T,
+}
+
+impl<T> RaydiumResponse<T> {
+    pub fn success(data: T) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            success: true,
+            version: "V1".to_string(),
+            data,
+        }
+    }
+
+    pub fn with_id(data: T, id: String) -> Self {
+        Self {
+            id,
+            success: true,
+            version: "V1".to_string(),
+            data,
+        }
+    }
+}
+
+/// 交换计算结果数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapComputeData {
+    /// 交换类型（BaseIn/BaseOut）
+    #[serde(rename = "swapType")]
+    pub swap_type: String,
+
+    /// 输入代币mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输入金额
+    #[serde(rename = "inputAmount")]
+    pub input_amount: String,
+
+    /// 输出代币mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 输出金额
+    #[serde(rename = "outputAmount")]
+    pub output_amount: String,
+
+    /// 最小输出阈值（考虑滑点）
+    #[serde(rename = "otherAmountThreshold")]
+    pub other_amount_threshold: String,
+
+    /// 滑点设置（基点）
+    #[serde(rename = "slippageBps")]
+    pub slippage_bps: u16,
+
+    /// 价格影响百分比
+    #[serde(rename = "priceImpactPct")]
+    pub price_impact_pct: f64,
+
+    /// 推荐人费用
+    #[serde(rename = "referrerAmount")]
+    pub referrer_amount: String,
+
+    /// 路由计划
+    #[serde(rename = "routePlan")]
+    pub route_plan: Vec<RoutePlan>,
+}
+
+/// SwapV2交换计算结果数据（支持转账费）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapComputeV2Data {
+    /// 交换类型（BaseInV2/BaseOutV2）
+    #[serde(rename = "swapType")]
+    pub swap_type: String,
+
+    /// 输入代币mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输入金额
+    #[serde(rename = "inputAmount")]
+    pub input_amount: String,
+
+    /// 输出代币mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 输出金额
+    #[serde(rename = "outputAmount")]
+    pub output_amount: String,
+
+    /// 最小输出阈值（考虑滑点）
+    #[serde(rename = "otherAmountThreshold")]
+    pub other_amount_threshold: String,
+
+    /// 滑点设置（基点）
+    #[serde(rename = "slippageBps")]
+    pub slippage_bps: u16,
+
+    /// 价格影响百分比
+    #[serde(rename = "priceImpactPct")]
+    pub price_impact_pct: f64,
+
+    /// 推荐人费用
+    #[serde(rename = "referrerAmount")]
+    pub referrer_amount: String,
+
+    /// 路由计划
+    #[serde(rename = "routePlan")]
+    pub route_plan: Vec<RoutePlan>,
+
+    /// 转账费信息
+    #[serde(rename = "transferFeeInfo")]
+    pub transfer_fee_info: Option<TransferFeeInfo>,
+
+    /// 扣除转账费后的实际金额
+    #[serde(rename = "amountSpecified")]
+    pub amount_specified: Option<String>,
+
+    /// 当前epoch
+    pub epoch: Option<u64>,
+}
+
+/// 转账费信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Copy)]
+pub struct TransferFeeInfo {
+    /// 输入代币转账费
+    #[serde(rename = "inputTransferFee")]
+    pub input_transfer_fee: u64,
+
+    /// 输出代币转账费
+    #[serde(rename = "outputTransferFee")]
+    pub output_transfer_fee: u64,
+
+    /// 输入代币精度
+    #[serde(rename = "inputMintDecimals")]
+    pub input_mint_decimals: u8,
+
+    /// 输出代币精度
+    #[serde(rename = "outputMintDecimals")]
+    pub output_mint_decimals: u8,
+}
+
+/// 路由计划详情
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct RoutePlan {
+    /// 流动性池ID
+    #[serde(rename = "poolId")]
+    pub pool_id: String,
+
+    /// 输入代币mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输出代币mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 手续费代币mint地址
+    #[serde(rename = "feeMint")]
+    pub fee_mint: String,
+
+    /// 手续费率
+    #[serde(rename = "feeRate")]
+    pub fee_rate: u32,
+
+    /// 手续费金额
+    #[serde(rename = "feeAmount")]
+    pub fee_amount: String,
+
+    /// 剩余账户列表
+    #[serde(rename = "remainingAccounts")]
+    pub remaining_accounts: Vec<String>,
+
+    /// 最后池价格（X64格式）
+    #[serde(rename = "lastPoolPriceX64")]
+    pub last_pool_price_x64: String,
+}
+
+/// 交易构建请求
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct TransactionSwapRequest {
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 64))]
+    pub wallet: String,
+
+    /// 计算单元价格（微lamports）
+    #[serde(rename = "computeUnitPriceMicroLamports")]
+    pub compute_unit_price_micro_lamports: String,
+
+    /// 交换响应数据（来自compute接口）
+    #[serde(rename = "swapResponse")]
+    pub swap_response: RaydiumResponse<SwapComputeData>,
+
+    /// 交易版本
+    #[serde(rename = "txVersion")]
+    pub tx_version: String,
+
+    /// 是否包装SOL
+    #[serde(rename = "wrapSol")]
+    pub wrap_sol: bool,
+
+    /// 是否解包装SOL
+    #[serde(rename = "unwrapSol")]
+    pub unwrap_sol: bool,
+
+    /// 输入代币账户地址（可选）
+    #[serde(rename = "inputAccount")]
+    pub input_account: Option<String>,
+
+    /// 输出代币账户地址（可选）
+    #[serde(rename = "outputAccount")]
+    pub output_account: Option<String>,
+}
+
+/// SwapV2交易构建请求
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct TransactionSwapV2Request {
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 64))]
+    pub wallet: String,
+
+    /// 计算单元价格（微lamports）
+    #[serde(rename = "computeUnitPriceMicroLamports")]
+    pub compute_unit_price_micro_lamports: String,
+
+    /// SwapV2交换响应数据（来自compute-v2接口）
+    #[serde(rename = "swapResponse")]
+    pub swap_response: RaydiumResponse<SwapComputeV2Data>,
+
+    /// 交易版本
+    #[serde(rename = "txVersion")]
+    pub tx_version: String,
+
+    /// 是否包装SOL
+    #[serde(rename = "wrapSol")]
+    pub wrap_sol: bool,
+
+    /// 是否解包装SOL
+    #[serde(rename = "unwrapSol")]
+    pub unwrap_sol: bool,
+
+    /// 输入代币账户地址（可选）
+    #[serde(rename = "inputAccount")]
+    pub input_account: Option<String>,
+
+    /// 输出代币账户地址（可选）
+    #[serde(rename = "outputAccount")]
+    pub output_account: Option<String>,
+}
+
+/// 交易数据响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TransactionData {
+    /// 序列化的交易数据（Base64编码）
+    pub transaction: String,
+}
+
+/// Raydium错误响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RaydiumErrorResponse {
+    /// 请求唯一标识符
+    pub id: String,
+
+    /// 请求是否成功（固定为false）
+    pub success: bool,
+
+    /// API版本
+    pub version: String,
+
+    /// 错误信息
+    pub error: String,
+}
+
+impl RaydiumErrorResponse {
+    pub fn new(error_message: &str) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            success: false,
+            version: "V1".to_string(),
+            error: error_message.to_string(),
+        }
+    }
+
+    pub fn with_id(error_message: &str, id: String) -> Self {
+        Self {
+            id,
+            success: false,
+            version: "V1".to_string(),
+            error: error_message.to_string(),
+        }
+    }
+}
+
+// ============ OpenPosition API ============
+
+/// 开仓请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct OpenPositionRequest {
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub pool_address: String,
+
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+
+    /// 下限价格
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub tick_lower_price: f64,
+
+    /// 上限价格
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub tick_upper_price: f64,
+
+    /// 是否基于token0计算流动性
+    pub is_base_0: bool,
+
+    /// 输入金额（最小单位）
+    #[validate(range(min = 1))]
+    pub input_amount: u64,
+
+    /// 是否包含NFT元数据
+    #[serde(default)]
+    pub with_metadata: bool,
+
+    /// 最大滑点百分比（0-100）
+    #[validate(range(min = 0.0, max = 50.0))]
+    #[serde(default = "default_slippage")]
+    pub max_slippage_percent: f64,
+}
+
+fn default_slippage() -> f64 {
+    0.5 // 默认0.5%滑点
+}
+
+/// 开仓响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct OpenPositionResponse {
+    /// Base64编码的未签名交易数据
+    pub transaction: String,
+
+    /// 交易消息摘要（用于前端显示）
+    pub transaction_message: String,
+
+    /// 预期的仓位NFT mint地址
+    pub position_nft_mint: String,
+
+    /// 预期的仓位键值
+    pub position_key: String,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 预期的流动性数量
+    pub liquidity: String, // 使用字符串避免精度丢失
+
+    /// 预期消耗的token0数量
+    pub amount_0: u64,
+
+    /// 预期消耗的token1数量
+    pub amount_1: u64,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 创建时间戳
+    pub timestamp: i64,
+}
+
+/// 开仓响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct OpenPositionAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 位置NFT mint地址
+    pub position_nft_mint: String,
+
+    /// 位置键值
+    pub position_key: String,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 流动性数量
+    pub liquidity: String, // 使用字符串避免精度丢失
+
+    /// 实际消耗的token0数量
+    pub amount_0: u64,
+
+    /// 实际消耗的token1数量
+    pub amount_1: u64,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// Solana Explorer链接
+    pub explorer_url: String,
+
+    /// 交易时间戳
+    pub timestamp: i64,
+}
+
+/// 仓位信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PositionInfo {
+    /// 仓位键值
+    pub position_key: String,
+
+    /// 仓位NFT mint地址
+    pub nft_mint: String,
+
+    /// 池子地址
+    pub pool_id: String,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 流动性数量
+    pub liquidity: String,
+
+    /// 下限价格
+    pub tick_lower_price: f64,
+
+    /// 上限价格
+    pub tick_upper_price: f64,
+
+    /// 累计的token0手续费
+    pub token_fees_owed_0: u64,
+
+    /// 累计的token1手续费
+    pub token_fees_owed_1: u64,
+
+    /// 奖励信息
+    pub reward_infos: Vec<PositionRewardInfo>,
+
+    /// 创建时间戳
+    pub created_at: i64,
+}
+
+/// 仓位奖励信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PositionRewardInfo {
+    /// 奖励代币mint地址
+    pub reward_mint: String,
+
+    /// 累计奖励数量
+    pub reward_amount_owed: u64,
+
+    /// 奖励增长内部记录
+    pub growth_inside_last_x64: String,
+}
+
+/// 获取用户仓位列表请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct GetUserPositionsRequest {
+    /// 用户钱包地址（可选，默认使用服务配置的钱包）
+    #[validate(length(min = 32, max = 44))]
+    pub wallet_address: Option<String>,
+
+    /// 池子地址过滤（可选）
+    #[validate(length(min = 32, max = 44))]
+    pub pool_address: Option<String>,
+}
+
+/// 用户仓位列表响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserPositionsResponse {
+    /// 仓位列表
+    pub positions: Vec<PositionInfo>,
+
+    /// 总仓位数量
+    pub total_count: usize,
+
+    /// 查询的钱包地址
+    pub wallet_address: String,
+
+    /// 查询时间戳
+    pub timestamp: i64,
+}
+
+/// 流动性计算请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CalculateLiquidityRequest {
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub pool_address: String,
+
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+
+    /// 下限价格
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub tick_lower_price: f64,
+
+    /// 上限价格
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub tick_upper_price: f64,
+
+    /// 是否基于token0计算
+    pub is_base_0: bool,
+
+    /// 输入金额
+    #[validate(range(min = 1))]
+    pub input_amount: u64,
+}
+
+/// 流动性计算响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CalculateLiquidityResponse {
+    /// 计算得到的流动性
+    pub liquidity: String,
+
+    /// 需要的token0数量
+    pub amount_0: u64,
+
+    /// 需要的token1数量
+    pub amount_1: u64,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 当前池子价格
+    pub current_price: f64,
+
+    /// 价格在范围内的比例
+    pub price_range_utilization: f64,
+}
+
+// ============ IncreaseLiquidity API相关DTO ============
+
+/// 增加流动性请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct IncreaseLiquidityRequest {
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub pool_address: String,
+
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+
+    /// 下限价格
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub tick_lower_price: f64,
+
+    /// 上限价格
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub tick_upper_price: f64,
+
+    /// 是否基于token0计算流动性
+    pub is_base_0: bool,
+
+    /// 输入金额（最小单位）
+    #[validate(range(min = 1))]
+    pub input_amount: u64,
+
+    /// 最大滑点百分比（0-100）
+    #[validate(range(min = 0.0, max = 50.0))]
+    #[serde(default = "default_slippage")]
+    pub max_slippage_percent: f64,
+}
+
+/// 增加流动性响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct IncreaseLiquidityResponse {
+    /// Base64编码的未签名交易数据
+    pub transaction: String,
+
+    /// 交易消息摘要（用于前端显示）
+    pub transaction_message: String,
+
+    /// 找到的现有仓位键值
+    pub position_key: String,
+
+    /// 增加的流动性数量
+    pub liquidity_added: String, // 使用字符串避免精度丢失
+
+    /// 需要消耗的token0数量
+    pub amount_0: u64,
+
+    /// 需要消耗的token1数量
+    pub amount_1: u64,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 创建时间戳
+    pub timestamp: i64,
+}
+
+/// 增加流动性并发送交易响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct IncreaseLiquidityAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 仓位键值
+    pub position_key: String,
+
+    /// 增加的流动性数量
+    pub liquidity_added: String, // 使用字符串避免精度丢失
+
+    /// 实际消耗的token0数量
+    pub amount_0: u64,
+
+    /// 实际消耗的token1数量
+    pub amount_1: u64,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+// ============ CreatePool API相关DTO ============
+
+/// 创建池子请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreatePoolRequest {
+    /// AMM配置索引
+    #[validate(range(min = 0, max = 255))]
+    pub config_index: u16,
+
+    /// 初始价格（token1/token0的比率）
+    #[validate(range(min = 0.000001, max = 1000000.0))]
+    pub price: f64,
+
+    /// 第一个代币mint地址
+    pub mint0: String,
+
+    /// 第二个代币mint地址
+    pub mint1: String,
+
+    /// 池子开放时间（Unix时间戳，0表示立即开放）
+    #[validate(range(min = 0))]
+    pub open_time: u64,
+
+    /// 用户钱包地址（用于签名交易）
+    pub user_wallet: String,
+}
+
+/// 创建池子响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreatePoolResponse {
+    /// Base64编码的未签名交易数据
+    pub transaction: String,
+
+    /// 交易描述信息
+    pub transaction_message: String,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// AMM配置地址
+    pub amm_config_address: String,
+
+    /// Token0 Vault地址
+    pub token_vault_0: String,
+
+    /// Token1 Vault地址
+    pub token_vault_1: String,
+
+    /// 观察状态地址
+    pub observation_address: String,
+
+    /// Tick Array Bitmap Extension地址
+    pub tickarray_bitmap_extension: String,
+
+    /// 初始价格
+    pub initial_price: f64,
+
+    /// 初始sqrt_price_x64
+    pub sqrt_price_x64: String,
+
+    /// 对应的tick
+    pub initial_tick: i32,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+/// 创建池子并发送交易响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreatePoolAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// AMM配置地址
+    pub amm_config_address: String,
+
+    /// Token0 Vault地址
+    pub token_vault_0: String,
+
+    /// Token1 Vault地址
+    pub token_vault_1: String,
+
+    /// 观察状态地址
+    pub observation_address: String,
+
+    /// Tick Array Bitmap Extension地址
+    pub tickarray_bitmap_extension: String,
+
+    /// 初始价格
+    pub initial_price: f64,
+
+    /// 初始sqrt_price_x64
+    pub sqrt_price_x64: String,
+
+    /// 对应的tick
+    pub initial_tick: i32,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+// ============ Classic AMM Pool API相关DTO ============
+
+/// 创建经典AMM池子请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct CreateClassicAmmPoolRequest {
+    /// 第一个代币mint地址
+    #[validate(length(min = 32, max = 44))]
+    pub mint0: String,
+
+    /// 第二个代币mint地址
+    #[validate(length(min = 32, max = 44))]
+    pub mint1: String,
+
+    /// 第一个代币的初始数量（最小单位）
+    #[validate(range(min = 1))]
+    pub init_amount_0: u64,
+
+    /// 第二个代币的初始数量（最小单位）
+    #[validate(range(min = 1))]
+    pub init_amount_1: u64,
+
+    /// 池子开放时间（Unix时间戳，0表示立即开放）
+    #[validate(range(min = 0))]
+    pub open_time: u64,
+
+    /// 用户钱包地址（用于签名交易）
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+}
+
+/// 创建经典AMM池子响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateClassicAmmPoolResponse {
+    /// Base64编码的未签名交易数据
+    pub transaction: String,
+
+    /// 交易描述信息
+    pub transaction_message: String,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// Coin mint地址（按字节序排序后的第一个mint）
+    pub coin_mint: String,
+
+    /// PC mint地址（按字节序排序后的第二个mint）
+    pub pc_mint: String,
+
+    /// Coin token账户地址
+    pub coin_vault: String,
+
+    /// PC token账户地址
+    pub pc_vault: String,
+
+    /// LP mint地址
+    pub lp_mint: String,
+
+    /// Open orders地址
+    pub open_orders: String,
+
+    /// Target orders地址
+    pub target_orders: String,
+
+    /// Withdraw queue地址
+    pub withdraw_queue: String,
+
+    /// 初始Coin数量
+    pub init_coin_amount: u64,
+
+    /// 初始PC数量
+    pub init_pc_amount: u64,
+
+    /// 池子开放时间
+    pub open_time: u64,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+/// 创建经典AMM池子并发送交易响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CreateClassicAmmPoolAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// Coin mint地址（按字节序排序后的第一个mint）
+    pub coin_mint: String,
+
+    /// PC mint地址（按字节序排序后的第二个mint）
+    pub pc_mint: String,
+
+    /// Coin token账户地址
+    pub coin_vault: String,
+
+    /// PC token账户地址
+    pub pc_vault: String,
+
+    /// LP mint地址
+    pub lp_mint: String,
+
+    /// Open orders地址
+    pub open_orders: String,
+
+    /// Target orders地址
+    pub target_orders: String,
+
+    /// Withdraw queue地址
+    pub withdraw_queue: String,
+
+    /// 实际使用的Coin数量
+    pub actual_coin_amount: u64,
+
+    /// 实际使用的PC数量
+    pub actual_pc_amount: u64,
+
+    /// 池子开放时间
+    pub open_time: u64,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+// ============ Pool Listing API相关DTO ============
+
+/// 池子列表查询请求参数
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Validate, IntoParams)]
+pub struct PoolListRequest {
+    /// 按池子类型过滤
+    #[serde(rename = "poolType")]
+    pub pool_type: Option<String>,
+
+    /// 排序字段 (default, created_at, price, open_time)
+    #[serde(rename = "poolSortField")]
+    pub pool_sort_field: Option<String>,
+
+    /// 排序方向 (asc, desc)
+    #[serde(rename = "sortType")]
+    pub sort_type: Option<String>,
+
+    /// 页大小 (1-100, 默认20)
+    #[serde(rename = "pageSize")]
+    #[validate(range(min = 1, max = 100))]
+    pub page_size: Option<u64>,
+
+    /// 页码 (1-based, 默认1)
+    #[validate(range(min = 1))]
+    pub page: Option<u64>,
+
+    /// 按创建者钱包地址过滤
+    #[serde(rename = "creatorWallet")]
+    pub creator_wallet: Option<String>,
+
+    /// 按代币mint地址过滤
+    #[serde(rename = "mintAddress")]
+    pub mint_address: Option<String>,
+
+    /// 按池子状态过滤
+    pub status: Option<String>,
+}
+
+impl Default for PoolListRequest {
+    fn default() -> Self {
+        Self {
+            pool_type: None,
+            pool_sort_field: Some("default".to_string()),
+            sort_type: Some("desc".to_string()),
+            page_size: Some(20),
+            page: Some(1),
+            creator_wallet: None,
+            mint_address: None,
+            status: None,
+        }
+    }
+}
+
+/// 新的池子列表响应格式（匹配期望格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NewPoolListResponse {
+    /// 请求ID
+    pub id: String,
+
+    /// 请求是否成功
+    pub success: bool,
+
+    /// 响应数据
+    pub data: PoolListData,
+}
+
+/// 新的池子列表响应格式（匹配期望格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NewPoolListResponse2 {
+    /// 请求ID
+    pub id: String,
+
+    /// 请求是否成功
+    pub success: bool,
+
+    /// 响应数据
+    // pub data: PoolListData2,
+    pub data: Vec<PoolInfo>,
+}
+
+/// 池子列表数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolListData {
+    /// 池子总数
+    pub count: u64,
+
+    /// 池子详细信息列表
+    pub data: Vec<PoolInfo>,
+
+    /// 是否有下一页
+    #[serde(rename = "hasNextPage")]
+    pub has_next_page: bool,
+}
+
+/// 池子列表数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolListData2 {
+    /// 池子详细信息列表
+    pub data: Vec<PoolInfo>,
+}
+/// 池子信息（新格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolInfo {
+    /// 池子类型
+    #[serde(rename = "type")]
+    pub pool_type: String,
+
+    /// 程序ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+
+    /// 池子ID（地址）
+    pub id: String,
+
+    /// 代币A信息
+    #[serde(rename = "mintA")]
+    pub mint_a: ExtendedMintInfo,
+
+    /// 代币B信息
+    #[serde(rename = "mintB")]
+    pub mint_b: ExtendedMintInfo,
+
+    /// 默认奖励池信息
+    #[serde(rename = "rewardDefaultPoolInfos")]
+    pub reward_default_pool_infos: String,
+
+    /// 默认奖励信息
+    #[serde(rename = "rewardDefaultInfos")]
+    pub reward_default_infos: Vec<RewardInfo>,
+
+    /// 当前价格
+    pub price: f64,
+
+    /// 代币A数量
+    #[serde(rename = "mintAmountA")]
+    pub mint_amount_a: f64,
+
+    /// 代币B数量
+    #[serde(rename = "mintAmountB")]
+    pub mint_amount_b: f64,
+
+    /// 手续费率
+    #[serde(rename = "feeRate")]
+    pub fee_rate: f64,
+
+    /// 开放时间
+    #[serde(rename = "openTime")]
+    pub open_time: String,
+
+    /// 总价值锁定
+    pub tvl: f64,
+
+    /// 日统计
+    pub day: Option<PeriodStats>,
+
+    /// 周统计
+    pub week: Option<PeriodStats>,
+
+    /// 月统计
+    pub month: Option<PeriodStats>,
+
+    /// 池子类型标签
+    pub pooltype: Vec<String>,
+
+    /// 即将开始的农场数量
+    #[serde(rename = "farmUpcomingCount")]
+    pub farm_upcoming_count: u32,
+
+    /// 进行中的农场数量
+    #[serde(rename = "farmOngoingCount")]
+    pub farm_ongoing_count: u32,
+
+    /// 已结束的农场数量
+    #[serde(rename = "farmFinishedCount")]
+    pub farm_finished_count: u32,
+
+    /// 配置信息
+    pub config: Option<PoolConfigInfo>,
+
+    /// 燃烧百分比
+    #[serde(rename = "burnPercent")]
+    pub burn_percent: f64,
+
+    /// 启动迁移池
+    #[serde(rename = "launchMigratePool")]
+    pub launch_migrate_pool: bool,
+}
+
+/// 扩展的mint信息（新格式）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ExtendedMintInfo {
+    /// 链ID
+    #[serde(rename = "chainId")]
+    pub chain_id: u32,
+
+    /// 代币地址
+    pub address: String,
+
+    /// 程序ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+
+    /// Logo URI
+    #[serde(rename = "logoURI")]
+    pub logo_uri: Option<String>,
+
+    /// 代币符号
+    pub symbol: Option<String>,
+
+    /// 代币名称
+    pub name: Option<String>,
+
+    /// 精度
+    pub decimals: u8,
+
+    /// 标签
+    pub tags: Vec<String>,
+
+    /// 扩展信息
+    pub extensions: serde_json::Value,
+}
+
+/// 奖励信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardInfo {
+    /// 奖励代币信息
+    pub mint: ExtendedMintInfo,
+
+    /// 每秒奖励
+    #[serde(rename = "perSecond")]
+    pub per_second: String,
+
+    /// 开始时间
+    #[serde(rename = "startTime")]
+    pub start_time: String,
+
+    /// 结束时间
+    #[serde(rename = "endTime")]
+    pub end_time: String,
+}
+
+/// 周期统计信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct PeriodStats {
+    /// 交易量
+    pub volume: f64,
+
+    /// 报价交易量
+    #[serde(rename = "volumeQuote")]
+    pub volume_quote: f64,
+
+    /// 手续费交易量
+    #[serde(rename = "volumeFee")]
+    pub volume_fee: f64,
+
+    /// 年化收益率
+    pub apr: f64,
+
+    /// 手续费年化收益率
+    #[serde(rename = "feeApr")]
+    pub fee_apr: f64,
+
+    /// 最低价格
+    #[serde(rename = "priceMin")]
+    pub price_min: f64,
+
+    /// 最高价格
+    #[serde(rename = "priceMax")]
+    pub price_max: f64,
+
+    /// 奖励年化收益率
+    #[serde(rename = "rewardApr")]
+    pub reward_apr: Vec<f64>,
+}
+
+/// 池子配置信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolConfigInfo {
+    /// 配置ID
+    pub id: String,
+
+    /// 配置索引
+    pub index: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u32,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u32,
+
+    /// Tick间距
+    #[serde(rename = "tickSpacing")]
+    pub tick_spacing: u32,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u32,
+
+    /// 默认范围
+    #[serde(rename = "defaultRange")]
+    pub default_range: f64,
+
+    /// 默认范围点
+    #[serde(rename = "defaultRangePoint")]
+    pub default_range_point: Vec<f64>,
+}
+
+/// 旧版池子列表响应（保持向后兼容）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolListResponse {
+    /// 池子列表
+    pub pools: Vec<ClmmPool>,
+
+    /// 分页元数据
+    pub pagination: PaginationMeta,
+
+    /// 过滤器摘要
+    pub filters: FilterSummary,
+}
+
+/// 分页元数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaginationMeta {
+    /// 当前页码
+    pub current_page: u64,
+
+    /// 页大小
+    pub page_size: u64,
+
+    /// 符合条件的总记录数
+    pub total_count: u64,
+
+    /// 总页数
+    pub total_pages: u64,
+
+    /// 是否有下一页
+    pub has_next: bool,
+
+    /// 是否有上一页
+    pub has_prev: bool,
+}
+
+/// 过滤器摘要
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct FilterSummary {
+    /// 应用的池子类型过滤器
+    pub pool_type: Option<String>,
+
+    /// 应用的排序字段
+    pub sort_field: String,
+
+    /// 应用的排序方向
+    pub sort_direction: String,
+
+    /// 按池子类型统计数量
+    pub type_counts: Vec<TypeCount>,
+}
+
+/// 池子类型统计
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TypeCount {
+    /// 池子类型
+    pub pool_type: String,
+
+    /// 数量
+    pub count: u64,
+}
+
+// ============ DecreaseLiquidity API相关DTO ============
+
+/// 减少流动性请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct DecreaseLiquidityRequest {
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub pool_address: String,
+
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 要减少的流动性数量（可选，如果为空则减少全部流动性）
+    pub liquidity: Option<String>, // 使用字符串避免精度丢失
+
+    /// 最大滑点百分比（0-100）
+    #[validate(range(min = 0.0, max = 50.0))]
+    pub max_slippage_percent: Option<f64>,
+
+    /// 是否只模拟交易（不实际发送）
+    #[serde(default)]
+    pub simulate: bool,
+}
+
+/// 减少流动性响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DecreaseLiquidityResponse {
+    /// Base64编码的未签名交易数据
+    pub transaction: String,
+
+    /// 交易消息摘要（用于前端显示）
+    pub transaction_message: String,
+
+    /// 仓位键值
+    pub position_key: String,
+
+    /// 减少的流动性数量
+    pub liquidity_removed: String, // 使用字符串避免精度丢失
+
+    /// 预期获得的token0数量（减去滑点和转账费）
+    pub amount_0_min: u64,
+
+    /// 预期获得的token1数量（减去滑点和转账费）
+    pub amount_1_min: u64,
+
+    /// 预期实际获得的token0数量（未减去滑点和转账费）
+    pub amount_0_expected: u64,
+
+    /// 预期实际获得的token1数量（未减去滑点和转账费）
+    pub amount_1_expected: u64,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 是否会完全关闭仓位
+    pub will_close_position: bool,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+/// 减少流动性并发送交易响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DecreaseLiquidityAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 仓位键值
+    pub position_key: String,
+
+    /// 减少的流动性数量
+    pub liquidity_removed: String, // 使用字符串避免精度丢失
+
+    /// 实际获得的token0数量
+    pub amount_0_actual: u64,
+
+    /// 实际获得的token1数量
+    pub amount_1_actual: u64,
+
+    /// 下限tick索引
+    pub tick_lower_index: i32,
+
+    /// 上限tick索引
+    pub tick_upper_index: i32,
+
+    /// 池子地址
+    pub pool_address: String,
+
+    /// 是否已完全关闭仓位
+    pub position_closed: bool,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// Solana Explorer链接
+    pub explorer_url: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+// ============ Position Storage API相关DTO ============
+
+/// 仓位存储请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct PositionStorageRequest {
+    /// 开仓请求信息
+    pub open_position_request: OpenPositionRequest,
+    /// 开仓响应信息
+    pub open_position_response: OpenPositionResponse,
+    /// 交易签名（可选）
+    pub transaction_signature: Option<String>,
+}
+
+/// 仓位更新请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct PositionUpdateRequest {
+    /// 仓位键值
+    #[validate(length(min = 32, max = 44))]
+    pub position_key: String,
+    /// 操作类型 ("increase", "decrease", "close")
+    #[validate(length(min = 1))]
+    pub operation_type: String,
+    /// 流动性变化数量
+    pub liquidity_change: String,
+    /// token0数量变化
+    pub amount_0_change: u64,
+    /// token1数量变化
+    pub amount_1_change: u64,
+    /// 交易签名（可选）
+    pub transaction_signature: Option<String>,
+}
+
+/// 仓位查询请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema, IntoParams)]
+pub struct PositionQueryRequest {
+    /// 用户钱包地址（可选）
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: Option<String>,
+    /// 池子地址（可选）
+    #[validate(length(min = 32, max = 44))]
+    pub pool_address: Option<String>,
+    /// 仓位状态过滤 ("Active", "Closed", "Paused", "Error")
+    pub status: Option<String>,
+    /// 是否只显示活跃仓位
+    pub active_only: Option<bool>,
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    pub page: Option<u64>,
+    /// 每页大小
+    #[validate(range(min = 1, max = 100))]
+    pub page_size: Option<u64>,
+}
+
+impl Default for PositionQueryRequest {
+    fn default() -> Self {
+        Self {
+            user_wallet: None,
+            pool_address: None,
+            status: None,
+            active_only: Some(true),
+            page: Some(1),
+            page_size: Some(20),
+        }
+    }
+}
+
+/// 链下仓位详细信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct StoredPositionInfo {
+    /// 基本仓位信息（复用现有的PositionInfo）
+    #[serde(flatten)]
+    pub position_info: PositionInfo,
+    /// 链下存储的额外信息
+    pub storage_info: PositionStorageInfo,
+}
+
+/// 仓位存储信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PositionStorageInfo {
+    /// 初始流动性
+    pub initial_liquidity: String,
+    /// 当前流动性
+    pub current_liquidity: String,
+    /// 累计增加的流动性
+    pub total_liquidity_added: String,
+    /// 累计减少的流动性
+    pub total_liquidity_removed: String,
+    /// 仓位状态
+    pub status: String,
+    /// 是否活跃
+    pub is_active: bool,
+    /// 是否在价格范围内
+    pub is_in_range: bool,
+    /// 累计赚取的手续费
+    pub total_fees_earned_0: u64,
+    pub total_fees_earned_1: u64,
+    /// 未领取的手续费
+    pub unclaimed_fees_0: u64,
+    pub unclaimed_fees_1: u64,
+    /// 总操作次数
+    pub total_operations: u32,
+    /// 最后操作类型
+    pub last_operation_type: Option<String>,
+    /// 创建时间
+    pub created_at: i64,
+    /// 最后更新时间
+    pub updated_at: i64,
+    /// 最后同步时间
+    pub last_sync_at: Option<i64>,
+    /// 扩展元数据
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// 仓位列表响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PositionListResponse {
+    /// 仓位列表
+    pub positions: Vec<StoredPositionInfo>,
+    /// 分页信息
+    pub pagination: PaginationInfo,
+    /// 统计信息
+    pub statistics: PositionListStatistics,
+    /// 查询时间戳
+    pub timestamp: i64,
+}
+
+/// 分页信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaginationInfo {
+    /// 当前页码
+    pub current_page: u64,
+    /// 每页大小
+    pub page_size: u64,
+    /// 总记录数
+    pub total_count: u64,
+    /// 总页数
+    pub total_pages: u64,
+    /// 是否有下一页
+    pub has_next: bool,
+    /// 是否有上一页
+    pub has_previous: bool,
+}
+
+/// 仓位列表统计信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PositionListStatistics {
+    /// 总仓位数
+    pub total_positions: u64,
+    /// 活跃仓位数
+    pub active_positions: u64,
+    /// 已关闭仓位数
+    pub closed_positions: u64,
+    /// 总流动性
+    pub total_liquidity: String,
+    /// 总手续费收益
+    pub total_fees_earned_0: u64,
+    pub total_fees_earned_1: u64,
+}
+
+/// 用户仓位统计响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserPositionStatsResponse {
+    /// 用户钱包地址
+    pub user_wallet: String,
+    /// 统计信息
+    pub statistics: PositionListStatistics,
+    /// 按池子分组的统计
+    pub pool_breakdown: Vec<PoolPositionBreakdown>,
+    /// 查询时间戳
+    pub timestamp: i64,
+}
+
+/// 池子仓位分解统计DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolPositionBreakdown {
+    /// 池子地址
+    pub pool_address: String,
+    /// 该池子中的仓位数量
+    pub position_count: u64,
+    /// 该池子中的总流动性
+    pub total_liquidity: String,
+    /// 该池子中的手续费收益
+    pub fees_earned_0: u64,
+    pub fees_earned_1: u64,
+}
+
+/// 池子仓位统计响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolPositionStatsResponse {
+    /// 池子地址
+    pub pool_address: String,
+    /// 总仓位数
+    pub total_positions: u64,
+    /// 活跃仓位数
+    pub active_positions: u64,
+    /// 唯一用户数
+    pub unique_users: u64,
+    /// 总流动性
+    pub total_liquidity: String,
+    /// 平均仓位大小
+    pub average_position_size: String,
+    /// 按用户分组的前10名
+    pub top_users: Vec<UserPositionSummary>,
+    /// 查询时间戳
+    pub timestamp: i64,
+}
+
+/// 用户仓位摘要DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserPositionSummary {
+    /// 用户钱包地址
+    pub user_wallet: String,
+    /// 该用户的仓位数量
+    pub position_count: u64,
+    /// 该用户的总流动性
+    pub total_liquidity: String,
+    /// 该用户的手续费收益
+    pub fees_earned_0: u64,
+    pub fees_earned_1: u64,
+}
+
+// ========================= 流动性线图相关DTO =========================
+
+/// 流动性线图查询请求参数
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, IntoParams, Validate)]
+pub struct PoolLiquidityLineRequest {
+    /// 池子地址
+    #[validate(length(min = 32, max = 44))]
+    pub id: String,
+
+    /// 查询范围（可选，以当前价格为中心的tick范围）
+    #[validate(range(min = 100, max = 10000))]
+    pub range: Option<i32>,
+
+    /// 最大返回点数（可选，默认100）
+    #[validate(range(min = 10, max = 1000))]
+    pub max_points: Option<u32>,
+}
+
+/// 流动性线图数据点
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LiquidityLinePoint {
+    /// 该tick对应的价格
+    pub price: f64,
+
+    /// 该tick的流动性数量（字符串避免精度丢失）
+    pub liquidity: String,
+
+    /// tick索引
+    pub tick: i32,
+}
+
+/// 流动性线图数据
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolLiquidityLineData {
+    /// 数据点数量
+    pub count: u32,
+
+    /// 流动性分布线图数据点列表
+    pub line: Vec<LiquidityLinePoint>,
+}
+
+/// 流动性线图响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolLiquidityLineResponse {
+    /// 请求ID
+    pub id: String,
+
+    /// 请求是否成功
+    pub success: bool,
+
+    /// 流动性线图数据
+    pub data: PoolLiquidityLineData,
+}
+
+/// 流动性线图错误响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct LiquidityLineErrorResponse {
+    /// 请求ID
+    pub id: String,
+
+    /// 请求失败
+    pub success: bool,
+
+    /// 错误信息
+    pub error: String,
+
+    /// 错误代码（可选）
+    pub error_code: Option<String>,
+}
+
+#[cfg(test)]
+mod pool_listing_tests {
+    use super::*;
+    use validator::Validate;
+
+    #[test]
+    fn test_pool_list_request_default() {
+        let request = PoolListRequest::default();
+
+        assert_eq!(request.pool_type, None);
+        assert_eq!(request.pool_sort_field, Some("default".to_string()));
+        assert_eq!(request.sort_type, Some("desc".to_string()));
+        assert_eq!(request.page_size, Some(20));
+        assert_eq!(request.page, Some(1));
+        assert_eq!(request.creator_wallet, None);
+        assert_eq!(request.mint_address, None);
+        assert_eq!(request.status, None);
+    }
+
+    #[test]
+    fn test_pool_list_request_validation_valid() {
+        let request = PoolListRequest {
+            pool_type: Some("concentrated".to_string()),
+            pool_sort_field: Some("created_at".to_string()),
+            sort_type: Some("asc".to_string()),
+            page_size: Some(50),
+            page: Some(2),
+            creator_wallet: Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()),
+            mint_address: Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
+            status: Some("Active".to_string()),
+        };
+
+        assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn test_pool_list_request_validation_invalid_page_size() {
+        let request = PoolListRequest {
+            page_size: Some(101), // 超过最大值100
+            ..Default::default()
+        };
+
+        let validation_result = request.validate();
+        assert!(validation_result.is_err());
+
+        let errors = validation_result.unwrap_err();
+        assert!(errors.field_errors().contains_key("pageSize"));
+    }
+
+    #[test]
+    fn test_pool_list_request_validation_invalid_page_size_zero() {
+        let request = PoolListRequest {
+            page_size: Some(0), // 小于最小值1
+            ..Default::default()
+        };
+
+        let validation_result = request.validate();
+        assert!(validation_result.is_err());
+
+        let errors = validation_result.unwrap_err();
+        assert!(errors.field_errors().contains_key("pageSize"));
+    }
+
+    #[test]
+    fn test_pool_list_request_validation_invalid_page_zero() {
+        let request = PoolListRequest {
+            page: Some(0), // 小于最小值1
+            ..Default::default()
+        };
+
+        let validation_result = request.validate();
+        assert!(validation_result.is_err());
+
+        let errors = validation_result.unwrap_err();
+        assert!(errors.field_errors().contains_key("page"));
+    }
+
+    #[test]
+    fn test_pool_list_request_serialization() {
+        let request = PoolListRequest {
+            pool_type: Some("concentrated".to_string()),
+            pool_sort_field: Some("created_at".to_string()),
+            sort_type: Some("asc".to_string()),
+            page_size: Some(50),
+            page: Some(2),
+            creator_wallet: Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()),
+            mint_address: Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
+            status: Some("Active".to_string()),
+        };
+
+        let json = serde_json::to_string(&request).unwrap();
+        let deserialized: PoolListRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(request.pool_type, deserialized.pool_type);
+        assert_eq!(request.pool_sort_field, deserialized.pool_sort_field);
+        assert_eq!(request.sort_type, deserialized.sort_type);
+        assert_eq!(request.page_size, deserialized.page_size);
+        assert_eq!(request.page, deserialized.page);
+        assert_eq!(request.creator_wallet, deserialized.creator_wallet);
+        assert_eq!(request.mint_address, deserialized.mint_address);
+        assert_eq!(request.status, deserialized.status);
+    }
+
+    #[test]
+    fn test_pool_list_request_serde_rename() {
+        let json = r#"{
+            "poolType": "concentrated",
+            "poolSortField": "created_at",
+            "sortType": "asc",
+            "pageSize": 50,
+            "page": 2,
+            "creatorWallet": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+            "mintAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "status": "Active"
+        }"#;
+
+        let request: PoolListRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.pool_type, Some("concentrated".to_string()));
+        assert_eq!(request.pool_sort_field, Some("created_at".to_string()));
+        assert_eq!(request.sort_type, Some("asc".to_string()));
+        assert_eq!(request.page_size, Some(50));
+        assert_eq!(request.page, Some(2));
+        assert_eq!(
+            request.creator_wallet,
+            Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string())
+        );
+        assert_eq!(
+            request.mint_address,
+            Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string())
+        );
+        assert_eq!(request.status, Some("Active".to_string()));
+    }
+
+    #[test]
+    fn test_pagination_meta_creation() {
+        let pagination = PaginationMeta {
+            current_page: 2,
+            page_size: 20,
+            total_count: 150,
+            total_pages: 8,
+            has_next: true,
+            has_prev: true,
+        };
+
+        assert_eq!(pagination.current_page, 2);
+        assert_eq!(pagination.page_size, 20);
+        assert_eq!(pagination.total_count, 150);
+        assert_eq!(pagination.total_pages, 8);
+        assert!(pagination.has_next);
+        assert!(pagination.has_prev);
+    }
+
+    #[test]
+    fn test_filter_summary_creation() {
+        let type_counts = vec![
+            TypeCount {
+                pool_type: "concentrated".to_string(),
+                count: 100,
+            },
+            TypeCount {
+                pool_type: "standard".to_string(),
+                count: 50,
+            },
+        ];
+
+        let filter_summary = FilterSummary {
+            pool_type: Some("concentrated".to_string()),
+            sort_field: "created_at".to_string(),
+            sort_direction: "desc".to_string(),
+            type_counts,
+        };
+
+        assert_eq!(filter_summary.pool_type, Some("concentrated".to_string()));
+        assert_eq!(filter_summary.sort_field, "created_at");
+        assert_eq!(filter_summary.sort_direction, "desc");
+        assert_eq!(filter_summary.type_counts.len(), 2);
+        assert_eq!(filter_summary.type_counts[0].pool_type, "concentrated");
+        assert_eq!(filter_summary.type_counts[0].count, 100);
+        assert_eq!(filter_summary.type_counts[1].pool_type, "standard");
+        assert_eq!(filter_summary.type_counts[1].count, 50);
+    }
+
+    #[test]
+    fn test_pool_list_response_creation() {
+        let pools = vec![]; // Empty for test
+        let pagination = PaginationMeta {
+            current_page: 1,
+            page_size: 20,
+            total_count: 0,
+            total_pages: 0,
+            has_next: false,
+            has_prev: false,
+        };
+        let filters = FilterSummary {
+            pool_type: None,
+            sort_field: "default".to_string(),
+            sort_direction: "desc".to_string(),
+            type_counts: vec![],
+        };
+
+        let response = PoolListResponse {
+            pools,
+            pagination,
+            filters,
+        };
+
+        assert_eq!(response.pools.len(), 0);
+        assert_eq!(response.pagination.current_page, 1);
+        assert_eq!(response.filters.sort_field, "default");
+    }
+
+    #[test]
+    fn test_type_count_serialization() {
+        let type_count = TypeCount {
+            pool_type: "concentrated".to_string(),
+            count: 42,
+        };
+
+        let json = serde_json::to_string(&type_count).unwrap();
+        let deserialized: TypeCount = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(type_count.pool_type, deserialized.pool_type);
+        assert_eq!(type_count.count, deserialized.count);
+    }
+
+    #[test]
+    fn test_pool_list_request_edge_cases() {
+        // Test with minimum valid values
+        let request = PoolListRequest {
+            page_size: Some(1),
+            page: Some(1),
+            ..Default::default()
+        };
+        assert!(request.validate().is_ok());
+
+        // Test with maximum valid values
+        let request = PoolListRequest {
+            page_size: Some(100),
+            page: Some(u64::MAX),
+            ..Default::default()
+        };
+        assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn test_pool_list_request_optional_fields() {
+        // Test with all optional fields as None
+        let request = PoolListRequest {
+            pool_type: None,
+            pool_sort_field: None,
+            sort_type: None,
+            page_size: None,
+            page: None,
+            creator_wallet: None,
+            mint_address: None,
+            status: None,
+        };
+        assert!(request.validate().is_ok());
+    }
+}
+
+/// Raydium CLMM池子密钥信息响应格式
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolKeyResponse {
+    /// 请求ID
+    pub id: String,
+
+    /// 请求是否成功
+    pub success: bool,
+
+    /// 池子密钥数据列表
+    pub data: Vec<Option<PoolKeyInfo>>,
+}
+
+/// 池子密钥详细信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolKeyInfo {
+    /// 程序ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+
+    /// 池子ID（地址）
+    pub id: String,
+
+    /// 代币A信息
+    #[serde(rename = "mintA")]
+    pub mint_a: RaydiumMintInfo,
+
+    /// 代币B信息
+    #[serde(rename = "mintB")]
+    pub mint_b: RaydiumMintInfo,
+
+    /// 查找表账户
+    #[serde(rename = "lookupTableAccount")]
+    pub lookup_table_account: String,
+
+    /// 开放时间
+    #[serde(rename = "openTime")]
+    pub open_time: String,
+
+    /// 金库信息
+    pub vault: VaultAddresses,
+
+    /// 配置信息
+    pub config: PoolConfig,
+
+    /// 奖励信息列表
+    #[serde(rename = "rewardInfos")]
+    pub reward_infos: Vec<PoolRewardInfo>,
+
+    /// 观察账户ID
+    #[serde(rename = "observationId")]
+    pub observation_id: String,
+
+    /// 扩展位图账户
+    #[serde(rename = "exBitmapAccount")]
+    pub ex_bitmap_account: String,
+}
+
+/// Raydium代币信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RaydiumMintInfo {
+    /// 链ID
+    #[serde(rename = "chainId")]
+    pub chain_id: u32,
+
+    /// 代币地址
+    pub address: String,
+
+    /// 程序ID
+    #[serde(rename = "programId")]
+    pub program_id: String,
+
+    /// 图标URI
+    #[serde(rename = "logoURI")]
+    pub logo_uri: String,
+
+    /// 代币符号
+    pub symbol: String,
+
+    /// 代币名称
+    pub name: String,
+
+    /// 精度
+    pub decimals: u8,
+
+    /// 标签列表
+    pub tags: Vec<String>,
+
+    /// 扩展信息
+    pub extensions: serde_json::Value,
+}
+
+/// 金库地址信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct VaultAddresses {
+    /// 代币A金库
+    #[serde(rename = "A")]
+    pub vault_a: String,
+
+    /// 代币B金库
+    #[serde(rename = "B")]
+    pub vault_b: String,
+}
+
+/// 池子配置信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolConfig {
+    /// 配置ID
+    pub id: String,
+
+    /// 配置索引
+    pub index: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u64,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u64,
+
+    /// Tick间距
+    #[serde(rename = "tickSpacing")]
+    pub tick_spacing: u32,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u64,
+
+    /// 默认价格范围
+    #[serde(rename = "defaultRange")]
+    pub default_range: f64,
+
+    /// 默认价格范围点位
+    #[serde(rename = "defaultRangePoint")]
+    pub default_range_point: Vec<f64>,
+}
+
+/// 池子奖励信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PoolRewardInfo {
+    /// 奖励代币mint地址
+    pub mint: String,
+
+    /// 奖励金库地址
+    pub vault: String,
+
+    /// 每秒发放量
+    pub emissions_per_second: u64,
+
+    /// 权限地址
+    pub authority: String,
+
+    /// 最后更新时间
+    pub last_update_time: u64,
+}
+
+// ============ MintNft API相关DTO ============
+
+/// Mint NFT请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct MintNftRequest {
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+
+    /// NFT铸造数量
+    #[validate(range(min = 1, max = 1000))]
+    pub amount: u64,
+}
+
+/// Mint NFT响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MintNftResponse {
+    /// 交易签名（未签名时为空）
+    pub signature: Option<String>,
+
+    /// 用户钱包地址
+    pub user_wallet: String,
+
+    /// 铸造的NFT数量
+    pub amount: u64,
+
+    /// NFT mint地址
+    pub nft_mint: String,
+
+    /// 用户推荐账户地址
+    pub user_referral: String,
+
+    /// 用户mint计数器地址
+    pub mint_counter: String,
+
+    /// NFT池子权限地址
+    pub nft_pool_authority: String,
+
+    /// NFT池子账户地址
+    pub nft_pool_account: String,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: Option<String>,
+
+    /// 时间戳
+    pub timestamp: i64,
+
+    /// 序列化的交易（base64编码，用于前端签名）
+    pub serialized_transaction: Option<String>,
+}
+
+/// Mint NFT并发送交易响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MintNftAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 用户钱包地址
+    pub user_wallet: String,
+
+    /// 铸造的NFT数量
+    pub amount: u64,
+
+    /// NFT mint地址
+    pub nft_mint: String,
+
+    /// 用户推荐账户地址
+    pub user_referral: String,
+
+    /// 用户mint计数器地址
+    pub mint_counter: String,
+
+    /// NFT池子权限地址
+    pub nft_pool_authority: String,
+
+    /// NFT池子账户地址
+    pub nft_pool_account: String,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+// ============ Claim NFT API相关DTO ============
+
+/// 领取推荐NFT请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ClaimNftRequest {
+    /// 下级用户钱包地址（发起领取的用户）
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+
+    /// 上级用户钱包地址（提供NFT的推荐人）
+    #[validate(length(min = 32, max = 44))]
+    pub upper: String,
+}
+
+/// 领取推荐NFT响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ClaimNftResponse {
+    /// 交易签名（未签名时为空）
+    pub signature: Option<String>,
+
+    /// 下级用户钱包地址
+    pub user_wallet: String,
+
+    /// 上级用户钱包地址
+    pub upper: String,
+
+    /// NFT mint地址
+    pub nft_mint: String,
+
+    /// 下级用户推荐账户地址
+    pub user_referral: String,
+
+    /// 上级用户推荐账户地址
+    pub upper_referral: String,
+
+    /// 上级用户mint计数器地址
+    pub upper_mint_counter: String,
+
+    /// NFT池子权限地址
+    pub nft_pool_authority: String,
+
+    /// NFT池子账户地址
+    pub nft_pool_account: String,
+
+    /// 下级用户ATA账户地址
+    pub user_ata: String,
+
+    /// 协议钱包地址
+    pub protocol_wallet: String,
+
+    /// 推荐配置账户地址
+    pub referral_config: String,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: Option<String>,
+
+    /// 时间戳
+    pub timestamp: i64,
+
+    /// 序列化的交易（base64编码，用于前端签名）
+    pub serialized_transaction: Option<String>,
+}
+
+/// 领取推荐NFT并发送交易响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ClaimNftAndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+
+    /// 下级用户钱包地址
+    pub user_wallet: String,
+
+    /// 上级用户钱包地址
+    pub upper: String,
+
+    /// NFT mint地址
+    pub nft_mint: String,
+
+    /// 下级用户推荐账户地址
+    pub user_referral: String,
+
+    /// 上级用户推荐账户地址
+    pub upper_referral: String,
+
+    /// 上级用户mint计数器地址
+    pub upper_mint_counter: String,
+
+    /// NFT池子权限地址
+    pub nft_pool_authority: String,
+
+    /// NFT池子账户地址
+    pub nft_pool_account: String,
+
+    /// 下级用户ATA账户地址
+    pub user_ata: String,
+
+    /// 协议钱包地址
+    pub protocol_wallet: String,
+
+    /// 推荐配置账户地址
+    pub referral_config: String,
+
+    /// 交易状态
+    pub status: TransactionStatus,
+
+    /// 区块链浏览器链接
+    pub explorer_url: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+// ============ Referral API相关DTO ============
+
+/// GetUpper请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema, IntoParams)]
+pub struct GetUpperRequest {
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+}
+
+/// GetUpper响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GetUpperResponse {
+    /// 用户钱包地址
+    pub user_wallet: String,
+
+    /// 上级钱包地址（如果存在）
+    pub upper: Option<String>,
+
+    /// 推荐账户PDA地址
+    pub referral_account: String,
+
+    /// 查询状态
+    pub status: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+/// GetUpper验证响应DTO（用于本地测试）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GetUpperAndVerifyResponse {
+    /// 基础响应数据
+    #[serde(flatten)]
+    pub base: GetUpperResponse,
+
+    /// 链上账户是否存在
+    pub account_exists: bool,
+
+    /// 完整的ReferralAccount数据
+    pub referral_account_data: Option<ReferralAccountData>,
+}
+
+/// ReferralAccount链上数据结构
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq)]
+pub struct ReferralAccountData {
+    /// 用户地址
+    pub user: String,
+
+    /// 上级用户地址
+    pub upper: Option<String>,
+
+    /// 上上级用户地址
+    pub upper_upper: Option<String>,
+
+    /// 绑定的NFT mint地址
+    pub nft_mint: String,
+
+    /// PDA bump
+    pub bump: u8,
+}
+
+/// GetMintCounter请求DTO
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct GetMintCounterRequest {
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 44))]
+    pub user_wallet: String,
+}
+
+/// GetMintCounter响应DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GetMintCounterResponse {
+    /// 用户钱包地址
+    pub user_wallet: String,
+
+    /// 总mint数量
+    pub total_mint: u64,
+
+    /// 剩余可claim数量
+    pub remain_mint: u64,
+
+    /// mint counter账户PDA地址
+    pub mint_counter_account: String,
+
+    /// 查询状态
+    pub status: String,
+
+    /// 时间戳
+    pub timestamp: i64,
+}
+
+/// GetMintCounter验证响应DTO（用于本地测试）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct GetMintCounterAndVerifyResponse {
+    /// 基础响应数据
+    #[serde(flatten)]
+    pub base: GetMintCounterResponse,
+
+    /// 链上账户是否存在
+    pub account_exists: bool,
+
+    /// 完整的MintCounter数据
+    pub mint_counter_data: Option<MintCounterData>,
+}
+
+/// MintCounter链上数据结构
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, PartialEq)]
+pub struct MintCounterData {
+    /// 用户地址
+    pub minter: String,
+
+    /// 总mint数量
+    pub total_mint: u64,
+
+    /// 剩余可claim数量
+    pub remain_mint: u64,
+
+    /// PDA bump
+    pub bump: u8,
+}
+
+// ============ 事件查询相关DTO ============
+
+/// 分页查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct PaginationParams {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+
+    /// 排序字段
+    pub sort_by: Option<String>,
+
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+}
+
+fn default_page() -> u64 {
+    1
+}
+
+fn default_page_size() -> u64 {
+    20
+}
+
+fn validate_sort_order(value: &str) -> Result<(), validator::ValidationError> {
+    if value == "asc" || value == "desc" {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("invalid_sort_order"))
+    }
+}
+
+/// NFT领取事件查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct NftClaimEventQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+
+    /// 排序字段
+    pub sort_by: Option<String>,
+
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+
+    /// NFT等级过滤（1-5）
+    #[validate(range(min = 1, max = 5))]
+    pub tier: Option<u8>,
+
+    /// 是否有推荐人
+    pub has_referrer: Option<bool>,
+
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+}
+
+/// NFT领取事件高级查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct NftClaimAdvancedQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+
+    /// 排序字段
+    pub sort_by: Option<String>,
+
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+
+    /// NFT等级过滤（1-5）
+    #[validate(range(min = 1, max = 5))]
+    pub tier: Option<u8>,
+
+    /// 是否有推荐人
+    pub has_referrer: Option<bool>,
+
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+
+    /// 推荐人地址过滤
+    pub referrer: Option<String>,
+
+    /// 领取者地址过滤
+    pub claimer: Option<String>,
+
+    /// NFT mint地址过滤
+    pub nft_mint: Option<String>,
+
+    /// 最小奖励金额过滤
+    #[validate(range(min = 0))]
+    pub claim_amount_min: Option<u64>,
+
+    /// 最大奖励金额过滤
+    #[validate(range(min = 0))]
+    pub claim_amount_max: Option<u64>,
+
+    /// 领取类型过滤
+    pub claim_type: Option<u8>,
+
+    /// 是否为紧急领取
+    pub is_emergency_claim: Option<bool>,
+
+    /// 池子地址过滤
+    pub pool_address: Option<String>,
+
+    /// 代币mint地址过滤
+    pub token_mint: Option<String>,
+
+    /// 最小奖励倍率过滤
+    #[validate(range(min = 0))]
+    pub reward_multiplier_min: Option<u16>,
+
+    /// 最大奖励倍率过滤
+    #[validate(range(min = 0))]
+    pub reward_multiplier_max: Option<u16>,
+}
+
+/// 奖励分发事件查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct RewardDistributionEventQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+
+    /// 排序字段
+    pub sort_by: Option<String>,
+
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+
+    /// 是否锁定
+    pub is_locked: Option<bool>,
+
+    /// 奖励类型
+    pub reward_type: Option<u8>,
+
+    /// 奖励来源
+    pub reward_source: Option<u8>,
+
+    /// 是否为推荐奖励
+    pub is_referral_reward: Option<bool>,
+
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+}
+
+/// 奖励分发事件高级查询参数
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, IntoParams, ToSchema)]
+pub struct RewardDistributionAdvancedQuery {
+    /// 页码（从1开始）
+    #[validate(range(min = 1))]
+    #[serde(default = "default_page")]
+    pub page: u64,
+
+    /// 每页条数（最大100）
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_page_size")]
+    pub page_size: u64,
+
+    /// 排序字段
+    pub sort_by: Option<String>,
+
+    /// 排序方向（asc/desc）
+    #[validate(custom = "validate_sort_order")]
+    pub sort_order: Option<String>,
+
+    /// 是否锁定
+    pub is_locked: Option<bool>,
+
+    /// 奖励类型
+    pub reward_type: Option<u8>,
+
+    /// 奖励来源
+    pub reward_source: Option<u8>,
+
+    /// 是否为推荐奖励
+    pub is_referral_reward: Option<bool>,
+
+    /// 开始日期时间戳
+    pub start_date: Option<i64>,
+
+    /// 结束日期时间戳
+    pub end_date: Option<i64>,
+
+    /// 推荐人地址过滤
+    pub referrer: Option<String>,
+
+    /// 接收者地址过滤
+    pub recipient: Option<String>,
+
+    /// 奖励代币mint地址过滤
+    pub reward_token_mint: Option<String>,
+
+    /// 最小奖励金额过滤
+    #[validate(range(min = 0))]
+    pub reward_amount_min: Option<u64>,
+
+    /// 最大奖励金额过滤
+    #[validate(range(min = 0))]
+    pub reward_amount_max: Option<u64>,
+
+    /// 最小分发ID过滤
+    #[validate(range(min = 0))]
+    pub distribution_id_min: Option<i64>,
+
+    /// 最大分发ID过滤
+    #[validate(range(min = 0))]
+    pub distribution_id_max: Option<i64>,
+
+    /// 奖励池地址过滤
+    pub reward_pool: Option<String>,
+
+    /// 是否有推荐人
+    pub has_referrer: Option<bool>,
+
+    /// 是否为高价值奖励
+    pub is_high_value_reward: Option<bool>,
+
+    /// 最小锁定天数
+    #[validate(range(min = 0))]
+    pub lock_days_min: Option<u64>,
+
+    /// 最大锁定天数
+    #[validate(range(min = 0))]
+    pub lock_days_max: Option<u64>,
+
+    /// 最小奖励倍率（基点）
+    #[validate(range(min = 0))]
+    pub multiplier_min: Option<u16>,
+
+    /// 最大奖励倍率（基点）
+    #[validate(range(min = 0))]
+    pub multiplier_max: Option<u16>,
+
+    /// 相关地址过滤
+    pub related_address: Option<String>,
+
+    /// 最小预估USD价值
+    #[validate(range(min = 0.0))]
+    pub estimated_usd_min: Option<f64>,
+
+    /// 最大预估USD价值
+    #[validate(range(min = 0.0))]
+    pub estimated_usd_max: Option<f64>,
+}
+
+/// 通用分页响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct EventPaginatedResponse<T> {
+    /// 数据项列表
+    pub items: Vec<T>,
+
+    /// 总记录数
+    pub total: u64,
+
+    /// 当前页码
+    pub page: u64,
+
+    /// 每页条数
+    pub page_size: u64,
+
+    /// 总页数
+    pub total_pages: u64,
+}
+
+/// NFT领取事件响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NftClaimEventResponse {
+    /// NFT的mint地址
+    pub nft_mint: String,
+
+    /// 领取者钱包地址
+    pub claimer: String,
+
+    /// 推荐人地址（可选）
+    pub referrer: Option<String>,
+
+    /// NFT等级
+    pub tier: u8,
+
+    /// 等级名称
+    pub tier_name: String,
+
+    /// 领取的代币数量
+    pub claim_amount: u64,
+
+    /// 实际奖励金额
+    pub bonus_amount: u64,
+
+    /// 是否有推荐人
+    pub has_referrer: bool,
+
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+
+    /// 领取时间戳
+    pub claimed_at: String,
+
+    /// 交易签名
+    pub signature: String,
+}
+
+/// 奖励分发事件响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardDistributionEventResponse {
+    /// 奖励分发ID
+    pub distribution_id: i64,
+
+    /// 接收者钱包地址
+    pub recipient: String,
+
+    /// 推荐人地址（可选）
+    pub referrer: Option<String>,
+
+    /// 奖励代币mint地址
+    pub reward_token_mint: String,
+
+    /// 奖励代币小数位数
+    pub reward_token_decimals: Option<u8>,
+
+    /// 奖励代币名称
+    pub reward_token_name: Option<String>,
+
+    /// 奖励代币符号
+    pub reward_token_symbol: Option<String>,
+
+    /// 奖励代币Logo URI
+    pub reward_token_logo_uri: Option<String>,
+
+    /// 奖励数量
+    pub reward_amount: u64,
+
+    /// 奖励类型名称
+    pub reward_type_name: String,
+
+    /// 是否已锁定
+    pub is_locked: bool,
+
+    /// 解锁时间戳
+    pub unlock_timestamp: Option<String>,
+
+    /// 是否为推荐奖励
+    pub is_referral_reward: bool,
+
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+
+    /// 发放时间戳
+    pub distributed_at: String,
+
+    /// 交易签名
+    pub signature: String,
+}
+
+/// NFT领取统计响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct NftClaimStatsResponse {
+    /// 总领取次数
+    pub total_claims: u64,
+
+    /// 今日领取次数
+    pub today_claims: u64,
+
+    /// 等级分布 (等级, 数量, 总金额)
+    pub tier_distribution: Vec<TierDistribution>,
+}
+
+/// 等级分布信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TierDistribution {
+    /// 等级
+    pub tier: u8,
+
+    /// 该等级的领取数量
+    pub count: u64,
+
+    /// 该等级的总金额
+    pub total_amount: u64,
+}
+
+/// 奖励分发统计响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardStatsResponse {
+    /// 总分发次数
+    pub total_distributions: u64,
+
+    /// 今日分发次数
+    pub today_distributions: u64,
+
+    /// 锁定中的奖励数量
+    pub locked_rewards: u64,
+
+    /// 奖励类型分布
+    pub reward_type_distribution: Vec<RewardTypeDistribution>,
+}
+
+/// 奖励类型分布信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardTypeDistribution {
+    /// 奖励类型
+    pub reward_type: u8,
+
+    /// 该类型的分发数量
+    pub count: u64,
+
+    /// 该类型的总金额
+    pub total_amount: u64,
+}
+
+/// 用户奖励汇总响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserRewardSummaryResponse {
+    /// 接收者地址
+    pub recipient: String,
+
+    /// 总奖励次数
+    pub total_rewards: u64,
+
+    /// 总奖励金额
+    pub total_amount: u64,
+
+    /// 锁定金额
+    pub locked_amount: u64,
+
+    /// 未锁定金额
+    pub unlocked_amount: u64,
+
+    /// 推荐奖励次数
+    pub referral_rewards: u64,
+
+    /// 推荐奖励金额
+    pub referral_amount: u64,
+}
+
+/// 用户NFT领取汇总响应
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UserNftClaimSummaryResponse {
+    /// 领取者地址
+    pub claimer: String,
+
+    /// 总领取次数
+    pub total_claims: u64,
+
+    /// 总领取金额
+    pub total_claim_amount: u64,
+
+    /// 总奖励金额
+    pub total_bonus_amount: u64,
+
+    /// 有推荐人的领取次数
+    pub claims_with_referrer: u64,
+
+    /// 等级分布
+    pub tier_distribution: Vec<(u8, u32)>,
+}
+
+// ============ SwapV3 API 相关DTO ============
+
+/// SwapV3计算交换请求参数（支持推荐系统）
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema, IntoParams)]
+pub struct ComputeSwapV3Request {
+    /// 输入代币的mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输出代币的mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 输入或输出金额（以最小单位计算）
+    #[validate(length(min = 1))]
+    pub amount: String,
+
+    /// 滑点容忍度（基点，如50表示0.5%）
+    #[serde(rename = "slippageBps")]
+    #[validate(range(min = 1, max = 10000))]
+    pub slippage_bps: u16,
+
+    /// 限价（可选）
+    #[serde(rename = "limitPrice")]
+    pub limit_price: Option<f64>,
+
+    /// 是否启用转账费计算（默认为true）
+    #[serde(rename = "enableTransferFee")]
+    pub enable_transfer_fee: Option<bool>,
+
+    /// 交易版本（V0或V1）
+    #[serde(rename = "txVersion")]
+    pub tx_version: String,
+    // /// 推荐账户地址（可选）
+    // #[serde(rename = "referralAccount")]
+    // pub referral_account: Option<String>,
+
+    // /// 上级地址（可选）
+    // #[serde(rename = "upperAccount")]
+    // pub upper_account: Option<String>,
+
+    // /// 是否启用推荐奖励（默认为true）
+    // #[serde(rename = "enableReferralRewards")]
+    // pub enable_referral_rewards: Option<bool>,
+}
+
+/// SwapV3交换计算结果数据（支持推荐系统）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapComputeV3Data {
+    /// 交换类型（BaseInV3/BaseOutV3）
+    #[serde(rename = "swapType")]
+    pub swap_type: String,
+
+    /// 输入代币mint地址
+    #[serde(rename = "inputMint")]
+    pub input_mint: String,
+
+    /// 输入金额
+    #[serde(rename = "inputAmount")]
+    pub input_amount: String,
+
+    /// 输出代币mint地址
+    #[serde(rename = "outputMint")]
+    pub output_mint: String,
+
+    /// 输出金额
+    #[serde(rename = "outputAmount")]
+    pub output_amount: String,
+
+    /// 最小输出阈值（考虑滑点）
+    #[serde(rename = "otherAmountThreshold")]
+    pub other_amount_threshold: String,
+
+    /// 滑点设置（基点）
+    #[serde(rename = "slippageBps")]
+    pub slippage_bps: u16,
+
+    /// 价格影响百分比
+    #[serde(rename = "priceImpactPct")]
+    pub price_impact_pct: f64,
+
+    /// 推荐人费用
+    #[serde(rename = "referrerAmount")]
+    pub referrer_amount: String,
+
+    /// 路由计划
+    #[serde(rename = "routePlan")]
+    pub route_plan: Vec<RoutePlan>,
+
+    /// 转账费信息
+    #[serde(rename = "transferFeeInfo")]
+    pub transfer_fee_info: Option<TransferFeeInfo>,
+
+    /// 扣除转账费后的实际金额
+    #[serde(rename = "amountSpecified")]
+    pub amount_specified: Option<String>,
+
+    /// 当前epoch
+    pub epoch: Option<u64>,
+}
+
+/// 推荐系统信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ReferralInfo {
+    /// 上级地址
+    pub upper: Option<String>,
+
+    /// 上上级地址
+    #[serde(rename = "upperUpper")]
+    pub upper_upper: Option<String>,
+
+    /// 项目方账户地址
+    #[serde(rename = "projectAccount")]
+    pub project_account: String,
+
+    /// 推荐程序ID
+    #[serde(rename = "referralProgram")]
+    pub referral_program: String,
+
+    /// 推荐账户PDA地址
+    #[serde(rename = "payerReferral")]
+    pub payer_referral: String,
+
+    /// 上级推荐账户PDA地址（可选）
+    #[serde(rename = "upperReferral")]
+    pub upper_referral: Option<String>,
+}
+
+/// 奖励分配信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardDistribution {
+    /// 总奖励费用
+    #[serde(rename = "totalRewardFee")]
+    pub total_reward_fee: u64,
+
+    /// 项目方奖励
+    #[serde(rename = "projectReward")]
+    pub project_reward: u64,
+
+    /// 上级奖励
+    #[serde(rename = "upperReward")]
+    pub upper_reward: u64,
+
+    /// 上上级奖励
+    #[serde(rename = "upperUpperReward")]
+    pub upper_upper_reward: u64,
+
+    /// 奖励分配比例说明
+    #[serde(rename = "distributionRatios")]
+    pub distribution_ratios: RewardDistributionRatios,
+}
+
+/// 奖励分配比例
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct RewardDistributionRatios {
+    /// 项目方比例（百分比）
+    #[serde(rename = "projectRatio")]
+    pub project_ratio: f64,
+
+    /// 上级比例（百分比）
+    #[serde(rename = "upperRatio")]
+    pub upper_ratio: f64,
+
+    /// 上上级比例（百分比）
+    #[serde(rename = "upperUpperRatio")]
+    pub upper_upper_ratio: f64,
+}
+
+/// SwapV3交易构建请求
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct TransactionSwapV3Request {
+    /// 用户钱包地址
+    #[validate(length(min = 32, max = 64))]
+    pub wallet: String,
+
+    /// 计算单元价格（微lamports）
+    #[serde(rename = "computeUnitPriceMicroLamports")]
+    pub compute_unit_price_micro_lamports: String,
+
+    /// SwapV3交换响应数据（来自compute-v3接口）
+    #[serde(rename = "swapResponse")]
+    pub swap_response: RaydiumResponse<SwapComputeV3Data>,
+
+    /// 交易版本
+    #[serde(rename = "txVersion")]
+    pub tx_version: String,
+
+    /// 是否包装SOL
+    #[serde(rename = "wrapSol")]
+    pub wrap_sol: bool,
+
+    /// 是否解包装SOL
+    #[serde(rename = "unwrapSol")]
+    pub unwrap_sol: bool,
+
+    /// 输入代币账户地址（可选）
+    #[serde(rename = "inputAccount")]
+    pub input_account: Option<String>,
+
+    /// 输出代币账户地址（可选）
+    #[serde(rename = "outputAccount")]
+    pub output_account: Option<String>,
+
+    /// 推荐系统相关账户
+    #[serde(rename = "referralAccounts")]
+    pub referral_accounts: Option<ReferralAccounts>,
+}
+
+/// 推荐系统账户信息
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+pub struct ReferralAccounts {
+    /// 推荐账户PDA地址
+    #[serde(rename = "payerReferral")]
+    pub payer_referral: String,
+
+    /// 上级地址（可选）
+    pub upper: Option<String>,
+
+    /// 上级代币账户地址（可选）
+    #[serde(rename = "upperTokenAccount")]
+    pub upper_token_account: Option<String>,
+
+    /// 上级推荐账户PDA地址（可选）
+    #[serde(rename = "upperReferral")]
+    pub upper_referral: Option<String>,
+
+    /// 上上级地址（可选）
+    #[serde(rename = "upperUpper")]
+    pub upper_upper: Option<String>,
+
+    /// 上上级代币账户地址（可选）
+    #[serde(rename = "upperUpperTokenAccount")]
+    pub upper_upper_token_account: Option<String>,
+
+    /// 项目方代币账户地址
+    #[serde(rename = "projectTokenAccount")]
+    pub project_token_account: String,
+
+    /// 推荐程序ID
+    #[serde(rename = "referralProgram")]
+    pub referral_program: String,
+}
+
+/// SwapV3交易构建响应（继承TransactionData但可能扩展）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapV3TransactionData {
+    /// 基础交易数据
+    #[serde(flatten)]
+    pub transaction_data: TransactionData,
+
+    /// 推荐系统相关信息
+    #[serde(rename = "referralInfo")]
+    pub referral_info: Option<ReferralTransactionInfo>,
+}
+
+/// 推荐系统交易信息
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ReferralTransactionInfo {
+    /// 是否启用推荐奖励
+    #[serde(rename = "rewardsEnabled")]
+    pub rewards_enabled: bool,
+
+    /// 预期奖励分配
+    #[serde(rename = "expectedRewards")]
+    pub expected_rewards: Option<RewardDistribution>,
+
+    /// 推荐系统账户验证状态
+    #[serde(rename = "accountValidation")]
+    pub account_validation: Vec<ReferralAccountValidation>,
+}
+
+/// 推荐账户验证状态
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ReferralAccountValidation {
+    /// 账户类型
+    #[serde(rename = "accountType")]
+    pub account_type: String,
+
+    /// 账户地址
+    pub address: String,
+
+    /// 验证状态
+    pub valid: bool,
+
+    /// 验证消息
+    pub message: Option<String>,
+}
+
+/// SwapV3并发送交易响应DTO（用于本地测试）
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SwapV3AndSendTransactionResponse {
+    /// 交易签名
+    pub signature: String,
+    /// 用户钱包地址
+    pub user_wallet: String,
+    /// 输入代币mint地址
+    pub input_mint: String,
+    /// 输出代币mint地址
+    pub output_mint: String,
+    /// 输入金额
+    pub input_amount: String,
+    /// 输出金额（预期）
+    pub output_amount: String,
+    /// 最小输出阈值
+    pub minimum_amount_out: String,
+    /// 池子地址
+    pub pool_address: String,
+    /// 推荐系统信息
+    pub referral_info: Option<ReferralInfo>,
+    /// 交易状态
+    pub status: TransactionStatus,
+    /// Solana Explorer链接
+    pub explorer_url: String,
+    /// 交易时间戳
+    pub timestamp: i64,
+}

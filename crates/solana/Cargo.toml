@@ -1,0 +1,44 @@
+[package]
+name = "solana"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+# Solana dependencies - 使用与client相同的版本
+solana-client = "=2.1.0"
+solana-sdk = "=2.1.0"
+solana-account-decoder = "=2.1.0"
+solana-transaction-status = "=2.1.0"
+
+# SPL Token dependencies
+spl-token = { version = "7.0.0", features = ["no-entrypoint"] }
+spl-token-client = "0.14.0"
+spl-associated-token-account = { version = "6.0.0", features = ["no-entrypoint"] }
+spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
+spl-memo = "6.0.0"
+
+# Anchor dependencies
+anchor-client = "0.31.0"
+anchor-lang = "0.31.0"
+
+# Raydium AMM V3
+raydium-amm-v3 = { path = "./clmm", features = ["no-entrypoint", "client"] }
+
+# Utility dependencies
+bs58 = "0.5.0"
+base64 = "0.21.0"
+hex = "0.4.3"
+
+# Workspace dependencies
+utils = { path = "../utils" }
+
+# Client依赖 - 引入client中的工具方法
+client = { path = "./clmm-client" }
+reqwest = { version = "0.11", features = ["json"] } 

@@ -2,30 +2,24 @@ use crate::{router::AppRouter, services::Services};
 use anyhow::Context;
 use axum::serve;
 use database::Database;
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::signal;
 use tracing::info;
-use utils::{logger::Logger, AppConfig, CargoEnv};
+use utils::AppConfig;
 
 pub struct ApplicationServer;
 
 impl ApplicationServer {
     pub async fn serve(config: Arc<AppConfig>) -> anyhow::Result<()> {
-        let _guard = Logger::new(config.cargo_env);
+        // 注意：日志初始化已经在主程序(coinfair/src/main.rs)中完成
+        // 这里不再重复初始化日志
 
-        let app_port = match &config.cargo_env {
-            CargoEnv::Development => config.app_port_test,
-            CargoEnv::Production => config.app_port,
-        };
-
-        let address = format!("{}:{}", config.app_host, app_port);
+        let address = format!("{}:{}", config.app_host, config.app_port);
         let tcp_listener = tokio::net::TcpListener::bind(address)
             .await
             .context("🔴 Failed to bind TCP listener")?;
 
-        let local_addr = tcp_listener
-            .local_addr()
-            .context("🔴 Failed to get local address")?;
+        let local_addr = tcp_listener.local_addr().context("🔴 Failed to get local address")?;
 
         // 构建一个内置了多种"集合"对应的底层数据库操作的Database
         let db = Database::new(config.clone()).await?;
@@ -34,7 +28,7 @@ impl ApplicationServer {
 
         info!("🟢 server:referring_reward has launched on {local_addr} 🚀");
 
-        serve(tcp_listener, router)
+        serve(tcp_listener, router.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(Self::shutdown_signal())
             .await
             .context("🔴 Failed to start server")?;
@@ -44,9 +38,7 @@ impl ApplicationServer {
 
     async fn shutdown_signal() {
         let ctrl_c = async {
-            signal::ctrl_c()
-                .await
-                .expect("🔴 Failed to install Ctrl+C handler");
+            signal::ctrl_c().await.expect("🔴 Failed to install Ctrl+C handler");
         };
 
         #[cfg(unix)]

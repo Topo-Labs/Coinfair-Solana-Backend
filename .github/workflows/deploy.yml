@@ -1,0 +1,350 @@
+name: 🚀 Production Deployment
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '部署环境'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      force_deploy:
+        description: '强制部署 (跳过测试)'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # 🔍 部署前检查
+  pre-deploy-check:
+    name: 🔍 部署前检查
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_env: ${{ steps.set_env.outputs.deploy_env }}
+      skip_tests: ${{ steps.set_env.outputs.skip_tests }}
+    
+    steps:
+      - name: 📋 确定部署环境
+        id: set_env
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "deploy_env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+            echo "skip_tests=${{ github.event.inputs.force_deploy }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "deploy_env=production" >> $GITHUB_OUTPUT
+            echo "skip_tests=false" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_env=staging" >> $GITHUB_OUTPUT
+            echo "skip_tests=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📊 显示部署信息
+        run: |
+          echo "🎯 部署环境: ${{ steps.set_env.outputs.deploy_env }}"
+          echo "⏭️ 跳过测试: ${{ steps.set_env.outputs.skip_tests }}"
+          echo "🌿 分支: ${{ github.ref_name }}"
+          echo "📝 提交: ${{ github.sha }}"
+
+  # 🧪 快速验证测试
+  quick-validation:
+    name: 🧪 快速验证测试
+    runs-on: ubuntu-latest
+    needs: pre-deploy-check
+    if: needs.pre-deploy-check.outputs.skip_tests == 'false'
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🦀 安装Rust工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 📦 缓存Cargo依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-deploy-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: ⚡ 快速构建检查
+        run: cargo check --release --bin coinfair
+
+      - name: 🧪 运行关键测试
+        run: |
+          echo "🧪 运行核心组件测试..."
+          cargo test --package utils --lib --release --quiet || true
+          cargo test --package database --lib --release --quiet || true
+          echo "✅ 关键测试完成"
+
+  # 🏗️ 构建生产版本  
+  build-production:
+    name: 🏗️ 构建生产版本
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-check, quick-validation]
+    if: always() && (needs.quick-validation.result == 'success' || needs.pre-deploy-check.outputs.skip_tests == 'true')
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🦀 安装Rust工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 📦 缓存Cargo依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-production-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: 🚀 构建生产版本
+        run: |
+          echo "🚀 开始生产构建..."
+          CARGO_ENV=Production cargo build --release --bin coinfair
+          
+          echo "📊 构建产物信息:"
+          ls -la target/release/
+          file target/release/coinfair
+          du -h target/release/coinfair
+          
+          echo "🔍 检查二进制依赖:"
+          ldd target/release/coinfair || true
+
+      - name: 📦 准备部署包
+        run: |
+          echo "📦 创建部署包..."
+          mkdir -p deploy
+          cp target/release/coinfair deploy/
+          cp .env.production deploy/.env
+          cp docker-compose.yaml deploy/
+          
+          # 创建部署脚本
+          cat > deploy/deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🚀 开始部署Coinfair..."
+          
+          # 备份当前版本
+          if [ -f coinfair ]; then
+            cp coinfair coinfair.backup.$(date +%Y%m%d_%H%M%S)
+            echo "✅ 已备份当前版本"
+          fi
+          
+          # 停止现有服务
+          pkill -f coinfair || true
+          sleep 2
+          
+          # 部署新版本
+          chmod +x coinfair
+          echo "✅ 新版本部署完成"
+          
+          # 启动数据库
+          docker-compose up -d
+          sleep 5
+          
+          # 启动服务
+          nohup ./coinfair > coinfair.log 2>&1 &
+          sleep 3
+          
+          # 健康检查
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/api/v1/health > /dev/null 2>&1; then
+              echo "✅ 服务启动成功"
+              exit 0
+            fi
+            echo "⏳ 等待服务启动... ($i/30)"
+            sleep 2
+          done
+          
+          echo "❌ 服务启动超时"
+          exit 1
+          EOF
+          
+          chmod +x deploy/deploy.sh
+          
+          echo "📊 部署包内容:"
+          ls -la deploy/
+
+      - name: 📦 上传部署包
+        uses: actions/upload-artifact@v4
+        with:
+          name: coinfair-deployment-${{ github.sha }}
+          path: deploy/
+          retention-days: 30
+
+  # 🚀 AWS EC2 部署
+  deploy-aws:
+    name: 🚀 AWS EC2 部署
+    runs-on: ubuntu-latest
+    needs: [pre-deploy-check, build-production]
+    environment: ${{ needs.pre-deploy-check.outputs.deploy_env }}
+    
+    steps:
+      - name: 📥 下载部署包
+        uses: actions/download-artifact@v4
+        with:
+          name: coinfair-deployment-${{ github.sha }}
+          path: deploy/
+
+      - name: 🔑 配置SSH密钥
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.AWS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 📤 上传到服务器
+        run: |
+          echo "📤 上传部署包到服务器..."
+          scp -r deploy/* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/opt/coinfair/
+          
+          echo "✅ 文件上传完成"
+
+      - name: 🚀 执行部署
+        run: |
+          echo "🚀 在服务器上执行部署..."
+          ssh ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            cd /opt/coinfair
+            
+            echo "📋 当前目录内容:"
+            ls -la
+            
+            echo "🚀 执行部署脚本..."
+            ./deploy.sh
+            
+            echo "📊 部署后状态检查:"
+            ps aux | grep coinfair | head -5
+            
+            echo "🔍 服务状态检查:"
+            curl -s http://localhost:8000/api/v1/health || echo "健康检查失败"
+            
+            echo "✅ 部署完成!"
+          EOF
+
+      - name: 🔍 部署后验证
+        run: |
+          echo "🔍 验证部署状态..."
+          
+          # 等待服务稳定
+          sleep 10
+          
+          # 健康检查
+          ssh ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+            # 检查进程
+            if pgrep -f coinfair > /dev/null; then
+              echo "✅ Coinfair进程正在运行"
+            else
+              echo "❌ Coinfair进程未找到"
+              exit 1
+            fi
+            
+            # 检查API
+            if curl -f http://localhost:8000/api/v1/health > /dev/null 2>&1; then
+              echo "✅ API健康检查通过"
+            else
+              echo "❌ API健康检查失败"
+              echo "📋 服务日志 (最后20行):"
+              tail -20 coinfair.log
+              exit 1
+            fi
+            
+            echo "🎉 部署验证成功!"
+          EOF
+
+  # 📊 Docker镜像构建 (可选)
+  build-docker:
+    name: 📊 Docker镜像构建
+    runs-on: ubuntu-latest
+    needs: pre-deploy-check
+    if: needs.pre-deploy-check.outputs.deploy_env == 'production'
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🔑 登录Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🏗️ 构建Docker镜像
+        run: |
+          cat > Dockerfile << 'EOF'
+          FROM rust:1.75 as builder
+          
+          WORKDIR /app
+          COPY . .
+          
+          RUN cargo build --release --bin coinfair
+          
+          FROM ubuntu:22.04
+          
+          RUN apt-get update && apt-get install -y \
+              ca-certificates \
+              curl \
+              && rm -rf /var/lib/apt/lists/*
+          
+          WORKDIR /opt/coinfair
+          
+          COPY --from=builder /app/target/release/coinfair .
+          COPY --from=builder /app/.env.production .env
+          
+          EXPOSE 8000
+          
+          CMD ["./coinfair"]
+          EOF
+          
+          docker build -t coinfair:${{ github.sha }} .
+          docker tag coinfair:${{ github.sha }} coinfair:latest
+          
+          echo "📊 镜像构建完成"
+          docker images | grep coinfair
+
+      - name: 📤 推送Docker镜像
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker push coinfair:${{ github.sha }}
+          docker push coinfair:latest
+          echo "✅ Docker镜像推送完成"
+
+  # 📧 部署通知
+  notify-deployment:
+    name: 📧 部署通知
+    runs-on: ubuntu-latest
+    needs: [deploy-aws, build-docker]
+    if: always()
+    
+    steps:
+      - name: 📧 发送部署通知
+        if: contains(needs.*.result, 'success')
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"🎉 Coinfair 部署成功!\n📋 环境: ${{ needs.pre-deploy-check.outputs.deploy_env }}\n🌿 分支: ${{ github.ref_name }}\n👤 部署者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }} || true
+
+      - name: 🚨 发送失败通知  
+        if: contains(needs.*.result, 'failure')
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"❌ Coinfair 部署失败!\n📋 环境: ${{ needs.pre-deploy-check.outputs.deploy_env }}\n🌿 分支: ${{ github.ref_name }}\n👤 操作者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }} || true

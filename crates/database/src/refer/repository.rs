@@ -78,10 +78,7 @@ impl ReferRepositoryTrait for Database {
             .collect();
 
         // Step 3: Query the database for existing `lower` addresses
-        let cursor: Cursor<Refer> = self
-            .refers
-            .find(doc! { "lower": { "$in": lowers }}, None)
-            .await?;
+        let cursor: Cursor<Refer> = self.refers.find(doc! { "lower": { "$in": lowers }}, None).await?;
 
         // Step 4: Collect all existing lowers from the cursor
         let mut existing_lowers: HashSet<String> = HashSet::new();
