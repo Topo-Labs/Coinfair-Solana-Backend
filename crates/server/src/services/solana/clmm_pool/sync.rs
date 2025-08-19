@@ -32,11 +32,26 @@ pub struct SyncConfig {
 impl Default for SyncConfig {
     fn default() -> Self {
         Self {
-            sync_interval: std::env::var("CLMM_SYNC_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(10), // 1分钟
-            batch_size: std::env::var("CLMM_SYNC_BATCH_SIZE").ok().and_then(|v| v.parse().ok()).unwrap_or(50),  // 每批次50个池子
-            max_retries: std::env::var("CLMM_SYNC_MAX_RETRIES").ok().and_then(|v| v.parse().ok()).unwrap_or(3), // 最多重试3次
-            retry_interval: std::env::var("CLMM_SYNC_RETRY_INTERVAL").ok().and_then(|v| v.parse().ok()).unwrap_or(30), // 重试间隔30秒
-            auto_sync_enabled: std::env::var("CLMM_AUTO_SYNC_ENABLED").ok().and_then(|v| v.parse().ok()).unwrap_or(true),
+            sync_interval: std::env::var("CLMM_SYNC_INTERVAL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10), // 1分钟
+            batch_size: std::env::var("CLMM_SYNC_BATCH_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(50), // 每批次50个池子
+            max_retries: std::env::var("CLMM_SYNC_MAX_RETRIES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3), // 最多重试3次
+            retry_interval: std::env::var("CLMM_SYNC_RETRY_INTERVAL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30), // 重试间隔30秒
+            auto_sync_enabled: std::env::var("CLMM_AUTO_SYNC_ENABLED")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
         }
     }
 }
@@ -129,7 +144,10 @@ impl ClmmPoolSyncService {
         info!("📋 找到 {} 个需要同步的池子", pools_to_sync.len());
 
         // 批量获取mint信息以减少RPC调用
-        let mint_addresses: Vec<_> = pools_to_sync.iter().flat_map(|pool| vec![&pool.mint0.mint_address, &pool.mint1.mint_address]).collect();
+        let mint_addresses: Vec<_> = pools_to_sync
+            .iter()
+            .flat_map(|pool| vec![&pool.mint0.mint_address, &pool.mint1.mint_address])
+            .collect();
 
         let mint_info_cache = match self.batch_fetch_mint_info(&mint_addresses).await {
             Ok(cache) => cache,
@@ -226,7 +244,10 @@ impl ClmmPoolSyncService {
     }
 
     /// 批量获取mint信息以优化RPC调用
-    async fn batch_fetch_mint_info(&self, mint_addresses: &[&String]) -> AppResult<std::collections::HashMap<String, (u8, String)>> {
+    async fn batch_fetch_mint_info(
+        &self,
+        mint_addresses: &[&String],
+    ) -> AppResult<std::collections::HashMap<String, (u8, String)>> {
         use std::collections::HashMap;
         use std::str::FromStr;
 
@@ -289,7 +310,11 @@ impl ClmmPoolSyncService {
             match self.storage.update_token_metadata(mint_address, metadata).await {
                 Ok(true) => {
                     updated_count += 1;
-                    debug!("✅ 代币元数据已更新: {} - {}", mint_address, metadata.symbol.as_deref().unwrap_or("Unknown"));
+                    debug!(
+                        "✅ 代币元数据已更新: {} - {}",
+                        mint_address,
+                        metadata.symbol.as_deref().unwrap_or("Unknown")
+                    );
                 }
                 Ok(false) => {
                     debug!("ℹ️ 代币元数据无需更新: {}", mint_address);
@@ -310,7 +335,11 @@ impl ClmmPoolSyncService {
     }
 
     /// 使用缓存同步单个池子以减少RPC调用
-    async fn sync_single_pool_with_cache(&self, pool: &ClmmPool, mint_cache: &std::collections::HashMap<String, (u8, String)>) -> AppResult<bool> {
+    async fn sync_single_pool_with_cache(
+        &self,
+        pool: &ClmmPool,
+        mint_cache: &std::collections::HashMap<String, (u8, String)>,
+    ) -> AppResult<bool> {
         let mut mint0_info: Option<(u8, String)> = None;
         let mut mint1_info: Option<(u8, String)> = None;
         let mut has_updates = false;
@@ -351,7 +380,9 @@ impl ClmmPoolSyncService {
                 sync_error: None,
             };
 
-            self.storage.update_sync_status(&pool.pool_address, &sync_status).await?;
+            self.storage
+                .update_sync_status(&pool.pool_address, &sync_status)
+                .await?;
             debug!("🔄 池子同步状态已更新: {}", pool.pool_address);
             Ok(false)
         }
@@ -368,14 +399,20 @@ impl ClmmPoolSyncService {
             match self.fetch_and_update_pool_data(pool).await {
                 Ok(updated) => {
                     if retry_count > 0 {
-                        info!("✅ 池子同步重试成功: {} (尝试次数: {})", pool.pool_address, retry_count + 1);
+                        info!(
+                            "✅ 池子同步重试成功: {} (尝试次数: {})",
+                            pool.pool_address,
+                            retry_count + 1
+                        );
                     }
                     return Ok(updated);
                 }
                 Err(e) => {
                     // 检查是否为不可重试的错误
                     let error_msg = e.to_string().to_lowercase();
-                    let is_retryable = !error_msg.contains("invalid") && !error_msg.contains("not found") && !error_msg.contains("parse");
+                    let is_retryable = !error_msg.contains("invalid")
+                        && !error_msg.contains("not found")
+                        && !error_msg.contains("parse");
 
                     if retry_count < self.config.max_retries && is_retryable {
                         retry_count += 1;
@@ -414,15 +451,19 @@ impl ClmmPoolSyncService {
         let pool_address = pool.pool_address.clone();
 
         error_handler
-            .execute_with_retry(&format!("同步池子数据: {}", pool_address), || self.fetch_pool_data_once(pool))
+            .execute_with_retry(&format!("同步池子数据: {}", pool_address), || {
+                self.fetch_pool_data_once(pool)
+            })
             .await
     }
 
     /// 单次获取池子数据（不包含重试逻辑）
     async fn fetch_pool_data_once(&self, pool: &ClmmPool) -> AppResult<bool> {
         // 1. 获取mint信息
-        let mint0_pubkey = Pubkey::from_str(&pool.mint0.mint_address).map_err(|e| anyhow::anyhow!("无效的mint0地址: {}", e))?;
-        let mint1_pubkey = Pubkey::from_str(&pool.mint1.mint_address).map_err(|e| anyhow::anyhow!("无效的mint1地址: {}", e))?;
+        let mint0_pubkey =
+            Pubkey::from_str(&pool.mint0.mint_address).map_err(|e| anyhow::anyhow!("无效的mint0地址: {}", e))?;
+        let mint1_pubkey =
+            Pubkey::from_str(&pool.mint1.mint_address).map_err(|e| anyhow::anyhow!("无效的mint1地址: {}", e))?;
 
         let load_pubkeys = vec![mint0_pubkey, mint1_pubkey];
         let accounts = self
@@ -445,7 +486,10 @@ impl ClmmPoolSyncService {
                 if pool.mint0.decimals != decimals || pool.mint0.owner != owner {
                     mint0_info = Some((decimals, owner));
                     has_updates = true;
-                    debug!("🔄 Mint0信息需要更新: decimals={}, owner={}", decimals, mint0_account.owner);
+                    debug!(
+                        "🔄 Mint0信息需要更新: decimals={}, owner={}",
+                        decimals, mint0_account.owner
+                    );
                 }
             }
         }
@@ -460,7 +504,10 @@ impl ClmmPoolSyncService {
                 if pool.mint1.decimals != decimals || pool.mint1.owner != owner {
                     mint1_info = Some((decimals, owner));
                     has_updates = true;
-                    debug!("🔄 Mint1信息需要更新: decimals={}, owner={}", decimals, mint1_account.owner);
+                    debug!(
+                        "🔄 Mint1信息需要更新: decimals={}, owner={}",
+                        decimals, mint1_account.owner
+                    );
                 }
             }
         }
@@ -487,7 +534,9 @@ impl ClmmPoolSyncService {
                 sync_error: None,
             };
 
-            self.storage.update_sync_status(&pool.pool_address, &sync_status).await?;
+            self.storage
+                .update_sync_status(&pool.pool_address, &sync_status)
+                .await?;
             debug!("🔄 池子同步状态已更新: {}", pool.pool_address);
             Ok(false)
         }
@@ -613,7 +662,11 @@ pub struct ClmmPoolSyncBuilder;
 
 impl ClmmPoolSyncBuilder {
     /// 从共享上下文和存储服务创建同步服务
-    pub fn from_context_and_storage(shared: Arc<SharedContext>, storage: ClmmPoolStorageService, config: Option<SyncConfig>) -> ClmmPoolSyncService {
+    pub fn from_context_and_storage(
+        shared: Arc<SharedContext>,
+        storage: ClmmPoolStorageService,
+        config: Option<SyncConfig>,
+    ) -> ClmmPoolSyncService {
         ClmmPoolSyncService::new(shared, storage, config)
     }
 }

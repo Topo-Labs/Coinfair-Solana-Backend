@@ -27,10 +27,16 @@ pub trait UserRepositoryTrait {
 #[async_trait]
 impl UserRepositoryTrait for Database {
     async fn create_user(&self, address: &str, amount: f64, price: f64) -> AppResult<InsertOneResult> {
-        let existing_user = self.users.find_one(doc! { "address": address.to_lowercase()}, None).await?;
+        let existing_user = self
+            .users
+            .find_one(doc! { "address": address.to_lowercase()}, None)
+            .await?;
 
         if existing_user.is_some() {
-            return Err(AppError::Conflict(format!("Valid User with address: {} already exists.", address)));
+            return Err(AppError::Conflict(format!(
+                "Valid User with address: {} already exists.",
+                address
+            )));
         }
 
         let new_doc = User {
@@ -62,7 +68,10 @@ impl UserRepositoryTrait for Database {
             .collect();
 
         // Step 2: Extract all unique `lower` addresses
-        let users: Vec<String> = unique_users.iter().map(|user| user.address.clone().to_lowercase()).collect();
+        let users: Vec<String> = unique_users
+            .iter()
+            .map(|user| user.address.clone().to_lowercase())
+            .collect();
 
         // Step 3: Query the database for existing `lower` addresses
         let cursor: Cursor<User> = self.users.find(doc! { "address": { "$in": users }}, None).await?;

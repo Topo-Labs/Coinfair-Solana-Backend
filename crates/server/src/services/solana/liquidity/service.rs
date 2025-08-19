@@ -1,8 +1,9 @@
 // LiquidityService handles all liquidity management operations
 
 use crate::dtos::solana_dto::{
-    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest,
-    IncreaseLiquidityResponse, TransactionStatus,
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+    TransactionStatus,
 };
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
@@ -13,9 +14,9 @@ use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, transaction::Transaction};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::collections::HashMap;
 use tracing::{info, warn};
 use utils::TokenUtils;
 
@@ -38,13 +39,19 @@ impl LiquidityService {
     pub fn new(shared: Arc<SharedContext>) -> Self {
         // TODO: 暂时使用占位符，直到 SharedContext 包含数据库实例
         let position_storage_service = PositionStorageService::placeholder();
-        Self { shared, position_storage_service }
+        Self {
+            shared,
+            position_storage_service,
+        }
     }
 
     /// Create a new LiquidityService with database
     pub fn with_database(shared: Arc<SharedContext>, db: Arc<database::Database>) -> Self {
         let position_storage_service = PositionStorageService::new(db);
-        Self { shared, position_storage_service }
+        Self {
+            shared,
+            position_storage_service,
+        }
     }
 
     /// 批量获取流动性操作所需的上下文信息（优化性能）
@@ -56,24 +63,28 @@ impl LiquidityService {
         tick_upper_index: i32,
     ) -> Result<LiquidityOperationContext> {
         info!("🚀 批量获取流动性操作上下文信息");
-        
+
         // 1. 并发获取pool状态和position信息
         let position_utils_optimized = PositionUtilsOptimized::new(&self.shared.rpc_client);
-        
+
         let (pool_result, position_result) = tokio::try_join!(
             async {
                 let pool_account = self.shared.rpc_client.get_account(pool_address)?;
                 SolanaUtils::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(&pool_account)
             },
-            position_utils_optimized.find_existing_position(user_wallet, pool_address, tick_lower_index, tick_upper_index)
+            position_utils_optimized.find_existing_position(
+                user_wallet,
+                pool_address,
+                tick_lower_index,
+                tick_upper_index
+            )
         )?;
-        
+
         let pool_state = pool_result;
-        let existing_position = position_result
-            .ok_or_else(|| anyhow::anyhow!("未找到匹配的现有仓位"))?;
-        
+        let existing_position = position_result.ok_or_else(|| anyhow::anyhow!("未找到匹配的现有仓位"))?;
+
         info!("✅ 获得pool状态和position信息");
-        
+
         // 2. 批量获取所有奖励token的program信息
         let mut reward_mints = Vec::new();
         for reward_info in &pool_state.reward_infos {
@@ -81,14 +92,14 @@ impl LiquidityService {
                 reward_mints.push(reward_info.token_mint);
             }
         }
-        
+
         let mut reward_token_programs = HashMap::new();
         if !reward_mints.is_empty() {
             info!("🚀 批量检测 {} 个奖励token的program类型", reward_mints.len());
-            
+
             // 批量获取mint账户信息
             let mint_accounts = self.shared.rpc_client.get_multiple_accounts(&reward_mints)?;
-            
+
             for (i, account_option) in mint_accounts.iter().enumerate() {
                 if let Some(account) = account_option {
                     // 通过owner字段判断token program
@@ -103,10 +114,10 @@ impl LiquidityService {
                     reward_token_programs.insert(reward_mints[i], spl_token::id());
                 }
             }
-            
+
             info!("✅ 批量获取奖励token program信息完成");
         }
-        
+
         Ok(LiquidityOperationContext {
             pool_state,
             existing_position,
@@ -119,7 +130,10 @@ impl LiquidityService {
         info!("🔧 开始构建增加流动性交易");
         info!("  池子地址: {}", request.pool_address);
         info!("  用户钱包: {}", request.user_wallet);
-        info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!(
+            "  价格范围: {} - {}",
+            request.tick_lower_price, request.tick_upper_price
+        );
         info!("  输入金额: {}", request.input_amount);
 
         // 1. 验证请求参数
@@ -137,8 +151,16 @@ impl LiquidityService {
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
-        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(
+            request.tick_lower_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
+        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(
+            request.tick_upper_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
 
         let tick_lower_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_lower)?;
         let tick_upper_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_upper)?;
@@ -149,13 +171,17 @@ impl LiquidityService {
         info!("  计算的tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
 
         // 4. 使用批量获取上下文信息（优化性能 - 这会重新获取pool_state但同时获取position信息）
-        let context = self.get_liquidity_operation_context(&pool_address, &user_wallet, tick_lower_adjusted, tick_upper_adjusted).await?;
+        let context = self
+            .get_liquidity_operation_context(&pool_address, &user_wallet, tick_lower_adjusted, tick_upper_adjusted)
+            .await?;
 
         info!("  找到现有仓位: {}", context.existing_position.position_key);
 
         // 重新计算调整后的sqrt_price
-        let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
-        let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+        let sqrt_price_lower_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
         // 5. 计算新增流动性
         let liquidity = position_utils.calculate_liquidity_from_single_amount(
@@ -166,8 +192,13 @@ impl LiquidityService {
             request.is_base_0,
         )?;
 
-        let (amount_0, amount_1) =
-            position_utils.calculate_amounts_from_liquidity(context.pool_state.tick_current, context.pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
+        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(
+            context.pool_state.tick_current,
+            context.pool_state.sqrt_price_x64,
+            tick_lower_adjusted,
+            tick_upper_adjusted,
+            liquidity,
+        )?;
 
         // 6. 应用滑点保护
         let slippage = if request.max_slippage_percent == 0.5 {
@@ -179,14 +210,20 @@ impl LiquidityService {
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1, slippage, false);
 
         // 7. 计算转账费用（支持Token-2022）
-        let (transfer_fee_0, transfer_fee_1) =
-            self.shared
-                .swap_v2_service
-                .get_pool_mints_inverse_fee(&context.pool_state.token_mint_0, &context.pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
+        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_inverse_fee(
+            &context.pool_state.token_mint_0,
+            &context.pool_state.token_mint_1,
+            amount_0_with_slippage,
+            amount_1_with_slippage,
+        )?;
 
         // 8. 计算包含转账费的最大金额
-        let amount_0_max = amount_0_with_slippage.checked_add(transfer_fee_0.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
-        let amount_1_max = amount_1_with_slippage.checked_add(transfer_fee_1.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_0_max = amount_0_with_slippage
+            .checked_add(transfer_fee_0.transfer_fee)
+            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_1_max = amount_1_with_slippage
+            .checked_add(transfer_fee_1.transfer_fee)
+            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
 
         info!("  新增流动性: {}", liquidity);
         info!("  Token0最大消耗: {}", amount_0_max);
@@ -195,15 +232,28 @@ impl LiquidityService {
         // 9. 构建remaining accounts
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 10. 计算tick array索引
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, context.pool_state.tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, context.pool_state.tick_spacing);
+        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(
+            tick_lower_adjusted,
+            context.pool_state.tick_spacing,
+        );
+        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(
+            tick_upper_adjusted,
+            context.pool_state.tick_spacing,
+        );
 
         // 11. 获取用户的代币账户（使用现有NFT的Token Program）
-        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &context.pool_state.token_mint_0, &transfer_fee_0.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &context.pool_state.token_mint_0,
+            &transfer_fee_0.owner,
+        );
         let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
             &user_wallet,
             &context.pool_state.token_mint_1,
@@ -268,7 +318,10 @@ impl LiquidityService {
         let request_clone = request.clone();
         let response_clone = response.clone();
         tokio::spawn(async move {
-            if let Err(e) = storage_service.update_increase_liquidity(&request_clone, &response_clone, None).await {
+            if let Err(e) = storage_service
+                .update_increase_liquidity(&request_clone, &response_clone, None)
+                .await
+            {
                 tracing::warn!("保存增加流动性信息到数据库失败: {}", e);
             }
         });
@@ -277,10 +330,16 @@ impl LiquidityService {
     }
 
     /// 增加流动性并发送交易
-    pub async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
+    pub async fn increase_liquidity_and_send_transaction(
+        &self,
+        request: IncreaseLiquidityRequest,
+    ) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
         info!("🔧 开始增加流动性操作");
         info!("  池子地址: {}", request.pool_address);
-        info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!(
+            "  价格范围: {} - {}",
+            request.tick_lower_price, request.tick_upper_price
+        );
         info!("  输入金额: {}", request.input_amount);
 
         // 1. 验证请求参数
@@ -306,8 +365,16 @@ impl LiquidityService {
 
         let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
-        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
-        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(
+            request.tick_lower_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
+        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(
+            request.tick_upper_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
 
         let tick_lower_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_lower)?;
         let tick_upper_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_upper)?;
@@ -315,8 +382,10 @@ impl LiquidityService {
         let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_raw, pool_state.tick_spacing as i32);
         let tick_upper_adjusted = position_utils.tick_with_spacing(tick_upper_raw, pool_state.tick_spacing as i32);
 
-        let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
-        let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+        let sqrt_price_lower_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
         // 查找现有的匹配仓位
         let existing_position = position_utils
@@ -346,30 +415,54 @@ impl LiquidityService {
             request.is_base_0,
         )?;
 
-        let (amount_0, amount_1) =
-            position_utils.calculate_amounts_from_liquidity(pool_state.tick_current, pool_state.sqrt_price_x64, tick_lower_adjusted, tick_upper_adjusted, liquidity)?;
+        let (amount_0, amount_1) = position_utils.calculate_amounts_from_liquidity(
+            pool_state.tick_current,
+            pool_state.sqrt_price_x64,
+            tick_lower_adjusted,
+            tick_upper_adjusted,
+            liquidity,
+        )?;
 
-        let slippage = if request.max_slippage_percent == 0.5 { 5.0 } else { request.max_slippage_percent };
+        let slippage = if request.max_slippage_percent == 0.5 {
+            5.0
+        } else {
+            request.max_slippage_percent
+        };
         let amount_0_with_slippage = position_utils.apply_slippage(amount_0, slippage, false);
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1, slippage, false);
 
-        let (transfer_fee_0, transfer_fee_1) =
-            self.shared
-                .swap_v2_service
-                .get_pool_mints_inverse_fee(&pool_state.token_mint_0, &pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
+        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_inverse_fee(
+            &pool_state.token_mint_0,
+            &pool_state.token_mint_1,
+            amount_0_with_slippage,
+            amount_1_with_slippage,
+        )?;
 
-        let amount_0_max = amount_0_with_slippage.checked_add(transfer_fee_0.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
-        let amount_1_max = amount_1_with_slippage.checked_add(transfer_fee_1.transfer_fee).ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_0_max = amount_0_with_slippage
+            .checked_add(transfer_fee_0.transfer_fee)
+            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
+        let amount_1_max = amount_1_with_slippage
+            .checked_add(transfer_fee_1.transfer_fee)
+            .ok_or_else(|| anyhow::anyhow!("金额溢出"))?;
 
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
+        let tick_array_lower_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
+        let tick_array_upper_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
 
-        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &pool_state.token_mint_0,
+            &transfer_fee_0.owner,
+        );
         let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
             &user_wallet,
             &pool_state.token_mint_1,
@@ -396,7 +489,8 @@ impl LiquidityService {
 
         // 14. 构建并发送交易
         let recent_blockhash = self.shared.rpc_client.get_latest_blockhash()?;
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
+        let transaction =
+            Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
 
         // 15. 发送交易
         let signature = self.shared.rpc_client.send_and_confirm_transaction(&transaction)?;
@@ -426,7 +520,10 @@ impl LiquidityService {
         let request_clone = request.clone();
         let response_clone = response.clone();
         tokio::spawn(async move {
-            if let Err(e) = storage_service.update_increase_liquidity_with_transaction(&request_clone, &response_clone).await {
+            if let Err(e) = storage_service
+                .update_increase_liquidity_with_transaction(&request_clone, &response_clone)
+                .await
+            {
                 tracing::warn!("保存增加流动性交易信息到数据库失败: {}", e);
             }
         });
@@ -459,7 +556,10 @@ impl LiquidityService {
         info!("🔧 开始构建减少流动性交易");
         info!("  池子地址: {}", request.pool_address);
         info!("  用户钱包: {}", request.user_wallet);
-        info!("  Tick范围: {} - {}", request.tick_lower_index, request.tick_upper_index);
+        info!(
+            "  Tick范围: {} - {}",
+            request.tick_lower_index, request.tick_upper_index
+        );
         info!("  减少流动性: {:?}", request.liquidity);
 
         // 1. 验证请求参数
@@ -470,7 +570,14 @@ impl LiquidityService {
         let user_wallet = Pubkey::from_str(&request.user_wallet)?;
 
         // 3. 使用批量获取上下文信息（优化性能）
-        let context = self.get_liquidity_operation_context(&pool_address, &user_wallet, request.tick_lower_index, request.tick_upper_index).await?;
+        let context = self
+            .get_liquidity_operation_context(
+                &pool_address,
+                &user_wallet,
+                request.tick_lower_index,
+                request.tick_upper_index,
+            )
+            .await?;
 
         info!("🎯 找到匹配的现有仓位:");
         info!("  NFT Mint: {}", context.existing_position.nft_mint);
@@ -513,10 +620,12 @@ impl LiquidityService {
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage_percent, true);
 
         // 7. 计算转账费
-        let (transfer_fee_0, transfer_fee_1) =
-            self.shared
-                .swap_v2_service
-                .get_pool_mints_transfer_fee(&context.pool_state.token_mint_0, &context.pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
+        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_transfer_fee(
+            &context.pool_state.token_mint_0,
+            &context.pool_state.token_mint_1,
+            amount_0_with_slippage,
+            amount_1_with_slippage,
+        )?;
 
         // 8. 计算最小输出金额（减去转账费）
         info!("transfer_fee_0: {:?}", transfer_fee_0);
@@ -541,7 +650,10 @@ impl LiquidityService {
         // 9. 构建remaining accounts（包含奖励账户）- 使用优化版本的token program信息
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 使用批量获取的奖励token program信息（优化性能）
@@ -554,7 +666,9 @@ impl LiquidityService {
                 // 第1个账户：reward token vault
                 remaining_accounts.push(AccountMeta::new(reward_info.token_vault, false));
                 // 第2个账户：user reward token account - 使用批量获取的program信息
-                let reward_token_program = context.reward_token_programs.get(&reward_info.token_mint)
+                let reward_token_program = context
+                    .reward_token_programs
+                    .get(&reward_info.token_mint)
                     .copied()
                     .unwrap_or(spl_token::id()); // 默认使用legacy token
                 let user_reward_token = spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -579,12 +693,26 @@ impl LiquidityService {
         info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
         // 10. 计算tick array索引
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_lower_index, context.pool_state.tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_upper_index, context.pool_state.tick_spacing);
+        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(
+            request.tick_lower_index,
+            context.pool_state.tick_spacing,
+        );
+        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(
+            request.tick_upper_index,
+            context.pool_state.tick_spacing,
+        );
 
         // 11. 构建用户代币账户地址
-        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &context.pool_state.token_mint_0, &transfer_fee_0.owner);
-        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &context.pool_state.token_mint_1, &transfer_fee_1.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &context.pool_state.token_mint_0,
+            &transfer_fee_0.owner,
+        );
+        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &context.pool_state.token_mint_1,
+            &transfer_fee_1.owner,
+        );
 
         // 12. 构建指令
         let mut instructions = Vec::new();
@@ -592,17 +720,24 @@ impl LiquidityService {
         // 确保所有有效奖励代币的用户ATA账户存在（仅在构建交易时需要）- 使用优化版本的program信息
         for reward_info in &context.pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
-                let reward_token_program = context.reward_token_programs.get(&reward_info.token_mint)
+                let reward_token_program = context
+                    .reward_token_programs
+                    .get(&reward_info.token_mint)
                     .copied()
                     .unwrap_or(spl_token::id());
-                let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &reward_info.token_mint, &reward_token_program);
-                info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
-                let create_reward_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                    &user_wallet,
+                let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
                     &user_wallet,
                     &reward_info.token_mint,
                     &reward_token_program,
                 );
+                info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
+                let create_reward_ata_ix =
+                    spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                        &user_wallet,
+                        &user_wallet,
+                        &reward_info.token_mint,
+                        &reward_token_program,
+                    );
                 instructions.push(create_reward_ata_ix);
             }
         }
@@ -639,7 +774,8 @@ impl LiquidityService {
         }
 
         // 14. 序列化交易
-        let transaction = Transaction::new_unsigned(solana_sdk::message::Message::new(&instructions, Some(&user_wallet)));
+        let transaction =
+            Transaction::new_unsigned(solana_sdk::message::Message::new(&instructions, Some(&user_wallet)));
         let serialized_transaction = bincode::serialize(&transaction)?;
         let transaction_base64 = BASE64_STANDARD.encode(&serialized_transaction);
 
@@ -674,7 +810,10 @@ impl LiquidityService {
         let request_clone = request.clone();
         let response_clone = response.clone();
         tokio::spawn(async move {
-            if let Err(e) = storage_service.update_decrease_liquidity(&request_clone, &response_clone, None).await {
+            if let Err(e) = storage_service
+                .update_decrease_liquidity(&request_clone, &response_clone, None)
+                .await
+            {
                 tracing::warn!("保存减少流动性信息到数据库失败: {}", e);
             }
         });
@@ -683,11 +822,17 @@ impl LiquidityService {
     }
 
     /// 减少流动性并发送交易
-    pub async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
+    pub async fn decrease_liquidity_and_send_transaction(
+        &self,
+        request: DecreaseLiquidityRequest,
+    ) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
         info!("🚀 开始减少流动性并发送交易");
         info!("  池子地址: {}", request.pool_address);
         info!("  用户钱包: {}", request.user_wallet);
-        info!("  Tick范围: {} - {}", request.tick_lower_index, request.tick_upper_index);
+        info!(
+            "  Tick范围: {} - {}",
+            request.tick_lower_index, request.tick_upper_index
+        );
         info!("  减少流动性: {:?}", request.liquidity);
 
         // 1. 验证请求参数
@@ -714,7 +859,12 @@ impl LiquidityService {
 
         let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
         let existing_position = position_utils
-            .find_existing_position(&user_wallet, &pool_address, request.tick_lower_index, request.tick_upper_index)
+            .find_existing_position(
+                &user_wallet,
+                &pool_address,
+                request.tick_lower_index,
+                request.tick_upper_index,
+            )
             .await?
             .ok_or_else(|| anyhow::anyhow!("未找到匹配的仓位。请检查tick索引范围和池子地址。"))?;
 
@@ -748,10 +898,12 @@ impl LiquidityService {
         let amount_0_with_slippage = position_utils.apply_slippage(amount_0_expected, slippage_percent, true); // true表示计算最小输出
         let amount_1_with_slippage = position_utils.apply_slippage(amount_1_expected, slippage_percent, true);
 
-        let (transfer_fee_0, transfer_fee_1) =
-            self.shared
-                .swap_v2_service
-                .get_pool_mints_transfer_fee(&pool_state.token_mint_0, &pool_state.token_mint_1, amount_0_with_slippage, amount_1_with_slippage)?;
+        let (transfer_fee_0, transfer_fee_1) = self.shared.swap_v2_service.get_pool_mints_transfer_fee(
+            &pool_state.token_mint_0,
+            &pool_state.token_mint_1,
+            amount_0_with_slippage,
+            amount_1_with_slippage,
+        )?;
         info!("transfer_fee_0: {:?}", transfer_fee_0);
         info!("transfer_fee_1: {:?}", transfer_fee_1);
         info!("amount_0_with_slippage: {:?}", amount_0_with_slippage);
@@ -773,7 +925,10 @@ impl LiquidityService {
 
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 添加奖励相关账户（与CLI版本保持100%一致）
@@ -821,18 +976,35 @@ impl LiquidityService {
         );
         info!("🔧 构建减少流动性剩余账户remaining_accounts: {:?}", remaining_accounts);
 
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_lower_index, pool_state.tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(request.tick_upper_index, pool_state.tick_spacing);
+        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(
+            request.tick_lower_index,
+            pool_state.tick_spacing,
+        );
+        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(
+            request.tick_upper_index,
+            pool_state.tick_spacing,
+        );
 
-        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_0, &transfer_fee_0.owner);
-        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &pool_state.token_mint_1, &transfer_fee_1.owner);
+        let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &pool_state.token_mint_0,
+            &transfer_fee_0.owner,
+        );
+        let user_token_account_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &user_wallet,
+            &pool_state.token_mint_1,
+            &transfer_fee_1.owner,
+        );
 
         // 打印所有构建指令需要的账户，排查问题
         info!("pool_address: {:?}", pool_address);
         info!("pool_state: {:?}", pool_state);
         info!("user_wallet: {:?}", user_wallet);
         info!("existing_position.nft_mint: {:?}", existing_position.nft_mint);
-        info!("existing_position.nft_token_account: {:?}", existing_position.nft_token_account);
+        info!(
+            "existing_position.nft_token_account: {:?}",
+            existing_position.nft_token_account
+        );
         info!("user_token_account_0: {:?}", user_token_account_0);
         info!("user_token_account_1: {:?}", user_token_account_1);
         info!("request.tick_lower_index: {:?}", request.tick_lower_index);
@@ -849,15 +1021,21 @@ impl LiquidityService {
         // 确保所有有效奖励代币的用户ATA账户存在
         for reward_info in &pool_state.reward_infos {
             if reward_info.token_mint != Pubkey::default() {
-                let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?;
-                let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(&user_wallet, &reward_info.token_mint, &reward_token_program);
-                info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
-                let create_reward_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                    &user_wallet,
+                let reward_token_program =
+                    TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_info.token_mint)?;
+                let reward_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
                     &user_wallet,
                     &reward_info.token_mint,
                     &reward_token_program,
                 );
+                info!("📝 确保用户奖励代币领取ATA账户存在: {}", reward_token_account);
+                let create_reward_ata_ix =
+                    spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                        &user_wallet,
+                        &user_wallet,
+                        &reward_info.token_mint,
+                        &reward_token_program,
+                    );
                 instructions.push(create_reward_ata_ix);
             }
         }
@@ -894,7 +1072,8 @@ impl LiquidityService {
 
         // 16. 构建并发送交易
         let recent_blockhash = self.shared.rpc_client.get_latest_blockhash()?;
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
+        let transaction =
+            Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
 
         // 17. 发送交易
         let signature = if request.simulate {
@@ -927,7 +1106,11 @@ impl LiquidityService {
             tick_upper_index: request.tick_upper_index,
             pool_address: request.pool_address.clone(),
             position_closed: will_close_position,
-            status: if request.simulate { TransactionStatus::Simulated } else { TransactionStatus::Finalized },
+            status: if request.simulate {
+                TransactionStatus::Simulated
+            } else {
+                TransactionStatus::Finalized
+            },
             explorer_url,
             timestamp: now,
         };
@@ -937,7 +1120,10 @@ impl LiquidityService {
         let request_clone = request.clone();
         let response_clone = response.clone();
         tokio::spawn(async move {
-            if let Err(e) = storage_service.update_decrease_liquidity_with_transaction(&request_clone, &response_clone).await {
+            if let Err(e) = storage_service
+                .update_decrease_liquidity_with_transaction(&request_clone, &response_clone)
+                .await
+            {
                 tracing::warn!("保存减少流动性交易信息到数据库失败: {}", e);
             }
         });
@@ -954,7 +1140,9 @@ impl LiquidityService {
 
         // 验证流动性数量（如果提供）
         if let Some(liquidity_str) = &request.liquidity {
-            let liquidity = liquidity_str.parse::<u128>().map_err(|_| anyhow::anyhow!("流动性数量格式错误"))?;
+            let liquidity = liquidity_str
+                .parse::<u128>()
+                .map_err(|_| anyhow::anyhow!("流动性数量格式错误"))?;
             if liquidity == 0 {
                 return Err(anyhow::anyhow!("流动性数量必须大于0"));
             }

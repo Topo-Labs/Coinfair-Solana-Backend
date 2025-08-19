@@ -85,14 +85,8 @@ pub fn collect_protocol_fee(
         amount_0 = amount_0_requested.min(pool_state.protocol_fees_token_0);
         amount_1 = amount_1_requested.min(pool_state.protocol_fees_token_1);
 
-        pool_state.protocol_fees_token_0 = pool_state
-            .protocol_fees_token_0
-            .checked_sub(amount_0)
-            .unwrap();
-        pool_state.protocol_fees_token_1 = pool_state
-            .protocol_fees_token_1
-            .checked_sub(amount_1)
-            .unwrap();
+        pool_state.protocol_fees_token_0 = pool_state.protocol_fees_token_0.checked_sub(amount_0).unwrap();
+        pool_state.protocol_fees_token_1 = pool_state.protocol_fees_token_1.checked_sub(amount_1).unwrap();
 
         auth_bump = pool_state.auth_bump;
         pool_state.recent_epoch = Clock::get()?.epoch;

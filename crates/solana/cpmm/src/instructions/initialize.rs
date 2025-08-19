@@ -159,12 +159,7 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn initialize(
-    ctx: Context<Initialize>,
-    init_amount_0: u64,
-    init_amount_1: u64,
-    mut open_time: u64,
-) -> Result<()> {
+pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, mut open_time: u64) -> Result<()> {
     if !(is_supported_mint(&ctx.accounts.token_0_mint).unwrap()
         && is_supported_mint(&ctx.accounts.token_1_mint).unwrap())
     {
@@ -242,24 +237,14 @@ pub fn initialize(
         ctx.accounts.token_1_mint.decimals,
     )?;
 
-    let token_0_vault =
-        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-            ctx.accounts
-                .token_0_vault
-                .to_account_info()
-                .try_borrow_data()?
-                .deref(),
-        )?
-        .base;
-    let token_1_vault =
-        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-            ctx.accounts
-                .token_1_vault
-                .to_account_info()
-                .try_borrow_data()?
-                .deref(),
-        )?
-        .base;
+    let token_0_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+        ctx.accounts.token_0_vault.to_account_info().try_borrow_data()?.deref(),
+    )?
+    .base;
+    let token_1_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+        ctx.accounts.token_1_vault.to_account_info().try_borrow_data()?.deref(),
+    )?
+    .base;
 
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
@@ -302,10 +287,7 @@ pub fn initialize(
             ],
         )?;
         invoke(
-            &spl_token::instruction::sync_native(
-                ctx.accounts.token_program.key,
-                &ctx.accounts.create_pool_fee.key(),
-            )?,
+            &spl_token::instruction::sync_native(ctx.accounts.token_program.key, &ctx.accounts.create_pool_fee.key())?,
             &[
                 ctx.accounts.token_program.to_account_info(),
                 ctx.accounts.create_pool_fee.to_account_info(),

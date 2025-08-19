@@ -1,6 +1,8 @@
 // ClmmPoolService handles CLMM pool creation operations
 
-use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, PoolKeyResponse, TransactionStatus};
+use crate::dtos::solana_dto::{
+    CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, PoolKeyResponse, TransactionStatus,
+};
 
 use super::super::config::ClmmConfigService;
 use super::super::shared::SharedContext;
@@ -29,7 +31,11 @@ pub struct ClmmPoolService {
 
 impl ClmmPoolService {
     /// Create a new ClmmPoolService with shared context and database
-    pub fn new(shared: Arc<SharedContext>, database: &database::Database, config_service: Arc<ClmmConfigService>) -> Self {
+    pub fn new(
+        shared: Arc<SharedContext>,
+        database: &database::Database,
+        config_service: Arc<ClmmConfigService>,
+    ) -> Self {
         let storage = ClmmPoolStorageBuilder::from_database(database);
         let sync_storage = ClmmPoolStorageBuilder::from_database(database);
         let sync_service = ClmmPoolSyncBuilder::from_context_and_storage(shared.clone(), sync_storage, None);
@@ -54,7 +60,12 @@ impl ClmmPoolService {
                 for config in configs {
                     if config.id == config_id {
                         info!("✅ 从数据库获取CLMM配置: {}", config_id);
-                        return (config.protocol_fee_rate, config.trade_fee_rate, config.tick_spacing, config.fund_fee_rate);
+                        return (
+                            config.protocol_fee_rate,
+                            config.trade_fee_rate,
+                            config.tick_spacing,
+                            config.fund_fee_rate,
+                        );
                     }
                 }
                 info!("⚠️ 数据库中未找到配置ID {}，尝试从链上获取", config_id);
@@ -214,7 +225,8 @@ impl ClmmPoolService {
         info!("    对应tick: {}", tick);
 
         // 7. 获取所有相关的PDA地址
-        let pool_addresses = ::utils::solana::PoolInstructionBuilder::get_all_pool_addresses(request.config_index, &mint0, &mint1)?;
+        let pool_addresses =
+            ::utils::solana::PoolInstructionBuilder::get_all_pool_addresses(request.config_index, &mint0, &mint1)?;
 
         info!("  计算的地址:");
         info!("    池子地址: {}", pool_addresses.pool);
@@ -282,7 +294,10 @@ impl ClmmPoolService {
     }
 
     /// Create CLMM pool and send transaction (signed just for local testing purposes, will not be used in production)
-    pub async fn create_pool_and_send_transaction(&self, request: CreatePoolRequest) -> Result<CreatePoolAndSendTransactionResponse> {
+    pub async fn create_pool_and_send_transaction(
+        &self,
+        request: CreatePoolRequest,
+    ) -> Result<CreatePoolAndSendTransactionResponse> {
         info!("🏗️ 开始创建池子并发送交易");
         info!("  配置索引: {}", request.config_index);
         info!("  初始价格: {}", request.price);
@@ -334,7 +349,8 @@ impl ClmmPoolService {
         let tick = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_x64)?;
 
         // 7. 获取所有相关的PDA地址
-        let pool_addresses = ::utils::solana::PoolInstructionBuilder::get_all_pool_addresses(request.config_index, &mint0, &mint1)?;
+        let pool_addresses =
+            ::utils::solana::PoolInstructionBuilder::get_all_pool_addresses(request.config_index, &mint0, &mint1)?;
 
         // 8. 构建CreatePool指令
         let instructions = ::utils::solana::PoolInstructionBuilder::build_create_pool_instruction(
@@ -350,7 +366,8 @@ impl ClmmPoolService {
 
         // 9. 构建并发送交易
         let recent_blockhash = self.shared.rpc_client.get_latest_blockhash()?;
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
+        let transaction =
+            Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair], recent_blockhash);
 
         // 10. 发送交易
         let signature = self.shared.rpc_client.send_and_confirm_transaction(&transaction)?;
@@ -378,7 +395,11 @@ impl ClmmPoolService {
         };
 
         // 12. 存储池子元数据和交易信息到数据库
-        match self.storage.store_pool_creation_with_transaction(&request, &response).await {
+        match self
+            .storage
+            .store_pool_creation_with_transaction(&request, &response)
+            .await
+        {
             Ok(pool_id) => {
                 info!("💾 池子元数据和交易信息存储成功，ID: {}", pool_id);
             }
@@ -412,7 +433,11 @@ impl ClmmPoolService {
     }
 
     /// 根据代币mint地址查询相关池子列表
-    pub async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    pub async fn get_pools_by_mint(
+        &self,
+        mint_address: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         info!("🔍 查询代币相关池子: {} (限制: {:?})", mint_address, limit);
 
         match self.storage.get_pools_by_mint(mint_address, limit).await {
@@ -428,7 +453,11 @@ impl ClmmPoolService {
     }
 
     /// 根据创建者查询池子列表
-    pub async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    pub async fn get_pools_by_creator(
+        &self,
+        creator_wallet: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         info!("🔍 查询创建者池子: {} (限制: {:?})", creator_wallet, limit);
 
         match self.storage.get_pools_by_creator(creator_wallet, limit).await {
@@ -444,7 +473,10 @@ impl ClmmPoolService {
     }
 
     /// 复杂查询接口
-    pub async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    pub async fn query_pools(
+        &self,
+        params: &database::clmm_pool::PoolQueryParams,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         info!("🔍 执行复杂池子查询");
 
         match self.storage.query_pools(params).await {
@@ -465,7 +497,10 @@ impl ClmmPoolService {
 
         match self.storage.get_pool_statistics().await {
             Ok(stats) => {
-                info!("✅ 统计信息获取成功 - 总池子: {}, 活跃池子: {}", stats.total_pools, stats.active_pools);
+                info!(
+                    "✅ 统计信息获取成功 - 总池子: {}, 活跃池子: {}",
+                    stats.total_pools, stats.active_pools
+                );
                 Ok(stats)
             }
             Err(e) => {
@@ -476,12 +511,19 @@ impl ClmmPoolService {
     }
 
     /// 分页查询池子列表，支持链上数据fallback
-    pub async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse> {
+    pub async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm_pool::model::PoolListResponse> {
         info!("📋 执行分页池子查询");
         info!("  池子类型: {:?}", params.pool_type);
         info!("  排序字段: {:?}", params.pool_sort_field);
         info!("  排序方向: {:?}", params.sort_type);
-        info!("  页码: {}, 页大小: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+        info!(
+            "  页码: {}, 页大小: {}",
+            params.page.unwrap_or(1),
+            params.page_size.unwrap_or(20)
+        );
 
         // 1. 先从数据库查询
         match self.storage.query_pools_with_pagination(params).await {
@@ -490,11 +532,16 @@ impl ClmmPoolService {
 
                 // 2. 如果是按IDs查询且结果不完整，尝试从链上补充
                 if let Some(ids_str) = &params.ids {
-                    let requested_ids: Vec<String> = ids_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                    let requested_ids: Vec<String> = ids_str
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
 
                     let found_ids: HashSet<String> = response.pools.iter().map(|p| p.pool_address.clone()).collect();
 
-                    let missing_ids: Vec<String> = requested_ids.into_iter().filter(|id| !found_ids.contains(id)).collect();
+                    let missing_ids: Vec<String> =
+                        requested_ids.into_iter().filter(|id| !found_ids.contains(id)).collect();
 
                     if !missing_ids.is_empty() {
                         info!("🔗 发现{}个池子未在数据库中，尝试从链上获取", missing_ids.len());
@@ -545,7 +592,10 @@ impl ClmmPoolService {
     }
 
     /// 从链上加载池子并异步保存到数据库
-    async fn load_and_save_pools_from_chain(&self, pool_addresses: &[String]) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
+    async fn load_and_save_pools_from_chain(
+        &self,
+        pool_addresses: &[String],
+    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
         info!("🔗 开始从链上加载{}个池子", pool_addresses.len());
 
         // 1. 从链上加载池子信息
@@ -642,7 +692,8 @@ impl ClmmPoolService {
         // 使用与CLI完全相同的计算逻辑
         let multipler = |decimals: u8| -> f64 { (10_i32).checked_pow(decimals.try_into().unwrap()).unwrap() as f64 };
 
-        let price_to_x64 = |price: f64| -> u128 { (price * raydium_amm_v3::libraries::fixed_point_64::Q64 as f64) as u128 };
+        let price_to_x64 =
+            |price: f64| -> u128 { (price * raydium_amm_v3::libraries::fixed_point_64::Q64 as f64) as u128 };
 
         let price_with_decimals = price * multipler(decimals_1) / multipler(decimals_0);
         price_to_x64(price_with_decimals.sqrt())
@@ -650,7 +701,10 @@ impl ClmmPoolService {
 
     /// 启动自动同步服务
     pub async fn start_auto_sync(&self) -> Result<()> {
-        self.sync_service.start_auto_sync().await.map_err(|e| anyhow::anyhow!("同步服务启动失败: {}", e))
+        self.sync_service
+            .start_auto_sync()
+            .await
+            .map_err(|e| anyhow::anyhow!("同步服务启动失败: {}", e))
     }
 
     /// 根据池子ID列表获取池子密钥信息
@@ -697,7 +751,8 @@ impl ClmmPoolService {
                     };
 
                     // 4. 构建配置信息 - 从配置服务动态获取,支持数据库优先，链上兜底，异步保存策略
-                    let (protocol_fee_rate, trade_fee_rate, tick_spacing, fund_fee_rate) = self.get_clmm_config_by_id(&pool.amm_config_address).await;
+                    let (protocol_fee_rate, trade_fee_rate, tick_spacing, fund_fee_rate) =
+                        self.get_clmm_config_by_id(&pool.amm_config_address).await;
 
                     let config = PoolConfig {
                         id: pool.amm_config_address.clone(),

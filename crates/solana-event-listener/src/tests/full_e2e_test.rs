@@ -23,9 +23,9 @@ use crate::{
     recovery::CheckpointManager,
     subscriber::{SubscriptionManager, WebSocketManager},
 };
+use solana_sdk::pubkey::Pubkey;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use solana_sdk::pubkey::Pubkey;
 use tokio::time::{sleep, timeout, Duration};
 use tracing::{error, info, warn};
 
@@ -76,7 +76,9 @@ fn create_complete_e2e_config() -> EventListenerConfig {
 async fn test_complete_e2e_flow() {
     // 初始化日志 - 提高日志级别以看到更多调试信息
     tracing_subscriber::fmt()
-        .with_env_filter("debug,solana_event_listener::subscriber::subscription_manager=info,solana_event_listener::parser=info")
+        .with_env_filter(
+            "debug,solana_event_listener::subscriber::subscription_manager=info,solana_event_listener::parser=info",
+        )
         .try_init()
         .ok();
 
@@ -125,7 +127,10 @@ async fn test_complete_e2e_flow() {
 
     // 获取初始数据库统计
     let initial_stats = event_storage.get_storage_stats().await.unwrap();
-    info!("📊 初始数据库统计: 总代币数={}, 今日新增={}", initial_stats.total_tokens, initial_stats.today_new_tokens);
+    info!(
+        "📊 初始数据库统计: 总代币数={}, 今日新增={}",
+        initial_stats.total_tokens, initial_stats.today_new_tokens
+    );
 
     // === 第3步：初始化所有组件 ===
     info!("🔧 第3步：初始化所有组件");
@@ -144,7 +149,15 @@ async fn test_complete_e2e_flow() {
     // === 第4步：创建订阅管理器 ===
     info!("📻 第4步：创建订阅管理器");
 
-    let subscription_manager = match SubscriptionManager::new(&config, parser_registry.clone(), batch_writer.clone(), checkpoint_manager, metrics.clone()).await {
+    let subscription_manager = match SubscriptionManager::new(
+        &config,
+        parser_registry.clone(),
+        batch_writer.clone(),
+        checkpoint_manager,
+        metrics.clone(),
+    )
+    .await
+    {
         Ok(manager) => {
             info!("✅ 订阅管理器创建成功");
             manager
@@ -246,8 +259,14 @@ async fn test_complete_e2e_flow() {
     // 生成性能报告
     let performance_report = metrics.generate_performance_report().await.unwrap();
     info!("🔧 性能报告:");
-    info!("   内存使用: {:.2} MB", performance_report.system_resources.memory_usage_mb);
-    info!("   CPU使用: {:.2}%", performance_report.system_resources.cpu_usage_percent);
+    info!(
+        "   内存使用: {:.2} MB",
+        performance_report.system_resources.memory_usage_mb
+    );
+    info!(
+        "   CPU使用: {:.2}%",
+        performance_report.system_resources.cpu_usage_percent
+    );
     info!("   运行时间: {} 秒", performance_report.uptime_seconds);
 
     // === 第9步：验证数据库持久化 ===
@@ -261,7 +280,10 @@ async fn test_complete_e2e_flow() {
     info!("   初始总代币: {}", initial_stats.total_tokens);
     info!("   最终总代币: {}", final_db_stats.total_tokens);
     info!("   新增代币: {}", new_tokens);
-    info!("   今日新增变化: {} → {}", initial_stats.today_new_tokens, final_db_stats.today_new_tokens);
+    info!(
+        "   今日新增变化: {} → {}",
+        initial_stats.today_new_tokens, final_db_stats.today_new_tokens
+    );
 
     // === 第10步：测试结果评估 ===
     info!("📋 第10步：测试结果评估");
@@ -380,7 +402,11 @@ async fn test_debug_filter_behavior() {
         match tokio::time::timeout(Duration::from_secs(10), event_receiver.recv()).await {
             Ok(Ok(log_response)) => {
                 info!("📨 调试事件 {}: {}", i, log_response.signature);
-                info!("📋 事件详情: err={:?}, logs_count={}", log_response.err, log_response.logs.len());
+                info!(
+                    "📋 事件详情: err={:?}, logs_count={}",
+                    log_response.err,
+                    log_response.logs.len()
+                );
 
                 // 打印前几行日志
                 for (j, log) in log_response.logs.iter().enumerate().take(5) {
@@ -560,7 +586,7 @@ async fn test_e2e_database_write_verification() {
 fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
     crate::parser::event_parser::PoolCreationEventData {
         pool_address: Pubkey::new_unique().to_string(),
-        token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(),  // SOL
+        token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(), // SOL
         token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse().unwrap(), // USDC
         token_a_decimals: 9,
         token_b_decimals: 6,

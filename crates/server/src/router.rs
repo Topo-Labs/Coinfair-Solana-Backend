@@ -1,16 +1,16 @@
 use super::services::Services;
 use crate::{
-    api, docs, middleware,
+    api,
     auth::{
-        AuthConfig, JwtManager, MultiDimensionalRateLimit,
-        PermissionManager, RateLimitService, SolanaAuthService,
+        AuthConfig, JwtManager, MultiDimensionalRateLimit, PermissionManager, RateLimitService, SolanaAuthService,
         SolanaMiddlewareBuilder,
     },
+    docs, middleware,
 };
 use axum::{
     error_handling::HandleErrorLayer,
     extract::State,
-    http::{Method, StatusCode, Request},
+    http::{Method, Request, StatusCode},
     middleware::{self as axum_middleware, Next},
     response::{IntoResponse, Response},
     routing::get,
@@ -37,42 +37,44 @@ impl AppRouter {
     pub fn new(services: Services) -> Router {
         // 确保加载环境变量
         utils::config::EnvLoader::load_env_file().expect("Failed to load environment variables");
-        
+
         // 初始化认证配置
         let auth_config = AuthConfig::default();
         let jwt_manager = JwtManager::new(auth_config.clone());
         let solana_auth_service = SolanaAuthService::new(jwt_manager.clone(), auth_config.clone());
         let permission_manager = PermissionManager::new();
-        
+
         // 创建 Solana 权限中间件构建器
         let solana_middleware_builder = SolanaMiddlewareBuilder::new(
-            jwt_manager.clone(), 
+            jwt_manager.clone(),
             services.solana_permission.clone(),
-            auth_config.clone()
+            auth_config.clone(),
         );
-        
+
         // 初始化速率限制服务
         let rate_limit_service = RateLimitService::new(
             auth_config.redis_url.clone(),
             auth_config.rate_limit_redis_prefix.clone(),
-        ).expect("Failed to initialize rate limit service");
-        
+        )
+        .expect("Failed to initialize rate limit service");
+
         let multi_rate_limiter = MultiDimensionalRateLimit::new(
             rate_limit_service,
             None, // 使用默认用户等级配置
             None, // 使用默认端点配置
         );
-        
+
         // 克隆用于中间件
         let rate_limiter_for_middleware = Arc::new(MultiDimensionalRateLimit::new(
             RateLimitService::new(
                 auth_config.redis_url.clone(),
                 auth_config.rate_limit_redis_prefix.clone(),
-            ).expect("Failed to initialize rate limit service for middleware"),
+            )
+            .expect("Failed to initialize rate limit service for middleware"),
             None,
             None,
         ));
-        
+
         let cors = CorsLayer::new()
             .allow_origin(Any)
             .allow_methods([
@@ -98,8 +100,8 @@ impl AppRouter {
             .route("/api-docs", get(api_docs_info))
             // 添加速率限制中间件
             .layer(axum_middleware::from_fn_with_state(
-                rate_limiter_for_middleware, 
-                Self::rate_limit_middleware
+                rate_limiter_for_middleware,
+                Self::rate_limit_middleware,
             ))
             // 添加IP日志中间件
             .layer(axum_middleware::from_fn(middleware::simple_ip_logger))

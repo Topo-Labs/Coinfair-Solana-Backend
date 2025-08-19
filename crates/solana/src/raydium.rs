@@ -203,7 +203,13 @@ impl RaydiumSwap {
     }
 
     /// 从池子数据计算交换输出 - 自动检测池子类型并使用对应算法
-    async fn calculate_swap_output_from_pool_data(&self, pool_pubkey: &Pubkey, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
+    async fn calculate_swap_output_from_pool_data(
+        &self,
+        pool_pubkey: &Pubkey,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
         info!("  🔬 开始计算交换输出");
         info!("  📍 使用池子地址: {}", pool_pubkey);
 
@@ -215,11 +221,13 @@ impl RaydiumSwap {
         match pool_type {
             PoolType::CLMM => {
                 info!("  🔄 使用CLMM算法");
-                self.calculate_clmm_output(pool_pubkey, from_mint, to_mint, amount_in).await
+                self.calculate_clmm_output(pool_pubkey, from_mint, to_mint, amount_in)
+                    .await
             }
             PoolType::AmmV4 => {
                 info!("  🔄 使用AMM V4算法");
-                self.calculate_amm_v4_output(pool_pubkey, from_mint, to_mint, amount_in).await
+                self.calculate_amm_v4_output(pool_pubkey, from_mint, to_mint, amount_in)
+                    .await
             }
             PoolType::CPSwap => {
                 info!("  🔄 使用CP-Swap算法");
@@ -261,7 +269,13 @@ impl RaydiumSwap {
     }
 
     /// 计算CLMM池子输出 - 使用client模块的精确计算方法
-    async fn calculate_clmm_output(&self, pool_pubkey: &Pubkey, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
+    async fn calculate_clmm_output(
+        &self,
+        pool_pubkey: &Pubkey,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
         info!("  📍 CLMM池子，使用client模块精确计算");
 
         // 直接使用client模块的精确计算
@@ -281,10 +295,16 @@ impl RaydiumSwap {
                 let to_mint_pubkey = to_mint.parse::<Pubkey>()?;
                 let zero_for_one = from_mint_pubkey < to_mint_pubkey;
 
-                info!("  📍 CLMM交换方向: {} -> {} (zero_for_one: {})", from_mint, to_mint, zero_for_one);
+                info!(
+                    "  📍 CLMM交换方向: {} -> {} (zero_for_one: {})",
+                    from_mint, to_mint, zero_for_one
+                );
 
                 match self.load_swap_accounts(pool_pubkey, zero_for_one).await {
-                    Ok(accounts_data) => match self.call_client_precise_calculation(amount_in, zero_for_one, &accounts_data).await {
+                    Ok(accounts_data) => match self
+                        .call_client_precise_calculation(amount_in, zero_for_one, &accounts_data)
+                        .await
+                    {
                         Ok(output_amount) => {
                             info!("  ✅ CLMM精确计算成功，输出: {}", output_amount);
                             Ok(output_amount)
@@ -304,7 +324,13 @@ impl RaydiumSwap {
     }
 
     /// 计算AMM V4池子输出 - 使用正确的AMM V4结构和算法
-    async fn calculate_amm_v4_output(&self, pool_pubkey: &Pubkey, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
+    async fn calculate_amm_v4_output(
+        &self,
+        pool_pubkey: &Pubkey,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
         info!("  📍 使用AMM V4算法处理真正的AMM V4池子");
 
         // 首先尝试获取AMM V4池子的储备信息
@@ -322,7 +348,8 @@ impl RaydiumSwap {
                 let amount_in_after_fee_f64 = amount_in as f64 * fee_multiplier;
 
                 // 使用浮点数进行精确计算
-                let output_f64 = (amount_in_after_fee_f64 * reserve_out as f64) / (reserve_in as f64 + amount_in_after_fee_f64);
+                let output_f64 =
+                    (amount_in_after_fee_f64 * reserve_out as f64) / (reserve_in as f64 + amount_in_after_fee_f64);
 
                 // 转换回整数，确保不损失精度
                 let output_amount = output_f64.floor() as u64;
@@ -363,7 +390,12 @@ impl RaydiumSwap {
     }
 
     /// 获取AMM V4池子的储备信息
-    async fn get_amm_v4_pool_reserves(&self, pool_pubkey: &Pubkey, from_mint: &str, to_mint: &str) -> Result<(u64, u64, f64)> {
+    async fn get_amm_v4_pool_reserves(
+        &self,
+        pool_pubkey: &Pubkey,
+        from_mint: &str,
+        to_mint: &str,
+    ) -> Result<(u64, u64, f64)> {
         info!("  📊 获取AMM V4池子储备信息...");
 
         let rpc_client = self.client.get_rpc_client();
@@ -373,7 +405,10 @@ impl RaydiumSwap {
 
         // AMM V4的数据结构通常在400-800字节之间
         if pool_account.data.len() < 400 {
-            return Err(anyhow::anyhow!("AMM V4池子数据长度不足: {} bytes", pool_account.data.len()));
+            return Err(anyhow::anyhow!(
+                "AMM V4池子数据长度不足: {} bytes",
+                pool_account.data.len()
+            ));
         }
 
         // 根据Raydium AMM V4的实际结构解析储备
@@ -430,7 +465,12 @@ impl RaydiumSwap {
     }
 
     /// 智能选择合理的储备对
-    fn select_reasonable_reserves(&self, balances: &[(u64, usize)], from_mint: &str, to_mint: &str) -> Result<(u64, u64)> {
+    fn select_reasonable_reserves(
+        &self,
+        balances: &[(u64, usize)],
+        from_mint: &str,
+        to_mint: &str,
+    ) -> Result<(u64, u64)> {
         // 根据代币类型的特征选择合适的储备对
         let from_mint_pubkey = from_mint.parse::<Pubkey>()?;
         let to_mint_pubkey = to_mint.parse::<Pubkey>()?;
@@ -478,20 +518,26 @@ impl RaydiumSwap {
     }
 
     /// 获取CLMM池子的vault余额和手续费信息
-    async fn _get_clmm_pool_vault_balances(&self, pool_pubkey: &Pubkey, from_mint: &str, to_mint: &str) -> Result<(u64, u64, f64)> {
+    async fn _get_clmm_pool_vault_balances(
+        &self,
+        pool_pubkey: &Pubkey,
+        from_mint: &str,
+        to_mint: &str,
+    ) -> Result<(u64, u64, f64)> {
         info!("  📊 获取CLMM池子vault余额...");
 
         let rpc_client = self.client.get_rpc_client();
 
         // 1. 先获取池子状态
         let pool_account = rpc_client.get_account(pool_pubkey)?;
-        let pool_state = client::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(&solana_sdk::account::Account {
-            lamports: pool_account.lamports,
-            data: pool_account.data,
-            owner: pool_account.owner,
-            executable: pool_account.executable,
-            rent_epoch: pool_account.rent_epoch,
-        })?;
+        let pool_state =
+            client::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(&solana_sdk::account::Account {
+                lamports: pool_account.lamports,
+                data: pool_account.data,
+                owner: pool_account.owner,
+                executable: pool_account.executable,
+                rent_epoch: pool_account.rent_epoch,
+            })?;
 
         info!("  ✅ 成功解析CLMM池子状态");
         info!("    Token0: {}", pool_state.token_mint_0);
@@ -531,24 +577,39 @@ impl RaydiumSwap {
                 warn!("    ⚠️ 无法获取AMM配置: {}", e);
                 // 使用默认手续费率
                 let default_fee_rate = 0.0025; // 0.25%
-                return self._determine_vault_direction(&pool_state, from_mint, to_mint, vault_0_balance, vault_1_balance, default_fee_rate);
+                return self._determine_vault_direction(
+                    &pool_state,
+                    from_mint,
+                    to_mint,
+                    vault_0_balance,
+                    vault_1_balance,
+                    default_fee_rate,
+                );
             }
         };
 
-        let amm_config = client::deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(&solana_sdk::account::Account {
-            lamports: amm_config_account.lamports,
-            data: amm_config_account.data,
-            owner: amm_config_account.owner,
-            executable: amm_config_account.executable,
-            rent_epoch: amm_config_account.rent_epoch,
-        })?;
+        let amm_config =
+            client::deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(&solana_sdk::account::Account {
+                lamports: amm_config_account.lamports,
+                data: amm_config_account.data,
+                owner: amm_config_account.owner,
+                executable: amm_config_account.executable,
+                rent_epoch: amm_config_account.rent_epoch,
+            })?;
 
         // 将trade_fee_rate从基点转换为小数
         let fee_rate = amm_config.trade_fee_rate as f64 / 1_000_000.0;
         info!("    手续费率: {:.4}% ({})", fee_rate * 100.0, amm_config.trade_fee_rate);
 
         // 4. 确定交换方向
-        self._determine_vault_direction(&pool_state, from_mint, to_mint, vault_0_balance, vault_1_balance, fee_rate)
+        self._determine_vault_direction(
+            &pool_state,
+            from_mint,
+            to_mint,
+            vault_0_balance,
+            vault_1_balance,
+            fee_rate,
+        )
     }
 
     /// 确定vault交换方向
@@ -565,23 +626,24 @@ impl RaydiumSwap {
         let to_mint_pubkey = to_mint.parse::<Pubkey>()?;
 
         // 根据代币mint地址确定正确的交换方向
-        let (reserve_in, reserve_out) = if pool_state.token_mint_0 == from_mint_pubkey && pool_state.token_mint_1 == to_mint_pubkey {
-            // Token0 -> Token1
-            info!("    交换方向: Token0 -> Token1");
-            (vault_0_balance, vault_1_balance)
-        } else if pool_state.token_mint_1 == from_mint_pubkey && pool_state.token_mint_0 == to_mint_pubkey {
-            // Token1 -> Token0
-            info!("    交换方向: Token1 -> Token0");
-            (vault_1_balance, vault_0_balance)
-        } else {
-            return Err(anyhow::anyhow!(
-                "代币mint不匹配池子: from={}, to={}, pool_mint0={}, pool_mint1={}",
-                from_mint,
-                to_mint,
-                pool_state.token_mint_0,
-                pool_state.token_mint_1
-            ));
-        };
+        let (reserve_in, reserve_out) =
+            if pool_state.token_mint_0 == from_mint_pubkey && pool_state.token_mint_1 == to_mint_pubkey {
+                // Token0 -> Token1
+                info!("    交换方向: Token0 -> Token1");
+                (vault_0_balance, vault_1_balance)
+            } else if pool_state.token_mint_1 == from_mint_pubkey && pool_state.token_mint_0 == to_mint_pubkey {
+                // Token1 -> Token0
+                info!("    交换方向: Token1 -> Token0");
+                (vault_1_balance, vault_0_balance)
+            } else {
+                return Err(anyhow::anyhow!(
+                    "代币mint不匹配池子: from={}, to={}, pool_mint0={}, pool_mint1={}",
+                    from_mint,
+                    to_mint,
+                    pool_state.token_mint_0,
+                    pool_state.token_mint_1
+                ));
+            };
 
         info!("    最终储备: 输入={}, 输出={}", reserve_in, reserve_out);
 
@@ -589,7 +651,12 @@ impl RaydiumSwap {
     }
 
     /// 获取AMM V4池子的储备和手续费信息（已弃用，保留用于向后兼容）
-    async fn _get_amm_v4_pool_info(&self, pool_pubkey: &Pubkey, from_mint: &str, to_mint: &str) -> Result<(u64, u64, f64)> {
+    async fn _get_amm_v4_pool_info(
+        &self,
+        pool_pubkey: &Pubkey,
+        from_mint: &str,
+        to_mint: &str,
+    ) -> Result<(u64, u64, f64)> {
         info!("  📊 获取AMM V4池子信息...");
 
         // 先尝试使用client模块进行精确计算（仅针对CLMM池子）
@@ -613,7 +680,10 @@ impl RaydiumSwap {
 
         // 检查数据长度 - 降低要求到752字节
         if pool_account.data.len() < 752 {
-            return Err(anyhow::anyhow!("AMM V4池子数据长度不足: {} bytes (需要至少752)", pool_account.data.len()));
+            return Err(anyhow::anyhow!(
+                "AMM V4池子数据长度不足: {} bytes (需要至少752)",
+                pool_account.data.len()
+            ));
         }
 
         info!("  🔍 手动解析AMM V4池子数据 (长度: {} bytes)", pool_account.data.len());
@@ -721,7 +791,13 @@ impl RaydiumSwap {
     }
 
     /// 使用client模块的精确计算功能
-    async fn try_get_pool_info_with_client(&self, pool_address: &str, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
+    async fn try_get_pool_info_with_client(
+        &self,
+        pool_address: &str,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
         info!("  🔬 使用client模块进行精确计算");
 
         let rpc_client = self.client.get_rpc_client();
@@ -743,8 +819,8 @@ impl RaydiumSwap {
         use client::deserialize_anchor_account;
 
         // 解析CLMM池子状态
-        let pool_state =
-            deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(pool_account).map_err(|e| anyhow::anyhow!("解析池子状态失败: {}", e))?;
+        let pool_state = deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(pool_account)
+            .map_err(|e| anyhow::anyhow!("解析池子状态失败: {}", e))?;
 
         // 复制packed字段到局部变量以避免对齐问题
         let token_mint_0 = pool_state.token_mint_0;
@@ -765,22 +841,28 @@ impl RaydiumSwap {
             .get_account(&pool_state.amm_config)
             .map_err(|e| anyhow::anyhow!("无法加载AMM配置: {}", e))?;
 
-        let amm_config =
-            deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(&amm_config_account).map_err(|e| anyhow::anyhow!("解析AMM配置失败: {}", e))?;
+        let amm_config = deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(&amm_config_account)
+            .map_err(|e| anyhow::anyhow!("解析AMM配置失败: {}", e))?;
 
-        info!("  ✅ AMM配置: 手续费率={}, tick_spacing={}", amm_config.trade_fee_rate, amm_config.tick_spacing);
+        info!(
+            "  ✅ AMM配置: 手续费率={}, tick_spacing={}",
+            amm_config.trade_fee_rate, amm_config.tick_spacing
+        );
 
         // 加载tick array bitmap extension
         use raydium_amm_v3::states::POOL_TICK_ARRAY_BITMAP_SEED;
-        let (tickarray_bitmap_pubkey, _bump) =
-            Pubkey::find_program_address(&[POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(), pool_pubkey.to_bytes().as_ref()], &self.program_id);
+        let (tickarray_bitmap_pubkey, _bump) = Pubkey::find_program_address(
+            &[POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(), pool_pubkey.to_bytes().as_ref()],
+            &self.program_id,
+        );
 
         let bitmap_account = rpc_client
             .get_account(&tickarray_bitmap_pubkey)
             .map_err(|e| anyhow::anyhow!("无法加载tick bitmap: {}", e))?;
 
-        let tickarray_bitmap = deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(&bitmap_account)
-            .map_err(|e| anyhow::anyhow!("解析tick bitmap失败: {}", e))?;
+        let tickarray_bitmap =
+            deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(&bitmap_account)
+                .map_err(|e| anyhow::anyhow!("解析tick bitmap失败: {}", e))?;
 
         // 确定交换方向
         let from_mint_pubkey = from_mint.parse::<Pubkey>()?;
@@ -880,7 +962,11 @@ impl RaydiumSwap {
         // 加载额外的tick arrays（以防需要跨多个数组）
         for i in 1..=3 {
             if let Some(next_start_index) = pool_state
-                .next_initialized_tick_array_start_index(&Some(*tickarray_bitmap), current_tick_array_start_index, zero_for_one)
+                .next_initialized_tick_array_start_index(
+                    &Some(*tickarray_bitmap),
+                    current_tick_array_start_index,
+                    zero_for_one,
+                )
                 .unwrap_or(None)
             {
                 let (next_tick_array_pubkey, _) = Pubkey::find_program_address(
@@ -893,16 +979,18 @@ impl RaydiumSwap {
                 );
 
                 match rpc_client.get_account(&next_tick_array_pubkey) {
-                    Ok(account) => match client::deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(&account) {
-                        Ok(tick_array_state) => {
-                            let start_tick_index = tick_array_state.start_tick_index;
-                            info!("    ✅ 加载额外tick array {}: 起始tick={}", i, start_tick_index);
-                            tick_arrays.push_back(tick_array_state);
+                    Ok(account) => {
+                        match client::deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(&account) {
+                            Ok(tick_array_state) => {
+                                let start_tick_index = tick_array_state.start_tick_index;
+                                info!("    ✅ 加载额外tick array {}: 起始tick={}", i, start_tick_index);
+                                tick_arrays.push_back(tick_array_state);
+                            }
+                            Err(_) => {
+                                tick_arrays.push_back(raydium_amm_v3::states::TickArrayState::default());
+                            }
                         }
-                        Err(_) => {
-                            tick_arrays.push_back(raydium_amm_v3::states::TickArrayState::default());
-                        }
-                    },
+                    }
                     Err(_) => {
                         tick_arrays.push_back(raydium_amm_v3::states::TickArrayState::default());
                     }
@@ -931,10 +1019,14 @@ impl RaydiumSwap {
         let (amm_config_data, actual_config_pubkey) = self.load_amm_config_from_pool(&pool_state_data).await?;
 
         // 3. 尝试加载tick bitmap扩展
-        let tick_bitmap_data = self.load_tick_bitmap_extension_from_pool(pool_pubkey, &actual_config_pubkey).await?;
+        let tick_bitmap_data = self
+            .load_tick_bitmap_extension_from_pool(pool_pubkey, &actual_config_pubkey)
+            .await?;
 
         // 4. 基于池子状态加载相关的tick数组
-        let tick_arrays_data = self.load_tick_arrays_from_pool(pool_pubkey, &pool_state_data, zero_for_one).await?;
+        let tick_arrays_data = self
+            .load_tick_arrays_from_pool(pool_pubkey, &pool_state_data, zero_for_one)
+            .await?;
 
         info!("  ✅ 账户数据加载完成");
 
@@ -947,7 +1039,12 @@ impl RaydiumSwap {
     }
 
     /// 调用client的精确计算方法
-    async fn call_client_precise_calculation(&self, input_amount: u64, zero_for_one: bool, accounts_data: &SwapAccountsData) -> Result<u64> {
+    async fn call_client_precise_calculation(
+        &self,
+        input_amount: u64,
+        zero_for_one: bool,
+        accounts_data: &SwapAccountsData,
+    ) -> Result<u64> {
         info!("  🧮 调用client精确计算方法...");
 
         // 使用client模块的工具函数进行计算
@@ -957,18 +1054,23 @@ impl RaydiumSwap {
 
         // 1. 反序列化池子状态
         let pool_account = self.create_account_from_data(&accounts_data.pool_state_data);
-        let pool_state: PoolState = deserialize_anchor_account(&pool_account).map_err(|e| anyhow::anyhow!("反序列化池子状态失败: {}", e))?;
+        let pool_state: PoolState =
+            deserialize_anchor_account(&pool_account).map_err(|e| anyhow::anyhow!("反序列化池子状态失败: {}", e))?;
 
         // 复制packed字段到局部变量以避免对齐问题
         let tick_current = pool_state.tick_current;
         let liquidity = pool_state.liquidity;
         let sqrt_price_x64 = pool_state.sqrt_price_x64;
 
-        info!("  📊 池子状态: tick={}, 流动性={}, sqrt_price={}", tick_current, liquidity, sqrt_price_x64);
+        info!(
+            "  📊 池子状态: tick={}, 流动性={}, sqrt_price={}",
+            tick_current, liquidity, sqrt_price_x64
+        );
 
         // 2. 反序列化AMM配置
         let amm_config_account = self.create_account_from_data(&accounts_data.amm_config_data);
-        let amm_config: AmmConfig = deserialize_anchor_account(&amm_config_account).map_err(|e| anyhow::anyhow!("反序列化AMM配置失败: {}", e))?;
+        let amm_config: AmmConfig = deserialize_anchor_account(&amm_config_account)
+            .map_err(|e| anyhow::anyhow!("反序列化AMM配置失败: {}", e))?;
 
         // 复制packed字段到局部变量
         let trade_fee_rate = amm_config.trade_fee_rate;
@@ -978,8 +1080,8 @@ impl RaydiumSwap {
 
         // 3. 反序列化tick bitmap扩展
         let tick_bitmap_account = self.create_account_from_data(&accounts_data.tick_bitmap_data);
-        let tick_bitmap_extension: TickArrayBitmapExtension =
-            deserialize_anchor_account(&tick_bitmap_account).map_err(|e| anyhow::anyhow!("反序列化tick bitmap扩展失败: {}", e))?;
+        let tick_bitmap_extension: TickArrayBitmapExtension = deserialize_anchor_account(&tick_bitmap_account)
+            .map_err(|e| anyhow::anyhow!("反序列化tick bitmap扩展失败: {}", e))?;
 
         // 4. 反序列化tick数组
         let mut tick_array_states = VecDeque::new();
@@ -1107,7 +1209,11 @@ impl RaydiumSwap {
     }
 
     /// 从池子加载tick bitmap扩展
-    async fn load_tick_bitmap_extension_from_pool(&self, pool_pubkey: &Pubkey, _config_pubkey: &Pubkey) -> Result<Vec<u8>> {
+    async fn load_tick_bitmap_extension_from_pool(
+        &self,
+        pool_pubkey: &Pubkey,
+        _config_pubkey: &Pubkey,
+    ) -> Result<Vec<u8>> {
         info!("  🗺️ 加载tick bitmap扩展...");
 
         let rpc_client = self.client.get_rpc_client();
@@ -1139,7 +1245,12 @@ impl RaydiumSwap {
     }
 
     /// 从池子状态加载相关的tick数组
-    async fn load_tick_arrays_from_pool(&self, pool_pubkey: &Pubkey, pool_data: &[u8], zero_for_one: bool) -> Result<Vec<Vec<u8>>> {
+    async fn load_tick_arrays_from_pool(
+        &self,
+        pool_pubkey: &Pubkey,
+        pool_data: &[u8],
+        zero_for_one: bool,
+    ) -> Result<Vec<Vec<u8>>> {
         info!("  🔢 加载tick数组...");
 
         let rpc_client = self.client.get_rpc_client();
@@ -1182,15 +1293,25 @@ impl RaydiumSwap {
             // 计算tick数组的标准化起始tick
             let normalized_start = (start_tick / (tick_spacing * ticks_per_array)) * (tick_spacing * ticks_per_array);
 
-            let tick_array_pubkey = Pubkey::find_program_address(&[b"tick_array", pool_pubkey.as_ref(), &normalized_start.to_le_bytes()], &self.program_id).0;
+            let tick_array_pubkey = Pubkey::find_program_address(
+                &[b"tick_array", pool_pubkey.as_ref(), &normalized_start.to_le_bytes()],
+                &self.program_id,
+            )
+            .0;
 
             match rpc_client.get_account(&tick_array_pubkey) {
                 Ok(account) => {
-                    info!("    ✅ 加载tick数组 {}: {} (起始tick: {})", i, tick_array_pubkey, normalized_start);
+                    info!(
+                        "    ✅ 加载tick数组 {}: {} (起始tick: {})",
+                        i, tick_array_pubkey, normalized_start
+                    );
                     tick_arrays.push(account.data);
                 }
                 Err(_) => {
-                    warn!("    ⚠️ 无法加载tick数组 {} (起始tick: {}), 使用默认数据", i, normalized_start);
+                    warn!(
+                        "    ⚠️ 无法加载tick数组 {} (起始tick: {}), 使用默认数据",
+                        i, normalized_start
+                    );
                     tick_arrays.push(vec![0u8; 8192]);
                 }
             }
@@ -1341,7 +1462,14 @@ impl RaydiumSwap {
 
         // 获取必要的账户地址
         let accounts = self
-            .get_swap_accounts(&pool_pubkey, &pool_state, &input_mint_pubkey, &output_mint_pubkey, &wallet_pubkey, zero_for_one)
+            .get_swap_accounts(
+                &pool_pubkey,
+                &pool_state,
+                &input_mint_pubkey,
+                &output_mint_pubkey,
+                &wallet_pubkey,
+                zero_for_one,
+            )
             .await?;
 
         // 计算价格限制
@@ -1387,7 +1515,8 @@ impl RaydiumSwap {
             rent_epoch: pool_account.rent_epoch,
         };
 
-        client::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(&account).map_err(|e| anyhow::anyhow!("反序列化池子状态失败: {}", e))
+        client::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(&account)
+            .map_err(|e| anyhow::anyhow!("反序列化池子状态失败: {}", e))
     }
 
     /// 获取交换所需的所有账户
@@ -1422,7 +1551,9 @@ impl RaydiumSwap {
         let observation_state = pool_state.observation_key;
 
         // 获取需要的tick arrays
-        let tick_arrays = self.get_required_tick_arrays(pool_pubkey, pool_state, zero_for_one).await?;
+        let tick_arrays = self
+            .get_required_tick_arrays(pool_pubkey, pool_state, zero_for_one)
+            .await?;
 
         Ok(SwapAccounts {
             amm_config,
@@ -1436,7 +1567,12 @@ impl RaydiumSwap {
     }
 
     /// 获取所需的tick arrays
-    async fn get_required_tick_arrays(&self, pool_pubkey: &Pubkey, pool_state: &raydium_amm_v3::states::PoolState, _zero_for_one: bool) -> Result<Vec<Pubkey>> {
+    async fn get_required_tick_arrays(
+        &self,
+        pool_pubkey: &Pubkey,
+        pool_state: &raydium_amm_v3::states::PoolState,
+        _zero_for_one: bool,
+    ) -> Result<Vec<Pubkey>> {
         info!("🔢 获取所需的tick arrays");
 
         // 获取当前tick
@@ -1482,7 +1618,13 @@ impl RaydiumSwap {
     }
 
     /// 构建交换指令数据
-    fn build_swap_instruction_data(&self, amount: u64, other_amount_threshold: u64, sqrt_price_limit_x64: u128, is_base_input: bool) -> Result<Vec<u8>> {
+    fn build_swap_instruction_data(
+        &self,
+        amount: u64,
+        other_amount_threshold: u64,
+        sqrt_price_limit_x64: u128,
+        is_base_input: bool,
+    ) -> Result<Vec<u8>> {
         use anchor_lang::InstructionData;
         use raydium_amm_v3::instruction::Swap;
 
@@ -1542,12 +1684,13 @@ impl RaydiumSwap {
                 Err(_) => {
                     info!("  创建关联代币账户: {}", ata);
 
-                    let create_ata_instruction = spl_associated_token_account::instruction::create_associated_token_account(
-                        &wallet_pubkey,
-                        &wallet_pubkey,
-                        &mint_pubkey,
-                        &spl_token::id(),
-                    );
+                    let create_ata_instruction =
+                        spl_associated_token_account::instruction::create_associated_token_account(
+                            &wallet_pubkey,
+                            &wallet_pubkey,
+                            &mint_pubkey,
+                            &spl_token::id(),
+                        );
 
                     instructions.push(create_ata_instruction);
                     created_accounts.push(ata.to_string());
@@ -1558,9 +1701,17 @@ impl RaydiumSwap {
         // 如果有需要创建的账户，发送交易
         if !instructions.is_empty() {
             let recent_blockhash = self.client.get_rpc_client().get_latest_blockhash()?;
-            let transaction = Transaction::new_signed_with_payer(&instructions, Some(&wallet_pubkey), &[self.client.get_wallet()], recent_blockhash);
+            let transaction = Transaction::new_signed_with_payer(
+                &instructions,
+                Some(&wallet_pubkey),
+                &[self.client.get_wallet()],
+                recent_blockhash,
+            );
 
-            let signature = self.client.get_rpc_client().send_and_confirm_transaction(&transaction)?;
+            let signature = self
+                .client
+                .get_rpc_client()
+                .send_and_confirm_transaction(&transaction)?;
             info!("  关联代币账户创建交易完成: {}", signature);
         }
 
@@ -1581,7 +1732,8 @@ impl RaydiumSwap {
         info!("  输入: {} {} -> {} {}", input_amount, input_mint, "?", output_mint);
 
         // 1. 确保关联代币账户存在
-        self.ensure_associated_token_accounts(&[input_mint, output_mint]).await?;
+        self.ensure_associated_token_accounts(&[input_mint, output_mint])
+            .await?;
 
         // 2. 计算预估输出
         let slippage = slippage_bps.unwrap_or(50) as f64 / 10000.0; // 默认0.5%
@@ -1625,7 +1777,14 @@ impl RaydiumSwap {
     // === 向后兼容的方法 ===
 
     /// 通用的代币交换方法（保持向后兼容）
-    pub async fn swap_tokens(&self, from_mint: &str, to_mint: &str, pool_address: &str, amount_in: u64, minimum_amount_out: u64) -> Result<String> {
+    pub async fn swap_tokens(
+        &self,
+        from_mint: &str,
+        to_mint: &str,
+        pool_address: &str,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) -> Result<String> {
         info!("🔄 执行代币交换（兼容方法）");
 
         self.execute_clmm_swap(
@@ -1640,14 +1799,27 @@ impl RaydiumSwap {
     }
 
     /// 从池子获取价格信息并估算输出（保持向后兼容）
-    pub async fn get_pool_price_and_estimate(&self, pool_address: &str, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
-        let estimate = self.calculate_precise_swap_output(from_mint, to_mint, pool_address, amount_in, None).await?;
+    pub async fn get_pool_price_and_estimate(
+        &self,
+        pool_address: &str,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
+        let estimate = self
+            .calculate_precise_swap_output(from_mint, to_mint, pool_address, amount_in, None)
+            .await?;
 
         Ok(estimate.estimated_output)
     }
 
     /// SOL到USDC的交换（向后兼容方法）
-    pub async fn swap_sol_to_usdc_with_pool(&self, pool_address: &str, amount_in_lamports: u64, _minimum_amount_out: u64) -> Result<String> {
+    pub async fn swap_sol_to_usdc_with_pool(
+        &self,
+        pool_address: &str,
+        amount_in_lamports: u64,
+        _minimum_amount_out: u64,
+    ) -> Result<String> {
         info!("🔄 SOL到USDC交换");
 
         let sol_mint = "So11111111111111111111111111111111111111112";
@@ -1666,7 +1838,12 @@ impl RaydiumSwap {
     }
 
     /// USDC到SOL的交换（向后兼容方法）
-    pub async fn swap_usdc_to_sol_with_pool(&self, pool_address: &str, amount_in_usdc: u64, _minimum_amount_out: u64) -> Result<String> {
+    pub async fn swap_usdc_to_sol_with_pool(
+        &self,
+        pool_address: &str,
+        amount_in_usdc: u64,
+        _minimum_amount_out: u64,
+    ) -> Result<String> {
         info!("🔄 USDC到SOL交换");
 
         let usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -1703,7 +1880,11 @@ impl RaydiumSwap {
             .map_err(|e| anyhow::anyhow!("无效的USDC mint地址: {}", e))?;
         let usdc_token_account = get_associated_token_address(&owner, &usdc_mint);
 
-        let usdc_balance = match self.client.get_rpc_client().get_token_account_balance(&usdc_token_account) {
+        let usdc_balance = match self
+            .client
+            .get_rpc_client()
+            .get_token_account_balance(&usdc_token_account)
+        {
             Ok(balance) => balance.amount.parse::<u64>().unwrap_or(0),
             Err(_) => {
                 warn!("USDC 代币账户不存在或获取余额失败");
@@ -1831,7 +2012,9 @@ impl RaydiumSwap {
 
         // 使用 client 库中相同的方法直接获取池子状态
         let rpc_client = self.client.get_rpc_client();
-        let pool_account = rpc_client.get_account(&pool_pubkey).map_err(|e| anyhow::anyhow!("获取池子账户失败: {}", e))?;
+        let pool_account = rpc_client
+            .get_account(&pool_pubkey)
+            .map_err(|e| anyhow::anyhow!("获取池子账户失败: {}", e))?;
 
         let account = solana_sdk::account::Account {
             lamports: pool_account.lamports,
@@ -1862,7 +2045,13 @@ impl RaydiumSwap {
     }
 
     /// 基于池子状态直接计算交换输出（简化且可靠的方法）
-    pub async fn calculate_swap_output_direct(&self, pool_address: &str, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
+    pub async fn calculate_swap_output_direct(
+        &self,
+        pool_address: &str,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
         info!("💱 使用直接方法计算交换输出");
         info!("  池子地址: {}", pool_address);
         info!("  输入代币: {}", from_mint);
@@ -1911,7 +2100,10 @@ impl RaydiumSwap {
         let sqrt_price_x64 = pool_state.sqrt_price_x64;
         let liquidity = pool_state.liquidity;
 
-        info!("  使用 client CLMM 算法计算，sqrt_price_x64: {}, liquidity: {}", sqrt_price_x64, liquidity);
+        info!(
+            "  使用 client CLMM 算法计算，sqrt_price_x64: {}, liquidity: {}",
+            sqrt_price_x64, liquidity
+        );
 
         // 获取 AMM 配置
         let rpc_client = self.client.get_rpc_client();
@@ -1919,18 +2111,22 @@ impl RaydiumSwap {
             .get_account(&pool_state.amm_config)
             .map_err(|e| anyhow::anyhow!("获取 AMM 配置失败: {}", e))?;
 
-        let amm_config = client::deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(&solana_sdk::account::Account {
-            lamports: amm_config_account.lamports,
-            data: amm_config_account.data,
-            owner: amm_config_account.owner,
-            executable: amm_config_account.executable,
-            rent_epoch: amm_config_account.rent_epoch,
-        })?;
+        let amm_config =
+            client::deserialize_anchor_account::<raydium_amm_v3::states::AmmConfig>(&solana_sdk::account::Account {
+                lamports: amm_config_account.lamports,
+                data: amm_config_account.data,
+                owner: amm_config_account.owner,
+                executable: amm_config_account.executable,
+                rent_epoch: amm_config_account.rent_epoch,
+            })?;
 
         // 获取 tick bitmap extension - 使用正确的方法获取
         let pool_pubkey = pool_address.parse::<Pubkey>()?;
         let tick_bitmap_extension_pubkey = Pubkey::find_program_address(
-            &[raydium_amm_v3::states::POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(), pool_pubkey.as_ref()],
+            &[
+                raydium_amm_v3::states::POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(),
+                pool_pubkey.as_ref(),
+            ],
             &self.program_id,
         )
         .0;
@@ -1939,13 +2135,15 @@ impl RaydiumSwap {
             .get_account(&tick_bitmap_extension_pubkey)
             .map_err(|e| anyhow::anyhow!("获取 tick bitmap extension 失败: {}", e))?;
 
-        let tick_bitmap = client::deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(&solana_sdk::account::Account {
-            lamports: tick_bitmap_extension.lamports,
-            data: tick_bitmap_extension.data,
-            owner: tick_bitmap_extension.owner,
-            executable: tick_bitmap_extension.executable,
-            rent_epoch: tick_bitmap_extension.rent_epoch,
-        })?;
+        let tick_bitmap = client::deserialize_anchor_account::<raydium_amm_v3::states::TickArrayBitmapExtension>(
+            &solana_sdk::account::Account {
+                lamports: tick_bitmap_extension.lamports,
+                data: tick_bitmap_extension.data,
+                owner: tick_bitmap_extension.owner,
+                executable: tick_bitmap_extension.executable,
+                rent_epoch: tick_bitmap_extension.rent_epoch,
+            },
+        )?;
 
         // 获取当前 tick array
         let (_is_pool_current_tick_array, current_tick_array_start_index) = pool_state
@@ -1953,7 +2151,11 @@ impl RaydiumSwap {
             .map_err(|e| anyhow::anyhow!("获取第一个初始化的 tick array 失败: {}", e))?;
 
         let tick_array_pubkey = Pubkey::find_program_address(
-            &[b"tick_array", pool_pubkey.as_ref(), &current_tick_array_start_index.to_le_bytes()],
+            &[
+                b"tick_array",
+                pool_pubkey.as_ref(),
+                &current_tick_array_start_index.to_le_bytes(),
+            ],
             &self.program_id,
         )
         .0;
@@ -1962,13 +2164,15 @@ impl RaydiumSwap {
             .get_account(&tick_array_pubkey)
             .map_err(|e| anyhow::anyhow!("获取 tick array 失败: {}", e))?;
 
-        let tick_array = client::deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(&solana_sdk::account::Account {
-            lamports: tick_array_account.lamports,
-            data: tick_array_account.data,
-            owner: tick_array_account.owner,
-            executable: tick_array_account.executable,
-            rent_epoch: tick_array_account.rent_epoch,
-        })?;
+        let tick_array = client::deserialize_anchor_account::<raydium_amm_v3::states::TickArrayState>(
+            &solana_sdk::account::Account {
+                lamports: tick_array_account.lamports,
+                data: tick_array_account.data,
+                owner: tick_array_account.owner,
+                executable: tick_array_account.executable,
+                rent_epoch: tick_array_account.rent_epoch,
+            },
+        )?;
 
         let mut tick_arrays = std::collections::VecDeque::new();
         tick_arrays.push_back(tick_array);
@@ -1991,8 +2195,15 @@ impl RaydiumSwap {
     }
 
     /// 获取池子价格信息并估算输出（改进版本，使用直接方法）
-    pub async fn get_pool_price_and_estimate_direct(&self, pool_address: &str, from_mint: &str, to_mint: &str, amount_in: u64) -> Result<u64> {
-        self.calculate_swap_output_direct(pool_address, from_mint, to_mint, amount_in).await
+    pub async fn get_pool_price_and_estimate_direct(
+        &self,
+        pool_address: &str,
+        from_mint: &str,
+        to_mint: &str,
+        amount_in: u64,
+    ) -> Result<u64> {
+        self.calculate_swap_output_direct(pool_address, from_mint, to_mint, amount_in)
+            .await
     }
 }
 

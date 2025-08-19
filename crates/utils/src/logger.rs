@@ -21,7 +21,7 @@ impl Logger {
             }
             CargoEnv::Production => {
                 let log_directory = Self::get_log_directory(log_dir);
-                
+
                 // 确保日志目录存在
                 if let Err(e) = std::fs::create_dir_all(&log_directory) {
                     eprintln!("⚠️ 无法创建日志目录 {:?}: {}", log_directory, e);
@@ -30,7 +30,7 @@ impl Logger {
                     let file_logger = tracing_appender::rolling::daily("logs", "log");
                     return tracing_appender::non_blocking(file_logger).1;
                 }
-                
+
                 println!("✅ 日志将输出到目录: {:?}", log_directory);
                 let file_logger = tracing_appender::rolling::daily(&log_directory, "log");
                 tracing_appender::non_blocking(file_logger)
@@ -39,8 +39,8 @@ impl Logger {
 
         // Set the default verbosity level for the root of the dependency graph.
         // env var: `RUST_LOG`
-        let env_filter =
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| format!("{}=debug,tower_http=debug", env!("CARGO_PKG_NAME")).into());
+        let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| format!("{}=debug,tower_http=debug", env!("CARGO_PKG_NAME")).into());
 
         tracing_subscriber::registry()
             .with(env_filter)

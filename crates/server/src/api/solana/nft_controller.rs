@@ -1,16 +1,11 @@
 use crate::dtos::solana_dto::{
-    ApiResponse, ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, ErrorResponse, MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse,
+    ApiResponse, ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, ErrorResponse,
+    MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse,
 };
 use crate::extractors::validation_extractor::ValidationExtractor;
 use crate::services::Services;
 
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::Json,
-    routing::post,
-    Router,
-};
+use axum::{extract::Extension, http::StatusCode, response::Json, routing::post, Router};
 use tracing::{error, info};
 
 pub struct NftController;
@@ -22,7 +17,6 @@ impl NftController {
             .route("/mint-nft", post(mint_nft))
             // NFT铸造并发送交易, 用户本地测试使用，本地签名并发送交易
             .route("/mint-nft-and-send-transaction", post(mint_nft_and_send_transaction))
-            
             // ============ ClaimNft API路由 ============
             .route("/claim-nft", post(claim_nft))
             // NFT领取并发送交易, 用户本地测试使用，本地签名并发送交易

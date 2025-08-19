@@ -1,12 +1,15 @@
 // Main SolanaService coordinator that delegates to specialized services
 
 use crate::dtos::solana_dto::{
-    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, ComputeSwapV3Request, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
-    CreateClassicAmmPoolResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, DecreaseLiquidityAndSendTransactionResponse,
-    DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest, 
-    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
-    NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PoolKeyResponse, PositionInfo, PriceQuoteRequest,
-    PriceQuoteResponse, SwapComputeV2Data, SwapComputeV3Data, SwapRequest, SwapResponse, SwapV3AndSendTransactionResponse, TransactionData, TransactionSwapV2Request, TransactionSwapV3Request, UserPositionsResponse, WalletInfo,
+    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, ComputeSwapV3Request,
+    CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
+    CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+    GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest,
+    IncreaseLiquidityResponse, NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse,
+    OpenPositionRequest, OpenPositionResponse, PoolKeyResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse,
+    SwapComputeV2Data, SwapComputeV3Data, SwapRequest, SwapResponse, SwapV3AndSendTransactionResponse, TransactionData,
+    TransactionSwapV2Request, TransactionSwapV3Request, UserPositionsResponse, WalletInfo,
 };
 
 use super::amm_pool::AmmPoolService;
@@ -23,8 +26,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
 use crate::services::data_transform::DataTransformService;
+use tokio::sync::Mutex;
 
 pub type DynSolanaService = Arc<dyn SolanaServiceTrait + Send + Sync>;
 
@@ -83,11 +86,24 @@ impl SolanaService {
 
         Ok(Self {
             swap_service: SwapService::new(optimized_shared_context.clone()),
-            position_service: PositionService::with_database(optimized_shared_context.clone(), Arc::new(database.clone())),
-            clmm_pool_service: ClmmPoolService::new(optimized_shared_context.clone(), &database, config_service_arc.clone()),
+            position_service: PositionService::with_database(
+                optimized_shared_context.clone(),
+                Arc::new(database.clone()),
+            ),
+            clmm_pool_service: ClmmPoolService::new(
+                optimized_shared_context.clone(),
+                &database,
+                config_service_arc.clone(),
+            ),
             amm_pool_service: AmmPoolService::new(optimized_shared_context.clone()),
-            config_service: ClmmConfigService::new(Arc::new(database.clone()), optimized_shared_context.rpc_client.clone()),
-            liquidity_line_service: LiquidityLineService::new(optimized_shared_context.rpc_client.clone(), Arc::new(database)),
+            config_service: ClmmConfigService::new(
+                Arc::new(database.clone()),
+                optimized_shared_context.rpc_client.clone(),
+            ),
+            liquidity_line_service: LiquidityLineService::new(
+                optimized_shared_context.rpc_client.clone(),
+                Arc::new(database),
+            ),
             nft: NftService::new(optimized_shared_context.clone()),
             referral: ReferralService::new(optimized_shared_context.clone()),
             shared_context: optimized_shared_context,
@@ -107,7 +123,7 @@ impl Default for SolanaService {
 pub trait SolanaServiceTrait {
     /// 支持类型转换的方法，用于downcasting
     fn as_any(&self) -> &dyn std::any::Any;
-    
+
     // Basic operations
     async fn swap_tokens(&self, request: SwapRequest) -> Result<SwapResponse>;
     async fn get_balance(&self) -> Result<BalanceResponse>;
@@ -127,47 +143,97 @@ pub trait SolanaServiceTrait {
     async fn build_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<TransactionData>;
     async fn build_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<TransactionData>;
     // SwapV3 testing operations (本地签名测试方法)
-    async fn build_and_send_transaction_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse>;
-    async fn build_and_send_transaction_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse>;
+    async fn build_and_send_transaction_swap_v3_transaction_base_in(
+        &self,
+        request: TransactionSwapV3Request,
+    ) -> Result<SwapV3AndSendTransactionResponse>;
+    async fn build_and_send_transaction_swap_v3_transaction_base_out(
+        &self,
+        request: TransactionSwapV3Request,
+    ) -> Result<SwapV3AndSendTransactionResponse>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
-    async fn open_position_and_send_transaction(&self, request: OpenPositionRequest) -> Result<OpenPositionAndSendTransactionResponse>;
+    async fn open_position_and_send_transaction(
+        &self,
+        request: OpenPositionRequest,
+    ) -> Result<OpenPositionAndSendTransactionResponse>;
     async fn calculate_liquidity(&self, request: CalculateLiquidityRequest) -> Result<CalculateLiquidityResponse>;
     async fn get_user_positions(&self, request: GetUserPositionsRequest) -> Result<UserPositionsResponse>;
     async fn get_position_info(&self, position_key: String) -> Result<PositionInfo>;
-    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<PositionInfo>>;
+    async fn check_position_exists(
+        &self,
+        pool_address: String,
+        tick_lower: i32,
+        tick_upper: i32,
+        wallet_address: Option<String>,
+    ) -> Result<Option<PositionInfo>>;
 
     // IncreaseLiquidity operations
     async fn increase_liquidity(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityResponse>;
-    async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse>;
+    async fn increase_liquidity_and_send_transaction(
+        &self,
+        request: IncreaseLiquidityRequest,
+    ) -> Result<IncreaseLiquidityAndSendTransactionResponse>;
 
     // DecreaseLiquidity operations
     async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse>;
-    async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse>;
+    async fn decrease_liquidity_and_send_transaction(
+        &self,
+        request: DecreaseLiquidityRequest,
+    ) -> Result<DecreaseLiquidityAndSendTransactionResponse>;
 
     // CLMM Pool operations
     async fn create_pool(&self, request: CreatePoolRequest) -> Result<CreatePoolResponse>;
-    async fn create_pool_and_send_transaction(&self, request: CreatePoolRequest) -> Result<CreatePoolAndSendTransactionResponse>;
+    async fn create_pool_and_send_transaction(
+        &self,
+        request: CreatePoolRequest,
+    ) -> Result<CreatePoolAndSendTransactionResponse>;
 
     // CLMM Pool query operations
     async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>>;
-    async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>>;
-    async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>>;
-    async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    async fn get_pools_by_mint(
+        &self,
+        mint_address: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    async fn get_pools_by_creator(
+        &self,
+        creator_wallet: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    async fn query_pools(
+        &self,
+        params: &database::clmm_pool::PoolQueryParams,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>>;
     async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats>;
-    async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse>;
+    async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm_pool::model::PoolListResponse>;
 
     // New method for the expected response format
-    async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse>;
+    async fn query_pools_with_new_format(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<NewPoolListResponse>;
 
-    async fn query_pools_with_new_format2(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse2>;
+    async fn query_pools_with_new_format2(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<NewPoolListResponse2>;
     // Pool key operations - NEW
     async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse>;
 
     // AMM Pool operations
-    async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse>;
-    async fn create_classic_amm_pool_and_send_transaction(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolAndSendTransactionResponse>;
+    async fn create_classic_amm_pool(
+        &self,
+        request: CreateClassicAmmPoolRequest,
+    ) -> Result<CreateClassicAmmPoolResponse>;
+    async fn create_classic_amm_pool_and_send_transaction(
+        &self,
+        request: CreateClassicAmmPoolRequest,
+    ) -> Result<CreateClassicAmmPoolAndSendTransactionResponse>;
 
     // CLMM Pool sync operations
     async fn start_clmm_pool_sync(&self) -> Result<()>;
@@ -176,10 +242,16 @@ pub trait SolanaServiceTrait {
     async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse>;
     async fn sync_clmm_configs_from_chain(&self) -> Result<u64>;
     async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String>;
-    async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse>;
+    async fn save_clmm_config_from_request(
+        &self,
+        request: crate::dtos::static_dto::SaveClmmConfigRequest,
+    ) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse>;
 
     /// 创建新的AMM配置（构建交易）
-    async fn create_amm_config(&self, request: crate::dtos::static_dto::CreateAmmConfigRequest) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse>;
+    async fn create_amm_config(
+        &self,
+        request: crate::dtos::static_dto::CreateAmmConfigRequest,
+    ) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse>;
 
     /// 创建新的AMM配置并发送交易（用于测试）
     async fn create_amm_config_and_send_transaction(
@@ -188,15 +260,30 @@ pub trait SolanaServiceTrait {
     ) -> Result<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse>;
 
     // Liquidity line operations
-    async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData>;
-    
+    async fn get_pool_liquidity_line(
+        &self,
+        request: &crate::dtos::solana_dto::PoolLiquidityLineRequest,
+    ) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData>;
+
     // NFT operations
-    async fn mint_nft(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftResponse>;
-    async fn mint_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse>;
-    
+    async fn mint_nft(
+        &self,
+        request: crate::dtos::solana_dto::MintNftRequest,
+    ) -> Result<crate::dtos::solana_dto::MintNftResponse>;
+    async fn mint_nft_and_send_transaction(
+        &self,
+        request: crate::dtos::solana_dto::MintNftRequest,
+    ) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse>;
+
     // Claim NFT operations
-    async fn claim_nft(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftResponse>;
-    async fn claim_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse>;
+    async fn claim_nft(
+        &self,
+        request: crate::dtos::solana_dto::ClaimNftRequest,
+    ) -> Result<crate::dtos::solana_dto::ClaimNftResponse>;
+    async fn claim_nft_and_send_transaction(
+        &self,
+        request: crate::dtos::solana_dto::ClaimNftRequest,
+    ) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -206,7 +293,7 @@ impl SolanaServiceTrait for SolanaService {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-    
+
     // Swap operations - delegate to swap_service
     async fn swap_tokens(&self, request: SwapRequest) -> Result<SwapResponse> {
         self.swap_service.swap_tokens(request).await
@@ -250,12 +337,22 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // SwapV3 testing operations - delegate to swap_service
-    async fn build_and_send_transaction_swap_v3_transaction_base_in(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse> {
-        self.swap_service.build_and_send_transaction_swap_v3_transaction_base_in(request).await
+    async fn build_and_send_transaction_swap_v3_transaction_base_in(
+        &self,
+        request: TransactionSwapV3Request,
+    ) -> Result<SwapV3AndSendTransactionResponse> {
+        self.swap_service
+            .build_and_send_transaction_swap_v3_transaction_base_in(request)
+            .await
     }
 
-    async fn build_and_send_transaction_swap_v3_transaction_base_out(&self, request: TransactionSwapV3Request) -> Result<SwapV3AndSendTransactionResponse> {
-        self.swap_service.build_and_send_transaction_swap_v3_transaction_base_out(request).await
+    async fn build_and_send_transaction_swap_v3_transaction_base_out(
+        &self,
+        request: TransactionSwapV3Request,
+    ) -> Result<SwapV3AndSendTransactionResponse> {
+        self.swap_service
+            .build_and_send_transaction_swap_v3_transaction_base_out(request)
+            .await
     }
 
     // Position operations - delegate to position_service
@@ -263,7 +360,10 @@ impl SolanaServiceTrait for SolanaService {
         self.position_service.open_position(request).await
     }
 
-    async fn open_position_and_send_transaction(&self, request: OpenPositionRequest) -> Result<OpenPositionAndSendTransactionResponse> {
+    async fn open_position_and_send_transaction(
+        &self,
+        request: OpenPositionRequest,
+    ) -> Result<OpenPositionAndSendTransactionResponse> {
         self.position_service.open_position_and_send_transaction(request).await
     }
 
@@ -284,7 +384,10 @@ impl SolanaServiceTrait for SolanaService {
         self.clmm_pool_service.create_pool(request).await
     }
 
-    async fn create_pool_and_send_transaction(&self, request: CreatePoolRequest) -> Result<CreatePoolAndSendTransactionResponse> {
+    async fn create_pool_and_send_transaction(
+        &self,
+        request: CreatePoolRequest,
+    ) -> Result<CreatePoolAndSendTransactionResponse> {
         self.clmm_pool_service.create_pool_and_send_transaction(request).await
     }
 
@@ -293,15 +396,26 @@ impl SolanaServiceTrait for SolanaService {
         self.clmm_pool_service.get_pool_by_address(pool_address).await
     }
 
-    async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    async fn get_pools_by_mint(
+        &self,
+        mint_address: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.get_pools_by_mint(mint_address, limit).await
     }
 
-    async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    async fn get_pools_by_creator(
+        &self,
+        creator_wallet: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.get_pools_by_creator(creator_wallet, limit).await
     }
 
-    async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    async fn query_pools(
+        &self,
+        params: &database::clmm_pool::PoolQueryParams,
+    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.query_pools(params).await
     }
 
@@ -309,39 +423,60 @@ impl SolanaServiceTrait for SolanaService {
         self.clmm_pool_service.get_pool_statistics().await
     }
 
-    async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<database::clmm_pool::model::PoolListResponse> {
+    async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm_pool::model::PoolListResponse> {
         self.clmm_pool_service.query_pools_with_pagination(params).await
     }
 
-    async fn query_pools_with_new_format(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse> {
+    async fn query_pools_with_new_format(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<NewPoolListResponse> {
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
 
         // 使用共享的数据转换服务（包含持久化缓存）
         let mut transform_service = self.shared_context.data_transform_service.lock().await;
-        let new_response = transform_service.transform_pool_list_response(old_response, params).await?;
+        let new_response = transform_service
+            .transform_pool_list_response(old_response, params)
+            .await?;
 
         Ok(new_response)
     }
 
-    async fn query_pools_with_new_format2(&self, params: &database::clmm_pool::model::PoolListRequest) -> Result<NewPoolListResponse2> {
+    async fn query_pools_with_new_format2(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> Result<NewPoolListResponse2> {
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
 
         // 使用共享的数据转换服务（包含持久化缓存）
         let mut transform_service = self.shared_context.data_transform_service.lock().await;
-        let new_response = transform_service.transform_pool_list_response2(old_response, params).await?;
+        let new_response = transform_service
+            .transform_pool_list_response2(old_response, params)
+            .await?;
 
         Ok(new_response)
     }
 
     // AMM Pool operations - delegate to amm_pool_service
-    async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse> {
+    async fn create_classic_amm_pool(
+        &self,
+        request: CreateClassicAmmPoolRequest,
+    ) -> Result<CreateClassicAmmPoolResponse> {
         self.amm_pool_service.create_classic_amm_pool(request).await
     }
 
-    async fn create_classic_amm_pool_and_send_transaction(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolAndSendTransactionResponse> {
-        self.amm_pool_service.create_classic_amm_pool_and_send_transaction(request).await
+    async fn create_classic_amm_pool_and_send_transaction(
+        &self,
+        request: CreateClassicAmmPoolRequest,
+    ) -> Result<CreateClassicAmmPoolAndSendTransactionResponse> {
+        self.amm_pool_service
+            .create_classic_amm_pool_and_send_transaction(request)
+            .await
     }
 
     // Basic utility operations - delegate to SolanaHelpers
@@ -357,8 +492,16 @@ impl SolanaServiceTrait for SolanaService {
         SolanaHelpers::health_check(&self.shared_context).await
     }
 
-    async fn check_position_exists(&self, pool_address: String, tick_lower: i32, tick_upper: i32, wallet_address: Option<String>) -> Result<Option<PositionInfo>> {
-        self.position_service.check_position_exists(pool_address, tick_lower, tick_upper, wallet_address).await
+    async fn check_position_exists(
+        &self,
+        pool_address: String,
+        tick_lower: i32,
+        tick_upper: i32,
+        wallet_address: Option<String>,
+    ) -> Result<Option<PositionInfo>> {
+        self.position_service
+            .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
+            .await
     }
 
     // IncreaseLiquidity operations - delegate to position_service
@@ -366,8 +509,13 @@ impl SolanaServiceTrait for SolanaService {
         self.position_service.increase_liquidity(request).await
     }
 
-    async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
-        self.position_service.increase_liquidity_and_send_transaction(request).await
+    async fn increase_liquidity_and_send_transaction(
+        &self,
+        request: IncreaseLiquidityRequest,
+    ) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
+        self.position_service
+            .increase_liquidity_and_send_transaction(request)
+            .await
     }
 
     // DecreaseLiquidity operations - delegate to position_service
@@ -375,8 +523,13 @@ impl SolanaServiceTrait for SolanaService {
         self.position_service.decrease_liquidity(request).await
     }
 
-    async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
-        self.position_service.decrease_liquidity_and_send_transaction(request).await
+    async fn decrease_liquidity_and_send_transaction(
+        &self,
+        request: DecreaseLiquidityRequest,
+    ) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
+        self.position_service
+            .decrease_liquidity_and_send_transaction(request)
+            .await
     }
 
     // CLMM Pool sync operations - delegate to clmm_pool_service
@@ -397,11 +550,17 @@ impl SolanaServiceTrait for SolanaService {
         self.config_service.save_clmm_config(config).await
     }
 
-    async fn save_clmm_config_from_request(&self, request: crate::dtos::static_dto::SaveClmmConfigRequest) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
+    async fn save_clmm_config_from_request(
+        &self,
+        request: crate::dtos::static_dto::SaveClmmConfigRequest,
+    ) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
         self.config_service.save_clmm_config_from_request(request).await
     }
 
-    async fn create_amm_config(&self, request: crate::dtos::static_dto::CreateAmmConfigRequest) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse> {
+    async fn create_amm_config(
+        &self,
+        request: crate::dtos::static_dto::CreateAmmConfigRequest,
+    ) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse> {
         self.config_service.create_amm_config(request).await
     }
 
@@ -409,11 +568,16 @@ impl SolanaServiceTrait for SolanaService {
         &self,
         request: crate::dtos::static_dto::CreateAmmConfigRequest,
     ) -> Result<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse> {
-        self.config_service.create_amm_config_and_send_transaction(request).await
+        self.config_service
+            .create_amm_config_and_send_transaction(request)
+            .await
     }
 
     // Liquidity line operations - delegate to liquidity_line_service
-    async fn get_pool_liquidity_line(&self, request: &crate::dtos::solana_dto::PoolLiquidityLineRequest) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData> {
+    async fn get_pool_liquidity_line(
+        &self,
+        request: &crate::dtos::solana_dto::PoolLiquidityLineRequest,
+    ) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData> {
         self.liquidity_line_service.get_pool_liquidity_line(request).await
     }
 
@@ -422,22 +586,34 @@ impl SolanaServiceTrait for SolanaService {
         // 使用共享服务来获取池子密钥信息
         self.clmm_pool_service.get_pools_key_by_ids(pool_ids).await
     }
-    
+
     // NFT operations - delegate to nft service
-    async fn mint_nft(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftResponse> {
+    async fn mint_nft(
+        &self,
+        request: crate::dtos::solana_dto::MintNftRequest,
+    ) -> Result<crate::dtos::solana_dto::MintNftResponse> {
         self.nft.mint_nft(request).await
     }
-    
-    async fn mint_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::MintNftRequest) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse> {
+
+    async fn mint_nft_and_send_transaction(
+        &self,
+        request: crate::dtos::solana_dto::MintNftRequest,
+    ) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse> {
         self.nft.mint_nft_and_send_transaction(request).await
     }
-    
+
     // Claim NFT operations - delegate to nft service
-    async fn claim_nft(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftResponse> {
+    async fn claim_nft(
+        &self,
+        request: crate::dtos::solana_dto::ClaimNftRequest,
+    ) -> Result<crate::dtos::solana_dto::ClaimNftResponse> {
         self.nft.claim_nft(request).await
     }
-    
-    async fn claim_nft_and_send_transaction(&self, request: crate::dtos::solana_dto::ClaimNftRequest) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse> {
+
+    async fn claim_nft_and_send_transaction(
+        &self,
+        request: crate::dtos::solana_dto::ClaimNftRequest,
+    ) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse> {
         self.nft.claim_nft_and_send_transaction(request).await
     }
 }

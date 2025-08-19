@@ -7,13 +7,13 @@ pub mod solana_auth;
 pub mod solana_permissions;
 
 #[cfg(test)]
-pub mod tests;
-#[cfg(test)]
-pub mod solana_permission_service_tests;
+pub mod hot_reload_tests;
 #[cfg(test)]
 pub mod integration_tests;
 #[cfg(test)]
-pub mod hot_reload_tests;
+pub mod solana_permission_service_tests;
+#[cfg(test)]
+pub mod tests;
 
 pub use jwt::*;
 pub use middleware::*;
@@ -22,4 +22,4 @@ pub use permissions::*;
 pub use solana_auth::*;
 pub use solana_permissions::*;
 // 不重复导出rate_limit中的RateLimitConfig以避免歧义
-pub use rate_limit::{RateLimitService, MultiDimensionalRateLimit, RateLimitKey, RateLimitResult};
+pub use rate_limit::{MultiDimensionalRateLimit, RateLimitKey, RateLimitResult, RateLimitService};

@@ -99,11 +99,7 @@ pub mod amm_v3 {
     /// * `ctx`- The context of accounts
     /// * `sqrt_price_x64` - the initial sqrt price (amount_token_1 / amount_token_0) of the pool as a Q64.64
     /// Note: The open_time must be smaller than the current block_timestamp on chain.
-    pub fn create_pool(
-        ctx: Context<CreatePool>,
-        sqrt_price_x64: u128,
-        open_time: u64,
-    ) -> Result<()> {
+    pub fn create_pool(ctx: Context<CreatePool>, sqrt_price_x64: u128, open_time: u64) -> Result<()> {
         instructions::create_pool(ctx, sqrt_price_x64, open_time)
     }
 
@@ -139,11 +135,7 @@ pub mod amm_v3 {
     ///           update whitelist mint when the `param` is 2
     ///           remove whitelist mint when the `param` is 3
     ///
-    pub fn update_operation_account(
-        ctx: Context<UpdateOperationAccount>,
-        param: u8,
-        keys: Vec<Pubkey>,
-    ) -> Result<()> {
+    pub fn update_operation_account(ctx: Context<UpdateOperationAccount>, param: u8, keys: Vec<Pubkey>) -> Result<()> {
         instructions::update_operation_account(ctx, param, keys)
     }
 
@@ -171,10 +163,7 @@ pub mod amm_v3 {
     /// * `end_time` - reward end timestamp
     /// * `emissions_per_second_x64` - Token reward per second are earned per unit of liquidity.
     ///
-    pub fn initialize_reward(
-        ctx: Context<InitializeReward>,
-        param: InitializeRewardParam,
-    ) -> Result<()> {
+    pub fn initialize_reward(ctx: Context<InitializeReward>, param: InitializeRewardParam) -> Result<()> {
         instructions::initialize_reward(ctx, param)
     }
 
@@ -185,10 +174,7 @@ pub mod amm_v3 {
     /// * `ctx`- The context of accounts
     /// * `reward_index` - the index to reward info
     ///
-    pub fn collect_remaining_rewards(
-        ctx: Context<CollectRemainingRewards>,
-        reward_index: u8,
-    ) -> Result<()> {
+    pub fn collect_remaining_rewards(ctx: Context<CollectRemainingRewards>, reward_index: u8) -> Result<()> {
         instructions::collect_remaining_rewards(ctx, reward_index)
     }
 
@@ -222,13 +208,7 @@ pub mod amm_v3 {
         open_time: u64,
         end_time: u64,
     ) -> Result<()> {
-        instructions::set_reward_params(
-            ctx,
-            reward_index,
-            emissions_per_second_x64,
-            open_time,
-            end_time,
-        )
+        instructions::set_reward_params(ctx, reward_index, emissions_per_second_x64, open_time, end_time)
     }
 
     /// Collect the protocol fee accrued to the pool
@@ -390,9 +370,7 @@ pub mod amm_v3 {
     ///
     /// * `ctx` - The context of accounts
     ///
-    pub fn close_position<'a, 'b, 'c, 'info>(
-        ctx: Context<'a, 'b, 'c, 'info, ClosePosition<'info>>,
-    ) -> Result<()> {
+    pub fn close_position<'a, 'b, 'c, 'info>(ctx: Context<'a, 'b, 'c, 'info, ClosePosition<'info>>) -> Result<()> {
         instructions::close_position(ctx)
     }
 
@@ -494,13 +472,7 @@ pub mod amm_v3 {
         sqrt_price_limit_x64: u128,
         is_base_input: bool,
     ) -> Result<()> {
-        instructions::swap(
-            ctx,
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64,
-            is_base_input,
-        )
+        instructions::swap(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
     }
 
     /// Swaps one token for as much as possible of another token across a single pool, support token program 2022
@@ -520,13 +492,7 @@ pub mod amm_v3 {
         sqrt_price_limit_x64: u128,
         is_base_input: bool,
     ) -> Result<()> {
-        instructions::swap_v2(
-            ctx,
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64,
-            is_base_input,
-        )
+        instructions::swap_v2(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
     }
 
     /// Swap token with referral support (V3)
@@ -546,13 +512,7 @@ pub mod amm_v3 {
         sqrt_price_limit_x64: u128,
         is_base_input: bool,
     ) -> Result<()> {
-        instructions::swap_v3(
-            ctx,
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64,
-            is_base_input,
-        )
+        instructions::swap_v3(ctx, amount, other_amount_threshold, sqrt_price_limit_x64, is_base_input)
     }
 
     /// Swap token for as much as possible of another token across the path provided, base input

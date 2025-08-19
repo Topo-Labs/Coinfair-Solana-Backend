@@ -50,13 +50,13 @@ pub enum Permission {
     ReadPool,
     ReadPosition,
     ReadReward,
-    
+
     // 写入权限
     CreateUser,
     CreatePool,
     CreatePosition,
     ManageReward,
-    
+
     // 管理权限
     AdminConfig,
     SystemMonitor,
@@ -202,8 +202,7 @@ pub struct AuthConfig {
 impl Default for AuthConfig {
     fn default() -> Self {
         Self {
-            jwt_secret: std::env::var("JWT_SECRET")
-                .expect("JWT_SECRET environment variable is required"),
+            jwt_secret: std::env::var("JWT_SECRET").expect("JWT_SECRET environment variable is required"),
             jwt_expires_in_hours: std::env::var("JWT_EXPIRES_IN_HOURS")
                 .unwrap_or_else(|_| "24".to_string())
                 .parse()

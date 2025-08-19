@@ -1,7 +1,4 @@
-use crate::{
-    config::EventListenerConfig,
-    error::Result,
-};
+use crate::{config::EventListenerConfig, error::Result};
 use std::{
     collections::HashMap,
     sync::{
@@ -71,7 +68,7 @@ impl MetricData {
 }
 
 /// 指标收集器
-/// 
+///
 /// 负责:
 /// - 收集各种系统指标
 /// - 提供指标查询接口
@@ -79,10 +76,10 @@ impl MetricData {
 /// - 监控性能和健康状态
 pub struct MetricsCollector {
     config: Arc<EventListenerConfig>,
-    
+
     // 运行状态
     is_running: Arc<RwLock<bool>>,
-    
+
     // 核心指标计数器
     events_processed: Arc<AtomicU64>,
     events_failed: Arc<AtomicU64>,
@@ -90,17 +87,17 @@ pub struct MetricsCollector {
     websocket_reconnections: Arc<AtomicU64>,
     batch_writes: Arc<AtomicU64>,
     checkpoint_saves: Arc<AtomicU64>,
-    
+
     // 性能指标
     processing_durations: Arc<RwLock<Vec<Duration>>>,
     websocket_latencies: Arc<RwLock<Vec<Duration>>>,
     batch_write_durations: Arc<RwLock<Vec<Duration>>>,
-    
+
     // 系统指标
     start_time: Instant,
     last_metrics_report: Arc<RwLock<Option<Instant>>>,
     system_monitor: Arc<RwLock<System>>,
-    
+
     // 自定义指标存储
     custom_metrics: Arc<RwLock<HashMap<String, MetricData>>>,
 }
@@ -164,11 +161,11 @@ impl MetricsCollector {
     /// 创建新的指标收集器
     pub fn new(config: &EventListenerConfig) -> Result<Self> {
         let config = Arc::new(config.clone());
-        
+
         // 初始化系统监控
         let mut system = System::new_all();
         system.refresh_all();
-        
+
         Ok(Self {
             config,
             is_running: Arc::new(RwLock::new(false)),
@@ -202,18 +199,18 @@ impl MetricsCollector {
 
         let collector = self.clone();
         let metrics_interval = self.config.get_metrics_interval();
-        
+
         tokio::spawn(async move {
             let mut interval = interval(metrics_interval);
-            
+
             while *collector.is_running.read().await {
                 interval.tick().await;
-                
+
                 if let Err(e) = collector.collect_and_report_metrics().await {
                     error!("❌ 指标收集和报告失败: {}", e);
                 }
             }
-            
+
             info!("📊 指标收集已停止");
         });
 
@@ -238,15 +235,16 @@ impl MetricsCollector {
     /// 记录特定程序的事件处理成功
     pub async fn record_event_processed_for_program(&self, program_id: &str) -> Result<()> {
         self.events_processed.fetch_add(1, Ordering::Relaxed);
-        
+
         // 创建带有程序ID标签的指标
         let metric = MetricData::new(
             "events_processed_by_program".to_string(),
             MetricType::Counter,
             1.0,
             "Events processed by specific program".to_string(),
-        ).with_label("program_id".to_string(), program_id.to_string());
-        
+        )
+        .with_label("program_id".to_string(), program_id.to_string());
+
         self.add_custom_metric(metric).await?;
         debug!("📈 记录程序{}事件处理成功", program_id);
         Ok(())
@@ -262,7 +260,7 @@ impl MetricsCollector {
     /// 记录特定程序的事件处理失败
     pub async fn record_event_failed_for_program(&self, program_id: &str, error: &str) -> Result<()> {
         self.events_failed.fetch_add(1, Ordering::Relaxed);
-        
+
         // 创建带有程序ID和错误类型标签的指标
         let metric = MetricData::new(
             "events_failed_by_program".to_string(),
@@ -272,7 +270,7 @@ impl MetricsCollector {
         )
         .with_label("program_id".to_string(), program_id.to_string())
         .with_label("error_type".to_string(), error.to_string());
-        
+
         self.add_custom_metric(metric).await?;
         debug!("📉 记录程序{}事件处理失败: {}", program_id, error);
         Ok(())
@@ -282,12 +280,12 @@ impl MetricsCollector {
     pub async fn record_processing_duration(&self, duration: Duration) -> Result<()> {
         let mut durations = self.processing_durations.write().await;
         durations.push(duration);
-        
+
         // 保持最近1000个样本
         if durations.len() > 1000 {
             durations.remove(0);
         }
-        
+
         debug!("⏱️ 记录处理耗时: {:?}", duration);
         Ok(())
     }
@@ -310,12 +308,12 @@ impl MetricsCollector {
     pub async fn record_websocket_latency(&self, latency: Duration) -> Result<()> {
         let mut latencies = self.websocket_latencies.write().await;
         latencies.push(latency);
-        
+
         // 保持最近1000个样本
         if latencies.len() > 1000 {
             latencies.remove(0);
         }
-        
+
         debug!("📡 记录WebSocket延迟: {:?}", latency);
         Ok(())
     }
@@ -331,12 +329,12 @@ impl MetricsCollector {
     pub async fn record_batch_write_duration(&self, duration: Duration) -> Result<()> {
         let mut durations = self.batch_write_durations.write().await;
         durations.push(duration);
-        
+
         // 保持最近1000个样本
         if durations.len() > 1000 {
             durations.remove(0);
         }
-        
+
         debug!("💽 记录批量写入耗时: {:?}", duration);
         Ok(())
     }
@@ -384,24 +382,28 @@ impl MetricsCollector {
 
         let stats = self.get_stats().await?;
         let report = self.generate_performance_report().await?;
-        
+
         // 更新最后报告时间
         {
             let mut last_report = self.last_metrics_report.write().await;
             *last_report = Some(Instant::now());
         }
 
-        info!("📊 性能报告 - 运行时间: {}s, 处理事件: {}, 成功率: {:.2}%, 平均处理时间: {:.2}ms", 
-              stats.uptime_seconds, 
-              stats.events_processed,
-              stats.success_rate * 100.0,
-              stats.avg_processing_duration_ms);
+        info!(
+            "📊 性能报告 - 运行时间: {}s, 处理事件: {}, 成功率: {:.2}%, 平均处理时间: {:.2}ms",
+            stats.uptime_seconds,
+            stats.events_processed,
+            stats.success_rate * 100.0,
+            stats.avg_processing_duration_ms
+        );
 
-        if report.error_rate > 0.1 { // 错误率超过10%
+        if report.error_rate > 0.1 {
+            // 错误率超过10%
             warn!("⚠️ 高错误率检测: {:.2}%", report.error_rate * 100.0);
         }
 
-        if report.avg_processing_time_ms > 1000.0 { // 平均处理时间超过1秒
+        if report.avg_processing_time_ms > 1000.0 {
+            // 平均处理时间超过1秒
             warn!("⚠️ 高处理延迟检测: {:.2}ms", report.avg_processing_time_ms);
         }
 
@@ -414,7 +416,7 @@ impl MetricsCollector {
         let events_processed = self.events_processed.load(Ordering::Relaxed);
         let events_failed = self.events_failed.load(Ordering::Relaxed);
         let total_events = events_processed + events_failed;
-        
+
         let events_per_second = if uptime > 0 {
             events_processed as f64 / uptime as f64
         } else {
@@ -482,17 +484,17 @@ impl MetricsCollector {
             // 刷新系统信息以获取最新数据
             system.refresh_cpu();
             system.refresh_memory();
-            
+
             // 计算内存使用量（MB）
             let memory_usage_mb = system.used_memory() as f64 / 1024.0 / 1024.0;
-            
+
             // 计算CPU使用率（平均值）
             let cpu_usage_percent = if system.cpus().is_empty() {
                 0.0
             } else {
                 system.cpus().iter().map(|cpu| cpu.cpu_usage()).sum::<f32>() as f64 / system.cpus().len() as f64
             };
-            
+
             SystemResources {
                 memory_usage_mb,
                 cpu_usage_percent,
@@ -518,7 +520,7 @@ impl MetricsCollector {
         let events_processed = self.events_processed.load(Ordering::Relaxed);
         let events_failed = self.events_failed.load(Ordering::Relaxed);
         let total_events = events_processed + events_failed;
-        
+
         let success_rate = if total_events > 0 {
             events_processed as f64 / total_events as f64
         } else {
@@ -581,34 +583,34 @@ impl MetricsCollector {
     /// 重置所有指标
     pub async fn reset_metrics(&self) -> Result<()> {
         info!("🔄 重置所有指标");
-        
+
         self.events_processed.store(0, Ordering::Relaxed);
         self.events_failed.store(0, Ordering::Relaxed);
         self.websocket_connections.store(0, Ordering::Relaxed);
         self.websocket_reconnections.store(0, Ordering::Relaxed);
         self.batch_writes.store(0, Ordering::Relaxed);
         self.checkpoint_saves.store(0, Ordering::Relaxed);
-        
+
         {
             let mut durations = self.processing_durations.write().await;
             durations.clear();
         }
-        
+
         {
             let mut latencies = self.websocket_latencies.write().await;
             latencies.clear();
         }
-        
+
         {
             let mut durations = self.batch_write_durations.write().await;
             durations.clear();
         }
-        
+
         {
             let mut metrics = self.custom_metrics.write().await;
             metrics.clear();
         }
-        
+
         {
             let mut last_report = self.last_metrics_report.write().await;
             *last_report = None;
@@ -621,102 +623,159 @@ impl MetricsCollector {
     pub async fn export_prometheus_metrics(&self) -> Result<String> {
         let stats = self.get_stats().await?;
         let report = self.generate_performance_report().await?;
-        
+
         let mut output = String::new();
-        
+
         // 基础标签 - 动态获取版本号
         let service_labels = "service=\"event-listener\"";
         let version_labels = format!("version=\"{}\"", env!("CARGO_PKG_VERSION"));
         let base_labels = format!("{},{}", service_labels, version_labels);
-        
+
         // === 事件处理指标 ===
         output.push_str("# HELP events_processed_total Total number of events processed successfully\n");
         output.push_str("# TYPE events_processed_total counter\n");
-        output.push_str(&format!("events_processed_total{{{}}} {}\n", base_labels, stats.events_processed));
-        
+        output.push_str(&format!(
+            "events_processed_total{{{}}} {}\n",
+            base_labels, stats.events_processed
+        ));
+
         output.push_str("# HELP events_failed_total Total number of events that failed processing\n");
         output.push_str("# TYPE events_failed_total counter\n");
-        output.push_str(&format!("events_failed_total{{{}}} {}\n", base_labels, stats.events_failed));
-        
+        output.push_str(&format!(
+            "events_failed_total{{{}}} {}\n",
+            base_labels, stats.events_failed
+        ));
+
         output.push_str("# HELP events_success_rate Success rate of event processing (0-1)\n");
         output.push_str("# TYPE events_success_rate gauge\n");
-        output.push_str(&format!("events_success_rate{{{}}} {:.4}\n", base_labels, stats.success_rate));
-        
+        output.push_str(&format!(
+            "events_success_rate{{{}}} {:.4}\n",
+            base_labels, stats.success_rate
+        ));
+
         output.push_str("# HELP events_per_second Current events processing rate\n");
         output.push_str("# TYPE events_per_second gauge\n");
-        output.push_str(&format!("events_per_second{{{}}} {:.2}\n", base_labels, report.events_per_second));
-        
+        output.push_str(&format!(
+            "events_per_second{{{}}} {:.2}\n",
+            base_labels, report.events_per_second
+        ));
+
         // === WebSocket 指标 ===
         output.push_str("# HELP websocket_connections_total Total number of WebSocket connections established\n");
         output.push_str("# TYPE websocket_connections_total counter\n");
-        output.push_str(&format!("websocket_connections_total{{{}}} {}\n", base_labels, stats.websocket_connections));
-        
+        output.push_str(&format!(
+            "websocket_connections_total{{{}}} {}\n",
+            base_labels, stats.websocket_connections
+        ));
+
         output.push_str("# HELP websocket_reconnections_total Total number of WebSocket reconnections\n");
         output.push_str("# TYPE websocket_reconnections_total counter\n");
-        output.push_str(&format!("websocket_reconnections_total{{{}}} {}\n", base_labels, stats.websocket_reconnections));
-        
-        output.push_str("# HELP websocket_connected Current WebSocket connection status (1=connected, 0=disconnected)\n");
+        output.push_str(&format!(
+            "websocket_reconnections_total{{{}}} {}\n",
+            base_labels, stats.websocket_reconnections
+        ));
+
+        output
+            .push_str("# HELP websocket_connected Current WebSocket connection status (1=connected, 0=disconnected)\n");
         output.push_str("# TYPE websocket_connected gauge\n");
-        output.push_str(&format!("websocket_connected{{{}}} {}\n", base_labels, if report.websocket_health.is_connected { 1 } else { 0 }));
-        
+        output.push_str(&format!(
+            "websocket_connected{{{}}} {}\n",
+            base_labels,
+            if report.websocket_health.is_connected { 1 } else { 0 }
+        ));
+
         output.push_str("# HELP websocket_latency_ms Average WebSocket latency in milliseconds\n");
         output.push_str("# TYPE websocket_latency_ms gauge\n");
-        output.push_str(&format!("websocket_latency_ms{{{}}} {:.2}\n", base_labels, report.websocket_health.avg_latency_ms));
-        
+        output.push_str(&format!(
+            "websocket_latency_ms{{{}}} {:.2}\n",
+            base_labels, report.websocket_health.avg_latency_ms
+        ));
+
         // === 批量写入指标 ===
         output.push_str("# HELP batch_writes_total Total number of batch writes executed\n");
         output.push_str("# TYPE batch_writes_total counter\n");
-        output.push_str(&format!("batch_writes_total{{{}}} {}\n", base_labels, stats.batch_writes));
-        
+        output.push_str(&format!(
+            "batch_writes_total{{{}}} {}\n",
+            base_labels, stats.batch_writes
+        ));
+
         output.push_str("# HELP batch_writes_per_minute Current batch writes per minute rate\n");
         output.push_str("# TYPE batch_writes_per_minute gauge\n");
-        output.push_str(&format!("batch_writes_per_minute{{{}}} {:.2}\n", base_labels, report.batches_per_minute));
-        
+        output.push_str(&format!(
+            "batch_writes_per_minute{{{}}} {:.2}\n",
+            base_labels, report.batches_per_minute
+        ));
+
         output.push_str("# HELP batch_write_duration_ms Average batch write duration in milliseconds\n");
         output.push_str("# TYPE batch_write_duration_ms gauge\n");
-        output.push_str(&format!("batch_write_duration_ms{{{}}} {:.2}\n", base_labels, report.database_health.avg_write_duration_ms));
-        
+        output.push_str(&format!(
+            "batch_write_duration_ms{{{}}} {:.2}\n",
+            base_labels, report.database_health.avg_write_duration_ms
+        ));
+
         // === 检查点指标 ===
         output.push_str("# HELP checkpoint_saves_total Total number of checkpoint saves\n");
         output.push_str("# TYPE checkpoint_saves_total counter\n");
-        output.push_str(&format!("checkpoint_saves_total{{{}}} {}\n", base_labels, stats.checkpoint_saves));
-        
+        output.push_str(&format!(
+            "checkpoint_saves_total{{{}}} {}\n",
+            base_labels, stats.checkpoint_saves
+        ));
+
         // === 性能指标 ===
         output.push_str("# HELP processing_duration_ms Average event processing duration in milliseconds\n");
         output.push_str("# TYPE processing_duration_ms gauge\n");
-        output.push_str(&format!("processing_duration_ms{{{}}} {:.2}\n", base_labels, stats.avg_processing_duration_ms));
-        
+        output.push_str(&format!(
+            "processing_duration_ms{{{}}} {:.2}\n",
+            base_labels, stats.avg_processing_duration_ms
+        ));
+
         output.push_str("# HELP processing_duration_total_ms Total processing time across all events\n");
         output.push_str("# TYPE processing_duration_total_ms gauge\n");
-        output.push_str(&format!("processing_duration_total_ms{{{}}} {:.2}\n", base_labels, report.avg_processing_time_ms));
-        
+        output.push_str(&format!(
+            "processing_duration_total_ms{{{}}} {:.2}\n",
+            base_labels, report.avg_processing_time_ms
+        ));
+
         output.push_str("# HELP error_rate Current error rate (0-1)\n");
         output.push_str("# TYPE error_rate gauge\n");
         output.push_str(&format!("error_rate{{{}}} {:.4}\n", base_labels, report.error_rate));
-        
+
         // === 系统资源指标 ===
         output.push_str("# HELP system_memory_usage_mb Current memory usage in megabytes\n");
         output.push_str("# TYPE system_memory_usage_mb gauge\n");
-        output.push_str(&format!("system_memory_usage_mb{{{}}} {:.2}\n", base_labels, report.system_resources.memory_usage_mb));
-        
+        output.push_str(&format!(
+            "system_memory_usage_mb{{{}}} {:.2}\n",
+            base_labels, report.system_resources.memory_usage_mb
+        ));
+
         output.push_str("# HELP system_cpu_usage_percent Current CPU usage percentage\n");
         output.push_str("# TYPE system_cpu_usage_percent gauge\n");
-        output.push_str(&format!("system_cpu_usage_percent{{{}}} {:.2}\n", base_labels, report.system_resources.cpu_usage_percent));
-        
+        output.push_str(&format!(
+            "system_cpu_usage_percent{{{}}} {:.2}\n",
+            base_labels, report.system_resources.cpu_usage_percent
+        ));
+
         // === 运行时指标 ===
         output.push_str("# HELP uptime_seconds Total uptime in seconds\n");
         output.push_str("# TYPE uptime_seconds counter\n");
         output.push_str(&format!("uptime_seconds{{{}}} {}\n", base_labels, stats.uptime_seconds));
-        
+
         output.push_str("# HELP running_status Current running status (1=running, 0=stopped)\n");
         output.push_str("# TYPE running_status gauge\n");
-        output.push_str(&format!("running_status{{{}}} {}\n", base_labels, if stats.is_running { 1 } else { 0 }));
-        
+        output.push_str(&format!(
+            "running_status{{{}}} {}\n",
+            base_labels,
+            if stats.is_running { 1 } else { 0 }
+        ));
+
         // === 自定义指标 ===
         output.push_str("# HELP custom_metrics_count Number of custom metrics registered\n");
         output.push_str("# TYPE custom_metrics_count gauge\n");
-        output.push_str(&format!("custom_metrics_count{{{}}} {}\n", base_labels, stats.custom_metrics_count));
-        
+        output.push_str(&format!(
+            "custom_metrics_count{{{}}} {}\n",
+            base_labels, stats.custom_metrics_count
+        ));
+
         // 导出自定义指标
         let custom_metrics = self.custom_metrics.read().await;
         for (name, metric) in custom_metrics.iter() {
@@ -727,20 +786,20 @@ impl MetricsCollector {
                 MetricType::Histogram => "histogram",
                 MetricType::Summary => "summary",
             };
-            
+
             output.push_str(&format!("# HELP {} {}\n", name, metric.description));
             output.push_str(&format!("# TYPE {} {}\n", name, prom_type));
-            
+
             // 构建标签字符串
             let mut labels_vec = vec![service_labels.to_string(), version_labels.clone()];
             for (key, value) in &metric.labels {
                 labels_vec.push(format!("{}=\"{}\"", key, value));
             }
             let labels_str = labels_vec.join(",");
-            
+
             output.push_str(&format!("{}{{{}}} {}\n", name, labels_str, metric.value));
         }
-        
+
         Ok(output)
     }
 
@@ -755,7 +814,7 @@ impl Clone for MetricsCollector {
         // 注意：对于系统监控，我们需要创建一个新的实例
         let mut system = System::new_all();
         system.refresh_all();
-        
+
         Self {
             config: Arc::clone(&self.config),
             is_running: Arc::clone(&self.is_running),
@@ -840,7 +899,8 @@ mod tests {
             MetricType::Gauge,
             100.0,
             "Test gauge metric".to_string(),
-        ).with_labels(labels.clone());
+        )
+        .with_labels(labels.clone());
 
         assert_eq!(metric.labels, labels);
     }
@@ -849,7 +909,7 @@ mod tests {
     async fn test_metrics_collector_creation() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         let stats = collector.get_stats().await.unwrap();
         assert_eq!(stats.events_processed, 0);
         assert_eq!(stats.events_failed, 0);
@@ -860,12 +920,12 @@ mod tests {
     async fn test_record_events() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 记录一些事件
         collector.record_event_processed().await.unwrap();
         collector.record_event_processed().await.unwrap();
         collector.record_event_failed().await.unwrap();
-        
+
         let stats = collector.get_stats().await.unwrap();
         assert_eq!(stats.events_processed, 2);
         assert_eq!(stats.events_failed, 1);
@@ -876,12 +936,21 @@ mod tests {
     async fn test_record_durations() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 记录一些处理耗时
-        collector.record_processing_duration(Duration::from_millis(100)).await.unwrap();
-        collector.record_processing_duration(Duration::from_millis(200)).await.unwrap();
-        collector.record_processing_duration(Duration::from_millis(150)).await.unwrap();
-        
+        collector
+            .record_processing_duration(Duration::from_millis(100))
+            .await
+            .unwrap();
+        collector
+            .record_processing_duration(Duration::from_millis(200))
+            .await
+            .unwrap();
+        collector
+            .record_processing_duration(Duration::from_millis(150))
+            .await
+            .unwrap();
+
         let stats = collector.get_stats().await.unwrap();
         assert_eq!(stats.avg_processing_duration_ms, 150.0);
     }
@@ -890,19 +959,19 @@ mod tests {
     async fn test_custom_metrics() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         let metric = MetricData::new(
             "custom_counter".to_string(),
             MetricType::Counter,
             10.0,
             "Custom counter".to_string(),
         );
-        
+
         collector.add_custom_metric(metric).await.unwrap();
-        
+
         let stats = collector.get_stats().await.unwrap();
         assert_eq!(stats.custom_metrics_count, 1);
-        
+
         // 更新自定义指标
         collector.update_custom_metric("custom_counter", 20.0).await.unwrap();
         // 这里可以添加更多验证逻辑
@@ -912,18 +981,18 @@ mod tests {
     async fn test_reset_metrics() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 记录一些数据
         collector.record_event_processed().await.unwrap();
         collector.record_websocket_connection().await.unwrap();
-        
+
         let stats_before = collector.get_stats().await.unwrap();
         assert_eq!(stats_before.events_processed, 1);
         assert_eq!(stats_before.websocket_connections, 1);
-        
+
         // 重置指标
         collector.reset_metrics().await.unwrap();
-        
+
         let stats_after = collector.get_stats().await.unwrap();
         assert_eq!(stats_after.events_processed, 0);
         assert_eq!(stats_after.websocket_connections, 0);
@@ -933,32 +1002,39 @@ mod tests {
     async fn test_system_resource_monitoring() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 生成性能报告，应该包含真实的系统资源信息
         let report = collector.generate_performance_report().await.unwrap();
-        
+
         // 验证系统资源监控不再使用占位符值
         assert!(report.system_resources.memory_usage_mb >= 0.0);
         assert!(report.system_resources.cpu_usage_percent >= 0.0);
-        assert!(report.system_resources.cpu_usage_percent <= 100.0 * std::thread::available_parallelism().unwrap().get() as f64);
-        
-        println!("✅ 系统资源监控: 内存 {:.2}MB, CPU {:.2}%", 
-            report.system_resources.memory_usage_mb,
-            report.system_resources.cpu_usage_percent);
+        assert!(
+            report.system_resources.cpu_usage_percent
+                <= 100.0 * std::thread::available_parallelism().unwrap().get() as f64
+        );
+
+        println!(
+            "✅ 系统资源监控: 内存 {:.2}MB, CPU {:.2}%",
+            report.system_resources.memory_usage_mb, report.system_resources.cpu_usage_percent
+        );
     }
 
     #[tokio::test]
     async fn test_generate_performance_report() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 记录一些数据
         collector.record_event_processed().await.unwrap();
-        collector.record_processing_duration(Duration::from_millis(500)).await.unwrap();
+        collector
+            .record_processing_duration(Duration::from_millis(500))
+            .await
+            .unwrap();
         collector.record_batch_write().await.unwrap();
-        
+
         let report = collector.generate_performance_report().await.unwrap();
-        
+
         assert_eq!(report.websocket_health.connections_count, 0);
         assert_eq!(report.database_health.batch_writes_count, 1);
         assert!(report.uptime_seconds < 60); // 应该小于60秒
@@ -968,33 +1044,34 @@ mod tests {
     async fn test_export_prometheus_metrics_enhanced() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 记录一些数据来测试增强功能
         collector.record_event_processed().await.unwrap();
         collector.record_event_failed().await.unwrap();
         collector.record_websocket_connection().await.unwrap();
         collector.record_batch_write().await.unwrap();
-        
+
         // 添加一个自定义指标
         let custom_metric = MetricData::new(
             "test_custom_metric".to_string(),
             MetricType::Gauge,
             42.5,
             "Test custom metric for enhanced export".to_string(),
-        ).with_label("environment".to_string(), "test".to_string());
-        
+        )
+        .with_label("environment".to_string(), "test".to_string());
+
         collector.add_custom_metric(custom_metric).await.unwrap();
-        
+
         let prometheus_output = collector.export_prometheus_metrics().await.unwrap();
-        
+
         // 获取当前版本用于测试
         let current_version = env!("CARGO_PKG_VERSION");
         let expected_label_pattern = format!("service=\"event-listener\",version=\"{}\"", current_version);
-        
+
         // 验证基础指标
         assert!(prometheus_output.contains(&format!("events_processed_total{{{}}} 1", expected_label_pattern)));
         assert!(prometheus_output.contains(&format!("events_failed_total{{{}}} 1", expected_label_pattern)));
-        
+
         // 验证增强功能
         assert!(prometheus_output.contains("events_success_rate"));
         assert!(prometheus_output.contains("events_per_second"));
@@ -1003,26 +1080,34 @@ mod tests {
         assert!(prometheus_output.contains("system_cpu_usage_percent"));
         assert!(prometheus_output.contains("uptime_seconds"));
         assert!(prometheus_output.contains("running_status"));
-        
+
         // 验证自定义指标
         assert!(prometheus_output.contains("test_custom_metric"));
         assert!(prometheus_output.contains("Test custom metric for enhanced export"));
         assert!(prometheus_output.contains("environment=\"test\""));
         assert!(prometheus_output.contains("42.5"));
-        
+
         // 验证Prometheus格式正确性
         assert!(prometheus_output.contains("# HELP"));
         assert!(prometheus_output.contains("# TYPE"));
-        
+
         // 验证所有标签都包含service和version
         let lines: Vec<&str> = prometheus_output.lines().collect();
         for line in lines.iter().filter(|line| !line.starts_with('#') && !line.is_empty()) {
             if line.contains('{') {
-                assert!(line.contains("service=\"event-listener\""), "Line missing service label: {}", line);
-                assert!(line.contains(&format!("version=\"{}\"", current_version)), "Line missing version label: {}", line);
+                assert!(
+                    line.contains("service=\"event-listener\""),
+                    "Line missing service label: {}",
+                    line
+                );
+                assert!(
+                    line.contains(&format!("version=\"{}\"", current_version)),
+                    "Line missing version label: {}",
+                    line
+                );
             }
         }
-        
+
         println!("✅ 增强的Prometheus导出包含 {} 行指标", lines.len());
     }
 
@@ -1030,16 +1115,16 @@ mod tests {
     async fn test_is_healthy() {
         let config = create_test_config();
         let collector = MetricsCollector::new(&config).unwrap();
-        
+
         // 初始状态不健康（未运行）
         assert!(!collector.is_healthy().await);
-        
+
         // 模拟运行状态
         {
             let mut is_running = collector.is_running.write().await;
             *is_running = true;
         }
-        
+
         // 运行状态下应该健康
         assert!(collector.is_healthy().await);
     }

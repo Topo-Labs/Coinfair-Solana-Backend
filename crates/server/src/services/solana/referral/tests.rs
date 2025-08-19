@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana_dto::{GetUpperRequest, GetMintCounterRequest};
-    use crate::services::solana::referral::service::{ReferralAccount, MintCounter};
+    use crate::dtos::solana_dto::{GetMintCounterRequest, GetUpperRequest};
+    use crate::services::solana::referral::service::{MintCounter, ReferralAccount};
     use crate::services::solana::referral::ReferralService;
     use crate::services::solana::shared::SharedContext;
     use solana_sdk::pubkey::Pubkey;
@@ -31,7 +31,8 @@ mod tests {
         let service = create_test_service();
 
         // 使用测试用户钱包地址
-        let user_wallet = Pubkey::from_str("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy").expect("Invalid test wallet address");
+        let user_wallet =
+            Pubkey::from_str("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy").expect("Invalid test wallet address");
 
         let result = service.calculate_referral_account_pda(&user_wallet);
         assert!(result.is_ok());
@@ -56,7 +57,8 @@ mod tests {
         let service = create_test_service();
 
         // 使用测试用户钱包地址
-        let user_wallet = Pubkey::from_str("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy").expect("Invalid test wallet address");
+        let user_wallet =
+            Pubkey::from_str("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy").expect("Invalid test wallet address");
 
         let result = service.calculate_mint_counter_pda(&user_wallet);
         assert!(result.is_ok());
@@ -194,7 +196,9 @@ mod tests {
         assert!(validator::Validate::validate(&invalid_request).is_err());
 
         // 测试空地址
-        let empty_request = GetUpperRequest { user_wallet: "".to_string() };
+        let empty_request = GetUpperRequest {
+            user_wallet: "".to_string(),
+        };
         assert!(validator::Validate::validate(&empty_request).is_err());
 
         println!("Request validation tests passed");
@@ -208,7 +212,8 @@ mod tests {
         let referral_program_id = service.get_referral_program_id().unwrap();
 
         // 手动计算PDA使用完全相同的seeds
-        let (manual_pda, manual_bump) = Pubkey::find_program_address(&[b"referral", user_wallet.as_ref()], &referral_program_id);
+        let (manual_pda, manual_bump) =
+            Pubkey::find_program_address(&[b"referral", user_wallet.as_ref()], &referral_program_id);
 
         // 通过服务计算PDA
         let (service_pda, service_bump) = service.calculate_referral_account_pda(&user_wallet).unwrap();

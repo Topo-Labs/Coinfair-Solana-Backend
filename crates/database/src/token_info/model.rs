@@ -67,7 +67,7 @@ pub struct TokenInfo {
     /// 冻结权限地址 (可选)
     pub freeze_authority: Option<String>,
 
-    /// 铸造权限地址 (可选)  
+    /// 铸造权限地址 (可选)
     pub mint_authority: Option<String>,
 
     /// 永久委托地址 (可选)
@@ -434,7 +434,9 @@ impl TokenInfo {
         Self {
             id: None,
             address: request.address,
-            program_id: request.program_id.unwrap_or_else(|| "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string()),
+            program_id: request
+                .program_id
+                .unwrap_or_else(|| "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string()),
             name: request.name,
             symbol: request.symbol,
             decimals: request.decimals,
@@ -458,13 +460,13 @@ impl TokenInfo {
     /// 更新代币信息
     pub fn update_from_push_request(&mut self, request: TokenPushRequest) {
         let now = Utc::now();
-        
+
         // 更新基本信息
         self.name = request.name;
         self.symbol = request.symbol;
         self.decimals = request.decimals;
         self.logo_uri = request.logo_uri;
-        
+
         // 更新可选字段
         if let Some(tags) = request.tags {
             self.tags = tags;
@@ -539,24 +541,51 @@ mod tests {
     fn test_token_status_serialization() {
         assert_eq!(serde_json::to_string(&TokenStatus::Active).unwrap(), "\"active\"");
         assert_eq!(serde_json::to_string(&TokenStatus::Paused).unwrap(), "\"paused\"");
-        assert_eq!(serde_json::to_string(&TokenStatus::Deprecated).unwrap(), "\"deprecated\"");
-        assert_eq!(serde_json::to_string(&TokenStatus::Blacklisted).unwrap(), "\"blacklisted\"");
+        assert_eq!(
+            serde_json::to_string(&TokenStatus::Deprecated).unwrap(),
+            "\"deprecated\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TokenStatus::Blacklisted).unwrap(),
+            "\"blacklisted\""
+        );
     }
 
     #[test]
     fn test_data_source_serialization() {
-        assert_eq!(serde_json::to_string(&DataSource::ExternalPush).unwrap(), "\"external_push\"");
-        assert_eq!(serde_json::to_string(&DataSource::OnchainSync).unwrap(), "\"onchain_sync\"");
+        assert_eq!(
+            serde_json::to_string(&DataSource::ExternalPush).unwrap(),
+            "\"external_push\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DataSource::OnchainSync).unwrap(),
+            "\"onchain_sync\""
+        );
         assert_eq!(serde_json::to_string(&DataSource::Manual).unwrap(), "\"manual\"");
-        assert_eq!(serde_json::to_string(&DataSource::SystemImport).unwrap(), "\"system_import\"");
+        assert_eq!(
+            serde_json::to_string(&DataSource::SystemImport).unwrap(),
+            "\"system_import\""
+        );
     }
 
     #[test]
     fn test_verification_status_serialization() {
-        assert_eq!(serde_json::to_string(&VerificationStatus::Unverified).unwrap(), "\"unverified\"");
-        assert_eq!(serde_json::to_string(&VerificationStatus::Verified).unwrap(), "\"verified\"");
-        assert_eq!(serde_json::to_string(&VerificationStatus::Community).unwrap(), "\"community\"");
-        assert_eq!(serde_json::to_string(&VerificationStatus::Strict).unwrap(), "\"strict\"");
+        assert_eq!(
+            serde_json::to_string(&VerificationStatus::Unverified).unwrap(),
+            "\"unverified\""
+        );
+        assert_eq!(
+            serde_json::to_string(&VerificationStatus::Verified).unwrap(),
+            "\"verified\""
+        );
+        assert_eq!(
+            serde_json::to_string(&VerificationStatus::Community).unwrap(),
+            "\"community\""
+        );
+        assert_eq!(
+            serde_json::to_string(&VerificationStatus::Strict).unwrap(),
+            "\"strict\""
+        );
     }
 
     #[test]
@@ -590,7 +619,7 @@ mod tests {
         );
 
         assert!(!token.is_blacklisted());
-        
+
         token.status = TokenStatus::Blacklisted;
         assert!(token.is_blacklisted());
     }
@@ -607,13 +636,13 @@ mod tests {
         );
 
         assert!(!token.is_whitelisted());
-        
+
         token.verification = VerificationStatus::Verified;
         assert!(token.is_whitelisted());
-        
+
         token.verification = VerificationStatus::Community;
         assert!(token.is_whitelisted());
-        
+
         token.verification = VerificationStatus::Strict;
         assert!(token.is_whitelisted());
     }

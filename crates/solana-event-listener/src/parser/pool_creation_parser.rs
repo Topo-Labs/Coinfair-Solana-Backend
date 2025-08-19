@@ -67,7 +67,9 @@ impl PoolCreationParser {
             .map_err(|e| EventListenerError::EventParsing(format!("Base64解码失败: {}", e)))?;
 
         if data.len() < 8 {
-            return Err(EventListenerError::EventParsing("数据长度不足，无法包含discriminator".to_string()));
+            return Err(EventListenerError::EventParsing(
+                "数据长度不足，无法包含discriminator".to_string(),
+            ));
         }
 
         // 验证discriminator
@@ -78,9 +80,13 @@ impl PoolCreationParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = PoolCreationEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        let event = PoolCreationEvent::try_from_slice(event_data)
+            .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
         info!("池子解析成功：{:?}", event);
-        debug!("✅ 成功解析池子创建事件: 池子={}, 代币对={}/{}", event.pool_state, event.token_mint_0, event.token_mint_1);
+        debug!(
+            "✅ 成功解析池子创建事件: 池子={}, 代币对={}/{}",
+            event.pool_state, event.token_mint_0, event.token_mint_1
+        );
         Ok(event)
     }
 
@@ -113,7 +119,12 @@ impl PoolCreationParser {
 
     /// 从链上查询缺失的信息（如费率、小数位等）
     /// 对于新创建的池子，如果账户未确认，进行重试（3秒延迟，总共重试3次）
-    async fn fetch_missing_info(&self, pool_address: Pubkey, token_mint_0: Pubkey, token_mint_1: Pubkey) -> Result<(u32, u8, u8, Pubkey, Pubkey, i64)> {
+    async fn fetch_missing_info(
+        &self,
+        pool_address: Pubkey,
+        token_mint_0: Pubkey,
+        token_mint_1: Pubkey,
+    ) -> Result<(u32, u8, u8, Pubkey, Pubkey, i64)> {
         let account_loader = AccountLoader::new(&self.rpc_client);
         let max_retries = 6;
         let retry_delay = std::time::Duration::from_secs(6);
@@ -122,9 +133,15 @@ impl PoolCreationParser {
 
         // 重试逻辑：尝试最多3次，每次间隔3秒
         for attempt in 1..=max_retries {
-            match account_loader.load_and_deserialize::<raydium_amm_v3::states::PoolState>(&pool_address).await {
+            match account_loader
+                .load_and_deserialize::<raydium_amm_v3::states::PoolState>(&pool_address)
+                .await
+            {
                 Ok(pool_state) => {
-                    debug!("✅ 成功获取池子状态（第{}次尝试），AMM配置: {}", attempt, pool_state.amm_config);
+                    debug!(
+                        "✅ 成功获取池子状态（第{}次尝试），AMM配置: {}",
+                        attempt, pool_state.amm_config
+                    );
 
                     // 查询AMM配置以获取费率
                     let fee_rate = match self.fetch_amm_config_fee_rate(&pool_state.amm_config).await {
@@ -150,17 +167,32 @@ impl PoolCreationParser {
                         attempt, fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at
                     );
 
-                    return Ok((fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at));
+                    return Ok((
+                        fee_rate,
+                        token_0_decimals,
+                        token_1_decimals,
+                        creator,
+                        clmm_config,
+                        created_at,
+                    ));
                 }
                 Err(e) => {
                     if attempt < max_retries {
-                        warn!("⚠️ 池子状态查询失败（第{}次尝试）: {} - {}秒后重试", attempt, e, retry_delay.as_secs());
+                        warn!(
+                            "⚠️ 池子状态查询失败（第{}次尝试）: {} - {}秒后重试",
+                            attempt,
+                            e,
+                            retry_delay.as_secs()
+                        );
 
                         // 等待指定时间后重试
                         tokio::time::sleep(retry_delay).await;
                     } else {
                         // 最后一次尝试失败，使用默认值
-                        warn!("❌ 池子状态查询失败（所有{}次重试都失败）: {} - 使用默认值", max_retries, e);
+                        warn!(
+                            "❌ 池子状态查询失败（所有{}次重试都失败）: {} - 使用默认值",
+                            max_retries, e
+                        );
 
                         // 所有重试都失败后，使用默认值
                         let default_fee_rate = 3000u32; // 0.3%
@@ -175,7 +207,8 @@ impl PoolCreationParser {
                         );
 
                         // 可以尝试从代币mint地址查询小数位数
-                        let (token_0_decimals, token_1_decimals) = self.fetch_token_decimals(token_mint_0, token_mint_1).await;
+                        let (token_0_decimals, token_1_decimals) =
+                            self.fetch_token_decimals(token_mint_0, token_mint_1).await;
 
                         return Ok((
                             default_fee_rate,
@@ -197,7 +230,10 @@ impl PoolCreationParser {
     /// 获取AMM配置的费率
     async fn fetch_amm_config_fee_rate(&self, amm_config_address: &Pubkey) -> Option<u32> {
         let account_loader = AccountLoader::new(&self.rpc_client);
-        match account_loader.load_and_deserialize::<raydium_amm_v3::states::AmmConfig>(amm_config_address).await {
+        match account_loader
+            .load_and_deserialize::<raydium_amm_v3::states::AmmConfig>(amm_config_address)
+            .await
+        {
             Ok(amm_config) => {
                 debug!("✅ 获取AMM配置费率: {}", amm_config.trade_fee_rate);
                 Some(amm_config.trade_fee_rate)
@@ -258,10 +294,16 @@ impl PoolCreationParser {
     }
 
     /// 将原始事件转换为ParsedEvent
-    async fn convert_to_parsed_event(&self, event: PoolCreationEvent, signature: String, slot: u64) -> Result<ParsedEvent> {
+    async fn convert_to_parsed_event(
+        &self,
+        event: PoolCreationEvent,
+        signature: String,
+        slot: u64,
+    ) -> Result<ParsedEvent> {
         // 获取缺失的信息
-        let (fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at) =
-            self.fetch_missing_info(event.pool_state, event.token_mint_0, event.token_mint_1).await?;
+        let (fee_rate, token_0_decimals, token_1_decimals, creator, clmm_config, created_at) = self
+            .fetch_missing_info(event.pool_state, event.token_mint_0, event.token_mint_1)
+            .await?;
 
         let (initial_price, annual_fee_rate, pool_type) = self.calculate_pool_metrics(&event, fee_rate);
 
@@ -311,7 +353,10 @@ impl PoolCreationParser {
 
         // 验证小数位数合理性
         if event.token_a_decimals > 18 || event.token_b_decimals > 18 {
-            warn!("❌ 代币小数位数超出合理范围: A={}, B={}", event.token_a_decimals, event.token_b_decimals);
+            warn!(
+                "❌ 代币小数位数超出合理范围: A={}, B={}",
+                event.token_a_decimals, event.token_b_decimals
+            );
             return Ok(false);
         }
 
@@ -380,7 +425,12 @@ impl EventParser for PoolCreationParser {
                 if let Some(data_part) = log.strip_prefix("Program data: ") {
                     match self.parse_program_data(data_part) {
                         Ok(event) => {
-                            info!("🏊 第{}行发现池子创建事件: {} (tick_spacing: {})", index + 1, event.pool_state, event.tick_spacing);
+                            info!(
+                                "🏊 第{}行发现池子创建事件: {} (tick_spacing: {})",
+                                index + 1,
+                                event.pool_state,
+                                event.tick_spacing
+                            );
                             match self.convert_to_parsed_event(event, signature.to_string(), slot).await {
                                 Ok(parsed_event) => return Ok(Some(parsed_event)),
                                 Err(e) => {
@@ -481,7 +531,9 @@ mod tests {
 
         // 注意：这个测试需要实际的RPC连接来获取缺失的链上信息
         // 在实际部署中，convert_to_parsed_event方法需要链上数据来完成池子信息的解析
-        let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345).await;
+        let parsed = parser
+            .convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345)
+            .await;
 
         match parsed {
             Ok(ParsedEvent::PoolCreation(data)) => {

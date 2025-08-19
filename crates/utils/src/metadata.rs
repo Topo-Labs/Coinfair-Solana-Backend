@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// 标准化的代币元数据结构
-/// 
+///
 /// 用于整个项目中的代币元数据表示，支持从多种来源获取的数据
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TokenMetadata {
@@ -111,14 +111,14 @@ impl TokenMetadata {
         if self.attributes.is_none() && other.attributes.is_some() {
             self.attributes = other.attributes;
         }
-        
+
         // 合并标签，去重
         for tag in other.tags {
             if !self.tags.contains(&tag) {
                 self.tags.push(tag);
             }
         }
-        
+
         self
     }
 
@@ -132,7 +132,7 @@ impl TokenMetadata {
     /// 添加属性
     pub fn add_attribute(&mut self, trait_type: String, value: String) {
         let attribute = TokenAttribute { trait_type, value };
-        
+
         match &mut self.attributes {
             Some(attrs) => {
                 // 检查是否已存在同样的属性，如果存在则更新值
@@ -157,7 +157,7 @@ impl TokenMetadata {
             .unwrap_or_else(|| {
                 // 返回地址的缩写形式
                 if self.address.len() > 8 {
-                    format!("{}...{}", &self.address[..4], &self.address[self.address.len()-4..])
+                    format!("{}...{}", &self.address[..4], &self.address[self.address.len() - 4..])
                 } else {
                     self.address.clone()
                 }
@@ -166,16 +166,13 @@ impl TokenMetadata {
 
     /// 获取显示符号（优先返回symbol，否则返回地址缩写）
     pub fn display_symbol(&self) -> String {
-        self.symbol
-            .as_ref()
-            .map(|s| s.clone())
-            .unwrap_or_else(|| {
-                if self.address.len() > 6 {
-                    format!("{}..{}", &self.address[..3], &self.address[self.address.len()-3..])
-                } else {
-                    self.address.clone()
-                }
-            })
+        self.symbol.as_ref().map(|s| s.clone()).unwrap_or_else(|| {
+            if self.address.len() > 6 {
+                format!("{}..{}", &self.address[..3], &self.address[self.address.len() - 3..])
+            } else {
+                self.address.clone()
+            }
+        })
     }
 }
 
@@ -262,7 +259,7 @@ impl MetadataResult {
 pub trait TokenMetadataProvider: Send + Sync {
     /// 获取单个代币的元数据
     async fn get_token_metadata(&mut self, mint_address: &str) -> anyhow::Result<Option<ExternalTokenMetadata>>;
-    
+
     /// 支持向下转型的方法（用于测试）
     fn as_any(&self) -> &dyn std::any::Any;
 }
@@ -298,10 +295,13 @@ impl ExternalTokenMetadata {
             description: metadata.description,
             external_url: metadata.external_url,
             attributes: metadata.attributes.map(|attrs| {
-                attrs.into_iter().map(|attr| ExternalTokenAttribute {
-                    trait_type: attr.trait_type,
-                    value: attr.value,
-                }).collect()
+                attrs
+                    .into_iter()
+                    .map(|attr| ExternalTokenAttribute {
+                        trait_type: attr.trait_type,
+                        value: attr.value,
+                    })
+                    .collect()
             }),
             tags: metadata.tags,
         }
@@ -318,10 +318,13 @@ impl ExternalTokenMetadata {
             description: self.description,
             external_url: self.external_url,
             attributes: self.attributes.map(|attrs| {
-                attrs.into_iter().map(|attr| TokenAttribute {
-                    trait_type: attr.trait_type,
-                    value: attr.value,
-                }).collect()
+                attrs
+                    .into_iter()
+                    .map(|attr| TokenAttribute {
+                        trait_type: attr.trait_type,
+                        value: attr.value,
+                    })
+                    .collect()
             }),
             tags: self.tags,
         }
@@ -335,7 +338,7 @@ mod tests {
     #[test]
     fn test_token_metadata_creation() {
         let metadata = TokenMetadata::new("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), 6);
-        
+
         assert_eq!(metadata.address, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
         assert_eq!(metadata.decimals, 6);
         assert!(metadata.is_basic());
@@ -367,7 +370,7 @@ mod tests {
             address: "test".to_string(),
             decimals: 6,
             symbol: Some("OVERRIDE".to_string()), // 不会覆盖，因为base已有symbol
-            name: Some("Test Token".to_string()),  // 会添加，因为base没有name
+            name: Some("Test Token".to_string()), // 会添加，因为base没有name
             logo_uri: Some("https://example.com/logo.png".to_string()),
             description: None,
             external_url: None,
@@ -404,12 +407,12 @@ mod tests {
     #[test]
     fn test_add_attribute() {
         let mut metadata = TokenMetadata::new("test".to_string(), 6);
-        
+
         metadata.add_attribute("decimals".to_string(), "6".to_string());
         metadata.add_attribute("type".to_string(), "utility".to_string());
-        
+
         assert_eq!(metadata.attributes.as_ref().unwrap().len(), 2);
-        
+
         // 测试更新已存在的属性
         metadata.add_attribute("decimals".to_string(), "9".to_string());
         assert_eq!(metadata.attributes.as_ref().unwrap().len(), 2); // 长度不变
@@ -420,7 +423,7 @@ mod tests {
     fn test_metadata_result() {
         let metadata = TokenMetadata::new("test".to_string(), 6);
         let result = MetadataResult::new(metadata.clone(), MetadataSource::OnChain);
-        
+
         assert_eq!(result.source, MetadataSource::OnChain);
         assert!(!result.cached);
         assert!(result.timestamp > 0);

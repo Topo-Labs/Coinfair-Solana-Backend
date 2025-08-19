@@ -18,7 +18,9 @@ impl PoolTypeMigration {
 
         // Check if migration is needed by counting documents without pool_type field
         let filter_without_pool_type = doc! { "pool_type": { "$exists": false } };
-        let count_without_pool_type = collection.count_documents(filter_without_pool_type.clone(), None).await?;
+        let count_without_pool_type = collection
+            .count_documents(filter_without_pool_type.clone(), None)
+            .await?;
 
         if count_without_pool_type == 0 {
             info!("✅ 迁移已完成，所有池子记录都已包含 pool_type 字段");
@@ -37,7 +39,10 @@ impl PoolTypeMigration {
         };
 
         let result = collection.update_many(filter_without_pool_type, update, None).await?;
-        info!("✅ 成功更新 {} 个池子记录，添加了 pool_type 字段", result.modified_count);
+        info!(
+            "✅ 成功更新 {} 个池子记录，添加了 pool_type 字段",
+            result.modified_count
+        );
 
         // Create index on pool_type field for performance
         self.create_pool_type_indexes(&collection).await?;
@@ -99,7 +104,11 @@ impl PoolTypeMigration {
                     "pool_type": 1,
                     "created_at": -1
                 })
-                .options(IndexOptions::builder().name("pool_type_1_created_at_-1".to_string()).build())
+                .options(
+                    IndexOptions::builder()
+                        .name("pool_type_1_created_at_-1".to_string())
+                        .build(),
+                )
                 .build(),
         ];
 
@@ -110,7 +119,10 @@ impl PoolTypeMigration {
             }
             Err(e) => {
                 error!("❌ 池子类型索引创建失败: {:?}", e);
-                Err(utils::AppError::InternalServerErrorWithContext(format!("索引创建失败: {}", e)))
+                Err(utils::AppError::InternalServerErrorWithContext(format!(
+                    "索引创建失败: {}",
+                    e
+                )))
             }
         }
     }
@@ -157,15 +169,25 @@ impl PoolTypeMigration {
         let total_count = collection.count_documents(doc! {}, None).await?;
 
         // Count documents with pool_type field
-        let with_pool_type = collection.count_documents(doc! { "pool_type": { "$exists": true } }, None).await?;
+        let with_pool_type = collection
+            .count_documents(doc! { "pool_type": { "$exists": true } }, None)
+            .await?;
 
         // Count documents without pool_type field
-        let without_pool_type = if total_count >= with_pool_type { total_count - with_pool_type } else { 0 };
+        let without_pool_type = if total_count >= with_pool_type {
+            total_count - with_pool_type
+        } else {
+            0
+        };
 
         // Count by pool type
-        let concentrated_count = collection.count_documents(doc! { "pool_type": "concentrated" }, None).await?;
+        let concentrated_count = collection
+            .count_documents(doc! { "pool_type": "concentrated" }, None)
+            .await?;
 
-        let standard_count = collection.count_documents(doc! { "pool_type": "standard" }, None).await?;
+        let standard_count = collection
+            .count_documents(doc! { "pool_type": "standard" }, None)
+            .await?;
 
         Ok(MigrationStats {
             total_pools: total_count,

@@ -27,7 +27,10 @@ impl<'a> ServiceHelpers<'a> {
 
     /// 使用PDA计算池子地址
     pub fn calculate_pool_address_pda(&self, input_mint: &str, output_mint: &str) -> Result<String> {
-        LogUtils::log_operation_start("PDA池子地址计算", &format!("输入: {} -> 输出: {}", input_mint, output_mint));
+        LogUtils::log_operation_start(
+            "PDA池子地址计算",
+            &format!("输入: {} -> 输出: {}", input_mint, output_mint),
+        );
 
         let result = PoolInfoManager::calculate_pool_address_pda(input_mint, output_mint)?;
 
@@ -238,7 +241,8 @@ impl<'a> ServiceHelpers<'a> {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let amm_config_index = ConfigManager::get_amm_config_index();
         let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
-        let (tickarray_bitmap_extension_pda, _) = PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, &pool_pubkey);
+        let (tickarray_bitmap_extension_pda, _) =
+            PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, &pool_pubkey);
 
         // 使用工具类标准化mint顺序
         let (mint0, mint1, zero_for_one) = TokenUtils::normalize_mint_order(&input_mint_pubkey, &output_mint_pubkey);
@@ -267,14 +271,19 @@ impl<'a> ServiceHelpers<'a> {
         let accounts = self.rpc_client.get_multiple_accounts(&load_accounts)?;
 
         // 使用统一的错误处理
-        let amm_config_account = accounts[2].as_ref().ok_or_else(|| ErrorHandler::handle_account_load_error("AMM配置"))?;
-        let pool_account = accounts[3].as_ref().ok_or_else(|| ErrorHandler::handle_account_load_error("池子"))?;
+        let amm_config_account = accounts[2]
+            .as_ref()
+            .ok_or_else(|| ErrorHandler::handle_account_load_error("AMM配置"))?;
+        let pool_account = accounts[3]
+            .as_ref()
+            .ok_or_else(|| ErrorHandler::handle_account_load_error("池子"))?;
         let tickarray_bitmap_extension_account = accounts[4]
             .as_ref()
             .ok_or_else(|| ErrorHandler::handle_account_load_error("bitmap扩展"))?;
 
         // 反序列化关键状态
-        let amm_config_state: raydium_amm_v3::states::AmmConfig = self.deserialize_anchor_account(amm_config_account)?;
+        let amm_config_state: raydium_amm_v3::states::AmmConfig =
+            self.deserialize_anchor_account(amm_config_account)?;
         let pool_state: raydium_amm_v3::states::PoolState = self.deserialize_anchor_account(pool_account)?;
         let tickarray_bitmap_extension: raydium_amm_v3::states::TickArrayBitmapExtension =
             self.deserialize_anchor_account(tickarray_bitmap_extension_account)?;
@@ -282,45 +291,66 @@ impl<'a> ServiceHelpers<'a> {
         let epoch = self.rpc_client.get_epoch_info()?.epoch;
         LogUtils::log_debug_info(
             "计算状态",
-            &[("epoch", &epoch.to_string()), ("amount_specified", &amount_specified.to_string())],
+            &[
+                ("epoch", &epoch.to_string()),
+                ("amount_specified", &amount_specified.to_string()),
+            ],
         );
 
         // 加载tick arrays
         let mut tick_arrays = self
             .swap_calculator
-            .load_cur_and_next_five_tick_array_like_cli(&pool_state, &tickarray_bitmap_extension, zero_for_one, &raydium_program_id, &pool_pubkey)
+            .load_cur_and_next_five_tick_array_like_cli(
+                &pool_state,
+                &tickarray_bitmap_extension,
+                zero_for_one,
+                &raydium_program_id,
+                &pool_pubkey,
+            )
             .await?;
 
         // 执行计算
-        let (_other_amount_threshold, tick_array_indexs) = self.swap_calculator.get_output_amount_and_remaining_accounts_cli_exact(
-            amount_specified,
-            None,
-            zero_for_one,
-            true,
-            &amm_config_state,
-            &pool_state,
-            &tickarray_bitmap_extension,
-            &mut tick_arrays,
-        )?;
+        let (_other_amount_threshold, tick_array_indexs) = self
+            .swap_calculator
+            .get_output_amount_and_remaining_accounts_cli_exact(
+                amount_specified,
+                None,
+                zero_for_one,
+                true,
+                &amm_config_state,
+                &pool_state,
+                &tickarray_bitmap_extension,
+                &mut tick_arrays,
+            )?;
 
         // 构建remaining accounts
         let mut remaining_accounts = Vec::new();
         remaining_accounts.push(tickarray_bitmap_extension_pda.to_string());
 
         for tick_index in tick_array_indexs {
-            let (tick_array_key, _) = PDACalculator::calculate_tick_array_pda(&raydium_program_id, &pool_pubkey, tick_index);
+            let (tick_array_key, _) =
+                PDACalculator::calculate_tick_array_pda(&raydium_program_id, &pool_pubkey, tick_index);
             remaining_accounts.push(tick_array_key.to_string());
         }
 
         let last_pool_price_x64 = pool_state.sqrt_price_x64;
         let last_pool_price_x64 = last_pool_price_x64.to_string();
 
-        LogUtils::log_operation_success("本地remaining accounts计算", &format!("{}个账户", remaining_accounts.len()));
+        LogUtils::log_operation_success(
+            "本地remaining accounts计算",
+            &format!("{}个账户", remaining_accounts.len()),
+        );
         Ok((remaining_accounts, last_pool_price_x64))
     }
 
     /// 计算价格影响（与TypeScript一致）
-    pub async fn calculate_price_impact_simple(&self, input_mint: &str, output_mint: &str, input_amount: u64, pool_address: &str) -> Result<f64> {
+    pub async fn calculate_price_impact_simple(
+        &self,
+        input_mint: &str,
+        output_mint: &str,
+        input_amount: u64,
+        pool_address: &str,
+    ) -> Result<f64> {
         self.swap_calculator
             .calculate_price_impact_simple(input_mint, output_mint, input_amount, pool_address)
             .await
@@ -342,17 +372,26 @@ impl<'a> ServiceHelpers<'a> {
 
     /// 解析金额字符串
     pub fn parse_amount(&self, amount_str: &str) -> Result<u64> {
-        amount_str.parse::<u64>().map_err(|e| anyhow::anyhow!("金额格式错误: {}", e))
+        amount_str
+            .parse::<u64>()
+            .map_err(|e| anyhow::anyhow!("金额格式错误: {}", e))
     }
 
     /// 反序列化anchor账户
-    fn deserialize_anchor_account<T: anchor_lang::AccountDeserialize>(&self, account: &solana_sdk::account::Account) -> Result<T> {
+    fn deserialize_anchor_account<T: anchor_lang::AccountDeserialize>(
+        &self,
+        account: &solana_sdk::account::Account,
+    ) -> Result<T> {
         let mut data: &[u8] = &account.data;
         T::try_deserialize(&mut data).map_err(Into::into)
     }
 
     /// 构建交易数据
-    pub fn build_transaction_data(&self, instructions: Vec<solana_sdk::instruction::Instruction>, user_wallet: &Pubkey) -> Result<serde_json::Value> {
+    pub fn build_transaction_data(
+        &self,
+        instructions: Vec<solana_sdk::instruction::Instruction>,
+        user_wallet: &Pubkey,
+    ) -> Result<serde_json::Value> {
         let recent_blockhash = self.rpc_client.get_latest_blockhash()?;
         let transaction = super::TransactionBuilder::build_transaction(instructions, user_wallet, recent_blockhash)?;
         let transaction_base64 = super::TransactionBuilder::serialize_transaction_to_base64(&transaction)?;
@@ -363,7 +402,11 @@ impl<'a> ServiceHelpers<'a> {
     }
 
     /// 构建池子相关的vault信息
-    pub fn build_vault_info(&self, pool_state: &raydium_amm_v3::states::PoolState, input_mint: &Pubkey) -> (Pubkey, Pubkey, Pubkey, Pubkey) {
+    pub fn build_vault_info(
+        &self,
+        pool_state: &raydium_amm_v3::states::PoolState,
+        input_mint: &Pubkey,
+    ) -> (Pubkey, Pubkey, Pubkey, Pubkey) {
         if *input_mint == pool_state.token_mint_0 {
             (
                 pool_state.token_vault_0,
@@ -393,7 +436,7 @@ impl<'a> SwapV3ServiceHelper<'a> {
     pub fn new(rpc_client: &'a RpcClient) -> Self {
         // 从环境变量获取RPC URL来创建SwapV2Service
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-        
+
         Self {
             rpc_client,
             service_helper: ServiceHelpers::new(rpc_client),
@@ -527,9 +570,13 @@ impl<'a> SwapV3ServiceHelper<'a> {
         let output_mint_pubkey = Pubkey::from_str(output_mint)?;
 
         // 使用SwapV2Service获取实际的transfer fee计算
-        let input_transfer_fee_result = self.swap_v2_service.get_transfer_fee(&input_mint_pubkey, input_amount)?;
-        let output_transfer_fee_result = self.swap_v2_service.get_transfer_fee(&output_mint_pubkey, output_amount)?;
-        
+        let input_transfer_fee_result = self
+            .swap_v2_service
+            .get_transfer_fee(&input_mint_pubkey, input_amount)?;
+        let output_transfer_fee_result = self
+            .swap_v2_service
+            .get_transfer_fee(&output_mint_pubkey, output_amount)?;
+
         // 使用SwapV2Service获取实际的mint信息
         let input_mint_info = self.swap_v2_service.load_mint_info(&input_mint_pubkey)?;
         let output_mint_info = self.swap_v2_service.load_mint_info(&output_mint_pubkey)?;
@@ -556,7 +603,9 @@ impl<'a> SwapV3ServiceHelper<'a> {
     ) -> Result<solana_sdk::instruction::Instruction> {
         LogUtils::log_operation_start("构建SwapV3指令", &format!("用户: {}", user_wallet));
 
-        let pool_address = self.service_helper.calculate_pool_address_pda(input_mint, output_mint)?;
+        let pool_address = self
+            .service_helper
+            .calculate_pool_address_pda(input_mint, output_mint)?;
         let pool_pubkey = Pubkey::from_str(&pool_address)?;
         let input_mint_pubkey = Pubkey::from_str(input_mint)?;
         let output_mint_pubkey = Pubkey::from_str(output_mint)?;
@@ -571,14 +620,18 @@ impl<'a> SwapV3ServiceHelper<'a> {
         let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_pubkey);
 
         // 获取用户代币账户
-        let input_token_account = spl_associated_token_account::get_associated_token_address(user_wallet, &input_mint_pubkey);
-        let output_token_account = spl_associated_token_account::get_associated_token_address(user_wallet, &output_mint_pubkey);
+        let input_token_account =
+            spl_associated_token_account::get_associated_token_address(user_wallet, &input_mint_pubkey);
+        let output_token_account =
+            spl_associated_token_account::get_associated_token_address(user_wallet, &output_mint_pubkey);
 
         // 获取池子状态来确定vault地址
         let pool_account = self.rpc_client.get_account(&pool_pubkey)?;
-        let pool_state: raydium_amm_v3::states::PoolState = self.service_helper.deserialize_anchor_account(&pool_account)?;
+        let pool_state: raydium_amm_v3::states::PoolState =
+            self.service_helper.deserialize_anchor_account(&pool_account)?;
 
-        let (input_vault, output_vault, input_vault_mint, output_vault_mint) = self.service_helper.build_vault_info(&pool_state, &input_mint_pubkey);
+        let (input_vault, output_vault, input_vault_mint, output_vault_mint) =
+            self.service_helper.build_vault_info(&pool_state, &input_mint_pubkey);
 
         // 计算推荐系统相关地址
         let (payer_referral, _) = super::ReferralManager::calculate_referral_pda(&referral_program_id, user_wallet)?;
@@ -587,10 +640,22 @@ impl<'a> SwapV3ServiceHelper<'a> {
         let (upper, upper_token_account, upper_referral, upper_upper, upper_upper_token_account, project_token_account) =
             if let Some(ref accounts) = referral_accounts {
                 let upper = accounts.upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
-                let upper_token_account = accounts.upper_token_account.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
-                let upper_referral = accounts.upper_referral.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let upper_token_account = accounts
+                    .upper_token_account
+                    .as_ref()
+                    .map(|s| Pubkey::from_str(s))
+                    .transpose()?;
+                let upper_referral = accounts
+                    .upper_referral
+                    .as_ref()
+                    .map(|s| Pubkey::from_str(s))
+                    .transpose()?;
                 let upper_upper = accounts.upper_upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
-                let upper_upper_token_account = accounts.upper_upper_token_account.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+                let upper_upper_token_account = accounts
+                    .upper_upper_token_account
+                    .as_ref()
+                    .map(|s| Pubkey::from_str(s))
+                    .transpose()?;
                 let project_token_account = Pubkey::from_str(&accounts.project_token_account)?;
 
                 (
@@ -604,7 +669,8 @@ impl<'a> SwapV3ServiceHelper<'a> {
             } else {
                 // 默认项目方账户
                 let project_wallet = ConfigManager::get_project_wallet()?;
-                let project_token_account = super::ReferralManager::get_project_token_account(&project_wallet, &input_mint_pubkey)?;
+                let project_token_account =
+                    super::ReferralManager::get_project_token_account(&project_wallet, &input_mint_pubkey)?;
                 (None, None, None, None, None, project_token_account)
             };
 
@@ -660,7 +726,8 @@ impl<'a> SwapV3ServiceHelper<'a> {
             .get_remaining_accounts_and_pool_price(pool_address, input_mint, output_mint, amount)
             .await?;
 
-        let remaining_accounts = super::AccountMetaBuilder::create_remaining_accounts(&remaining_account_addresses, true)?;
+        let remaining_accounts =
+            super::AccountMetaBuilder::create_remaining_accounts(&remaining_account_addresses, true)?;
         Ok(remaining_accounts)
     }
 }

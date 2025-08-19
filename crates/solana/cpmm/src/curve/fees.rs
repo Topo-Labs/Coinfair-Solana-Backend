@@ -15,11 +15,7 @@ fn ceil_div(token_amount: u128, fee_numerator: u128, fee_denominator: u128) -> O
 
 /// Helper function for calculating swap fee
 pub fn floor_div(token_amount: u128, fee_numerator: u128, fee_denominator: u128) -> Option<u128> {
-    Some(
-        token_amount
-            .checked_mul(fee_numerator)?
-            .checked_div(fee_denominator)?,
-    )
+    Some(token_amount.checked_mul(fee_numerator)?.checked_div(fee_denominator)?)
 }
 
 impl Fees {
@@ -55,8 +51,7 @@ impl Fees {
             Some(post_fee_amount)
         } else {
             let numerator = post_fee_amount.checked_mul(u128::from(FEE_RATE_DENOMINATOR_VALUE))?;
-            let denominator =
-                u128::from(FEE_RATE_DENOMINATOR_VALUE).checked_sub(u128::from(trade_fee_rate))?;
+            let denominator = u128::from(FEE_RATE_DENOMINATOR_VALUE).checked_sub(u128::from(trade_fee_rate))?;
 
             numerator
                 .checked_add(denominator)?

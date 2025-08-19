@@ -634,10 +634,7 @@ impl<'a> SwapCalculator<'a> {
         info!("💰 swap_accounts: {:?}", swap_accounts.pool_state);
         let liquidity = swap_accounts.pool_state.liquidity;
         if liquidity <= 0 {
-            bail!(
-                "Liquidity insuffient! Available:{:?}",
-                liquidity
-            );
+            bail!("Liquidity insuffient! Available:{:?}", liquidity);
         }
 
         // 4. 为了保持与CLI完全一致，获取原始mint账户数据用于transfer fee计算

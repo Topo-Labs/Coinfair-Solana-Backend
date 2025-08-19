@@ -15,7 +15,8 @@ mod integration_tests;
 // Re-export the main service, storage, sync, chain loader and error handling
 pub use chain_loader::ChainPoolLoader;
 pub use error_handler::{
-    ConsistencyChecker, ConsistencyIssue, ConsistencyIssueType, ErrorCategory, ErrorHandler, HealthChecker, HealthStatus, IssueSeverity, RetryConfig, TransactionManager,
+    ConsistencyChecker, ConsistencyIssue, ConsistencyIssueType, ErrorCategory, ErrorHandler, HealthChecker,
+    HealthStatus, IssueSeverity, RetryConfig, TransactionManager,
 };
 pub use service::ClmmPoolService;
 pub use storage::{ClmmPoolStorageBuilder, ClmmPoolStorageService};

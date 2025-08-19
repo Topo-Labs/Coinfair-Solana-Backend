@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana_dto::{MintNftRequest, ClaimNftRequest};
-    use crate::services::solana::shared::SharedContext;
+    use crate::dtos::solana_dto::{ClaimNftRequest, MintNftRequest};
     use crate::services::solana::nft::NftService;
+    use crate::services::solana::shared::SharedContext;
     use solana_sdk::pubkey::Pubkey;
     use std::str::FromStr;
     use std::sync::Arc;
@@ -46,7 +46,7 @@ mod tests {
         let user_wallet = Pubkey::from_str("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").unwrap();
         let result = service.get_user_referral_pda(&user_wallet);
         assert!(result.is_ok());
-        
+
         let (pda, bump) = result.unwrap();
         assert_ne!(pda, Pubkey::default());
         assert!(bump > 0);
@@ -58,7 +58,7 @@ mod tests {
         let user_wallet = Pubkey::from_str("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").unwrap();
         let result = service.get_mint_counter_pda(&user_wallet);
         assert!(result.is_ok());
-        
+
         let (pda, bump) = result.unwrap();
         assert_ne!(pda, Pubkey::default());
         assert!(bump > 0);
@@ -70,7 +70,7 @@ mod tests {
         let user_wallet = Pubkey::from_str("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").unwrap();
         let result = service.get_nft_pool_authority_pda(&user_wallet);
         assert!(result.is_ok());
-        
+
         let (pda, bump) = result.unwrap();
         assert_ne!(pda, Pubkey::default());
         assert!(bump > 0);
@@ -83,7 +83,7 @@ mod tests {
         let (nft_pool_authority, _) = service.get_nft_pool_authority_pda(&user_wallet).unwrap();
         let result = service.get_nft_pool_account(&nft_pool_authority);
         assert!(result.is_ok());
-        
+
         let pool_account = result.unwrap();
         assert_ne!(pool_account, Pubkey::default());
     }
@@ -92,13 +92,13 @@ mod tests {
     async fn test_build_mint_nft_instructions() {
         let service = create_test_service();
         let user_wallet = Pubkey::from_str("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").unwrap();
-        
+
         let result = service.build_mint_nft_instructions(user_wallet, 1).await;
         assert!(result.is_ok());
-        
+
         let instructions = result.unwrap();
         assert_eq!(instructions.len(), 1);
-        
+
         let instruction = &instructions[0];
         assert_eq!(instruction.accounts.len(), 13); // 应该有13个账户
         assert!(!instruction.data.is_empty()); // 应该有数据
@@ -117,7 +117,7 @@ mod tests {
             user_wallet: "invalid_wallet".to_string(),
             amount: 1,
         };
-        
+
         // 这应该在验证时失败，因为钱包地址无效
         assert!(request.user_wallet.len() < 32);
     }
@@ -128,7 +128,7 @@ mod tests {
             user_wallet: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string(),
             amount: 0, // 无效数量
         };
-        
+
         // 这应该在验证时失败，因为数量为0
         assert_eq!(request.amount, 0);
     }
@@ -146,7 +146,7 @@ mod tests {
         let service = create_test_service();
         let result = service.get_referral_config_pda();
         assert!(result.is_ok());
-        
+
         let (pda, bump) = result.unwrap();
         assert_ne!(pda, Pubkey::default());
         assert!(bump > 0);
@@ -157,7 +157,7 @@ mod tests {
         let service = create_test_service();
         let result = service.get_protocol_wallet();
         assert!(result.is_ok());
-        
+
         let wallet = result.unwrap();
         assert_ne!(wallet, Pubkey::default());
     }
@@ -167,17 +167,17 @@ mod tests {
         let service = create_test_service();
         let user_wallet = Pubkey::from_str("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").unwrap();
         let upper_wallet = Pubkey::from_str("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy").unwrap();
-        
+
         let result = service.build_claim_nft_instructions(user_wallet, upper_wallet).await;
         assert!(result.is_ok());
-        
+
         let instructions = result.unwrap();
         assert_eq!(instructions.len(), 1);
-        
+
         let instruction = &instructions[0];
         assert_eq!(instruction.accounts.len(), 15); // 应该有15个账户
         assert!(!instruction.data.is_empty()); // 应该有数据 (discriminator)
-        
+
         // 验证upper_mint_counter账户是可写的
         let upper_mint_counter_found = instruction.accounts.iter().any(|meta| meta.is_writable);
         assert!(upper_mint_counter_found);
@@ -196,7 +196,7 @@ mod tests {
             user_wallet: "invalid_wallet".to_string(),
             upper: "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string(),
         };
-        
+
         // 这应该在验证时失败，因为用户钱包地址无效
         assert!(request.user_wallet.len() < 32);
     }
@@ -207,7 +207,7 @@ mod tests {
             user_wallet: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string(),
             upper: "invalid_upper".to_string(),
         };
-        
+
         // 这应该在验证时失败，因为上级钱包地址无效
         assert!(request.upper.len() < 32);
     }
@@ -219,7 +219,7 @@ mod tests {
             user_wallet: same_wallet.to_string(),
             upper: same_wallet.to_string(),
         };
-        
+
         // 验证不能自己推荐自己
         assert_eq!(request.user_wallet, request.upper);
     }
@@ -228,11 +228,11 @@ mod tests {
     fn test_pda_consistency() {
         let service = create_test_service();
         let user_wallet = Pubkey::from_str("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM").unwrap();
-        
+
         // 测试多次调用相同的PDA方法是否返回相同结果
         let (pda1, bump1) = service.get_user_referral_pda(&user_wallet).unwrap();
         let (pda2, bump2) = service.get_user_referral_pda(&user_wallet).unwrap();
-        
+
         assert_eq!(pda1, pda2);
         assert_eq!(bump1, bump2);
     }

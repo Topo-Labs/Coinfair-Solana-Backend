@@ -16,9 +16,11 @@ mod create_pool_tests {
     fn test_calculate_sqrt_price_x64() {
         // 直接测试计算逻辑，不依赖SolanaService实例
         let calculate_sqrt_price_x64 = |price: f64, decimals_0: u8, decimals_1: u8| -> u128 {
-            let multipler = |decimals: u8| -> f64 { (10_i32).checked_pow(decimals.try_into().unwrap()).unwrap() as f64 };
+            let multipler =
+                |decimals: u8| -> f64 { (10_i32).checked_pow(decimals.try_into().unwrap()).unwrap() as f64 };
 
-            let price_to_x64 = |price: f64| -> u128 { (price * raydium_amm_v3::libraries::fixed_point_64::Q64 as f64) as u128 };
+            let price_to_x64 =
+                |price: f64| -> u128 { (price * raydium_amm_v3::libraries::fixed_point_64::Q64 as f64) as u128 };
 
             let price_with_decimals = price * multipler(decimals_1) / multipler(decimals_0);
             price_to_x64(price_with_decimals.sqrt())
@@ -114,7 +116,10 @@ mod create_pool_tests {
             }
         };
 
-        let config_service = Arc::new(ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()));
+        let config_service = Arc::new(ClmmConfigService::new(
+            Arc::new(database.clone()),
+            shared_context.rpc_client.clone(),
+        ));
         let _service = ClmmPoolService::new(shared_context, &database, config_service);
         // If we get here without panicking, the service was created successfully
     }

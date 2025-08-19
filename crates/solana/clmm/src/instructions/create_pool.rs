@@ -128,18 +128,12 @@ pub struct CreatePool<'info> {
 }
 
 pub fn create_pool(ctx: Context<CreatePool>, sqrt_price_x64: u128, open_time: u64) -> Result<()> {
-    let mint0_associated_is_initialized = util::support_mint_associated_is_initialized(
-        &ctx.remaining_accounts,
-        &ctx.accounts.token_mint_0,
-    )?;
-    let mint1_associated_is_initialized = util::support_mint_associated_is_initialized(
-        &ctx.remaining_accounts,
-        &ctx.accounts.token_mint_1,
-    )?;
-    if !(util::is_supported_mint(&ctx.accounts.token_mint_0, mint0_associated_is_initialized)
-        .unwrap()
-        && util::is_supported_mint(&ctx.accounts.token_mint_1, mint1_associated_is_initialized)
-            .unwrap())
+    let mint0_associated_is_initialized =
+        util::support_mint_associated_is_initialized(&ctx.remaining_accounts, &ctx.accounts.token_mint_0)?;
+    let mint1_associated_is_initialized =
+        util::support_mint_associated_is_initialized(&ctx.remaining_accounts, &ctx.accounts.token_mint_1)?;
+    if !(util::is_supported_mint(&ctx.accounts.token_mint_0, mint0_associated_is_initialized).unwrap()
+        && util::is_supported_mint(&ctx.accounts.token_mint_1, mint1_associated_is_initialized).unwrap())
     {
         return err!(ErrorCode::NotSupportMint);
     }
@@ -150,16 +144,9 @@ pub fn create_pool(ctx: Context<CreatePool>, sqrt_price_x64: u128, open_time: u6
 
     let tick = tick_math::get_tick_at_sqrt_price(sqrt_price_x64)?;
     #[cfg(feature = "enable-log")]
-    msg!(
-        "create pool, init_price: {}, init_tick:{}",
-        sqrt_price_x64,
-        tick
-    );
+    msg!("create pool, init_price: {}, init_tick:{}", sqrt_price_x64, tick);
     // init observation
-    ctx.accounts
-        .observation_state
-        .load_init()?
-        .initialize(pool_id)?;
+    ctx.accounts.observation_state.load_init()?.initialize(pool_id)?;
 
     let bump = ctx.bumps.pool_state;
     pool_state.initialize(
@@ -176,10 +163,7 @@ pub fn create_pool(ctx: Context<CreatePool>, sqrt_price_x64: u128, open_time: u6
         ctx.accounts.observation_state.key(),
     )?;
 
-    ctx.accounts
-        .tick_array_bitmap
-        .load_init()?
-        .initialize(pool_id);
+    ctx.accounts.tick_array_bitmap.load_init()?.initialize(pool_id);
 
     emit!(PoolCreatedEvent {
         token_mint_0: ctx.accounts.token_mint_0.key(),

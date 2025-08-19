@@ -138,7 +138,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()
                 .unwrap_or(false),
-            event_listener_db_mode: std::env::var("EVENT_LISTENER_DB_MODE").unwrap_or_else(|_| "update_only".to_string()),
+            event_listener_db_mode: std::env::var("EVENT_LISTENER_DB_MODE")
+                .unwrap_or_else(|_| "update_only".to_string()),
         }
     }
 

@@ -7,11 +7,11 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+#[cfg(test)]
+pub mod config_fix_verification_tests;
 pub mod data_transform;
 #[cfg(test)]
 pub mod data_transform_optimization_tests;
-#[cfg(test)]
-pub mod config_fix_verification_tests;
 pub mod position_storage;
 pub mod refer_service;
 pub mod reward_service;

@@ -57,10 +57,16 @@ pub trait RewardRepositoryTrait {
 #[async_trait]
 impl RewardRepositoryTrait for Database {
     async fn create_reward(&self, user_address: &str, rewards: Vec<RewardItem>) -> AppResult<InsertOneResult> {
-        let existing_user = self.rewards.find_one(doc! { "user_address": user_address.to_lowercase()}, None).await?;
+        let existing_user = self
+            .rewards
+            .find_one(doc! { "user_address": user_address.to_lowercase()}, None)
+            .await?;
 
         if existing_user.is_some() {
-            return Err(AppError::Conflict(format!("Reward of User with address: {} already exists.", user_address)));
+            return Err(AppError::Conflict(format!(
+                "Reward of User with address: {} already exists.",
+                user_address
+            )));
         }
 
         let new_doc = Reward {
@@ -136,7 +142,10 @@ impl RewardRepositoryTrait for Database {
             }
         }
 
-        let result: Vec<RewardItem> = reward_map.into_iter().map(|(address, amount)| RewardItem { address, amount }).collect();
+        let result: Vec<RewardItem> = reward_map
+            .into_iter()
+            .map(|(address, amount)| RewardItem { address, amount })
+            .collect();
 
         Ok(result)
     }
@@ -158,7 +167,10 @@ impl RewardRepositoryTrait for Database {
             }
         }
 
-        let result: Vec<RewardItem> = reward_map.into_iter().map(|(address, amount)| RewardItem { address, amount }).collect();
+        let result: Vec<RewardItem> = reward_map
+            .into_iter()
+            .map(|(address, amount)| RewardItem { address, amount })
+            .collect();
 
         Ok(result)
     }
@@ -194,7 +206,10 @@ impl RewardRepositoryTrait for Database {
             }
         }
 
-        let mut result: Vec<RewardItem> = reward_map.into_iter().map(|(address, amount)| RewardItem { address, amount }).collect();
+        let mut result: Vec<RewardItem> = reward_map
+            .into_iter()
+            .map(|(address, amount)| RewardItem { address, amount })
+            .collect();
 
         result.sort_by(|a, b| b.amount.partial_cmp(&a.amount).unwrap_or(Ordering::Equal));
         Ok(result)

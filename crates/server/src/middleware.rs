@@ -23,7 +23,10 @@ pub async fn request_logger(ConnectInfo(addr): ConnectInfo<SocketAddr>, request:
         client_ip,
         method,
         uri,
-        request.headers().get("user-agent").map(|h| h.to_str().unwrap_or("Unknown"))
+        request
+            .headers()
+            .get("user-agent")
+            .map(|h| h.to_str().unwrap_or("Unknown"))
     );
 
     // 处理请求

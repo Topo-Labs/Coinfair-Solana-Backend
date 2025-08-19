@@ -9,22 +9,16 @@ pub struct ReferralManager;
 
 impl ReferralManager {
     /// 计算推荐账户PDA地址
-    pub fn calculate_referral_pda(
-        referral_program_id: &Pubkey,
-        user: &Pubkey,
-    ) -> Result<(Pubkey, u8)> {
+    pub fn calculate_referral_pda(referral_program_id: &Pubkey, user: &Pubkey) -> Result<(Pubkey, u8)> {
         let seeds = &[b"referral", user.as_ref()];
         let (pda, bump) = Pubkey::find_program_address(seeds, referral_program_id);
         Ok((pda, bump))
     }
 
     /// 查询用户的推荐关系信息
-    pub async fn get_referral_info(
-        user: &Pubkey,
-        referral_program_id: &Pubkey,
-    ) -> Result<Option<ReferralInfo>> {
+    pub async fn get_referral_info(user: &Pubkey, referral_program_id: &Pubkey) -> Result<Option<ReferralInfo>> {
         let (_referral_pda, _) = Self::calculate_referral_pda(referral_program_id, user)?;
-        
+
         // 这里应该是从链上查询实际数据的逻辑
         // 为了示例，返回None表示没有推荐关系
         Ok(None)
@@ -64,7 +58,7 @@ impl ReferralManager {
         RewardDistribution {
             total_reward_fee: total_fee,
             project_reward,
-            upper_reward: upper_total_reward * 5 / 6, // 约41.67%总费用
+            upper_reward: upper_total_reward * 5 / 6,   // 约41.67%总费用
             upper_upper_reward: upper_total_reward / 6, // 约8.33%总费用
             distribution_ratios: RewardDistributionRatios {
                 project_ratio: 50.0,
@@ -75,27 +69,15 @@ impl ReferralManager {
     }
 
     /// 获取项目方代币账户地址
-    pub fn get_project_token_account(
-        pool_owner: &Pubkey,
-        token_mint: &Pubkey,
-    ) -> Result<Pubkey> {
+    pub fn get_project_token_account(pool_owner: &Pubkey, token_mint: &Pubkey) -> Result<Pubkey> {
         // 使用关联代币账户
-        let project_token_account = spl_associated_token_account::get_associated_token_address(
-            pool_owner,
-            token_mint,
-        );
+        let project_token_account = spl_associated_token_account::get_associated_token_address(pool_owner, token_mint);
         Ok(project_token_account)
     }
 
     /// 获取上级用户的代币账户地址
-    pub fn get_upper_token_account(
-        upper: &Pubkey,
-        token_mint: &Pubkey,
-    ) -> Result<Pubkey> {
-        let upper_token_account = spl_associated_token_account::get_associated_token_address(
-            upper,
-            token_mint,
-        );
+    pub fn get_upper_token_account(upper: &Pubkey, token_mint: &Pubkey) -> Result<Pubkey> {
+        let upper_token_account = spl_associated_token_account::get_associated_token_address(upper, token_mint);
         Ok(upper_token_account)
     }
 }
@@ -178,7 +160,8 @@ impl PoolInfoManager {
         let (mint0, mint1, _) = TokenUtils::normalize_mint_order(&input_mint_pubkey, &output_mint_pubkey);
 
         let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
-        let (pool_id_account, _) = PDACalculator::calculate_pool_pda(&raydium_program_id, &amm_config_key, &mint0, &mint1);
+        let (pool_id_account, _) =
+            PDACalculator::calculate_pool_pda(&raydium_program_id, &amm_config_key, &mint0, &mint1);
 
         Ok(pool_id_account.to_string())
     }

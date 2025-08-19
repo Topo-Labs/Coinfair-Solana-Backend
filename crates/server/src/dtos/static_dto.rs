@@ -58,7 +58,11 @@ pub struct DefaultFeeConfig {
 
 impl AutoFeeConfig {
     pub fn default_fees() -> DefaultFeeConfig {
-        DefaultFeeConfig { vh: 25216, h: 18912, m: 10000 }
+        DefaultFeeConfig {
+            vh: 25216,
+            h: 18912,
+            m: 10000,
+        }
     }
 }
 

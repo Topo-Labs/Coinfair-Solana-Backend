@@ -1,11 +1,11 @@
 //! CLMM池子服务异常处理模块
-//! 
+//!
 //! 提供统一的错误处理、重试机制和数据一致性保障
 
 use database::clmm_pool::{ClmmPool, PoolStatus};
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{error, warn, info};
+use tracing::{error, info, warn};
 use utils::AppResult;
 
 /// 错误类型分类
@@ -68,46 +68,51 @@ impl ErrorHandler {
     /// 分类错误类型
     pub fn categorize_error(&self, error: &anyhow::Error) -> ErrorCategory {
         let error_msg = error.to_string().to_lowercase();
-        
+
         // 网络相关错误
-        if error_msg.contains("connection") || 
-           error_msg.contains("timeout") || 
-           error_msg.contains("network") ||
-           error_msg.contains("dns") {
+        if error_msg.contains("connection")
+            || error_msg.contains("timeout")
+            || error_msg.contains("network")
+            || error_msg.contains("dns")
+        {
             return ErrorCategory::Network;
         }
-        
+
         // RPC相关错误
-        if error_msg.contains("rpc") || 
-           error_msg.contains("solana") ||
-           error_msg.contains("account not found") ||
-           error_msg.contains("insufficient funds") {
+        if error_msg.contains("rpc")
+            || error_msg.contains("solana")
+            || error_msg.contains("account not found")
+            || error_msg.contains("insufficient funds")
+        {
             return ErrorCategory::Rpc;
         }
-        
+
         // 数据库相关错误
-        if error_msg.contains("mongodb") || 
-           error_msg.contains("database") ||
-           error_msg.contains("collection") ||
-           error_msg.contains("bson") {
+        if error_msg.contains("mongodb")
+            || error_msg.contains("database")
+            || error_msg.contains("collection")
+            || error_msg.contains("bson")
+        {
             return ErrorCategory::Database;
         }
-        
+
         // 验证相关错误
-        if error_msg.contains("invalid") || 
-           error_msg.contains("validation") ||
-           error_msg.contains("parse") ||
-           error_msg.contains("format") {
+        if error_msg.contains("invalid")
+            || error_msg.contains("validation")
+            || error_msg.contains("parse")
+            || error_msg.contains("format")
+        {
             return ErrorCategory::Validation;
         }
-        
+
         // 业务逻辑错误
-        if error_msg.contains("pool already exists") || 
-           error_msg.contains("insufficient liquidity") ||
-           error_msg.contains("price out of range") {
+        if error_msg.contains("pool already exists")
+            || error_msg.contains("insufficient liquidity")
+            || error_msg.contains("price out of range")
+        {
             return ErrorCategory::Business;
         }
-        
+
         // 默认为系统错误
         ErrorCategory::System
     }
@@ -115,9 +120,7 @@ impl ErrorHandler {
     /// 判断错误是否可重试
     pub fn is_retryable(&self, error: &anyhow::Error) -> bool {
         match self.categorize_error(error) {
-            ErrorCategory::Network | 
-            ErrorCategory::Rpc | 
-            ErrorCategory::Database => true,
+            ErrorCategory::Network | ErrorCategory::Rpc | ErrorCategory::Database => true,
             _ => false,
         }
     }
@@ -127,34 +130,31 @@ impl ErrorHandler {
         if attempt == 0 {
             return Duration::from_millis(0);
         }
-        
+
         let base_delay = self.retry_config.base_delay_ms as f64;
         let multiplier = self.retry_config.backoff_multiplier;
         let max_delay = self.retry_config.max_delay_ms as f64;
-        
+
         // 指数退避
         let delay = base_delay * multiplier.powi((attempt - 1) as i32);
         let delay = delay.min(max_delay);
-        
+
         // 添加简单的抖动 (使用系统时间作为随机源)
         let jitter_ms = (chrono::Utc::now().timestamp_millis() % 100) as f64;
         let jitter = delay * self.retry_config.jitter_factor * (jitter_ms / 100.0 - 0.5);
         let final_delay = (delay + jitter).max(0.0) as u64;
-        
+
         Duration::from_millis(final_delay)
     }
 
     /// 执行带重试的操作
-    pub async fn execute_with_retry<F, Fut, T>(&self, 
-        operation_name: &str,
-        mut operation: F
-    ) -> AppResult<T>
+    pub async fn execute_with_retry<F, Fut, T>(&self, operation_name: &str, mut operation: F) -> AppResult<T>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = AppResult<T>>,
     {
         let mut last_error: Option<utils::AppError> = None;
-        
+
         for attempt in 0..=self.retry_config.max_retries {
             match operation().await {
                 Ok(result) => {
@@ -166,12 +166,18 @@ impl ErrorHandler {
                 Err(error) => {
                     let error_msg = error.to_string();
                     let is_retryable = self.is_retryable(&anyhow::anyhow!(error_msg.clone()));
-                    
+
                     if attempt < self.retry_config.max_retries && is_retryable {
                         let delay = self.calculate_delay(attempt + 1);
-                        warn!("⚠️ 操作失败，将重试: {} (尝试 {}/{}) - {} (延迟: {:?})", 
-                              operation_name, attempt + 1, self.retry_config.max_retries, error_msg, delay);
-                        
+                        warn!(
+                            "⚠️ 操作失败，将重试: {} (尝试 {}/{}) - {} (延迟: {:?})",
+                            operation_name,
+                            attempt + 1,
+                            self.retry_config.max_retries,
+                            error_msg,
+                            delay
+                        );
+
                         last_error = Some(error);
                         sleep(delay).await;
                     } else {
@@ -181,7 +187,7 @@ impl ErrorHandler {
                 }
             }
         }
-        
+
         Err(last_error.unwrap_or_else(|| anyhow::anyhow!("未知错误").into()))
     }
 }
@@ -193,7 +199,7 @@ impl ConsistencyChecker {
     /// 检查池子数据一致性
     pub async fn check_pool_consistency(&self, pool: &ClmmPool) -> Vec<ConsistencyIssue> {
         let mut issues = Vec::new();
-        
+
         // 1. 检查基本字段完整性
         if pool.pool_address.is_empty() {
             issues.push(ConsistencyIssue {
@@ -203,7 +209,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::Critical,
             });
         }
-        
+
         if pool.mint0.mint_address.is_empty() {
             issues.push(ConsistencyIssue {
                 issue_type: ConsistencyIssueType::MissingField,
@@ -212,7 +218,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::Critical,
             });
         }
-        
+
         if pool.mint1.mint_address.is_empty() {
             issues.push(ConsistencyIssue {
                 issue_type: ConsistencyIssueType::MissingField,
@@ -221,7 +227,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::Critical,
             });
         }
-        
+
         // 2. 检查mint顺序
         if pool.mint0.mint_address >= pool.mint1.mint_address {
             issues.push(ConsistencyIssue {
@@ -231,7 +237,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::High,
             });
         }
-        
+
         // 3. 检查价格合理性
         if pool.price_info.initial_price <= 0.0 {
             issues.push(ConsistencyIssue {
@@ -241,10 +247,11 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::High,
             });
         }
-        
+
         // 4. 检查时间戳合理性
         let now = chrono::Utc::now().timestamp() as u64;
-        if pool.api_created_at > now + 3600 {  // 允许1小时的时间偏差
+        if pool.api_created_at > now + 3600 {
+            // 允许1小时的时间偏差
             issues.push(ConsistencyIssue {
                 issue_type: ConsistencyIssueType::InvalidValue,
                 field_name: "created_at".to_string(),
@@ -252,7 +259,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::Medium,
             });
         }
-        
+
         if pool.updated_at < pool.api_created_at {
             issues.push(ConsistencyIssue {
                 issue_type: ConsistencyIssueType::InvalidValue,
@@ -261,7 +268,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::Medium,
             });
         }
-        
+
         // 5. 检查同步状态一致性
         if pool.sync_status.needs_sync && pool.sync_status.sync_error.is_some() {
             issues.push(ConsistencyIssue {
@@ -271,7 +278,7 @@ impl ConsistencyChecker {
                 severity: IssueSeverity::Low,
             });
         }
-        
+
         // 6. 检查交易信息一致性
         if let Some(tx_info) = &pool.transaction_info {
             if tx_info.signature.is_empty() {
@@ -282,7 +289,7 @@ impl ConsistencyChecker {
                     severity: IssueSeverity::High,
                 });
             }
-            
+
             // 如果有交易信息，状态应该是Active或Pending
             match pool.status {
                 PoolStatus::Created => {
@@ -296,21 +303,21 @@ impl ConsistencyChecker {
                 _ => {}
             }
         }
-        
+
         issues
     }
 
     /// 自动修复可修复的一致性问题
     pub async fn auto_fix_issues(&self, pool: &mut ClmmPool, issues: &[ConsistencyIssue]) -> Vec<String> {
         let mut fixed_issues = Vec::new();
-        
+
         for issue in issues {
             match &issue.issue_type {
                 ConsistencyIssueType::InvalidOrder if issue.field_name == "mint_order" => {
                     // 自动修复mint顺序
                     if pool.mint0.mint_address > pool.mint1.mint_address {
                         std::mem::swap(&mut pool.mint0, &mut pool.mint1);
-                        
+
                         // 调整价格
                         if pool.price_info.initial_price != 0.0 {
                             pool.price_info.initial_price = 1.0 / pool.price_info.initial_price;
@@ -318,7 +325,7 @@ impl ConsistencyChecker {
                         if let Some(current_price) = pool.price_info.current_price {
                             pool.price_info.current_price = Some(1.0 / current_price);
                         }
-                        
+
                         fixed_issues.push("修复了mint地址顺序和相应的价格".to_string());
                     }
                 }
@@ -334,7 +341,7 @@ impl ConsistencyChecker {
                 }
             }
         }
-        
+
         fixed_issues
     }
 }
@@ -379,16 +386,12 @@ pub struct TransactionManager;
 
 impl TransactionManager {
     /// 执行带事务的池子创建操作
-    pub async fn create_pool_with_transaction<F>(
-        &self,
-        operation_name: &str,
-        operation: F,
-    ) -> AppResult<String>
+    pub async fn create_pool_with_transaction<F>(&self, operation_name: &str, operation: F) -> AppResult<String>
     where
         F: std::future::Future<Output = AppResult<String>>,
     {
         info!("🔄 开始事务操作: {}", operation_name);
-        
+
         // 这里可以扩展为真正的数据库事务
         // 目前先实现基本的错误处理和日志记录
         match operation.await {
@@ -398,10 +401,10 @@ impl TransactionManager {
             }
             Err(error) => {
                 error!("❌ 事务操作失败: {} - 错误: {}", operation_name, error);
-                
+
                 // 这里可以添加回滚逻辑
                 self.rollback_operation(operation_name).await?;
-                
+
                 Err(error)
             }
         }
@@ -410,10 +413,10 @@ impl TransactionManager {
     /// 回滚操作 (占位符实现)
     async fn rollback_operation(&self, operation_name: &str) -> AppResult<()> {
         warn!("🔄 执行回滚操作: {}", operation_name);
-        
+
         // TODO: 实现具体的回滚逻辑
         // 例如：删除部分创建的记录、恢复状态等
-        
+
         Ok(())
     }
 }
@@ -425,16 +428,16 @@ impl HealthChecker {
     /// 检查系统健康状态
     pub async fn check_system_health(&self) -> HealthStatus {
         let issues = Vec::new();
-        
+
         // 检查数据库连接
         // TODO: 实现实际的数据库连接检查
-        
+
         // 检查RPC连接
         // TODO: 实现实际的RPC连接检查
-        
+
         // 检查同步状态
         // TODO: 实现同步状态检查
-        
+
         if issues.is_empty() {
             HealthStatus::Healthy
         } else {
@@ -459,13 +462,13 @@ mod tests {
     #[test]
     fn test_error_categorization() {
         let handler = ErrorHandler::new(None);
-        
+
         let network_error = anyhow::anyhow!("Connection timeout");
         assert_eq!(handler.categorize_error(&network_error), ErrorCategory::Network);
-        
+
         let rpc_error = anyhow::anyhow!("RPC call failed");
         assert_eq!(handler.categorize_error(&rpc_error), ErrorCategory::Rpc);
-        
+
         let validation_error = anyhow::anyhow!("Invalid address format");
         assert_eq!(handler.categorize_error(&validation_error), ErrorCategory::Validation);
     }
@@ -473,11 +476,11 @@ mod tests {
     #[test]
     fn test_retry_delay_calculation() {
         let handler = ErrorHandler::new(None);
-        
+
         let delay1 = handler.calculate_delay(1);
         let delay2 = handler.calculate_delay(2);
         let delay3 = handler.calculate_delay(3);
-        
+
         // 验证指数退避
         assert!(delay2 > delay1);
         assert!(delay3 > delay2);

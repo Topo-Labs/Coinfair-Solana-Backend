@@ -175,7 +175,9 @@ impl Coinfair {
     }
 
     async fn with_service(config: Arc<AppConfig>) -> Services {
-        let mongodb = Database::new(config.clone()).await.expect("mongodb wrong in coinfair/src/main.rs");
+        let mongodb = Database::new(config.clone())
+            .await
+            .expect("mongodb wrong in coinfair/src/main.rs");
 
         let services = Services::new(mongodb);
         services

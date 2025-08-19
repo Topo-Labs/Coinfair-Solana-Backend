@@ -63,7 +63,13 @@ mod integration_tests {
         let app = create_test_app().await;
 
         let response = app
-            .oneshot(Request::builder().uri("/api/v1/solana/events/nft-claims/stats").method("GET").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/solana/events/nft-claims/stats")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -108,7 +114,13 @@ mod integration_tests {
         let app = create_test_app().await;
 
         let response = app
-            .oneshot(Request::builder().uri("/api/v1/solana/events/rewards/stats").method("GET").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/solana/events/rewards/stats")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -182,7 +194,13 @@ mod integration_tests {
         // 测试默认分页参数
         let response = app
             .clone()
-            .oneshot(Request::builder().uri("/api/v1/solana/events/nft-claims").method("GET").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/solana/events/nft-claims")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -272,13 +290,22 @@ mod integration_tests {
     async fn test_date_range_filter() {
         let app = create_test_app().await;
 
-        let start_date = chrono::Utc::now().checked_sub_signed(chrono::Duration::days(30)).unwrap().timestamp();
+        let start_date = chrono::Utc::now()
+            .checked_sub_signed(chrono::Duration::days(30))
+            .unwrap()
+            .timestamp();
         let end_date = chrono::Utc::now().timestamp();
 
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/v1/solana/events/nft-claims?start_date={}&end_date={}", start_date, end_date).as_str())
+                    .uri(
+                        format!(
+                            "/api/v1/solana/events/nft-claims?start_date={}&end_date={}",
+                            start_date, end_date
+                        )
+                        .as_str(),
+                    )
                     .method("GET")
                     .body(Body::empty())
                     .unwrap(),
@@ -391,7 +418,13 @@ mod integration_tests {
         // 测试无效页码（0）
         let response = app
             .clone()
-            .oneshot(Request::builder().uri("/api/v1/solana/events/nft-claims?page=0").method("GET").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/solana/events/nft-claims?page=0")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 

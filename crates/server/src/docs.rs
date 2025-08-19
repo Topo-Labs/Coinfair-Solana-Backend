@@ -101,7 +101,7 @@ use utoipa::OpenApi;
         crate::api::solana::static_config_controller::get_mint_list,
         crate::api::solana::static_config_controller::get_info,
         crate::api::solana::static_config_controller::get_clmm_config,
-        // Token Management endpoints  
+        // Token Management endpoints
         crate::api::solana::token_controller::push_token,
         crate::api::solana::token_controller::get_token_list,
         crate::api::solana::token_controller::query_tokens,

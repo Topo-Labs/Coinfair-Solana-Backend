@@ -40,7 +40,11 @@ impl EventService {
         let page_size = page_size.unwrap_or(20).min(100); // 最大100条
         let skip = (page - 1) * page_size;
         let sort_field = sort_by.unwrap_or_else(|| "claimed_at".to_string());
-        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" {
+            1
+        } else {
+            -1
+        };
 
         // 构建查询条件
         let filter = doc! { "claimer": claimer };
@@ -49,10 +53,18 @@ impl EventService {
         let sort = doc! { &sort_field: sort_direction };
 
         // 构建查询选项
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
         // 查询总数
-        let total = self.database.nft_claim_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .nft_claim_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
         // 查询数据
         let cursor = self.database.nft_claim_events.find(filter, find_options).await?;
@@ -71,7 +83,12 @@ impl EventService {
     }
 
     /// 根据NFT mint地址查询领取事件
-    pub async fn get_nft_claim_events_by_nft_mint(&self, nft_mint: &str, page: Option<u64>, page_size: Option<u64>) -> Result<PaginatedResponse<NftClaimEvent>> {
+    pub async fn get_nft_claim_events_by_nft_mint(
+        &self,
+        nft_mint: &str,
+        page: Option<u64>,
+        page_size: Option<u64>,
+    ) -> Result<PaginatedResponse<NftClaimEvent>> {
         info!("🔍 查询NFT {} 的领取事件", nft_mint);
 
         let page = page.unwrap_or(1);
@@ -81,9 +98,17 @@ impl EventService {
         let filter = doc! { "nft_mint": nft_mint };
         let sort = doc! { "claimed_at": -1 };
 
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
-        let total = self.database.nft_claim_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .nft_claim_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
         let cursor = self.database.nft_claim_events.find(filter, find_options).await?;
 
@@ -118,7 +143,11 @@ impl EventService {
         let page_size = page_size.unwrap_or(20).min(100);
         let skip = (page - 1) * page_size;
         let sort_field = sort_by.unwrap_or_else(|| "claimed_at".to_string());
-        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" {
+            1
+        } else {
+            -1
+        };
 
         // 构建过滤条件
         let mut filter = Document::new();
@@ -145,9 +174,17 @@ impl EventService {
 
         let sort = doc! { &sort_field: sort_direction };
 
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
-        let total = self.database.nft_claim_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .nft_claim_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
         let cursor = self.database.nft_claim_events.find(filter, find_options).await?;
 
@@ -193,7 +230,11 @@ impl EventService {
         let page_size = page_size.unwrap_or(20).min(100);
         let skip = (page - 1) * page_size;
         let sort_field = sort_by.unwrap_or_else(|| "claimed_at".to_string());
-        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" {
+            1
+        } else {
+            -1
+        };
 
         // 构建高级过滤条件
         let mut filter = Document::new();
@@ -274,9 +315,17 @@ impl EventService {
 
         let sort = doc! { &sort_field: sort_direction };
 
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
-        let total = self.database.nft_claim_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .nft_claim_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
         let cursor = self.database.nft_claim_events.find(filter, find_options).await?;
 
@@ -321,7 +370,11 @@ impl EventService {
         let page_size = page_size.unwrap_or(20).min(100);
         let skip = (page - 1) * page_size;
         let sort_field = sort_by.unwrap_or_else(|| "distributed_at".to_string());
-        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" {
+            1
+        } else {
+            -1
+        };
 
         // 构建查询条件
         let mut filter = doc! { "recipient": recipient };
@@ -336,11 +389,23 @@ impl EventService {
 
         let sort = doc! { &sort_field: sort_direction };
 
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
-        let total = self.database.reward_distribution_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .reward_distribution_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
-        let cursor = self.database.reward_distribution_events.find(filter, find_options).await?;
+        let cursor = self
+            .database
+            .reward_distribution_events
+            .find(filter, find_options)
+            .await?;
 
         let items: Vec<RewardDistributionEvent> = cursor.try_collect().await?;
 
@@ -356,10 +421,17 @@ impl EventService {
     }
 
     /// 根据分发ID查询奖励事件
-    pub async fn get_reward_event_by_distribution_id(&self, distribution_id: i64) -> Result<Option<RewardDistributionEvent>> {
+    pub async fn get_reward_event_by_distribution_id(
+        &self,
+        distribution_id: i64,
+    ) -> Result<Option<RewardDistributionEvent>> {
         info!("🔍 查询分发ID {} 的奖励事件", distribution_id);
 
-        let event = self.database.reward_distribution_event_repository.find_by_distribution_id(distribution_id).await?;
+        let event = self
+            .database
+            .reward_distribution_event_repository
+            .find_by_distribution_id(distribution_id)
+            .await?;
 
         Ok(event)
     }
@@ -384,7 +456,11 @@ impl EventService {
         let page_size = page_size.unwrap_or(20).min(100);
         let skip = (page - 1) * page_size;
         let sort_field = sort_by.unwrap_or_else(|| "distributed_at".to_string());
-        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" {
+            1
+        } else {
+            -1
+        };
 
         // 构建过滤条件
         let mut filter = Document::new();
@@ -419,11 +495,23 @@ impl EventService {
 
         let sort = doc! { &sort_field: sort_direction };
 
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
-        let total = self.database.reward_distribution_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .reward_distribution_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
-        let cursor = self.database.reward_distribution_events.find(filter, find_options).await?;
+        let cursor = self
+            .database
+            .reward_distribution_events
+            .find(filter, find_options)
+            .await?;
 
         let items: Vec<RewardDistributionEvent> = cursor.try_collect().await?;
 
@@ -475,7 +563,11 @@ impl EventService {
         let page_size = page_size.unwrap_or(20).min(100);
         let skip = (page - 1) * page_size;
         let sort_field = sort_by.unwrap_or_else(|| "distributed_at".to_string());
-        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" { 1 } else { -1 };
+        let sort_direction = if sort_order.unwrap_or_else(|| "desc".to_string()) == "asc" {
+            1
+        } else {
+            -1
+        };
 
         // 构建高级过滤条件
         let mut filter = Document::new();
@@ -600,11 +692,23 @@ impl EventService {
 
         let sort = doc! { &sort_field: sort_direction };
 
-        let find_options = FindOptions::builder().skip(skip).limit(page_size as i64).sort(sort).build();
+        let find_options = FindOptions::builder()
+            .skip(skip)
+            .limit(page_size as i64)
+            .sort(sort)
+            .build();
 
-        let total = self.database.reward_distribution_events.count_documents(filter.clone(), None).await? as u64;
+        let total = self
+            .database
+            .reward_distribution_events
+            .count_documents(filter.clone(), None)
+            .await? as u64;
 
-        let cursor = self.database.reward_distribution_events.find(filter, find_options).await?;
+        let cursor = self
+            .database
+            .reward_distribution_events
+            .find(filter, find_options)
+            .await?;
 
         let items: Vec<RewardDistributionEvent> = cursor.try_collect().await?;
 
@@ -623,7 +727,11 @@ impl EventService {
     pub async fn get_reward_stats(&self) -> Result<RewardStats> {
         info!("📊 获取奖励分发统计信息");
 
-        let stats = self.database.reward_distribution_event_repository.get_reward_stats().await?;
+        let stats = self
+            .database
+            .reward_distribution_event_repository
+            .get_reward_stats()
+            .await?;
 
         Ok(stats)
     }
@@ -684,7 +792,11 @@ impl EventService {
             },
         ];
 
-        let mut cursor = self.database.reward_distribution_events.aggregate(pipeline, None).await?;
+        let mut cursor = self
+            .database
+            .reward_distribution_events
+            .aggregate(pipeline, None)
+            .await?;
 
         let summary = if let Some(doc) = cursor.try_next().await? {
             UserRewardSummary {

@@ -15,7 +15,9 @@ impl ApplicationServer {
         // 这里不再重复初始化日志
 
         let address = format!("{}:{}", config.app_host, config.app_port);
-        let tcp_listener = tokio::net::TcpListener::bind(address).await.context("🔴 Failed to bind TCP listener")?;
+        let tcp_listener = tokio::net::TcpListener::bind(address)
+            .await
+            .context("🔴 Failed to bind TCP listener")?;
 
         let local_addr = tcp_listener.local_addr().context("🔴 Failed to get local address")?;
 

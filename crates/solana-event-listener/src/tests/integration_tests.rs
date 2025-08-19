@@ -1,5 +1,5 @@
 //! 集成测试
-//! 
+//!
 //! 验证所有修复的有效性：
 //! 1. 真实slot获取逻辑
 //! 2. 系统资源监控
@@ -8,16 +8,11 @@
 //! 5. 测试数据清理
 
 use crate::{
-    config::EventListenerConfig,
-    error::EventListenerError,
-    metrics::MetricsCollector,
-    persistence::BatchWriter,
-    subscriber::SubscriptionManager,
-    recovery::CheckpointManager,
-    parser::EventParserRegistry,
+    config::EventListenerConfig, error::EventListenerError, metrics::MetricsCollector, parser::EventParserRegistry,
+    persistence::BatchWriter, recovery::CheckpointManager, subscriber::SubscriptionManager,
 };
-use std::sync::Arc;
 use solana_sdk::pubkey::Pubkey;
+use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 
 /// 创建测试配置
@@ -68,18 +63,12 @@ async fn test_fix_1_real_slot_retrieval() {
     let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-    let manager = SubscriptionManager::new(
-        &config,
-        parser_registry,
-        batch_writer,
-        checkpoint_manager,
-        metrics,
-    ).await.unwrap();
+    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+        .await
+        .unwrap();
 
     // 测试获取当前slot（注意：这会向真实的RPC端点发送请求）
-    let result = timeout(Duration::from_secs(10), async {
-        manager.get_current_slot().await
-    }).await;
+    let result = timeout(Duration::from_secs(10), async { manager.get_current_slot().await }).await;
 
     match result {
         Ok(Ok(slot)) => {
@@ -113,10 +102,14 @@ async fn test_fix_2_system_resource_monitoring() {
     // 验证不再使用占位符值
     assert!(report.system_resources.memory_usage_mb >= 0.0, "内存使用应该 >= 0");
     assert!(report.system_resources.cpu_usage_percent >= 0.0, "CPU使用应该 >= 0");
-    assert!(report.system_resources.cpu_usage_percent <= 100.0 * std::thread::available_parallelism().unwrap().get() as f64, "CPU使用应该合理");
-    
+    assert!(
+        report.system_resources.cpu_usage_percent <= 100.0 * std::thread::available_parallelism().unwrap().get() as f64,
+        "CPU使用应该合理"
+    );
+
     // 验证不是占位符值0.0（除非真的是0）
-    let is_placeholder = report.system_resources.memory_usage_mb == 0.0 && report.system_resources.cpu_usage_percent == 0.0;
+    let is_placeholder =
+        report.system_resources.memory_usage_mb == 0.0 && report.system_resources.cpu_usage_percent == 0.0;
     if is_placeholder {
         println!("⚠️ 警告：系统资源值可能仍为占位符，需进一步检查");
     }
@@ -145,7 +138,7 @@ async fn test_fix_3_intelligent_retry_logic() {
             created_at: 1234567890,
             signature: "integration_test_signature".to_string(),
             slot: 12345,
-        }
+        },
     )];
 
     // 测试可重试错误
@@ -190,7 +183,10 @@ async fn test_fix_3_intelligent_retry_logic() {
     let batch_id = "test-batch-limit";
 
     // 第一次应该可以重试
-    assert!(writer.should_retry_batch(&test_batch, &test_error, batch_id).await, "第一次应该可以重试");
+    assert!(
+        writer.should_retry_batch(&test_batch, &test_error, batch_id).await,
+        "第一次应该可以重试"
+    );
 
     // 模拟达到最大重试次数
     {
@@ -199,7 +195,10 @@ async fn test_fix_3_intelligent_retry_logic() {
     }
 
     // 达到限制后应该拒绝重试
-    assert!(!writer.should_retry_batch(&test_batch, &test_error, batch_id).await, "达到限制后应该拒绝重试");
+    assert!(
+        !writer.should_retry_batch(&test_batch, &test_error, batch_id).await,
+        "达到限制后应该拒绝重试"
+    );
 
     println!("✅ 修复3验证成功：智能重试机制工作正常");
 }
@@ -217,7 +216,10 @@ async fn test_fix_4_enhanced_prometheus_export() {
     collector.record_event_failed().await.unwrap();
     collector.record_websocket_connection().await.unwrap();
     collector.record_batch_write().await.unwrap();
-    collector.record_processing_duration(Duration::from_millis(100)).await.unwrap();
+    collector
+        .record_processing_duration(Duration::from_millis(100))
+        .await
+        .unwrap();
 
     // 添加自定义指标
     let custom_metric = crate::metrics::collector::MetricData::new(
@@ -225,7 +227,8 @@ async fn test_fix_4_enhanced_prometheus_export() {
         crate::metrics::collector::MetricType::Gauge,
         123.45,
         "Integration test custom metric".to_string(),
-    ).with_label("test_type".to_string(), "integration".to_string());
+    )
+    .with_label("test_type".to_string(), "integration".to_string());
 
     collector.add_custom_metric(custom_metric).await.unwrap();
 
@@ -239,7 +242,7 @@ async fn test_fix_4_enhanced_prometheus_export() {
     // 验证增强功能
     let enhanced_metrics = vec![
         "events_success_rate",
-        "events_per_second", 
+        "events_per_second",
         "websocket_connected",
         "websocket_latency_ms",
         "batch_writes_per_minute",
@@ -259,14 +262,26 @@ async fn test_fix_4_enhanced_prometheus_export() {
     }
 
     // 验证自定义指标
-    assert!(prometheus_output.contains("integration_test_metric"), "应该包含自定义指标");
-    assert!(prometheus_output.contains("Integration test custom metric"), "应该包含自定义指标描述");
-    assert!(prometheus_output.contains("test_type=\"integration\""), "应该包含自定义标签");
+    assert!(
+        prometheus_output.contains("integration_test_metric"),
+        "应该包含自定义指标"
+    );
+    assert!(
+        prometheus_output.contains("Integration test custom metric"),
+        "应该包含自定义指标描述"
+    );
+    assert!(
+        prometheus_output.contains("test_type=\"integration\""),
+        "应该包含自定义标签"
+    );
     assert!(prometheus_output.contains("123.45"), "应该包含自定义指标值");
 
     // 验证版本标签不再硬编码
     assert!(prometheus_output.contains(&expected_labels), "应该包含动态版本标签");
-    assert!(!prometheus_output.contains("version=\"0.1.0\"") || current_version == "0.1.0", "不应该硬编码版本号");
+    assert!(
+        !prometheus_output.contains("version=\"0.1.0\"") || current_version == "0.1.0",
+        "不应该硬编码版本号"
+    );
 
     // 验证格式正确性
     assert!(prometheus_output.contains("# HELP"), "应该包含HELP注释");
@@ -287,14 +302,18 @@ async fn test_fix_5_test_data_cleanup_verification() {
 
     // 验证配置中的默认值是合理的（非硬编码测试数据）
     let config = create_integration_test_config();
-    
+
     // 检查RPC URL是否为合理的devnet端点（用于开发环境）
-    assert!(config.solana.rpc_url.contains("devnet") || config.solana.rpc_url.contains("localhost"), 
-            "RPC URL应该指向devnet或localhost");
-    
+    assert!(
+        config.solana.rpc_url.contains("devnet") || config.solana.rpc_url.contains("localhost"),
+        "RPC URL应该指向devnet或localhost"
+    );
+
     // 检查数据库名称是否为测试专用
-    assert!(config.database.database_name.contains("test"), 
-            "测试配置应该使用测试数据库");
+    assert!(
+        config.database.database_name.contains("test"),
+        "测试配置应该使用测试数据库"
+    );
 
     // 验证版本号是动态的
     let version = env!("CARGO_PKG_VERSION");
@@ -316,7 +335,7 @@ async fn test_comprehensive_integration() {
     println!("🔄 开始综合集成测试...");
 
     let config = create_integration_test_config();
-    
+
     // 初始化所有组件
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
@@ -325,7 +344,10 @@ async fn test_comprehensive_integration() {
 
     // 验证所有组件可以协同工作
     assert!(metrics.is_healthy().await == false, "初始状态metrics应该未运行"); // 未启动时不健康
-    assert!(batch_writer.is_healthy().await == false, "初始状态batch_writer应该未运行");
+    assert!(
+        batch_writer.is_healthy().await == false,
+        "初始状态batch_writer应该未运行"
+    );
     assert!(checkpoint_manager.is_healthy().await, "checkpoint_manager应该健康");
 
     // 启动指标收集

@@ -37,45 +37,25 @@ impl TokenInfoRepository {
                 .options(IndexOptions::builder().unique(true).build())
                 .build(),
             // 符号索引 (常用查询)
-            IndexModel::builder()
-                .keys(doc! { "symbol": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "symbol": 1 }).build(),
             // 名称索引 (常用查询)
-            IndexModel::builder()
-                .keys(doc! { "name": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "name": 1 }).build(),
             // 状态索引 (活跃代币查询)
-            IndexModel::builder()
-                .keys(doc! { "status": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "status": 1 }).build(),
             // 数据来源索引
-            IndexModel::builder()
-                .keys(doc! { "source": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "source": 1 }).build(),
             // 验证状态索引
-            IndexModel::builder()
-                .keys(doc! { "verification": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "verification": 1 }).build(),
             // 日交易量索引 (排序用)
-            IndexModel::builder()
-                .keys(doc! { "daily_volume": -1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "daily_volume": -1 }).build(),
             // 创建时间索引 (排序用)
-            IndexModel::builder()
-                .keys(doc! { "created_at": -1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "created_at": -1 }).build(),
             // 推送时间索引
-            IndexModel::builder()
-                .keys(doc! { "push_time": -1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "push_time": -1 }).build(),
             // 更新时间索引
-            IndexModel::builder()
-                .keys(doc! { "updated_at": -1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "updated_at": -1 }).build(),
             // 标签索引 (多值字段)
-            IndexModel::builder()
-                .keys(doc! { "tags": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "tags": 1 }).build(),
             // 复合索引 - 状态和创建时间 (常用组合查询)
             IndexModel::builder()
                 .keys(doc! {
@@ -104,7 +84,7 @@ impl TokenInfoRepository {
                             "name": 5,
                             "address": 1
                         })
-                        .build()
+                        .build(),
                 )
                 .build(),
         ];
@@ -117,10 +97,10 @@ impl TokenInfoRepository {
     /// 推送代币信息 (upsert操作)
     pub async fn push_token(&self, request: TokenPushRequest) -> AppResult<TokenPushResponse> {
         let now = Utc::now();
-        
+
         // 检查是否已存在
         let existing = self.find_by_address(&request.address).await?;
-        
+
         let (operation, token_info) = if let Some(mut existing_token) = existing {
             // 更新现有记录
             existing_token.update_from_push_request(request.clone());
@@ -136,7 +116,7 @@ impl TokenInfoRepository {
             "$set": mongodb::bson::to_bson(&token_info)?
         };
         let options = UpdateOptions::builder().upsert(true).build();
-        
+
         let result = self.collection.update_one(filter, update, options).await?;
 
         let success = result.upserted_id.is_some() || result.modified_count > 0;
@@ -203,7 +183,7 @@ impl TokenInfoRepository {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            
+
             if !tags.is_empty() {
                 filter.insert("tags", doc! { "$in": tags });
             }
@@ -233,7 +213,11 @@ impl TokenInfoRepository {
 
         // 构建排序
         let sort_field = query.sort_by.as_deref().unwrap_or("created_at");
-        let sort_direction = if query.sort_order.as_deref() == Some("asc") { 1 } else { -1 };
+        let sort_direction = if query.sort_order.as_deref() == Some("asc") {
+            1
+        } else {
+            -1
+        };
         let sort_doc = doc! { sort_field: sort_direction };
 
         // 计算分页参数
@@ -257,7 +241,11 @@ impl TokenInfoRepository {
         }
 
         // 构建响应
-        let total_pages = if total_count == 0 { 0 } else { (total_count + page_size - 1) / page_size };
+        let total_pages = if total_count == 0 {
+            0
+        } else {
+            (total_count + page_size - 1) / page_size
+        };
 
         let pagination = PaginationInfo {
             current_page: page,
@@ -306,14 +294,12 @@ impl TokenInfoRepository {
     /// 构建过滤器统计信息
     async fn build_filter_stats(&self) -> AppResult<FilterStats> {
         // 按状态统计
-        let status_pipeline = vec![
-            doc! {
-                "$group": {
-                    "_id": "$status",
-                    "count": { "$sum": 1 }
-                }
+        let status_pipeline = vec![doc! {
+            "$group": {
+                "_id": "$status",
+                "count": { "$sum": 1 }
             }
-        ];
+        }];
 
         let mut status_cursor = self.collection.aggregate(status_pipeline, None).await?;
         let mut status_counts = Vec::new();
@@ -331,14 +317,12 @@ impl TokenInfoRepository {
         }
 
         // 按数据来源统计
-        let source_pipeline = vec![
-            doc! {
-                "$group": {
-                    "_id": "$source",
-                    "count": { "$sum": 1 }
-                }
+        let source_pipeline = vec![doc! {
+            "$group": {
+                "_id": "$source",
+                "count": { "$sum": 1 }
             }
-        ];
+        }];
 
         let mut source_cursor = self.collection.aggregate(source_pipeline, None).await?;
         let mut source_counts = Vec::new();
@@ -356,14 +340,12 @@ impl TokenInfoRepository {
         }
 
         // 按验证状态统计
-        let verification_pipeline = vec![
-            doc! {
-                "$group": {
-                    "_id": "$verification",
-                    "count": { "$sum": 1 }
-                }
+        let verification_pipeline = vec![doc! {
+            "$group": {
+                "_id": "$verification",
+                "count": { "$sum": 1 }
             }
-        ];
+        }];
 
         let mut verification_cursor = self.collection.aggregate(verification_pipeline, None).await?;
         let mut verification_counts = Vec::new();
@@ -371,7 +353,9 @@ impl TokenInfoRepository {
         while verification_cursor.advance().await? {
             let doc = verification_cursor.current();
             if let (Ok(verification_str), Ok(count)) = (doc.get_str("_id"), doc.get_i64("count")) {
-                if let Ok(verification) = serde_json::from_str::<VerificationStatus>(&format!("\"{}\"", verification_str)) {
+                if let Ok(verification) =
+                    serde_json::from_str::<VerificationStatus>(&format!("\"{}\"", verification_str))
+                {
                     verification_counts.push(VerificationCount {
                         verification,
                         count: count as u64,
@@ -489,28 +473,37 @@ impl TokenInfoRepository {
         let total_tokens = self.collection.count_documents(doc! {}, None).await?;
 
         // 活跃代币数量
-        let active_tokens = self.collection.count_documents(doc! { "status": "active" }, None).await?;
+        let active_tokens = self
+            .collection
+            .count_documents(doc! { "status": "active" }, None)
+            .await?;
 
         // 已验证代币数量
-        let verified_tokens = self.collection.count_documents(
-            doc! { 
-                "verification": { 
-                    "$in": ["verified", "community", "strict"] 
-                } 
-            }, 
-            None
-        ).await?;
+        let verified_tokens = self
+            .collection
+            .count_documents(
+                doc! {
+                    "verification": {
+                        "$in": ["verified", "community", "strict"]
+                    }
+                },
+                None,
+            )
+            .await?;
 
         // 今日新增代币数量
         let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let today_new_tokens = self.collection.count_documents(
-            doc! { 
-                "created_at": { 
-                    "$gte": mongodb::bson::to_bson(&today_start)? 
-                } 
-            }, 
-            None
-        ).await?;
+        let today_new_tokens = self
+            .collection
+            .count_documents(
+                doc! {
+                    "created_at": {
+                        "$gte": mongodb::bson::to_bson(&today_start)?
+                    }
+                },
+                None,
+            )
+            .await?;
 
         Ok(TokenStats {
             total_tokens,
@@ -527,15 +520,15 @@ impl TokenInfoRepository {
         }
 
         // 优先使用文本搜索
-        let text_filter = doc! { 
+        let text_filter = doc! {
             "$text": { "$search": keyword },
             "status": "active"
         };
 
         let text_options = FindOptions::builder()
-            .sort(doc! { 
+            .sort(doc! {
                 "score": { "$meta": "textScore" },
-                "daily_volume": -1 
+                "daily_volume": -1
             })
             .limit(limit.unwrap_or(20))
             .build();
@@ -583,7 +576,7 @@ impl TokenInfoRepository {
 
     /// 获取热门代币 (按交易量排序)
     pub async fn get_trending_tokens(&self, limit: Option<i64>) -> AppResult<Vec<TokenInfo>> {
-        let filter = doc! { 
+        let filter = doc! {
             "status": "active",
             "daily_volume": { "$gt": 0.0 }
         };
@@ -720,7 +713,10 @@ mod tests {
         assert_eq!(response.address, "So11111111111111111111111111111111111111112");
 
         // Verify token was created
-        let token = repository.find_by_address("So11111111111111111111111111111111111111112").await.unwrap();
+        let token = repository
+            .find_by_address("So11111111111111111111111111111111111111112")
+            .await
+            .unwrap();
         assert!(token.is_some());
         let token = token.unwrap();
         assert_eq!(token.symbol, "WSOL");
@@ -737,11 +733,7 @@ mod tests {
         let repository = TokenInfoRepository::new(collection.clone());
 
         // First create a token
-        let mut token = create_test_token(
-            "So11111111111111111111111111111111111111112",
-            "WSOL",
-            "Wrapped SOL"
-        );
+        let mut token = create_test_token("So11111111111111111111111111111111111111112", "WSOL", "Wrapped SOL");
         token.daily_volume = 500000.0;
         collection.insert_one(&token, None).await.unwrap();
 
@@ -769,7 +761,11 @@ mod tests {
         assert_eq!(response.operation, "updated");
 
         // Verify token was updated
-        let updated_token = repository.find_by_address("So11111111111111111111111111111111111111112").await.unwrap().unwrap();
+        let updated_token = repository
+            .find_by_address("So11111111111111111111111111111111111111112")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated_token.name, "Wrapped Solana");
         assert_eq!(updated_token.daily_volume, 2000000.0);
         assert!(updated_token.tags.contains(&"updated".to_string()));
@@ -896,7 +892,7 @@ mod tests {
         // Test symbol search
         let results = repository.search_tokens("USDC", Some(10)).await.unwrap();
         assert!(!results.is_empty());
-        
+
         // Test name search
         let results = repository.search_tokens("Wrapped", Some(10)).await.unwrap();
         assert!(!results.is_empty());
@@ -920,7 +916,10 @@ mod tests {
         collection.insert_one(&token, None).await.unwrap();
 
         // Update status
-        let result = repository.update_token_status("address1", TokenStatus::Paused).await.unwrap();
+        let result = repository
+            .update_token_status("address1", TokenStatus::Paused)
+            .await
+            .unwrap();
         assert!(result);
 
         // Verify update
@@ -947,12 +946,15 @@ mod tests {
         let mut token4 = create_test_token("address4", "TOKEN4", "Token 4");
         token4.daily_volume = 0.0; // Should be excluded
 
-        collection.insert_many([token1, token2, token3, token4], None).await.unwrap();
+        collection
+            .insert_many([token1, token2, token3, token4], None)
+            .await
+            .unwrap();
 
         let trending = repository.get_trending_tokens(Some(10)).await.unwrap();
 
         assert_eq!(trending.len(), 3); // token4 excluded due to 0 volume
-        // Should be sorted by volume descending
+                                       // Should be sorted by volume descending
         assert_eq!(trending[0].address, "address2"); // 3000.0
         assert_eq!(trending[1].address, "address3"); // 2000.0
         assert_eq!(trending[2].address, "address1"); // 1000.0

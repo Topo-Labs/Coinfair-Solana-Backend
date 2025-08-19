@@ -122,7 +122,11 @@ impl RaydiumApiClient {
     }
 
     /// 计算池子的储备和流动性
-    pub async fn calculate_pool_reserves(&self, pool_info: &RaydiumPoolInfo, rpc_client: &solana_client::rpc_client::RpcClient) -> Result<(u64, u64, f64)> {
+    pub async fn calculate_pool_reserves(
+        &self,
+        pool_info: &RaydiumPoolInfo,
+        rpc_client: &solana_client::rpc_client::RpcClient,
+    ) -> Result<(u64, u64, f64)> {
         info!("📊 计算池子储备: {}", pool_info.id);
 
         // 获取base vault余额
@@ -142,9 +146,16 @@ impl RaydiumApiClient {
         let base_ui_amount = base_amount as f64 / base_decimal_factor;
         let quote_ui_amount = quote_amount as f64 / quote_decimal_factor;
 
-        let price = if base_ui_amount > 0.0 { quote_ui_amount / base_ui_amount } else { 0.0 };
+        let price = if base_ui_amount > 0.0 {
+            quote_ui_amount / base_ui_amount
+        } else {
+            0.0
+        };
 
-        info!("💰 池子储备: base={}, quote={}, 价格={:.6}", base_amount, quote_amount, price);
+        info!(
+            "💰 池子储备: base={}, quote={}, 价格={:.6}",
+            base_amount, quote_amount, price
+        );
 
         Ok((base_amount, quote_amount, price))
     }
@@ -162,19 +173,59 @@ impl RaydiumApiClient {
             version: json.get("version").and_then(|v| v.as_u64()).unwrap_or(4) as u8,
             programId: json.get("programId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
             authority: json.get("authority").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            openOrders: json.get("openOrders").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            targetOrders: json.get("targetOrders").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            openOrders: json
+                .get("openOrders")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            targetOrders: json
+                .get("targetOrders")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             baseVault: json.get("baseVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            quoteVault: json.get("quoteVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            quoteVault: json
+                .get("quoteVault")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             marketVersion: json.get("marketVersion").and_then(|v| v.as_u64()).unwrap_or(3) as u8,
-            marketProgramId: json.get("marketProgramId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketProgramId: json
+                .get("marketProgramId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
             marketId: json.get("marketId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            marketAuthority: json.get("marketAuthority").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            marketBaseVault: json.get("marketBaseVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            marketQuoteVault: json.get("marketQuoteVault").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            marketBids: json.get("marketBids").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            marketAsks: json.get("marketAsks").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-            marketEventQueue: json.get("marketEventQueue").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            marketAuthority: json
+                .get("marketAuthority")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            marketBaseVault: json
+                .get("marketBaseVault")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            marketQuoteVault: json
+                .get("marketQuoteVault")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            marketBids: json
+                .get("marketBids")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            marketAsks: json
+                .get("marketAsks")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            marketEventQueue: json
+                .get("marketEventQueue")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
         })
     }
 }
@@ -243,7 +294,7 @@ pub async fn calculate_swap_output_with_api(
     _rpc_client: &solana_client::rpc_client::RpcClient,
 ) -> Result<u64> {
     info!("💱 计算交换输出（优化版）- 池子: {}", pool_address);
-    
+
     // 使用备用恒定乘积计算模型
     warn!("⚠️ 使用备用恒定乘积计算模型");
 

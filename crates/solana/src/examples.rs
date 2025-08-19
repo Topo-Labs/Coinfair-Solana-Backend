@@ -31,7 +31,10 @@ pub async fn example_swap_sol_to_usdc() -> Result<()> {
         let mock_swap = SolanaSwap::new(config)?;
         let amount_in = 100_000_000; // 0.1 SOL
         let estimated_output = mock_swap.calculate_swap_output(amount_in, true)?;
-        info!("💰 模拟计算：{} lamports SOL -> {} micro-USDC", amount_in, estimated_output);
+        info!(
+            "💰 模拟计算：{} lamports SOL -> {} micro-USDC",
+            amount_in, estimated_output
+        );
 
         return Ok(());
     }
@@ -41,8 +44,16 @@ pub async fn example_swap_sol_to_usdc() -> Result<()> {
 
     // 检查账户余额
     let (sol_balance, usdc_balance) = swap.get_account_balances().await?;
-    info!("当前 SOL 余额: {} lamports ({:.4} SOL)", sol_balance, sol_balance as f64 / 1_000_000_000.0);
-    info!("当前 USDC 余额: {} ({:.2} USDC)", usdc_balance, usdc_balance as f64 / 1_000_000.0);
+    info!(
+        "当前 SOL 余额: {} lamports ({:.4} SOL)",
+        sol_balance,
+        sol_balance as f64 / 1_000_000_000.0
+    );
+    info!(
+        "当前 USDC 余额: {} ({:.2} USDC)",
+        usdc_balance,
+        usdc_balance as f64 / 1_000_000.0
+    );
 
     // 交换 0.01 SOL 到 USDC（较小金额用于演示）
     let amount_in = 10_000_000; // 0.01 SOL (以 lamports 为单位)
@@ -60,7 +71,10 @@ pub async fn example_swap_sol_to_usdc() -> Result<()> {
         Ok(signature) => {
             info!("✅ 演示交易成功!");
             info!("📋 交易签名: {}", signature);
-            info!("🔗 在 Solana Explorer 查看: https://explorer.solana.com/tx/{}", signature);
+            info!(
+                "🔗 在 Solana Explorer 查看: https://explorer.solana.com/tx/{}",
+                signature
+            );
         }
         Err(e) => {
             info!("❌ 交换失败: {:?}", e);
@@ -120,7 +134,11 @@ pub async fn example_custom_config() -> Result<()> {
     let (sol_balance, usdc_balance) = swap.get_account_balances().await?;
 
     info!("配置完成，当前余额:");
-    info!("SOL: {} lamports ({} SOL)", sol_balance, sol_balance as f64 / 1_000_000_000.0);
+    info!(
+        "SOL: {} lamports ({} SOL)",
+        sol_balance,
+        sol_balance as f64 / 1_000_000_000.0
+    );
     info!("USDC: {} ({} USDC)", usdc_balance, usdc_balance as f64 / 1_000_000.0);
 
     Ok(())
@@ -156,11 +174,21 @@ pub async fn demonstrate_precise_swap_calculation() -> Result<()> {
             info!("✅ 计算成功!");
             info!("  预估输出: {} USDC (micro units)", result.estimated_output);
             info!("  预估输出: {:.6} USDC", result.estimated_output as f64 / 1_000_000.0);
-            info!("  最小输出(含滑点): {} USDC (micro units)", result.min_output_with_slippage);
+            info!(
+                "  最小输出(含滑点): {} USDC (micro units)",
+                result.min_output_with_slippage
+            );
             info!("  价格影响: {:.4}%", result.price_impact * 100.0);
             info!("  滑点率: {:.2}%", result.slippage_rate * 100.0);
             info!("  使用tick数组: {}", result.tick_arrays_used);
-            info!("  交换方向: {}", if result.zero_for_one { "Token0 -> Token1" } else { "Token1 -> Token0" });
+            info!(
+                "  交换方向: {}",
+                if result.zero_for_one {
+                    "Token0 -> Token1"
+                } else {
+                    "Token1 -> Token0"
+                }
+            );
         }
         Err(e) => {
             info!("❌ 计算失败: {:?}", e);
@@ -169,7 +197,10 @@ pub async fn demonstrate_precise_swap_calculation() -> Result<()> {
 
     // 示例2：使用便捷方法计算1 SOL输出
     info!("\n📊 示例2: 使用便捷方法计算1 SOL输出");
-    match precise_swap_service.estimate_1_sol_output(pool_address, usdc_mint).await {
+    match precise_swap_service
+        .estimate_1_sol_output(pool_address, usdc_mint)
+        .await
+    {
         Ok(output) => {
             info!("✅ 1 SOL 预估输出: {} USDC (micro units)", output);
             info!("✅ 1 SOL 预估输出: {:.6} USDC", output as f64 / 1_000_000.0);
@@ -299,14 +330,23 @@ pub async fn example_calculate_1_sol_swap() -> Result<()> {
                 result.min_output_with_slippage,
                 result.slippage_rate * 100.0
             );
-            info!("  最小输出: {:.6} USDC", result.min_output_with_slippage as f64 / 1_000_000.0);
+            info!(
+                "  最小输出: {:.6} USDC",
+                result.min_output_with_slippage as f64 / 1_000_000.0
+            );
             info!("  价格影响: {:.4}%", result.price_impact * 100.0);
-            info!("  隐含价格: {:.2} USDC/SOL", result.estimated_output as f64 / 1_000_000.0);
+            info!(
+                "  隐含价格: {:.2} USDC/SOL",
+                result.estimated_output as f64 / 1_000_000.0
+            );
             info!("  tick数组使用: {}", result.tick_arrays_used);
 
             // 步骤4：风险评估
             if result.price_impact > 0.01 {
-                info!("⚠️ 警告：价格影响较大 (>{:.2}%), 请谨慎交易", result.price_impact * 100.0);
+                info!(
+                    "⚠️ 警告：价格影响较大 (>{:.2}%), 请谨慎交易",
+                    result.price_impact * 100.0
+                );
             } else {
                 info!("✅ 价格影响在合理范围内");
             }

@@ -1,6 +1,6 @@
 use crate::dtos::solana_dto::{
-    ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse,
-    TransactionStatus,
+    ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, MintNftAndSendTransactionResponse,
+    MintNftRequest, MintNftResponse, TransactionStatus,
 };
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
@@ -12,7 +12,9 @@ use base64::Engine;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{instruction::Instruction, pubkey::Pubkey, signer::Signer, system_program, sysvar::rent, transaction::Transaction};
+use solana_sdk::{
+    instruction::Instruction, pubkey::Pubkey, signer::Signer, system_program, sysvar::rent, transaction::Transaction,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
@@ -40,7 +42,9 @@ impl NftService {
         let user_wallet = Pubkey::from_str(&request.user_wallet)?;
 
         // 构建指令
-        let instructions = self.build_mint_nft_instructions_internal(user_wallet, request.amount).await?;
+        let instructions = self
+            .build_mint_nft_instructions_internal(user_wallet, request.amount)
+            .await?;
 
         // 创建交易
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
@@ -79,7 +83,10 @@ impl NftService {
     }
 
     /// 铸造推荐NFT并发送交易（本地签名）
-    pub async fn mint_nft_and_send_transaction(&self, request: MintNftRequest) -> Result<MintNftAndSendTransactionResponse> {
+    pub async fn mint_nft_and_send_transaction(
+        &self,
+        request: MintNftRequest,
+    ) -> Result<MintNftAndSendTransactionResponse> {
         info!("🎯 开始铸造推荐NFT并发送交易");
         info!("  用户钱包: {}", request.user_wallet);
         info!("  铸造数量: {}", request.amount);
@@ -90,13 +97,20 @@ impl NftService {
         let payer_keypair = ConfigManager::get_admin_keypair()?;
 
         // 构建指令
-        let instructions = self.build_mint_nft_instructions_internal(user_wallet, request.amount).await?;
+        let instructions = self
+            .build_mint_nft_instructions_internal(user_wallet, request.amount)
+            .await?;
 
         // 创建和发送交易
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
         let recent_blockhash = rpc_client.get_latest_blockhash()?;
 
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&payer_keypair.pubkey()), &[&payer_keypair], recent_blockhash);
+        let transaction = Transaction::new_signed_with_payer(
+            &instructions,
+            Some(&payer_keypair.pubkey()),
+            &[&payer_keypair],
+            recent_blockhash,
+        );
 
         let signature = rpc_client.send_and_confirm_transaction(&transaction)?;
 
@@ -137,7 +151,9 @@ impl NftService {
         let upper_wallet = Pubkey::from_str(&request.upper)?;
 
         // 构建指令
-        let instructions = self.build_claim_nft_instructions_internal(user_wallet, upper_wallet).await?;
+        let instructions = self
+            .build_claim_nft_instructions_internal(user_wallet, upper_wallet)
+            .await?;
 
         // 创建交易
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
@@ -184,7 +200,10 @@ impl NftService {
     }
 
     /// 领取推荐NFT并发送交易（本地签名）
-    pub async fn claim_nft_and_send_transaction(&self, request: ClaimNftRequest) -> Result<ClaimNftAndSendTransactionResponse> {
+    pub async fn claim_nft_and_send_transaction(
+        &self,
+        request: ClaimNftRequest,
+    ) -> Result<ClaimNftAndSendTransactionResponse> {
         info!("🎯 开始领取推荐NFT并发送交易");
         info!("  下级用户钱包: {}", request.user_wallet);
         info!("  上级用户钱包: {}", request.upper);
@@ -197,13 +216,20 @@ impl NftService {
         info!("🔑 下级用户私钥: {:?}", lower_keypair.to_base58_string());
 
         // 构建指令
-        let instructions = self.build_claim_nft_instructions_internal(user_wallet, upper_wallet).await?;
+        let instructions = self
+            .build_claim_nft_instructions_internal(user_wallet, upper_wallet)
+            .await?;
 
         // 创建和发送交易
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
         let recent_blockhash = rpc_client.get_latest_blockhash()?;
 
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&lower_keypair.pubkey()), &[&lower_keypair], recent_blockhash);
+        let transaction = Transaction::new_signed_with_payer(
+            &instructions,
+            Some(&lower_keypair.pubkey()),
+            &[&lower_keypair],
+            recent_blockhash,
+        );
 
         let signature = rpc_client.send_and_confirm_transaction(&transaction)?;
 
@@ -263,19 +289,19 @@ impl NftService {
 
         // 构建账户元数据
         let accounts = vec![
-            AccountMeta::new(user_wallet, true),                                  // authority (signer)
-            AccountMeta::new_readonly(referral_config, false),                    // config
-            AccountMeta::new(user_referral, false),                               // user_referral
-            AccountMeta::new(nft_mint, false),                                    // official_mint
-            AccountMeta::new(user_ata, false),                                    // user_ata
-            AccountMeta::new(mint_counter, false),                                // mint_counter
-            AccountMeta::new_readonly(mint_authority, false),                     // mint_authority
-            AccountMeta::new_readonly(nft_pool_authority, false),                 // nft_pool_authority
-            AccountMeta::new(nft_pool_account, false),                            // nft_pool_account
-            AccountMeta::new_readonly(spl_token::id(), false),                    // token_program
-            AccountMeta::new_readonly(system_program::id(), false),               // system_program
+            AccountMeta::new(user_wallet, true),                    // authority (signer)
+            AccountMeta::new_readonly(referral_config, false),      // config
+            AccountMeta::new(user_referral, false),                 // user_referral
+            AccountMeta::new(nft_mint, false),                      // official_mint
+            AccountMeta::new(user_ata, false),                      // user_ata
+            AccountMeta::new(mint_counter, false),                  // mint_counter
+            AccountMeta::new_readonly(mint_authority, false),       // mint_authority
+            AccountMeta::new_readonly(nft_pool_authority, false),   // nft_pool_authority
+            AccountMeta::new(nft_pool_account, false),              // nft_pool_account
+            AccountMeta::new_readonly(spl_token::id(), false),      // token_program
+            AccountMeta::new_readonly(system_program::id(), false), // system_program
             AccountMeta::new_readonly(spl_associated_token_account::id(), false), // associated_token_program
-            AccountMeta::new_readonly(rent::id(), false),                         // rent
+            AccountMeta::new_readonly(rent::id(), false),           // rent
         ];
         let mut instruction_data = vec![];
         // 构建指令数据 (discriminator) - 使用正确的Anchor哈希方法
@@ -295,11 +321,20 @@ impl NftService {
 
     /// 构建领取NFT的指令
     #[cfg(test)]
-    pub async fn build_claim_nft_instructions(&self, user_wallet: Pubkey, upper_wallet: Pubkey) -> Result<Vec<Instruction>> {
-        self.build_claim_nft_instructions_internal(user_wallet, upper_wallet).await
+    pub async fn build_claim_nft_instructions(
+        &self,
+        user_wallet: Pubkey,
+        upper_wallet: Pubkey,
+    ) -> Result<Vec<Instruction>> {
+        self.build_claim_nft_instructions_internal(user_wallet, upper_wallet)
+            .await
     }
 
-    async fn build_claim_nft_instructions_internal(&self, user_wallet: Pubkey, upper_wallet: Pubkey) -> Result<Vec<Instruction>> {
+    async fn build_claim_nft_instructions_internal(
+        &self,
+        user_wallet: Pubkey,
+        upper_wallet: Pubkey,
+    ) -> Result<Vec<Instruction>> {
         let referral_program_id = self.get_referral_program_id_internal()?;
         let nft_mint = self.get_nft_mint_internal()?;
         let protocol_wallet = self.get_protocol_wallet_internal()?;
@@ -380,7 +415,8 @@ impl NftService {
     }
 
     fn get_protocol_wallet_internal(&self) -> Result<Pubkey> {
-        let wallet_str = std::env::var("PROTOCOL_WALLET").unwrap_or_else(|_| "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()); // 默认值，需要配置
+        let wallet_str = std::env::var("PROTOCOL_WALLET")
+            .unwrap_or_else(|_| "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()); // 默认值，需要配置
         Pubkey::from_str(&wallet_str).map_err(Into::into)
     }
 
@@ -391,7 +427,8 @@ impl NftService {
     }
 
     fn get_referral_program_id_internal(&self) -> Result<Pubkey> {
-        let program_id_str = std::env::var("REFERRAL_PROGRAM_ID").unwrap_or_else(|_| "REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL".to_string()); // 默认值，需要配置
+        let program_id_str = std::env::var("REFERRAL_PROGRAM_ID")
+            .unwrap_or_else(|_| "REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL".to_string()); // 默认值，需要配置
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 
@@ -402,7 +439,8 @@ impl NftService {
     }
 
     fn get_nft_mint_internal(&self) -> Result<Pubkey> {
-        let mint_str = std::env::var("COINFAIR_NFT_MINT").unwrap_or_else(|_| "NFTaoszFxtEmGXvHcb8yfkGZxqLPAfwDqLN1mhrV2jM".to_string()); // 默认值，需要配置
+        let mint_str = std::env::var("COINFAIR_NFT_MINT")
+            .unwrap_or_else(|_| "NFTaoszFxtEmGXvHcb8yfkGZxqLPAfwDqLN1mhrV2jM".to_string()); // 默认值，需要配置
         Pubkey::from_str(&mint_str).map_err(Into::into)
     }
 

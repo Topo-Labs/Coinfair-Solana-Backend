@@ -1,6 +1,8 @@
 use crate::services::solana::shared::SharedContext;
 use anyhow::Result;
-use database::clmm_pool::model::{ClmmPool, ExtensionInfo, PoolStatus, PoolType, PriceInfo, SyncStatus, TokenInfo, VaultInfo};
+use database::clmm_pool::model::{
+    ClmmPool, ExtensionInfo, PoolStatus, PoolType, PriceInfo, SyncStatus, TokenInfo, VaultInfo,
+};
 use solana_sdk::program_pack::Pack;
 use solana_sdk::pubkey::Pubkey;
 use spl_token::state::Mint;
@@ -75,11 +77,16 @@ impl ChainPoolLoader {
         debug!("🔍 开始加载池子: {}", pool_address);
 
         // 1. 解析池子地址
-        let pool_pubkey = Pubkey::from_str(pool_address).map_err(|e| anyhow::anyhow!("无效的池子地址 {}: {}", pool_address, e))?;
+        let pool_pubkey =
+            Pubkey::from_str(pool_address).map_err(|e| anyhow::anyhow!("无效的池子地址 {}: {}", pool_address, e))?;
 
         // 2. 获取池子账户信息
         let account_loader = AccountLoader::new(&self.shared.rpc_client);
-        let pool_account = self.shared.rpc_client.get_account(&pool_pubkey).map_err(|e| anyhow::anyhow!("获取池子账户失败: {}", e))?;
+        let pool_account = self
+            .shared
+            .rpc_client
+            .get_account(&pool_pubkey)
+            .map_err(|e| anyhow::anyhow!("获取池子账户失败: {}", e))?;
 
         // 3. 解析池子状态
         let pool_state: raydium_amm_v3::states::PoolState = account_loader.deserialize_anchor_account(&pool_account)?;
@@ -91,22 +98,38 @@ impl ChainPoolLoader {
         // 注意：pool_state.amm_config 是配置的 Pubkey，而不是索引
         // 我们需要从其他地方获取配置索引，这里先设为0作为默认值
         let config_index = 0u16; // TODO: 需要从其他来源获取正确的配置索引
-        let (amm_config_key, _) = Pubkey::find_program_address(&["amm_config".as_bytes(), &config_index.to_be_bytes()], &raydium_program_id);
+        let (amm_config_key, _) = Pubkey::find_program_address(
+            &["amm_config".as_bytes(), &config_index.to_be_bytes()],
+            &raydium_program_id,
+        );
 
         // TickArray Bitmap Extension地址
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&["pool_tick_array_bitmap_extension".as_bytes(), pool_pubkey.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &["pool_tick_array_bitmap_extension".as_bytes(), pool_pubkey.as_ref()],
+            &raydium_program_id,
+        );
 
         // Observation地址
-        let (observation_key, _) = Pubkey::find_program_address(&["observation".as_bytes(), pool_pubkey.as_ref()], &raydium_program_id);
+        let (observation_key, _) =
+            Pubkey::find_program_address(&["observation".as_bytes(), pool_pubkey.as_ref()], &raydium_program_id);
 
         // 5. 批量获取mint和vault信息
-        let load_pubkeys = vec![pool_state.token_mint_0, pool_state.token_mint_1, pool_state.token_vault_0, pool_state.token_vault_1];
+        let load_pubkeys = vec![
+            pool_state.token_mint_0,
+            pool_state.token_mint_1,
+            pool_state.token_vault_0,
+            pool_state.token_vault_1,
+        ];
 
         let accounts = account_loader.load_multiple_accounts(&load_pubkeys).await?;
 
         // 6. 解析mint信息
-        let mint0_account = accounts[0].as_ref().ok_or_else(|| anyhow::anyhow!("无法获取mint0账户"))?;
-        let mint1_account = accounts[1].as_ref().ok_or_else(|| anyhow::anyhow!("无法获取mint1账户"))?;
+        let mint0_account = accounts[0]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("无法获取mint0账户"))?;
+        let mint1_account = accounts[1]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("无法获取mint1账户"))?;
 
         let mint0_state = Mint::unpack(&mint0_account.data)?;
         let mint1_state = Mint::unpack(&mint1_account.data)?;
@@ -114,7 +137,8 @@ impl ChainPoolLoader {
         // 7. 计算当前价格和tick
         let current_sqrt_price = pool_state.sqrt_price_x64;
         let current_tick = pool_state.tick_current;
-        let current_price = self.calculate_price_from_sqrt_price_x64(current_sqrt_price, mint0_state.decimals, mint1_state.decimals);
+        let current_price =
+            self.calculate_price_from_sqrt_price_x64(current_sqrt_price, mint0_state.decimals, mint1_state.decimals);
 
         // 8. 构建ClmmPool结构
         let now = chrono::Utc::now().timestamp() as u64;
@@ -174,13 +198,13 @@ impl ChainPoolLoader {
             api_created_at: now,
             api_created_slot: None,
             updated_at: now,
-            
+
             // 链上事件字段
             event_signature: None,
             event_updated_slot: None,
             event_confirmed_at: None,
             event_updated_at: None,
-            
+
             transaction_info: None,
             status: PoolStatus::Active, // 已存在的池子认为是活跃状态
 

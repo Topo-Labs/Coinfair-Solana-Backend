@@ -75,13 +75,7 @@ pub struct SolanaApiPermissionConfigModel {
 
 impl SolanaApiPermissionConfigModel {
     /// 创建新的API权限配置
-    pub fn new(
-        endpoint: String,
-        name: String,
-        category: String,
-        read_policy: String,
-        write_policy: String,
-    ) -> Self {
+    pub fn new(endpoint: String, name: String, category: String, read_policy: String, write_policy: String) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
         Self {
             id: None,
@@ -131,12 +125,7 @@ pub struct PermissionConfigLogModel {
 
 impl PermissionConfigLogModel {
     /// 创建新的操作日志
-    pub fn new(
-        operation_type: String,
-        target_type: String,
-        target_id: String,
-        operator_id: String,
-    ) -> Self {
+    pub fn new(operation_type: String, target_type: String, target_id: String, operator_id: String) -> Self {
         Self {
             id: None,
             operation_type,
@@ -180,7 +169,7 @@ mod tests {
     #[test]
     fn test_global_config_creation() {
         let config = GlobalSolanaPermissionConfigModel::default();
-        
+
         assert_eq!(config.config_type, "global");
         assert!(config.global_read_enabled);
         assert!(config.global_write_enabled);
@@ -220,10 +209,7 @@ mod tests {
             Some(r#"{"enabled":true}"#.to_string()),
             Some(r#"{"enabled":false}"#.to_string()),
         )
-        .with_operator_info(
-            Some("wallet123".to_string()),
-            Some("127.0.0.1".to_string()),
-        )
+        .with_operator_info(Some("wallet123".to_string()), Some("127.0.0.1".to_string()))
         .with_reason("权限调整".to_string());
 
         assert_eq!(log.operation_type, "update");
@@ -248,11 +234,11 @@ mod tests {
         );
 
         let old_updated_at = config.updated_at;
-        
+
         // 模拟时间推移
         std::thread::sleep(std::time::Duration::from_millis(10));
         config.update();
-        
+
         assert!(config.updated_at > old_updated_at);
     }
 }

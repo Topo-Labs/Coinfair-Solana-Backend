@@ -12,12 +12,8 @@ pub mod tests;
 pub use error::{EventListenerError, Result};
 
 use crate::{
-    config::EventListenerConfig,
-    metrics::MetricsCollector,
-    parser::EventParserRegistry,
-    persistence::BatchWriter,
-    recovery::CheckpointManager,
-    subscriber::SubscriptionManager,
+    config::EventListenerConfig, metrics::MetricsCollector, parser::EventParserRegistry, persistence::BatchWriter,
+    recovery::CheckpointManager, subscriber::SubscriptionManager,
 };
 use std::sync::Arc;
 use tokio::signal;
@@ -25,7 +21,7 @@ use tracing::{error, info, warn};
 use utils::{MetaplexService, TokenMetadataProvider};
 
 /// Event-Listener 主服务
-/// 
+///
 /// 负责协调所有子模块运行:
 /// - WebSocket订阅管理
 /// - 事件解析和路由
@@ -46,19 +42,19 @@ impl EventListenerService {
     /// 创建新的Event-Listener服务实例
     pub async fn new(config: EventListenerConfig) -> Result<Self> {
         let config = Arc::new(config);
-        
+
         info!("🚀 初始化Event-Listener服务...");
-        
+
         // 初始化各个组件
         let metrics = Arc::new(MetricsCollector::new(&config)?);
         let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await?);
         let batch_writer = Arc::new(BatchWriter::new(&config).await?);
-        
+
         // 创建 MetaplexService 作为代币元数据提供者
         let metadata_provider = match MetaplexService::new(None) {
             Ok(service) => {
                 info!("✅ 成功创建代币元数据提供者");
-                let provider: Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>> = 
+                let provider: Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>> =
                     Arc::new(tokio::sync::Mutex::new(service));
                 Some(provider)
             }
@@ -67,10 +63,13 @@ impl EventListenerService {
                 None
             }
         };
-        
+
         // 使用带有元数据提供者的EventParserRegistry
-        let parser_registry = Arc::new(EventParserRegistry::new_with_metadata_provider(&config, metadata_provider)?);
-        
+        let parser_registry = Arc::new(EventParserRegistry::new_with_metadata_provider(
+            &config,
+            metadata_provider,
+        )?);
+
         let subscription_manager = Arc::new(
             SubscriptionManager::new(
                 &config,
@@ -78,7 +77,8 @@ impl EventListenerService {
                 Arc::clone(&batch_writer),
                 Arc::clone(&checkpoint_manager),
                 Arc::clone(&metrics),
-            ).await?
+            )
+            .await?,
         );
 
         info!("✅ Event-Listener服务初始化完成");
@@ -157,9 +157,7 @@ impl EventListenerService {
     /// 等待关闭信号
     async fn wait_for_shutdown_signal(&self) {
         let ctrl_c = async {
-            signal::ctrl_c()
-                .await
-                .expect("failed to install Ctrl+C handler");
+            signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
         };
 
         #[cfg(unix)]

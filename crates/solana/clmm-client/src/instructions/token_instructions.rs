@@ -58,7 +58,12 @@ pub fn create_and_init_mint_instr(
     Ok(instructions)
 }
 
-pub fn create_account_rent_exmpt_instr(config: &ClientConfig, new_account_key: &Pubkey, owner: Pubkey, data_size: usize) -> Result<Vec<Instruction>> {
+pub fn create_account_rent_exmpt_instr(
+    config: &ClientConfig,
+    new_account_key: &Pubkey,
+    owner: Pubkey,
+    data_size: usize,
+) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
@@ -77,7 +82,12 @@ pub fn create_account_rent_exmpt_instr(config: &ClientConfig, new_account_key: &
     Ok(instructions)
 }
 
-pub fn create_ata_token_account_instr(config: &ClientConfig, token_program: Pubkey, mint: &Pubkey, owner: &Pubkey) -> Result<Vec<Instruction>> {
+pub fn create_ata_token_account_instr(
+    config: &ClientConfig,
+    token_program: Pubkey,
+    mint: &Pubkey,
+    owner: &Pubkey,
+) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
@@ -85,17 +95,24 @@ pub fn create_ata_token_account_instr(config: &ClientConfig, token_program: Pubk
     let program = client.program(token_program)?;
     let instructions = program
         .request()
-        .instruction(spl_associated_token_account::instruction::create_associated_token_account(
-            &program.payer(),
-            owner,
-            mint,
-            &token_program,
-        ))
+        .instruction(
+            spl_associated_token_account::instruction::create_associated_token_account(
+                &program.payer(),
+                owner,
+                mint,
+                &token_program,
+            ),
+        )
         .instructions()?;
     Ok(instructions)
 }
 
-pub fn create_and_init_auxiliary_token(config: &ClientConfig, new_account_key: &Pubkey, mint: &Pubkey, owner: &Pubkey) -> Result<Vec<Instruction>> {
+pub fn create_and_init_auxiliary_token(
+    config: &ClientConfig,
+    new_account_key: &Pubkey,
+    mint: &Pubkey,
+    owner: &Pubkey,
+) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let mint_account = &mut RpcClient::new(config.http_url.to_string()).get_account(&mint)?;
@@ -128,13 +145,26 @@ pub fn create_and_init_auxiliary_token(config: &ClientConfig, new_account_key: &
             space as u64,
             &program.id(),
         ))
-        .instruction(spl_token_2022::instruction::initialize_immutable_owner(&program.id(), new_account_key)?)
-        .instruction(spl_token_2022::instruction::initialize_account(&program.id(), new_account_key, mint, owner)?)
+        .instruction(spl_token_2022::instruction::initialize_immutable_owner(
+            &program.id(),
+            new_account_key,
+        )?)
+        .instruction(spl_token_2022::instruction::initialize_account(
+            &program.id(),
+            new_account_key,
+            mint,
+            owner,
+        )?)
         .instructions()?;
     Ok(instructions)
 }
 
-pub fn close_token_account(config: &ClientConfig, close_account: &Pubkey, destination: &Pubkey, owner: &Keypair) -> Result<Vec<Instruction>> {
+pub fn close_token_account(
+    config: &ClientConfig,
+    close_account: &Pubkey,
+    destination: &Pubkey,
+    owner: &Keypair,
+) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
@@ -154,7 +184,13 @@ pub fn close_token_account(config: &ClientConfig, close_account: &Pubkey, destin
     Ok(instructions)
 }
 
-pub fn spl_token_transfer_instr(config: &ClientConfig, from: &Pubkey, to: &Pubkey, amount: u64, from_authority: &Keypair) -> Result<Vec<Instruction>> {
+pub fn spl_token_transfer_instr(
+    config: &ClientConfig,
+    from: &Pubkey,
+    to: &Pubkey,
+    amount: u64,
+    from_authority: &Keypair,
+) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
@@ -219,12 +255,14 @@ pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruct
 
     let instructions = program
         .request()
-        .instruction(spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            &program.payer(),
-            &wallet_key,
-            &wsol_mint,
-            &program.id(),
-        ))
+        .instruction(
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &program.payer(),
+                &wallet_key,
+                &wsol_mint,
+                &program.id(),
+            ),
+        )
         .instruction(system_instruction::transfer(&wallet_key, &wsol_ata_account, amount))
         .instruction(spl_token::instruction::sync_native(&program.id(), &wsol_ata_account)?)
         .instructions()?;

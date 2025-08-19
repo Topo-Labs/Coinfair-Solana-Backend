@@ -39,10 +39,16 @@ pub trait ReferRepositoryTrait {
 #[async_trait]
 impl ReferRepositoryTrait for Database {
     async fn create_refer(&self, lower: &str, upper: &str) -> AppResult<InsertOneResult> {
-        let existing_lower = self.refers.find_one(doc! { "lower": lower.to_lowercase()}, None).await?;
+        let existing_lower = self
+            .refers
+            .find_one(doc! { "lower": lower.to_lowercase()}, None)
+            .await?;
 
         if existing_lower.is_some() {
-            return Err(AppError::Conflict(format!("Lower with address: {} already exists.", lower)));
+            return Err(AppError::Conflict(format!(
+                "Lower with address: {} already exists.",
+                lower
+            )));
         }
 
         let new_doc = Refer {
@@ -66,7 +72,10 @@ impl ReferRepositoryTrait for Database {
             .collect();
 
         // Step 2: Extract all unique `lower` addresses
-        let lowers: Vec<String> = unique_refers.iter().map(|refer| refer.lower.clone().to_lowercase()).collect();
+        let lowers: Vec<String> = unique_refers
+            .iter()
+            .map(|refer| refer.lower.clone().to_lowercase())
+            .collect();
 
         // Step 3: Query the database for existing `lower` addresses
         let cursor: Cursor<Refer> = self.refers.find(doc! { "lower": { "$in": lowers }}, None).await?;

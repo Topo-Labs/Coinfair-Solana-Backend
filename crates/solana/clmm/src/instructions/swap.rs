@@ -181,7 +181,9 @@ pub fn swap_internal<'b, 'info>(
         if tick_array_current.start_tick_index == current_vaild_tick_array_start_index {
             break;
         }
-        tick_array_current = tick_array_states.pop_front().ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
+        tick_array_current = tick_array_states
+            .pop_front()
+            .ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
     }
     // check the first tick_array account is owned by the pool
     require_keys_eq!(tick_array_current.pool_id, pool_state.key());
@@ -214,17 +216,18 @@ pub fn swap_internal<'b, 'info>(
         let mut step = StepComputations::default();
         step.sqrt_price_start_x64 = state.sqrt_price_x64;
 
-        let mut next_initialized_tick =
-            if let Some(tick_state) = tick_array_current.next_initialized_tick(state.tick, pool_state.tick_spacing, zero_for_one)? {
-                Box::new(*tick_state)
+        let mut next_initialized_tick = if let Some(tick_state) =
+            tick_array_current.next_initialized_tick(state.tick, pool_state.tick_spacing, zero_for_one)?
+        {
+            Box::new(*tick_state)
+        } else {
+            if !is_match_pool_current_tick_array {
+                is_match_pool_current_tick_array = true;
+                Box::new(*tick_array_current.first_initialized_tick(zero_for_one)?)
             } else {
-                if !is_match_pool_current_tick_array {
-                    is_match_pool_current_tick_array = true;
-                    Box::new(*tick_array_current.first_initialized_tick(zero_for_one)?)
-                } else {
-                    Box::new(TickState::default())
-                }
-            };
+                Box::new(TickState::default())
+            }
+        };
         #[cfg(feature = "enable-log")]
         msg!(
             "next_initialized_tick, status:{}, tick_index:{}, tick_array_current:{}",
@@ -243,7 +246,9 @@ pub fn swap_internal<'b, 'info>(
             }
 
             while tick_array_current.start_tick_index != next_initialized_tickarray_index.unwrap() {
-                tick_array_current = tick_array_states.pop_front().ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
+                tick_array_current = tick_array_states
+                    .pop_front()
+                    .ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
                 // check the tick_array account is owned by the pool
                 require_keys_eq!(tick_array_current.pool_id, pool_state.key());
             }
@@ -310,12 +315,18 @@ pub fn swap_internal<'b, 'info>(
         step.fee_amount = swap_step.fee_amount;
 
         if is_base_input {
-            state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(step.amount_in + step.fee_amount).unwrap();
+            state.amount_specified_remaining = state
+                .amount_specified_remaining
+                .checked_sub(step.amount_in + step.fee_amount)
+                .unwrap();
             state.amount_calculated = state.amount_calculated.checked_add(step.amount_out).unwrap();
         } else {
             state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(step.amount_out).unwrap();
 
-            let step_amount_calculate = step.amount_in.checked_add(step.fee_amount).ok_or(ErrorCode::CalculateOverflow)?;
+            let step_amount_calculate = step
+                .amount_in
+                .checked_add(step.fee_amount)
+                .ok_or(ErrorCode::CalculateOverflow)?;
             state.amount_calculated = state
                 .amount_calculated
                 .checked_add(step_amount_calculate)
@@ -353,7 +364,10 @@ pub fn swap_internal<'b, 'info>(
                 .unwrap()
                 .as_u128();
 
-            state.fee_growth_global_x64 = state.fee_growth_global_x64.checked_add(fee_growth_global_x64_delta).unwrap();
+            state.fee_growth_global_x64 = state
+                .fee_growth_global_x64
+                .checked_add(fee_growth_global_x64_delta)
+                .unwrap();
             state.fee_amount = state.fee_amount.checked_add(step.fee_amount).unwrap();
             #[cfg(feature = "enable-log")]
             msg!(
@@ -386,7 +400,11 @@ pub fn swap_internal<'b, 'info>(
                     &updated_reward_infos,
                 );
                 // update tick_state to tick_array account
-                tick_array_current.update_tick_state(next_initialized_tick.tick, pool_state.tick_spacing.into(), *next_initialized_tick)?;
+                tick_array_current.update_tick_state(
+                    next_initialized_tick.tick,
+                    pool_state.tick_spacing.into(),
+                    *next_initialized_tick,
+                )?;
 
                 if zero_for_one {
                     liquidity_net = liquidity_net.neg();
@@ -394,7 +412,11 @@ pub fn swap_internal<'b, 'info>(
                 state.liquidity = liquidity_math::add_delta(state.liquidity, liquidity_net)?;
             }
 
-            state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
+            state.tick = if zero_for_one {
+                step.tick_next - 1
+            } else {
+                step.tick_next
+            };
         } else if state.sqrt_price_x64 != step.sqrt_price_start_x64 {
             // recompute unless we're on a lower tick boundary (i.e. already transitioned ticks), and haven't moved
             // if only a small amount of quantity is traded, the input may be consumed by fees, resulting in no price change. If state.sqrt_price_x64, i.e., the latest price in the pool, is used to recalculate the tick, some errors may occur.
@@ -459,25 +481,43 @@ pub fn swap_internal<'b, 'info>(
         pool_state.total_fees_token_0 = pool_state.total_fees_token_0.checked_add(state.fee_amount).unwrap();
 
         if state.protocol_fee > 0 {
-            pool_state.protocol_fees_token_0 = pool_state.protocol_fees_token_0.checked_add(state.protocol_fee).unwrap();
+            pool_state.protocol_fees_token_0 = pool_state
+                .protocol_fees_token_0
+                .checked_add(state.protocol_fee)
+                .unwrap();
         }
         if state.fund_fee > 0 {
             pool_state.fund_fees_token_0 = pool_state.fund_fees_token_0.checked_add(state.fund_fee).unwrap();
         }
-        pool_state.swap_in_amount_token_0 = pool_state.swap_in_amount_token_0.checked_add(u128::from(amount_0)).unwrap();
-        pool_state.swap_out_amount_token_1 = pool_state.swap_out_amount_token_1.checked_add(u128::from(amount_1)).unwrap();
+        pool_state.swap_in_amount_token_0 = pool_state
+            .swap_in_amount_token_0
+            .checked_add(u128::from(amount_0))
+            .unwrap();
+        pool_state.swap_out_amount_token_1 = pool_state
+            .swap_out_amount_token_1
+            .checked_add(u128::from(amount_1))
+            .unwrap();
     } else {
         pool_state.fee_growth_global_1_x64 = state.fee_growth_global_x64;
         pool_state.total_fees_token_1 = pool_state.total_fees_token_1.checked_add(state.fee_amount).unwrap();
 
         if state.protocol_fee > 0 {
-            pool_state.protocol_fees_token_1 = pool_state.protocol_fees_token_1.checked_add(state.protocol_fee).unwrap();
+            pool_state.protocol_fees_token_1 = pool_state
+                .protocol_fees_token_1
+                .checked_add(state.protocol_fee)
+                .unwrap();
         }
         if state.fund_fee > 0 {
             pool_state.fund_fees_token_1 = pool_state.fund_fees_token_1.checked_add(state.fund_fee).unwrap();
         }
-        pool_state.swap_in_amount_token_1 = pool_state.swap_in_amount_token_1.checked_add(u128::from(amount_1)).unwrap();
-        pool_state.swap_out_amount_token_0 = pool_state.swap_out_amount_token_0.checked_add(u128::from(amount_0)).unwrap();
+        pool_state.swap_in_amount_token_1 = pool_state
+            .swap_in_amount_token_1
+            .checked_add(u128::from(amount_1))
+            .unwrap();
+        pool_state.swap_out_amount_token_0 = pool_state
+            .swap_out_amount_token_0
+            .checked_add(u128::from(amount_0))
+            .unwrap();
     }
 
     Ok((amount_0, amount_1))
@@ -551,7 +591,9 @@ pub fn swap_internal_new<'b, 'info>(
         if tick_array_current.start_tick_index == current_vaild_tick_array_start_index {
             break;
         }
-        tick_array_current = tick_array_states.pop_front().ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
+        tick_array_current = tick_array_states
+            .pop_front()
+            .ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
     }
     // check the first tick_array account is owned by the pool
     require_keys_eq!(tick_array_current.pool_id, pool_state.key());
@@ -587,17 +629,18 @@ pub fn swap_internal_new<'b, 'info>(
         let mut step = StepComputations::default();
         step.sqrt_price_start_x64 = state.sqrt_price_x64;
 
-        let mut next_initialized_tick =
-            if let Some(tick_state) = tick_array_current.next_initialized_tick(state.tick, pool_state.tick_spacing, zero_for_one)? {
-                Box::new(*tick_state)
+        let mut next_initialized_tick = if let Some(tick_state) =
+            tick_array_current.next_initialized_tick(state.tick, pool_state.tick_spacing, zero_for_one)?
+        {
+            Box::new(*tick_state)
+        } else {
+            if !is_match_pool_current_tick_array {
+                is_match_pool_current_tick_array = true;
+                Box::new(*tick_array_current.first_initialized_tick(zero_for_one)?)
             } else {
-                if !is_match_pool_current_tick_array {
-                    is_match_pool_current_tick_array = true;
-                    Box::new(*tick_array_current.first_initialized_tick(zero_for_one)?)
-                } else {
-                    Box::new(TickState::default())
-                }
-            };
+                Box::new(TickState::default())
+            }
+        };
         #[cfg(feature = "enable-log")]
         msg!(
             "next_initialized_tick, status:{}, tick_index:{}, tick_array_current:{}",
@@ -616,7 +659,9 @@ pub fn swap_internal_new<'b, 'info>(
             }
 
             while tick_array_current.start_tick_index != next_initialized_tickarray_index.unwrap() {
-                tick_array_current = tick_array_states.pop_front().ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
+                tick_array_current = tick_array_states
+                    .pop_front()
+                    .ok_or(ErrorCode::NotEnoughTickArrayAccount)?;
                 // check the tick_array account is owned by the pool
                 require_keys_eq!(tick_array_current.pool_id, pool_state.key());
             }
@@ -683,12 +728,18 @@ pub fn swap_internal_new<'b, 'info>(
         step.fee_amount = swap_step.fee_amount;
 
         if is_base_input {
-            state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(step.amount_in + step.fee_amount).unwrap();
+            state.amount_specified_remaining = state
+                .amount_specified_remaining
+                .checked_sub(step.amount_in + step.fee_amount)
+                .unwrap();
             state.amount_calculated = state.amount_calculated.checked_add(step.amount_out).unwrap();
         } else {
             state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(step.amount_out).unwrap();
 
-            let step_amount_calculate = step.amount_in.checked_add(step.fee_amount).ok_or(ErrorCode::CalculateOverflow)?;
+            let step_amount_calculate = step
+                .amount_in
+                .checked_add(step.fee_amount)
+                .ok_or(ErrorCode::CalculateOverflow)?;
             state.amount_calculated = state
                 .amount_calculated
                 .checked_add(step_amount_calculate)
@@ -702,11 +753,19 @@ pub fn swap_internal_new<'b, 'info>(
         if let Some(_upper_token_account) = upper_token_account {
             reward_fee = step_fee_amount * 3 / 5;
             step_fee_amount = step_fee_amount.checked_sub(reward_fee).unwrap();
-            msg!("With upper account - reward_fee: {}, step_fee_amount: {}", reward_fee, step_fee_amount);
+            msg!(
+                "With upper account - reward_fee: {}, step_fee_amount: {}",
+                reward_fee,
+                step_fee_amount
+            );
         } else {
             reward_fee = step_fee_amount * 3 / 10;
             step_fee_amount = step_fee_amount.checked_sub(reward_fee).unwrap();
-            msg!("Without upper account - reward_fee: {}, step_fee_amount: {}", reward_fee, step_fee_amount);
+            msg!(
+                "Without upper account - reward_fee: {}, step_fee_amount: {}",
+                reward_fee,
+                step_fee_amount
+            );
         }
 
         step.fee_amount = step.fee_amount.checked_sub(reward_fee).unwrap();
@@ -744,7 +803,10 @@ pub fn swap_internal_new<'b, 'info>(
                 .unwrap()
                 .as_u128();
 
-            state.fee_growth_global_x64 = state.fee_growth_global_x64.checked_add(fee_growth_global_x64_delta).unwrap();
+            state.fee_growth_global_x64 = state
+                .fee_growth_global_x64
+                .checked_add(fee_growth_global_x64_delta)
+                .unwrap();
             state.fee_amount = state.fee_amount.checked_add(step.fee_amount).unwrap();
             #[cfg(feature = "enable-log")]
             msg!(
@@ -777,7 +839,11 @@ pub fn swap_internal_new<'b, 'info>(
                     &updated_reward_infos,
                 );
                 // update tick_state to tick_array account
-                tick_array_current.update_tick_state(next_initialized_tick.tick, pool_state.tick_spacing.into(), *next_initialized_tick)?;
+                tick_array_current.update_tick_state(
+                    next_initialized_tick.tick,
+                    pool_state.tick_spacing.into(),
+                    *next_initialized_tick,
+                )?;
 
                 if zero_for_one {
                     liquidity_net = liquidity_net.neg();
@@ -785,7 +851,11 @@ pub fn swap_internal_new<'b, 'info>(
                 state.liquidity = liquidity_math::add_delta(state.liquidity, liquidity_net)?;
             }
 
-            state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
+            state.tick = if zero_for_one {
+                step.tick_next - 1
+            } else {
+                step.tick_next
+            };
         } else if state.sqrt_price_x64 != step.sqrt_price_start_x64 {
             // recompute unless we're on a lower tick boundary (i.e. already transitioned ticks), and haven't moved
             // if only a small amount of quantity is traded, the input may be consumed by fees, resulting in no price change. If state.sqrt_price_x64, i.e., the latest price in the pool, is used to recalculate the tick, some errors may occur.
@@ -850,25 +920,43 @@ pub fn swap_internal_new<'b, 'info>(
         pool_state.total_fees_token_0 = pool_state.total_fees_token_0.checked_add(state.fee_amount).unwrap();
 
         if state.protocol_fee > 0 {
-            pool_state.protocol_fees_token_0 = pool_state.protocol_fees_token_0.checked_add(state.protocol_fee).unwrap();
+            pool_state.protocol_fees_token_0 = pool_state
+                .protocol_fees_token_0
+                .checked_add(state.protocol_fee)
+                .unwrap();
         }
         if state.fund_fee > 0 {
             pool_state.fund_fees_token_0 = pool_state.fund_fees_token_0.checked_add(state.fund_fee).unwrap();
         }
-        pool_state.swap_in_amount_token_0 = pool_state.swap_in_amount_token_0.checked_add(u128::from(amount_0)).unwrap();
-        pool_state.swap_out_amount_token_1 = pool_state.swap_out_amount_token_1.checked_add(u128::from(amount_1)).unwrap();
+        pool_state.swap_in_amount_token_0 = pool_state
+            .swap_in_amount_token_0
+            .checked_add(u128::from(amount_0))
+            .unwrap();
+        pool_state.swap_out_amount_token_1 = pool_state
+            .swap_out_amount_token_1
+            .checked_add(u128::from(amount_1))
+            .unwrap();
     } else {
         pool_state.fee_growth_global_1_x64 = state.fee_growth_global_x64;
         pool_state.total_fees_token_1 = pool_state.total_fees_token_1.checked_add(state.fee_amount).unwrap();
 
         if state.protocol_fee > 0 {
-            pool_state.protocol_fees_token_1 = pool_state.protocol_fees_token_1.checked_add(state.protocol_fee).unwrap();
+            pool_state.protocol_fees_token_1 = pool_state
+                .protocol_fees_token_1
+                .checked_add(state.protocol_fee)
+                .unwrap();
         }
         if state.fund_fee > 0 {
             pool_state.fund_fees_token_1 = pool_state.fund_fees_token_1.checked_add(state.fund_fee).unwrap();
         }
-        pool_state.swap_in_amount_token_1 = pool_state.swap_in_amount_token_1.checked_add(u128::from(amount_1)).unwrap();
-        pool_state.swap_out_amount_token_0 = pool_state.swap_out_amount_token_0.checked_add(u128::from(amount_0)).unwrap();
+        pool_state.swap_in_amount_token_1 = pool_state
+            .swap_in_amount_token_1
+            .checked_add(u128::from(amount_1))
+            .unwrap();
+        pool_state.swap_out_amount_token_0 = pool_state
+            .swap_out_amount_token_0
+            .checked_add(u128::from(amount_0))
+            .unwrap();
     }
 
     Ok((amount_0, amount_1, reward_fee))
@@ -915,7 +1003,11 @@ pub fn exact_internal<'b, 'c: 'info, 'info>(
         let tick_array_bitmap_extension_key = TickArrayBitmapExtension::key(pool_state.key());
         for account_info in remaining_accounts.into_iter() {
             if account_info.key().eq(&tick_array_bitmap_extension_key) {
-                tickarray_bitmap_extension = Some(*(AccountLoader::<TickArrayBitmapExtension>::try_from(account_info)?.load()?.deref()));
+                tickarray_bitmap_extension = Some(
+                    *(AccountLoader::<TickArrayBitmapExtension>::try_from(account_info)?
+                        .load()?
+                        .deref()),
+                );
                 continue;
             }
             tick_array_states.push_back(AccountLoad::load_data_mut(account_info)?);
@@ -1109,7 +1201,9 @@ mod swap_test {
     use std::collections::HashMap;
     use std::vec;
 
-    pub fn get_tick_array_states_mut(deque_tick_array_states: &VecDeque<RefCell<TickArrayState>>) -> RefCell<VecDeque<RefMut<'_, TickArrayState>>> {
+    pub fn get_tick_array_states_mut(
+        deque_tick_array_states: &VecDeque<RefCell<TickArrayState>>,
+    ) -> RefCell<VecDeque<RefMut<'_, TickArrayState>>> {
         let mut tick_array_states = VecDeque::new();
 
         for tick_array_state in deque_tick_array_states {
@@ -1185,13 +1279,21 @@ mod swap_test {
             ..Default::default()
         };
 
-        let pool_state_refcel = build_pool(start_tick, tick_spacing, tick_math::get_sqrt_price_at_tick(start_tick).unwrap(), 0);
+        let pool_state_refcel = build_pool(
+            start_tick,
+            tick_spacing,
+            tick_math::get_sqrt_price_at_tick(start_tick).unwrap(),
+            0,
+        );
 
         let observation_state = RefCell::new(ObservationState::default());
 
         let param = &mut BuildExtensionAccountInfo::default();
         param.key = Pubkey::find_program_address(
-            &[POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(), pool_state_refcel.borrow().key().as_ref()],
+            &[
+                POOL_TICK_ARRAY_BITMAP_SEED.as_bytes(),
+                pool_state_refcel.borrow().key().as_ref(),
+            ],
             &crate::id(),
         )
         .0;
@@ -1224,14 +1326,21 @@ mod swap_test {
                 .unwrap();
                 sum_amount_0 += amount_0;
                 sum_amount_1 += amount_1;
-                let tick_array_lower_start_index = TickArrayState::get_array_start_index(position_param.tick_lower, tick_spacing);
+                let tick_array_lower_start_index =
+                    TickArrayState::get_array_start_index(position_param.tick_lower, tick_spacing);
 
                 if !tick_array_map.contains_key(&tick_array_lower_start_index) {
-                    let mut tick_array_refcel =
-                        build_tick_array_with_tick_states(pool_state.key(), tick_array_lower_start_index, tick_spacing, vec![]);
+                    let mut tick_array_refcel = build_tick_array_with_tick_states(
+                        pool_state.key(),
+                        tick_array_lower_start_index,
+                        tick_spacing,
+                        vec![],
+                    );
                     let tick_array_lower = tick_array_refcel.get_mut();
 
-                    let tick_lower = tick_array_lower.get_tick_state_mut(position_param.tick_lower, tick_spacing).unwrap();
+                    let tick_lower = tick_array_lower
+                        .get_tick_state_mut(position_param.tick_lower, tick_spacing)
+                        .unwrap();
                     tick_lower.tick = position_param.tick_lower;
                     tick_lower
                         .update(
@@ -1263,13 +1372,20 @@ mod swap_test {
                         )
                         .unwrap();
                 }
-                let tick_array_upper_start_index = TickArrayState::get_array_start_index(position_param.tick_upper, tick_spacing);
+                let tick_array_upper_start_index =
+                    TickArrayState::get_array_start_index(position_param.tick_upper, tick_spacing);
                 if !tick_array_map.contains_key(&tick_array_upper_start_index) {
-                    let mut tick_array_refcel =
-                        build_tick_array_with_tick_states(pool_state.key(), tick_array_upper_start_index, tick_spacing, vec![]);
+                    let mut tick_array_refcel = build_tick_array_with_tick_states(
+                        pool_state.key(),
+                        tick_array_upper_start_index,
+                        tick_spacing,
+                        vec![],
+                    );
                     let tick_array_upper = tick_array_refcel.get_mut();
 
-                    let tick_upper = tick_array_upper.get_tick_state_mut(position_param.tick_upper, tick_spacing).unwrap();
+                    let tick_upper = tick_array_upper
+                        .get_tick_state_mut(position_param.tick_upper, tick_spacing)
+                        .unwrap();
                     tick_upper.tick = position_param.tick_upper;
 
                     tick_upper
@@ -1303,13 +1419,18 @@ mod swap_test {
                         )
                         .unwrap();
                 }
-                if pool_state.tick_current >= position_param.tick_lower && pool_state.tick_current < position_param.tick_upper {
-                    pool_state.liquidity = liquidity_math::add_delta(pool_state.liquidity, i128::try_from(liquidity).unwrap()).unwrap();
+                if pool_state.tick_current >= position_param.tick_lower
+                    && pool_state.tick_current < position_param.tick_upper
+                {
+                    pool_state.liquidity =
+                        liquidity_math::add_delta(pool_state.liquidity, i128::try_from(liquidity).unwrap()).unwrap();
                 }
             }
             for (tickarray_start_index, tick_array_info) in tick_array_map {
                 tick_array_states.push_back(tick_array_info);
-                pool_state.flip_tick_array_bit(Some(&bitmap_extension), tickarray_start_index).unwrap();
+                pool_state
+                    .flip_tick_array_bit(Some(&bitmap_extension), tickarray_start_index)
+                    .unwrap();
             }
 
             use std::convert::identity;
@@ -1891,7 +2012,10 @@ mod swap_test {
                 oracle::block_timestamp_mock() as u32,
             );
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err(), ErrorCode::MissingTickArrayBitmapExtensionAccount.into());
+            assert_eq!(
+                result.unwrap_err(),
+                ErrorCode::MissingTickArrayBitmapExtensionAccount.into()
+            );
         }
     }
 
@@ -2095,7 +2219,15 @@ mod swap_test {
             let amount_0 = u64::MAX - 1;
             let amount_1 = u64::MAX - 1;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2138,7 +2270,15 @@ mod swap_test {
             let amount_0 = u64::MAX - 1;
             let amount_1 = u64::MAX - 1;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2181,7 +2321,15 @@ mod swap_test {
             let amount_0 = u64::MAX - 1;
             let amount_1 = u64::MAX - 1;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2223,7 +2371,15 @@ mod swap_test {
             let amount_0 = u64::MAX - 1;
             let amount_1 = u64::MAX - 1;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2269,7 +2425,15 @@ mod swap_test {
             let amount_0 = u64::MAX / 2;
             let amount_1 = u64::MAX / 2;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2312,7 +2476,15 @@ mod swap_test {
             let amount_0 = u64::MAX / 2;
             let amount_1 = u64::MAX / 2;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2355,7 +2527,15 @@ mod swap_test {
             let amount_0 = u64::MAX / 2;
             let amount_1 = u64::MAX / 2;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {
@@ -2397,7 +2577,15 @@ mod swap_test {
             let amount_0 = u64::MAX / 2;
             let amount_1 = u64::MAX / 2;
 
-            let (amm_config, pool_state, tick_array_states, observation_state, bitmap_extension_state, sum_amount_0, sum_amount_1) = setup_swap_test(
+            let (
+                amm_config,
+                pool_state,
+                tick_array_states,
+                observation_state,
+                bitmap_extension_state,
+                sum_amount_0,
+                sum_amount_1,
+            ) = setup_swap_test(
                 tick_current,
                 tick_spacing as u16,
                 vec![OpenPositionParam {

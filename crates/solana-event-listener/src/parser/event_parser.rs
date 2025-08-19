@@ -557,47 +557,47 @@ impl EventParserRegistry {
     }
 
     /// 从单条日志和完整上下文解析所有事件（处理多事件版本）
-    /// 
+    ///
     /// 与 `parse_event_with_context` 不同，此方法会处理并返回所有找到的有效事件，
     /// 而不是只返回第一个有效事件。
-    /// 
+    ///
     /// # 使用场景
-    /// 
+    ///
     /// - **单个事务包含多个事件时**：当一个事务可能生成多个不同类型的事件
     /// - **需要完整事件处理时**：当业务逻辑需要处理事务中的所有事件
     /// - **事件统计分析时**：当需要统计和分析事务中所有事件的信息
-    /// 
+    ///
     /// # 与 parse_event_with_context 的区别
-    /// 
+    ///
     /// | 特性 | parse_event_with_context | parse_all_events_with_context |
     /// |------|-------------------------|-------------------------------|
     /// | 返回类型 | `Result<Option<ParsedEvent>>` | `Result<Vec<ParsedEvent>>` |
     /// | 事件处理策略 | 只返回第一个有效事件 | 返回所有有效事件 |
     /// | 向后兼容性 | ✅ 保持现有行为 | ❌ 新方法 |
     /// | 性能开销 | 较低（找到第一个即停止）| 稍高（处理所有事件）|
-    /// 
+    ///
     /// # 参数
-    /// 
+    ///
     /// * `logs` - 事务的完整日志数组
     /// * `signature` - 事务签名
     /// * `slot` - 区块槽位
     /// * `subscribed_programs` - 订阅的程序ID列表
-    /// 
+    ///
     /// # 返回值
-    /// 
+    ///
     /// 返回包含所有成功解析事件的向量。如果没有找到任何有效事件，返回空向量。
-    /// 
+    ///
     /// # 错误处理
-    /// 
+    ///
     /// 只有在解析过程中发生系统性错误时才会返回 `Err`。单个事件的解析失败
     /// 不会导致整个方法失败，失败的事件会被跳过并记录在日志中。
-    /// 
+    ///
     /// # 示例
-    /// 
+    ///
     /// ```rust,no_run
     /// use solana_event_listener::parser::EventParserRegistry;
     /// use solana_sdk::pubkey::Pubkey;
-    /// 
+    ///
     /// async fn process_all_transaction_events(registry: &EventParserRegistry) -> Result<(), Box<dyn std::error::Error>> {
     ///     let logs = vec![
     ///         "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
@@ -605,17 +605,17 @@ impl EventParserRegistry {
     ///         "Program data: <base64_event_data_2>".to_string(),
     ///         "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
     ///     ];
-    ///     
+    ///
     ///     let events = registry
     ///         .parse_all_events_with_context(&logs, "signature", 12345, &[])
     ///         .await?;
-    ///         
+    ///
     ///     println!("找到{}个事件", events.len());
     ///     for event in events {
     ///         println!("事件类型: {}", event.event_type());
     ///         // 处理每个事件...
     ///     }
-    ///     
+    ///
     ///     Ok(())
     /// }
     /// ```
@@ -1611,20 +1611,30 @@ mod tests {
         let logs_with_multiple_program_data = vec![
             "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
             "Program data: dGVzdF9kYXRhXzE=".to_string(), // base64编码的"test_data_1"
-            "Program data: dGVzdF9kYXRhXzI=".to_string(), // base64编码的"test_data_2" 
+            "Program data: dGVzdF9kYXRhXzI=".to_string(), // base64编码的"test_data_2"
             "Program data: dGVzdF9kYXRhXzM=".to_string(), // base64编码的"test_data_3"
             "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
         ];
 
         // 测试单事件解析方法
         let single_result = registry
-            .parse_event_with_context(&logs_with_multiple_program_data, "test_sig", 12345, &config.solana.program_ids)
+            .parse_event_with_context(
+                &logs_with_multiple_program_data,
+                "test_sig",
+                12345,
+                &config.solana.program_ids,
+            )
             .await
             .unwrap();
 
         // 测试所有事件解析方法
         let all_result = registry
-            .parse_all_events_with_context(&logs_with_multiple_program_data, "test_sig", 12345, &config.solana.program_ids)
+            .parse_all_events_with_context(
+                &logs_with_multiple_program_data,
+                "test_sig",
+                12345,
+                &config.solana.program_ids,
+            )
             .await
             .unwrap();
 

@@ -52,7 +52,7 @@ impl SwapParser {
         // 交换事件的discriminator（与TokenCreationEvent相同）
         let discriminator = [64, 198, 205, 232, 38, 8, 113, 226];
 
-        Ok(Self { 
+        Ok(Self {
             discriminator,
             target_program_id: program_id,
         })
@@ -66,7 +66,9 @@ impl SwapParser {
             .map_err(|e| EventListenerError::EventParsing(format!("Base64解码失败: {}", e)))?;
 
         if data.len() < 8 {
-            return Err(EventListenerError::EventParsing("数据长度不足，无法包含discriminator".to_string()));
+            return Err(EventListenerError::EventParsing(
+                "数据长度不足，无法包含discriminator".to_string(),
+            ));
         }
 
         // 验证discriminator
@@ -77,10 +79,13 @@ impl SwapParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = SwapEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        let event = SwapEvent::try_from_slice(event_data)
+            .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
 
-        debug!("✅ 成功解析交换事件: 池子={}, 发送者={}, amount_0={}, amount_1={}", 
-               event.pool_state, event.sender, event.amount_0, event.amount_1);
+        debug!(
+            "✅ 成功解析交换事件: 池子={}, 发送者={}, amount_0={}, amount_1={}",
+            event.pool_state, event.sender, event.amount_0, event.amount_1
+        );
         Ok(event)
     }
 
@@ -173,7 +178,7 @@ impl EventParser for SwapParser {
                                 event.amount_0,
                                 event.amount_1
                             );
-                            
+
                             if self.validate_swap(&event)? {
                                 let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot);
                                 return Ok(Some(parsed_event));
@@ -297,7 +302,12 @@ mod tests {
                                 println!("❌ SwapEvent解析失败: {}", e);
                                 println!("事件数据长度: {} bytes", event_data.len());
                                 // 打印前32字节的十六进制数据用于调试
-                                let hex_data = event_data.iter().take(32).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+                                let hex_data = event_data
+                                    .iter()
+                                    .take(32)
+                                    .map(|b| format!("{:02x}", b))
+                                    .collect::<Vec<_>>()
+                                    .join(" ");
                                 println!("事件数据前32字节: {}", hex_data);
                             }
                         }

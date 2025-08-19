@@ -18,7 +18,7 @@ mod integration_tests {
 
         // 测试构建指令（不实际发送到网络）
         let result = nft_service.mint_nft(request).await;
-        
+
         // 在测试环境中，此操作可能失败（由于没有实际的RPC连接），
         // 但我们可以检查是否能到达指令构建阶段
         match result {
@@ -31,10 +31,10 @@ mod integration_tests {
                 // 在测试环境中，RPC调用可能会失败，这是预期的
                 let error_msg = e.to_string();
                 assert!(
-                    error_msg.contains("RPC") || 
-                    error_msg.contains("network") || 
-                    error_msg.contains("connection") ||
-                    error_msg.contains("timeout")
+                    error_msg.contains("RPC")
+                        || error_msg.contains("network")
+                        || error_msg.contains("connection")
+                        || error_msg.contains("timeout")
                 );
             }
         }

@@ -64,17 +64,11 @@ pub fn initialize_pool_instr(
         &program.id(),
     );
     let (lp_mint_key, __bump) = Pubkey::find_program_address(
-        &[
-            POOL_LP_MINT_SEED.as_bytes(),
-            pool_account_key.to_bytes().as_ref(),
-        ],
+        &[POOL_LP_MINT_SEED.as_bytes(), pool_account_key.to_bytes().as_ref()],
         &program.id(),
     );
     let (observation_key, __bump) = Pubkey::find_program_address(
-        &[
-            OBSERVATION_SEED.as_bytes(),
-            pool_account_key.to_bytes().as_ref(),
-        ],
+        &[OBSERVATION_SEED.as_bytes(), pool_account_key.to_bytes().as_ref()],
         &program.id(),
     );
 

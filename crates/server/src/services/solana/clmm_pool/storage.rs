@@ -3,7 +3,10 @@
 //! 负责将池子创建后的元数据存储到MongoDB数据库中
 
 use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
-use database::clmm_pool::{ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo, TransactionInfo, TransactionStatus, VaultInfo};
+use database::clmm_pool::{
+    ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
+    TransactionInfo, TransactionStatus, VaultInfo,
+};
 use mongodb::Collection;
 use tracing::{debug, error, info, warn};
 use utils::{AppResult, TokenMetadata};
@@ -66,7 +69,11 @@ impl ClmmPoolStorageService {
     }
 
     /// 存储池子创建响应数据 (仅构建交易，未发送)
-    pub async fn store_pool_creation(&self, request: &CreatePoolRequest, response: &CreatePoolResponse) -> AppResult<String> {
+    pub async fn store_pool_creation(
+        &self,
+        request: &CreatePoolRequest,
+        response: &CreatePoolResponse,
+    ) -> AppResult<String> {
         info!("💾 存储池子创建数据: {}", response.pool_address);
 
         // 检查池子是否已存在
@@ -80,7 +87,7 @@ impl ClmmPoolStorageService {
         }
 
         let now = chrono::Utc::now().timestamp() as u64;
-        
+
         // 获取当前slot（这里简化处理，实际应该从RPC获取）
         let api_slot = self.get_current_slot().await.unwrap_or(0);
 
@@ -147,18 +154,18 @@ impl ClmmPoolStorageService {
 
             creator_wallet: request.user_wallet.clone(),
             open_time: request.open_time,
-            
+
             // 新字段
             api_created_at: now,
             api_created_slot: Some(api_slot),
             updated_at: now,
-            
+
             // 链上事件字段（初始为空）
             event_signature: None,
             event_updated_slot: None,
             event_confirmed_at: None,
             event_updated_at: None,
-            
+
             transaction_info: None, // 仅构建交易时为空
             status: PoolStatus::Created,
 
@@ -170,7 +177,7 @@ impl ClmmPoolStorageService {
             },
 
             pool_type: database::clmm_pool::model::PoolType::Concentrated,
-            
+
             // 新增状态字段
             data_source: DataSource::ApiCreated,
             chain_confirmed: false,
@@ -182,7 +189,7 @@ impl ClmmPoolStorageService {
 
         Ok(response.pool_address.clone())
     }
-    
+
     /// 获取当前slot（简化实现）
     async fn get_current_slot(&self) -> AppResult<u64> {
         // TODO: 实际应该从RPC client获取
@@ -191,7 +198,11 @@ impl ClmmPoolStorageService {
     }
 
     /// 存储池子创建并发送交易的响应数据
-    pub async fn store_pool_creation_with_transaction(&self, request: &CreatePoolRequest, response: &CreatePoolAndSendTransactionResponse) -> AppResult<String> {
+    pub async fn store_pool_creation_with_transaction(
+        &self,
+        request: &CreatePoolRequest,
+        response: &CreatePoolAndSendTransactionResponse,
+    ) -> AppResult<String> {
         info!("💾 存储池子创建和交易数据: {}", response.pool_address);
 
         let now = chrono::Utc::now().timestamp() as u64;
@@ -270,18 +281,18 @@ impl ClmmPoolStorageService {
 
             creator_wallet: request.user_wallet.clone(),
             open_time: request.open_time,
-            
+
             // 新字段
             api_created_at: now,
             api_created_slot: Some(api_slot),
             updated_at: now,
-            
+
             // 交易已发送，可以填充事件字段
             event_signature: Some(response.signature.clone()),
             event_updated_slot: Some(api_slot), // 暂时使用同一个slot
             event_confirmed_at: Some(now),
             event_updated_at: Some(now),
-            
+
             transaction_info: Some(transaction_info),
             status: PoolStatus::Active, // 交易已确认，状态为活跃
 
@@ -293,7 +304,7 @@ impl ClmmPoolStorageService {
             },
 
             pool_type: database::clmm_pool::model::PoolType::Concentrated,
-            
+
             // 状态字段
             data_source: DataSource::ApiCreated,
             chain_confirmed: true, // 交易已发送并确认
@@ -410,7 +421,10 @@ impl ClmmPoolStorageService {
     }
 
     /// 分页查询池子列表
-    pub async fn query_pools_with_pagination(&self, params: &database::clmm_pool::model::PoolListRequest) -> AppResult<database::clmm_pool::model::PoolListResponse> {
+    pub async fn query_pools_with_pagination(
+        &self,
+        params: &database::clmm_pool::model::PoolListRequest,
+    ) -> AppResult<database::clmm_pool::model::PoolListResponse> {
         self.repository.query_pools_with_pagination(params).await
     }
 
@@ -432,7 +446,16 @@ impl ClmmPoolStorageService {
     }
 
     /// 批量更新池子链上数据
-    pub async fn batch_update_pool_onchain_data(&self, updates: &[(String, Option<(u8, String)>, Option<(u8, String)>, Option<f64>, Option<i32>)]) -> AppResult<u64> {
+    pub async fn batch_update_pool_onchain_data(
+        &self,
+        updates: &[(
+            String,
+            Option<(u8, String)>,
+            Option<(u8, String)>,
+            Option<f64>,
+            Option<i32>,
+        )],
+    ) -> AppResult<u64> {
         if updates.is_empty() {
             return Ok(0);
         }
@@ -442,7 +465,13 @@ impl ClmmPoolStorageService {
 
         for (pool_address, mint0_info, mint1_info, current_price, current_tick) in updates {
             match self
-                .update_pool_onchain_data(pool_address, mint0_info.to_owned(), mint1_info.to_owned(), *current_price, *current_tick)
+                .update_pool_onchain_data(
+                    pool_address,
+                    mint0_info.to_owned(),
+                    mint1_info.to_owned(),
+                    *current_price,
+                    *current_tick,
+                )
                 .await
             {
                 Ok(true) => {
@@ -469,7 +498,7 @@ impl ClmmPoolStorageService {
 
         // 准备更新字段
         let mut mint_update_fields = Document::new();
-        
+
         // 基础字段
         if let Some(symbol) = &metadata.symbol {
             mint_update_fields.insert("symbol", symbol);
@@ -477,7 +506,7 @@ impl ClmmPoolStorageService {
         if let Some(name) = &metadata.name {
             mint_update_fields.insert("name", name);
         }
-        
+
         // 新增的元数据字段
         if let Some(log_uri) = &metadata.logo_uri {
             mint_update_fields.insert("log_uri", log_uri);
@@ -488,22 +517,25 @@ impl ClmmPoolStorageService {
         if let Some(external_url) = &metadata.external_url {
             mint_update_fields.insert("external_url", external_url);
         }
-        
+
         // 处理 tags 数组字段
         if !metadata.tags.is_empty() {
             mint_update_fields.insert("tags", &metadata.tags);
         }
-        
+
         // 处理 attributes 数组字段
         if let Some(attributes) = &metadata.attributes {
             if !attributes.is_empty() {
                 // 将 TokenAttribute 转换为 BSON 文档
-                let attr_docs: Vec<Document> = attributes.iter().map(|attr| {
-                    doc! {
-                        "trait_type": &attr.trait_type,
-                        "value": &attr.value
-                    }
-                }).collect();
+                let attr_docs: Vec<Document> = attributes
+                    .iter()
+                    .map(|attr| {
+                        doc! {
+                            "trait_type": &attr.trait_type,
+                            "value": &attr.value
+                        }
+                    })
+                    .collect();
                 mint_update_fields.insert("attributes", attr_docs);
             }
         }
@@ -525,11 +557,19 @@ impl ClmmPoolStorageService {
             "$set": update_mint0_doc
         };
 
-        match self.repository.get_collection().update_many(filter_mint0, update_mint0, None).await {
+        match self
+            .repository
+            .get_collection()
+            .update_many(filter_mint0, update_mint0, None)
+            .await
+        {
             Ok(result) => {
                 total_updated += result.modified_count;
                 if result.modified_count > 0 {
-                    debug!("✅ 更新了 {} 个池子的mint0元数据: {}", result.modified_count, mint_address);
+                    debug!(
+                        "✅ 更新了 {} 个池子的mint0元数据: {}",
+                        result.modified_count, mint_address
+                    );
                 }
             }
             Err(e) => {
@@ -549,11 +589,19 @@ impl ClmmPoolStorageService {
             "$set": update_mint1_doc
         };
 
-        match self.repository.get_collection().update_many(filter_mint1, update_mint1, None).await {
+        match self
+            .repository
+            .get_collection()
+            .update_many(filter_mint1, update_mint1, None)
+            .await
+        {
             Ok(result) => {
                 total_updated += result.modified_count;
                 if result.modified_count > 0 {
-                    debug!("✅ 更新了 {} 个池子的mint1元数据: {}", result.modified_count, mint_address);
+                    debug!(
+                        "✅ 更新了 {} 个池子的mint1元数据: {}",
+                        result.modified_count, mint_address
+                    );
                 }
             }
             Err(e) => {
@@ -562,7 +610,10 @@ impl ClmmPoolStorageService {
         }
 
         if total_updated > 0 {
-            info!("🔄 代币元数据更新完成: {} (更新了 {} 个池子)", mint_address, total_updated);
+            info!(
+                "🔄 代币元数据更新完成: {} (更新了 {} 个池子)",
+                mint_address, total_updated
+            );
         }
 
         Ok(total_updated > 0)

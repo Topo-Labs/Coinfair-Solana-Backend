@@ -1,6 +1,8 @@
 use crate::dtos::solana_dto::{
-    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimAdvancedQuery, NftClaimEventQuery, NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionAdvancedQuery, RewardDistributionEventQuery,
-    RewardDistributionEventResponse, RewardStatsResponse, RewardTypeDistribution, TierDistribution, UserNftClaimSummaryResponse, UserRewardSummaryResponse,
+    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimAdvancedQuery, NftClaimEventQuery,
+    NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionAdvancedQuery,
+    RewardDistributionEventQuery, RewardDistributionEventResponse, RewardStatsResponse, RewardTypeDistribution,
+    TierDistribution, UserNftClaimSummaryResponse, UserRewardSummaryResponse,
 };
 use crate::services::solana::event::EventService;
 use crate::services::Services;
@@ -67,7 +69,10 @@ impl EventController {
 pub async fn get_nft_claim_events(
     Extension(services): Extension<Services>,
     Query(params): Query<NftClaimEventQuery>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 查询NFT领取事件列表");
 
     let event_service = EventService::new(services.database.clone());
@@ -97,7 +102,10 @@ pub async fn get_nft_claim_events(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -141,7 +149,10 @@ pub async fn get_nft_claim_events(
 pub async fn get_nft_claim_events_advanced(
     Extension(services): Extension<Services>,
     Query(params): Query<NftClaimAdvancedQuery>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 高级查询NFT领取事件列表");
 
     let event_service = EventService::new(services.database.clone());
@@ -182,7 +193,10 @@ pub async fn get_nft_claim_events_advanced(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -197,7 +211,9 @@ pub async fn get_nft_claim_events_advanced(
     ),
     tag = "事件查询"
 )]
-pub async fn get_nft_claim_stats(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<NftClaimStatsResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_nft_claim_stats(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<NftClaimStatsResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 获取NFT领取统计信息");
 
     let event_service = EventService::new(services.database.clone());
@@ -227,7 +243,10 @@ pub async fn get_nft_claim_stats(Extension(services): Extension<Services>) -> Re
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -251,13 +270,22 @@ pub async fn get_nft_claims_by_claimer(
     Extension(services): Extension<Services>,
     Path(address): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 查询领取者 {} 的NFT领取事件", address);
 
     let event_service = EventService::new(services.database.clone());
 
     match event_service
-        .get_nft_claim_events_by_claimer(&address, Some(params.page), Some(params.page_size), params.sort_by, params.sort_order)
+        .get_nft_claim_events_by_claimer(
+            &address,
+            Some(params.page),
+            Some(params.page_size),
+            params.sort_by,
+            params.sort_order,
+        )
         .await
     {
         Ok(result) => {
@@ -272,7 +300,10 @@ pub async fn get_nft_claims_by_claimer(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -296,12 +327,18 @@ pub async fn get_nft_claims_by_nft(
     Extension(services): Extension<Services>,
     Path(mint): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<NftClaimEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 查询NFT {} 的领取事件", mint);
 
     let event_service = EventService::new(services.database.clone());
 
-    match event_service.get_nft_claim_events_by_nft_mint(&mint, Some(params.page), Some(params.page_size)).await {
+    match event_service
+        .get_nft_claim_events_by_nft_mint(&mint, Some(params.page), Some(params.page_size))
+        .await
+    {
         Ok(result) => {
             let response = convert_nft_claim_paginated_response(result);
             Ok(Json(ApiResponse::success(response)))
@@ -314,7 +351,10 @@ pub async fn get_nft_claims_by_nft(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -360,7 +400,10 @@ pub async fn get_user_nft_claim_summary(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -382,7 +425,10 @@ pub async fn get_user_nft_claim_summary(
 pub async fn get_reward_events(
     Extension(services): Extension<Services>,
     Query(params): Query<RewardDistributionEventQuery>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 查询奖励分发事件列表");
 
     let event_service = EventService::new(services.database.clone());
@@ -414,7 +460,10 @@ pub async fn get_reward_events(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -466,7 +515,10 @@ pub async fn get_reward_events(
 pub async fn get_reward_events_advanced(
     Extension(services): Extension<Services>,
     Query(params): Query<RewardDistributionAdvancedQuery>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 高级查询奖励分发事件列表");
 
     let event_service = EventService::new(services.database.clone());
@@ -515,7 +567,10 @@ pub async fn get_reward_events_advanced(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -530,7 +585,9 @@ pub async fn get_reward_events_advanced(
     ),
     tag = "事件查询"
 )]
-pub async fn get_reward_stats(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<RewardStatsResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_reward_stats(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<RewardStatsResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 获取奖励分发统计信息");
 
     let event_service = EventService::new(services.database.clone());
@@ -561,7 +618,10 @@ pub async fn get_reward_stats(Extension(services): Extension<Services>) -> Resul
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -585,13 +645,24 @@ pub async fn get_rewards_by_recipient(
     Extension(services): Extension<Services>,
     Path(address): Path<String>,
     Query(params): Query<PaginationParams>,
-) -> Result<Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<
+    Json<ApiResponse<EventPaginatedResponse<RewardDistributionEventResponse>>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
     info!("🔍 查询接收者 {} 的奖励分发事件", address);
 
     let event_service = EventService::new(services.database.clone());
 
     match event_service
-        .get_reward_events_by_recipient(&address, Some(params.page), Some(params.page_size), None, None, params.sort_by, params.sort_order)
+        .get_reward_events_by_recipient(
+            &address,
+            Some(params.page),
+            Some(params.page_size),
+            None,
+            None,
+            params.sort_by,
+            params.sort_order,
+        )
         .await
     {
         Ok(result) => {
@@ -606,7 +677,10 @@ pub async fn get_rewards_by_recipient(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -655,7 +729,10 @@ pub async fn get_reward_by_distribution_id(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -702,7 +779,10 @@ pub async fn get_user_reward_summary(
                 details: None,
                 timestamp: chrono::Utc::now().timestamp(),
             };
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -710,7 +790,9 @@ pub async fn get_user_reward_summary(
 // ==================== 辅助函数 ====================
 
 /// 转换NFT领取事件分页响应
-fn convert_nft_claim_paginated_response(result: crate::services::solana::event::service::PaginatedResponse<NftClaimEvent>) -> EventPaginatedResponse<NftClaimEventResponse> {
+fn convert_nft_claim_paginated_response(
+    result: crate::services::solana::event::service::PaginatedResponse<NftClaimEvent>,
+) -> EventPaginatedResponse<NftClaimEventResponse> {
     EventPaginatedResponse {
         items: result.items.into_iter().map(convert_nft_claim_to_response).collect(),
         total: result.total,

@@ -146,12 +146,7 @@ pub mod raydium_cp_swap {
     /// * `init_amount_1` - the initial amount_1 to deposit
     /// * `open_time` - the timestamp allowed for swap
     ///
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        init_amount_0: u64,
-        init_amount_1: u64,
-        open_time: u64,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, open_time: u64) -> Result<()> {
         instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
     }
 
@@ -170,12 +165,7 @@ pub mod raydium_cp_swap {
         maximum_token_0_amount: u64,
         maximum_token_1_amount: u64,
     ) -> Result<()> {
-        instructions::deposit(
-            ctx,
-            lp_token_amount,
-            maximum_token_0_amount,
-            maximum_token_1_amount,
-        )
+        instructions::deposit(ctx, lp_token_amount, maximum_token_0_amount, maximum_token_1_amount)
     }
 
     /// Withdraw lp for token0 ande token1
@@ -193,12 +183,7 @@ pub mod raydium_cp_swap {
         minimum_token_0_amount: u64,
         minimum_token_1_amount: u64,
     ) -> Result<()> {
-        instructions::withdraw(
-            ctx,
-            lp_token_amount,
-            minimum_token_0_amount,
-            minimum_token_1_amount,
-        )
+        instructions::withdraw(ctx, lp_token_amount, minimum_token_0_amount, minimum_token_1_amount)
     }
 
     /// Swap the tokens in the pool base input amount
@@ -209,11 +194,7 @@ pub mod raydium_cp_swap {
     /// * `amount_in` -  input amount to transfer, output to DESTINATION is based on the exchange rate
     /// * `minimum_amount_out` -  Minimum amount of output token, prevents excessive slippage
     ///
-    pub fn swap_base_input(
-        ctx: Context<Swap>,
-        amount_in: u64,
-        minimum_amount_out: u64,
-    ) -> Result<()> {
+    pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u64) -> Result<()> {
         instructions::swap_base_input(ctx, amount_in, minimum_amount_out)
     }
 

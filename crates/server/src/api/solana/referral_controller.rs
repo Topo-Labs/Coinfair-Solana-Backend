@@ -1,9 +1,9 @@
 use crate::dtos::solana_dto::{
-    ApiResponse, ErrorResponse, GetUpperAndVerifyResponse, GetUpperRequest, GetUpperResponse,
-    GetMintCounterRequest, GetMintCounterResponse, GetMintCounterAndVerifyResponse,
+    ApiResponse, ErrorResponse, GetMintCounterAndVerifyResponse, GetMintCounterRequest, GetMintCounterResponse,
+    GetUpperAndVerifyResponse, GetUpperRequest, GetUpperResponse,
 };
-use crate::services::Services;
 use crate::services::solana::SolanaService;
+use crate::services::Services;
 
 use axum::{
     extract::{Extension, Query},
@@ -85,7 +85,13 @@ pub async fn get_upper(
             .map(|(field, errors)| {
                 let error_messages: Vec<String> = errors
                     .iter()
-                    .map(|error| error.message.as_ref().unwrap_or(&std::borrow::Cow::Borrowed("Invalid value")).to_string())
+                    .map(|error| {
+                        error
+                            .message
+                            .as_ref()
+                            .unwrap_or(&std::borrow::Cow::Borrowed("Invalid value"))
+                            .to_string()
+                    })
                     .collect();
                 format!("{}: {}", field, error_messages.join(", "))
             })
@@ -103,7 +109,8 @@ pub async fn get_upper(
     }
 
     // 将DynSolanaService转换为具体的SolanaService以访问referral字段
-    let concrete_service = services.solana
+    let concrete_service = services
+        .solana
         .as_any()
         .downcast_ref::<SolanaService>()
         .ok_or_else(|| {
@@ -197,7 +204,13 @@ pub async fn get_upper_and_verify(
             .map(|(field, errors)| {
                 let error_messages: Vec<String> = errors
                     .iter()
-                    .map(|error| error.message.as_ref().unwrap_or(&std::borrow::Cow::Borrowed("Invalid value")).to_string())
+                    .map(|error| {
+                        error
+                            .message
+                            .as_ref()
+                            .unwrap_or(&std::borrow::Cow::Borrowed("Invalid value"))
+                            .to_string()
+                    })
                     .collect();
                 format!("{}: {}", field, error_messages.join(", "))
             })
@@ -215,7 +228,8 @@ pub async fn get_upper_and_verify(
     }
 
     // 将DynSolanaService转换为具体的SolanaService以访问referral字段
-    let concrete_service = services.solana
+    let concrete_service = services
+        .solana
         .as_any()
         .downcast_ref::<SolanaService>()
         .ok_or_else(|| {
@@ -307,7 +321,13 @@ pub async fn get_mint_counter(
             .map(|(field, errors)| {
                 let error_messages: Vec<String> = errors
                     .iter()
-                    .map(|error| error.message.as_ref().unwrap_or(&std::borrow::Cow::Borrowed("Invalid value")).to_string())
+                    .map(|error| {
+                        error
+                            .message
+                            .as_ref()
+                            .unwrap_or(&std::borrow::Cow::Borrowed("Invalid value"))
+                            .to_string()
+                    })
                     .collect();
                 format!("{}: {}", field, error_messages.join(", "))
             })
@@ -325,7 +345,8 @@ pub async fn get_mint_counter(
     }
 
     // 将DynSolanaService转换为具体的SolanaService以访问referral字段
-    let concrete_service = services.solana
+    let concrete_service = services
+        .solana
         .as_any()
         .downcast_ref::<SolanaService>()
         .ok_or_else(|| {
@@ -343,7 +364,10 @@ pub async fn get_mint_counter(
 
     match concrete_service.referral.get_mint_counter(request).await {
         Ok(response) => {
-            info!("✅ 成功查询MintCounter信息: total_mint={}, remain_mint={}", response.total_mint, response.remain_mint);
+            info!(
+                "✅ 成功查询MintCounter信息: total_mint={}, remain_mint={}",
+                response.total_mint, response.remain_mint
+            );
             Ok(Json(ApiResponse::success(response)))
         }
         Err(e) => {
@@ -419,7 +443,13 @@ pub async fn get_mint_counter_and_verify(
             .map(|(field, errors)| {
                 let error_messages: Vec<String> = errors
                     .iter()
-                    .map(|error| error.message.as_ref().unwrap_or(&std::borrow::Cow::Borrowed("Invalid value")).to_string())
+                    .map(|error| {
+                        error
+                            .message
+                            .as_ref()
+                            .unwrap_or(&std::borrow::Cow::Borrowed("Invalid value"))
+                            .to_string()
+                    })
                     .collect();
                 format!("{}: {}", field, error_messages.join(", "))
             })
@@ -437,7 +467,8 @@ pub async fn get_mint_counter_and_verify(
     }
 
     // 将DynSolanaService转换为具体的SolanaService以访问referral字段
-    let concrete_service = services.solana
+    let concrete_service = services
+        .solana
         .as_any()
         .downcast_ref::<SolanaService>()
         .ok_or_else(|| {
@@ -455,8 +486,10 @@ pub async fn get_mint_counter_and_verify(
 
     match concrete_service.referral.get_mint_counter_and_verify(request).await {
         Ok(response) => {
-            info!("✅ 成功查询并验证MintCounter信息，账户存在: {}, total_mint={}, remain_mint={}", 
-                  response.account_exists, response.base.total_mint, response.base.remain_mint);
+            info!(
+                "✅ 成功查询并验证MintCounter信息，账户存在: {}, total_mint={}, remain_mint={}",
+                response.account_exists, response.base.total_mint, response.base.remain_mint
+            );
             Ok(Json(ApiResponse::success(response)))
         }
         Err(e) => {

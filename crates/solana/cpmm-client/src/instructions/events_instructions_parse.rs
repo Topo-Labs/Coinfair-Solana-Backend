@@ -7,9 +7,7 @@ use colorful::Colorful;
 use raydium_cp_swap::instruction;
 use raydium_cp_swap::states::*;
 use regex::Regex;
-use solana_transaction_status::{
-    option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta,
-};
+use solana_transaction_status::{option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta};
 
 const PROGRAM_LOG: &str = "Program log: ";
 const PROGRAM_DATA: &str = "Program data: ";
@@ -20,10 +18,7 @@ pub enum InstructionDecodeType {
     Base58,
 }
 
-pub fn parse_program_event(
-    self_program_str: &str,
-    meta: Option<UiTransactionStatusMeta>,
-) -> Result<(), ClientError> {
+pub fn parse_program_event(self_program_str: &str, meta: Option<UiTransactionStatusMeta>) -> Result<(), ClientError> {
     let logs: Vec<String> = if let Some(meta_data) = meta {
         let log_messages = if let OptionSerializer::Some(log_messages) = meta_data.log_messages {
             log_messages
@@ -38,16 +33,15 @@ pub fn parse_program_event(
     if !logs.is_empty() {
         if let Ok(mut execution) = Execution::new(&mut logs) {
             for l in logs {
-                let (new_program, did_pop) =
-                    if !execution.is_empty() && self_program_str == execution.program() {
-                        handle_program_log(self_program_str, &l, true).unwrap_or_else(|e| {
-                            println!("Unable to parse log: {e}");
-                            std::process::exit(1);
-                        })
-                    } else {
-                        let (program, did_pop) = handle_system_log(self_program_str, l);
-                        (program, did_pop)
-                    };
+                let (new_program, did_pop) = if !execution.is_empty() && self_program_str == execution.program() {
+                    handle_program_log(self_program_str, &l, true).unwrap_or_else(|e| {
+                        println!("Unable to parse log: {e}");
+                        std::process::exit(1);
+                    })
+                } else {
+                    let (program, did_pop) = handle_system_log(self_program_str, l);
+                    (program, did_pop)
+                };
                 // Switch program context on CPI.
                 if let Some(new_program) = new_program {
                     execution.push(new_program);
@@ -82,9 +76,7 @@ impl Execution {
             .ok_or_else(|| ClientError::LogParseError(l.to_string()))?
             .as_str()
             .to_string();
-        Ok(Self {
-            stack: vec![program],
-        })
+        Ok(Self { stack: vec![program] })
     }
 
     pub fn program(&self) -> String {
@@ -113,8 +105,7 @@ pub fn handle_program_log(
 ) -> Result<(Option<String>, bool), ClientError> {
     // Log emitted from the current program.
     if let Some(log) = if with_prefix {
-        l.strip_prefix(PROGRAM_LOG)
-            .or_else(|| l.strip_prefix(PROGRAM_DATA))
+        l.strip_prefix(PROGRAM_LOG).or_else(|| l.strip_prefix(PROGRAM_DATA))
     } else {
         Some(l)
     } {
@@ -170,11 +161,9 @@ fn handle_system_log(this_program_str: &str, log: &str) -> (Option<String>, bool
     }
 }
 
-fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(
-    slice: &mut &[u8],
-) -> Result<T, ClientError> {
-    let event: T = anchor_lang::AnchorDeserialize::deserialize(slice)
-        .map_err(|e| ClientError::LogParseError(e.to_string()))?;
+fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(slice: &mut &[u8]) -> Result<T, ClientError> {
+    let event: T =
+        anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|e| ClientError::LogParseError(e.to_string()))?;
     Ok(event)
 }
 
@@ -219,20 +208,14 @@ pub fn parse_program_instruction(
             }
             _ => {}
         }
-        let program_index = account_keys
-            .iter()
-            .position(|r| r == self_program_str)
-            .unwrap();
+        let program_index = account_keys.iter().position(|r| r == self_program_str).unwrap();
         // println!("{}", program_index);
         // println!("{:#?}", account_keys);
         for (i, ui_compiled_instruction) in ui_raw_msg.instructions.iter().enumerate() {
             if (ui_compiled_instruction.program_id_index as usize) == program_index {
                 let out_put = format!("instruction #{}", i + 1);
                 println!("{}", out_put.gradient(Color::Green));
-                handle_program_instruction(
-                    &ui_compiled_instruction.data,
-                    InstructionDecodeType::Base58,
-                )?;
+                handle_program_instruction(&ui_compiled_instruction.data, InstructionDecodeType::Base58)?;
             }
         }
 
@@ -241,14 +224,9 @@ pub fn parse_program_instruction(
                 for inner in inner_instructions {
                     for (i, instruction) in inner.instructions.iter().enumerate() {
                         match instruction {
-                            solana_transaction_status::UiInstruction::Compiled(
-                                ui_compiled_instruction,
-                            ) => {
-                                if (ui_compiled_instruction.program_id_index as usize)
-                                    == program_index
-                                {
-                                    let out_put =
-                                        format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
+                            solana_transaction_status::UiInstruction::Compiled(ui_compiled_instruction) => {
+                                if (ui_compiled_instruction.program_id_index as usize) == program_index {
+                                    let out_put = format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
                                     println!("{}", out_put.gradient(Color::Green));
                                     handle_program_instruction(
                                         &ui_compiled_instruction.data,
@@ -267,10 +245,7 @@ pub fn parse_program_instruction(
     Ok(())
 }
 
-pub fn handle_program_instruction(
-    instr_data: &str,
-    decode_type: InstructionDecodeType,
-) -> Result<(), ClientError> {
+pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDecodeType) -> Result<(), ClientError> {
     let data;
     match decode_type {
         InstructionDecodeType::BaseHex => {
@@ -376,9 +351,7 @@ pub fn handle_program_instruction(
             }
             impl From<instruction::UpdatePoolStatus> for UpdatePoolStatus {
                 fn from(instr: instruction::UpdatePoolStatus) -> UpdatePoolStatus {
-                    UpdatePoolStatus {
-                        status: instr.status,
-                    }
+                    UpdatePoolStatus { status: instr.status }
                 }
             }
             println!("{:#?}", UpdatePoolStatus::from(ix));

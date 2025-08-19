@@ -74,7 +74,7 @@ impl SolanaHelpers {
         })
     }
 
-    /// Get wallet info - moved from original SolanaService  
+    /// Get wallet info - moved from original SolanaService
     pub async fn get_wallet_info(shared: &SharedContext) -> Result<WalletInfo> {
         let wallet_info = WalletInfo {
             address: shared.get_wallet_address_from_private_key().await,
@@ -109,7 +109,7 @@ impl SolanaUtils {
         } else {
             "mainnet-beta"
         };
-        
+
         if network == "mainnet-beta" {
             format!("https://explorer.solana.com/tx/{}", signature)
         } else {

@@ -1,6 +1,9 @@
 // AmmPoolService handles classic AMM pool creation operations
 
-use crate::dtos::solana_dto::{CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse, TransactionStatus};
+use crate::dtos::solana_dto::{
+    CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
+    TransactionStatus,
+};
 
 use super::super::shared::SharedContext;
 use anchor_lang::Discriminator;
@@ -27,7 +30,10 @@ impl AmmPoolService {
     }
 
     /// Create CPMM pool transaction (unsigned) - 100% faithful to CLI logic
-    pub async fn create_classic_amm_pool(&self, request: CreateClassicAmmPoolRequest) -> Result<CreateClassicAmmPoolResponse> {
+    pub async fn create_classic_amm_pool(
+        &self,
+        request: CreateClassicAmmPoolRequest,
+    ) -> Result<CreateClassicAmmPoolResponse> {
         info!("🏗️ 开始创建CPMM池子 (基于CLI逻辑)");
         info!("  Mint0: {}", request.mint0);
         info!("  Mint1: {}", request.mint1);
@@ -56,8 +62,14 @@ impl AmmPoolService {
         // CLI逻辑第2步：获取代币程序信息
         let load_pubkeys = vec![mint0, mint1];
         let rsps = self.shared.rpc_client.get_multiple_accounts(&load_pubkeys)?;
-        let token_0_program = rsps[0].as_ref().ok_or_else(|| anyhow::anyhow!("无法获取mint0账户信息"))?.owner;
-        let token_1_program = rsps[1].as_ref().ok_or_else(|| anyhow::anyhow!("无法获取mint1账户信息"))?.owner;
+        let token_0_program = rsps[0]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("无法获取mint0账户信息"))?
+            .owner;
+        let token_1_program = rsps[1]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("无法获取mint1账户信息"))?
+            .owner;
 
         info!("  Token0程序: {}", token_0_program);
         info!("  Token1程序: {}", token_1_program);
@@ -156,8 +168,14 @@ impl AmmPoolService {
         // CLI逻辑第2步：获取代币程序信息
         let load_pubkeys = vec![mint0, mint1];
         let rsps = self.shared.rpc_client.get_multiple_accounts(&load_pubkeys)?;
-        let token_0_program = rsps[0].as_ref().ok_or_else(|| anyhow::anyhow!("无法获取mint0账户信息"))?.owner;
-        let token_1_program = rsps[1].as_ref().ok_or_else(|| anyhow::anyhow!("无法获取mint1账户信息"))?.owner;
+        let token_0_program = rsps[0]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("无法获取mint0账户信息"))?
+            .owner;
+        let token_1_program = rsps[1]
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("无法获取mint1账户信息"))?
+            .owner;
 
         info!("  Token0程序: {}", token_0_program);
         info!("  Token1程序: {}", token_1_program);
@@ -230,7 +248,10 @@ impl AmmPoolService {
         let amm_config_index: u16 = std::env::var("AMM_CONFIG_INDEX").unwrap_or("0".to_string()).parse()?;
 
         // AMM配置账户
-        let (amm_config_key, _) = Pubkey::find_program_address(&["amm_config".as_bytes(), &amm_config_index.to_be_bytes()], &raydium_cp_program);
+        let (amm_config_key, _) = Pubkey::find_program_address(
+            &["amm_config".as_bytes(), &amm_config_index.to_be_bytes()],
+            &raydium_cp_program,
+        );
 
         // 池子状态账户
         let (pool_account_key, _) = Pubkey::find_program_address(
@@ -244,24 +265,39 @@ impl AmmPoolService {
         );
 
         // 权限账户
-        let (authority, _) = Pubkey::find_program_address(&["vault_and_lp_mint_auth_seed".as_bytes()], &raydium_cp_program);
+        let (authority, _) =
+            Pubkey::find_program_address(&["vault_and_lp_mint_auth_seed".as_bytes()], &raydium_cp_program);
 
         // 代币金库账户
         let (token_0_vault, _) = Pubkey::find_program_address(
-            &["pool_vault".as_bytes(), pool_account_key.to_bytes().as_ref(), token_0_mint.to_bytes().as_ref()],
+            &[
+                "pool_vault".as_bytes(),
+                pool_account_key.to_bytes().as_ref(),
+                token_0_mint.to_bytes().as_ref(),
+            ],
             &raydium_cp_program,
         );
 
         let (token_1_vault, _) = Pubkey::find_program_address(
-            &["pool_vault".as_bytes(), pool_account_key.to_bytes().as_ref(), token_1_mint.to_bytes().as_ref()],
+            &[
+                "pool_vault".as_bytes(),
+                pool_account_key.to_bytes().as_ref(),
+                token_1_mint.to_bytes().as_ref(),
+            ],
             &raydium_cp_program,
         );
 
         // LP代币铸造账户
-        let (lp_mint_key, _) = Pubkey::find_program_address(&["pool_lp_mint".as_bytes(), pool_account_key.to_bytes().as_ref()], &raydium_cp_program);
+        let (lp_mint_key, _) = Pubkey::find_program_address(
+            &["pool_lp_mint".as_bytes(), pool_account_key.to_bytes().as_ref()],
+            &raydium_cp_program,
+        );
 
         // 观察状态账户
-        let (observation_key, _) = Pubkey::find_program_address(&["observation".as_bytes(), pool_account_key.to_bytes().as_ref()], &raydium_cp_program);
+        let (observation_key, _) = Pubkey::find_program_address(
+            &["observation".as_bytes(), pool_account_key.to_bytes().as_ref()],
+            &raydium_cp_program,
+        );
 
         // 用户关联代币账户
         let creator_token_0 = spl_associated_token_account::get_associated_token_address(user_wallet, &token_0_mint);
@@ -282,26 +318,26 @@ impl AmmPoolService {
 
         // 构建Initialize指令的账户（按照CLI中raydium_cp_accounts::Initialize的顺序）
         let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(*user_wallet, true),              // creator (signer)
-            solana_sdk::instruction::AccountMeta::new_readonly(amm_config_key, false),  // amm_config
-            solana_sdk::instruction::AccountMeta::new_readonly(authority, false),       // authority
-            solana_sdk::instruction::AccountMeta::new(pool_account_key, false),         // pool_state
-            solana_sdk::instruction::AccountMeta::new_readonly(token_0_mint, false),    // token_0_mint
-            solana_sdk::instruction::AccountMeta::new_readonly(token_1_mint, false),    // token_1_mint
-            solana_sdk::instruction::AccountMeta::new(lp_mint_key, false),              // lp_mint
-            solana_sdk::instruction::AccountMeta::new(creator_token_0, false),          // creator_token_0
-            solana_sdk::instruction::AccountMeta::new(creator_token_1, false),          // creator_token_1
-            solana_sdk::instruction::AccountMeta::new(creator_lp_token, false),         // creator_lp_token
-            solana_sdk::instruction::AccountMeta::new(token_0_vault, false),            // token_0_vault
-            solana_sdk::instruction::AccountMeta::new(token_1_vault, false),            // token_1_vault
-            solana_sdk::instruction::AccountMeta::new(create_pool_fee, false),          // create_pool_fee
-            solana_sdk::instruction::AccountMeta::new(observation_key, false),          // observation_state
+            solana_sdk::instruction::AccountMeta::new(*user_wallet, true), // creator (signer)
+            solana_sdk::instruction::AccountMeta::new_readonly(amm_config_key, false), // amm_config
+            solana_sdk::instruction::AccountMeta::new_readonly(authority, false), // authority
+            solana_sdk::instruction::AccountMeta::new(pool_account_key, false), // pool_state
+            solana_sdk::instruction::AccountMeta::new_readonly(token_0_mint, false), // token_0_mint
+            solana_sdk::instruction::AccountMeta::new_readonly(token_1_mint, false), // token_1_mint
+            solana_sdk::instruction::AccountMeta::new(lp_mint_key, false), // lp_mint
+            solana_sdk::instruction::AccountMeta::new(creator_token_0, false), // creator_token_0
+            solana_sdk::instruction::AccountMeta::new(creator_token_1, false), // creator_token_1
+            solana_sdk::instruction::AccountMeta::new(creator_lp_token, false), // creator_lp_token
+            solana_sdk::instruction::AccountMeta::new(token_0_vault, false), // token_0_vault
+            solana_sdk::instruction::AccountMeta::new(token_1_vault, false), // token_1_vault
+            solana_sdk::instruction::AccountMeta::new(create_pool_fee, false), // create_pool_fee
+            solana_sdk::instruction::AccountMeta::new(observation_key, false), // observation_state
             solana_sdk::instruction::AccountMeta::new_readonly(spl_token::id(), false), // token_program
             solana_sdk::instruction::AccountMeta::new_readonly(token_0_program, false), // token_0_program
             solana_sdk::instruction::AccountMeta::new_readonly(token_1_program, false), // token_1_program
             solana_sdk::instruction::AccountMeta::new_readonly(spl_associated_token_account::id(), false), // associated_token_program
             solana_sdk::instruction::AccountMeta::new_readonly(solana_sdk::system_program::id(), false), // system_program
-            solana_sdk::instruction::AccountMeta::new_readonly(solana_sdk::sysvar::rent::id(), false), // rent
+            solana_sdk::instruction::AccountMeta::new_readonly(solana_sdk::sysvar::rent::id(), false),   // rent
         ];
 
         // 构建指令数据（CLI中的raydium_cp_instructions::Initialize参数）
@@ -317,7 +353,12 @@ impl AmmPoolService {
     }
 
     /// Build initialize instruction data - faithful to CLI logic
-    fn build_initialize_instruction_data(&self, init_amount_0: u64, init_amount_1: u64, open_time: u64) -> Result<Vec<u8>> {
+    fn build_initialize_instruction_data(
+        &self,
+        init_amount_0: u64,
+        init_amount_1: u64,
+        open_time: u64,
+    ) -> Result<Vec<u8>> {
         // CPMM Initialize指令的discriminator (需要根据实际程序确定)
         // 这里使用一个通用的discriminator，实际使用时可能需要调整
         // let discriminator: [u8; 8] = [95, 180, 10, 172, 84, 174, 232, 40]; // initialize指令的discriminator
@@ -339,7 +380,10 @@ impl AmmPoolService {
         let raydium_cp_program = self.get_raydium_cp_program_id()?;
         let amm_config_index: u16 = 0;
 
-        let (amm_config_key, _) = Pubkey::find_program_address(&["amm_config".as_bytes(), &amm_config_index.to_be_bytes()], &raydium_cp_program);
+        let (amm_config_key, _) = Pubkey::find_program_address(
+            &["amm_config".as_bytes(), &amm_config_index.to_be_bytes()],
+            &raydium_cp_program,
+        );
 
         let (pool_account_key, _) = Pubkey::find_program_address(
             &[
@@ -357,7 +401,8 @@ impl AmmPoolService {
     /// Get Raydium CP program ID from configuration
     fn get_raydium_cp_program_id(&self) -> Result<Pubkey> {
         // 从配置中获取，或使用默认值
-        let program_id_str = std::env::var("RAYDIUM_CP_PROGRAM_ID").unwrap_or_else(|_| "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".to_string());
+        let program_id_str = std::env::var("RAYDIUM_CP_PROGRAM_ID")
+            .unwrap_or_else(|_| "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".to_string());
         info!("🔍 获取CPMM程序ID: {}", program_id_str);
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }

@@ -1,18 +1,18 @@
 //! 简化的E2E测试
-//! 
+//!
 //! 验证核心功能：WebSocket连接 → 事件解析 → 数据库写入
 //! 使用更短的时间和模拟数据来快速验证完整流程
 
 use crate::{
     config::EventListenerConfig,
+    metrics::MetricsCollector,
     parser::{EventParserRegistry, ParsedEvent},
     persistence::EventStorage,
-    metrics::MetricsCollector,
 };
-use std::sync::Arc;
 use solana_sdk::pubkey::Pubkey;
+use std::sync::Arc;
 use tokio::time::{timeout, Duration};
-use tracing::{info, error};
+use tracing::{error, info};
 
 /// 创建简化测试配置
 fn create_simple_e2e_config() -> EventListenerConfig {
@@ -59,18 +59,15 @@ fn create_simple_e2e_config() -> EventListenerConfig {
 #[ignore]
 async fn test_simple_e2e_flow() {
     // 初始化日志
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .try_init()
-        .ok();
+    tracing_subscriber::fmt().with_env_filter("info").try_init().ok();
 
     info!("🚀 开始简化E2E测试流程");
-    
+
     let config = create_simple_e2e_config();
-    
+
     // === 步骤1：验证网络连接 ===
     info!("📡 步骤1：验证网络连接");
-    
+
     let rpc_client = solana_client::nonblocking::rpc_client::RpcClient::new(config.solana.rpc_url.clone());
     let current_slot = match timeout(Duration::from_secs(5), rpc_client.get_slot()).await {
         Ok(Ok(slot)) => {
@@ -89,7 +86,7 @@ async fn test_simple_e2e_flow() {
 
     // === 步骤2：验证数据库连接 ===
     info!("🗄️  步骤2：验证数据库连接");
-    
+
     let event_storage = match EventStorage::new(&config).await {
         Ok(storage) => {
             info!("✅ 数据库连接成功");
@@ -105,21 +102,21 @@ async fn test_simple_e2e_flow() {
 
     // === 步骤3：初始化解析器 ===
     info!("🔧 步骤3：初始化解析器");
-    
+
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     info!("✅ 解析器注册表: 已注册{}个解析器", parser_registry.parser_count());
     assert_eq!(parser_registry.parser_count(), 6, "应该有6个解析器");
 
     // === 步骤4：初始化指标收集 ===
     info!("📈 步骤4：初始化指标收集");
-    
+
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
     metrics.start_collection().await.unwrap();
     info!("✅ 指标收集已启动");
 
     // === 步骤5：创建和写入测试数据 ===
     info!("📝 步骤5：创建和写入测试数据");
-    
+
     let test_events = create_test_events();
     info!("准备写入{}个测试事件", test_events.len());
 
@@ -153,7 +150,7 @@ async fn test_simple_e2e_flow() {
 
     // === 步骤6：记录指标并生成报告 ===
     info!("📈 步骤6：记录指标并生成报告");
-    
+
     metrics.record_event_processed().await.unwrap();
     metrics.record_batch_write().await.unwrap();
     metrics.record_websocket_connection().await.unwrap();
@@ -173,7 +170,7 @@ async fn test_simple_e2e_flow() {
 
     // === 步骤7：验证Prometheus导出 ===
     info!("📊 步骤7：验证Prometheus导出");
-    
+
     let prometheus_output = metrics.export_prometheus_metrics().await.unwrap();
     let lines_count = prometheus_output.lines().count();
     info!("✅ Prometheus导出成功，包含{}行指标", lines_count);
@@ -181,7 +178,7 @@ async fn test_simple_e2e_flow() {
 
     // === 步骤8：最终验证 ===
     info!("🎯 步骤8：最终验证");
-    
+
     let mut success_checks = 0u32;
     let total_checks = 7u32;
 
@@ -246,29 +243,27 @@ async fn test_simple_e2e_flow() {
 
     // 断言基本功能正常
     assert!(success_checks >= 5, "至少5个基本检查应该通过");
-    
+
     info!("✅ 简化E2E测试流程成功结束");
 }
 
 /// 创建测试事件数据
 fn create_test_events() -> Vec<ParsedEvent> {
     vec![
-        ParsedEvent::TokenCreation(
-            crate::parser::event_parser::TokenCreationEventData {
-                mint_address: Pubkey::new_unique().to_string(),
-                name: "Simple E2E Test Token".to_string(),
-                symbol: "SE2E".to_string(),
-                uri: "https://simple-e2e-test.example.com/metadata.json".to_string(),
-                decimals: 9,
-                supply: 1000000000000,
-                creator: Pubkey::new_unique().to_string(),
-                has_whitelist: false,
-                whitelist_deadline: 0,
-                created_at: chrono::Utc::now().timestamp(),
-                signature: format!("simple_e2e_test_sig_{}", chrono::Utc::now().timestamp_millis()),
-                slot: 999999999,
-            }
-        ),
+        ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+            mint_address: Pubkey::new_unique().to_string(),
+            name: "Simple E2E Test Token".to_string(),
+            symbol: "SE2E".to_string(),
+            uri: "https://simple-e2e-test.example.com/metadata.json".to_string(),
+            decimals: 9,
+            supply: 1000000000000,
+            creator: Pubkey::new_unique().to_string(),
+            has_whitelist: false,
+            whitelist_deadline: 0,
+            created_at: chrono::Utc::now().timestamp(),
+            signature: format!("simple_e2e_test_sig_{}", chrono::Utc::now().timestamp_millis()),
+            slot: 999999999,
+        }),
         ParsedEvent::PoolCreation(create_test_pool_event()),
         ParsedEvent::NftClaim(create_test_nft_event()),
         ParsedEvent::RewardDistribution(create_test_reward_event()),

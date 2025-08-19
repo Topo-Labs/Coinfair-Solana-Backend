@@ -6,7 +6,8 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use crate::dtos::static_dto::{
-    ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest, CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
+    ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
+    CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -30,7 +31,10 @@ pub trait ClmmConfigServiceTrait: Send + Sync {
     async fn create_amm_config(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigResponse>;
 
     /// 创建新的AMM配置并发送交易（用于测试）
-    async fn create_amm_config_and_send_transaction(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigAndSendTransactionResponse>;
+    async fn create_amm_config_and_send_transaction(
+        &self,
+        request: CreateAmmConfigRequest,
+    ) -> Result<CreateAmmConfigAndSendTransactionResponse>;
 
     /// 根据配置地址获取单个配置
     async fn get_config_by_address(&self, config_address: &str) -> Result<Option<ClmmConfig>>;
@@ -62,9 +66,11 @@ impl ClmmConfigService {
     fn calculate_config_pda(&self, index: u16) -> Result<String> {
         info!("🔍 计算CLMM配置PDA，索引: {}", index);
 
-        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id().map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()
+            .map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
 
-        let (config_pda, bump) = utils::solana::calculators::PDACalculator::calculate_amm_config_pda(&raydium_program_id, index);
+        let (config_pda, bump) =
+            utils::solana::calculators::PDACalculator::calculate_amm_config_pda(&raydium_program_id, index);
 
         let config_id = config_pda.to_string();
         info!("✅ 索引{}的配置PDA: {} (bump: {})", index, config_id, bump);
@@ -164,7 +170,9 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         let mut pda_addresses = Vec::new();
         for &index in &amm_config_indexes {
             let config_id = self.calculate_config_pda(index)?;
-            let config_pda = config_id.parse::<solana_sdk::pubkey::Pubkey>().map_err(|e| anyhow::anyhow!("解析配置PDA失败: {}", e))?;
+            let config_pda = config_id
+                .parse::<solana_sdk::pubkey::Pubkey>()
+                .map_err(|e| anyhow::anyhow!("解析配置PDA失败: {}", e))?;
             pda_addresses.push(config_pda);
         }
         info!("📋 计算所有AMM配置PDA: {:?}", pda_addresses);
@@ -312,12 +320,15 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         info!("  基金费率: {}", request.fund_fee_rate);
 
         // 1. 获取必要的配置信息
-        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id().map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()
+            .map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
 
-        let admin_keypair = utils::solana::ConfigManager::get_admin_keypair().map_err(|e| anyhow::anyhow!("获取管理员密钥失败: {}", e))?;
+        let admin_keypair = utils::solana::ConfigManager::get_admin_keypair()
+            .map_err(|e| anyhow::anyhow!("获取管理员密钥失败: {}", e))?;
 
         // 2. 计算AMM配置地址
-        let (config_address, _bump) = utils::solana::PDACalculator::calculate_amm_config_pda(&raydium_program_id, request.config_index);
+        let (config_address, _bump) =
+            utils::solana::PDACalculator::calculate_amm_config_pda(&raydium_program_id, request.config_index);
 
         info!("📍 计算得到的配置地址: {}", config_address);
 
@@ -344,7 +355,10 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
 
         // 5. 构建未签名交易
         let mut message = solana_sdk::message::Message::new(&[create_instruction], Some(&admin_keypair.pubkey()));
-        message.recent_blockhash = self.rpc_client.get_latest_blockhash().map_err(|e| anyhow::anyhow!("获取最新区块哈希失败: {}", e))?;
+        message.recent_blockhash = self
+            .rpc_client
+            .get_latest_blockhash()
+            .map_err(|e| anyhow::anyhow!("获取最新区块哈希失败: {}", e))?;
 
         // 序列化交易消息为Base64
         let transaction_data = bincode::serialize(&message).map_err(|e| anyhow::anyhow!("序列化交易失败: {}", e))?;
@@ -397,7 +411,10 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
     }
 
     /// 创建新的AMM配置并发送交易（用于测试）
-    async fn create_amm_config_and_send_transaction(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigAndSendTransactionResponse> {
+    async fn create_amm_config_and_send_transaction(
+        &self,
+        request: CreateAmmConfigRequest,
+    ) -> Result<CreateAmmConfigAndSendTransactionResponse> {
         info!("🚀 开始创建AMM配置并发送交易");
         info!("  配置索引: {}", request.config_index);
         info!("  tick间距: {}", request.tick_spacing);
@@ -406,12 +423,15 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         info!("  基金费率: {}", request.fund_fee_rate);
 
         // 1. 获取必要的配置信息
-        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id().map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
+        let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()
+            .map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
 
-        let admin_keypair = utils::solana::ConfigManager::get_admin_keypair().map_err(|e| anyhow::anyhow!("获取管理员密钥失败: {}", e))?;
+        let admin_keypair = utils::solana::ConfigManager::get_admin_keypair()
+            .map_err(|e| anyhow::anyhow!("获取管理员密钥失败: {}", e))?;
 
         // 2. 计算AMM配置地址
-        let (config_address, _bump) = utils::solana::PDACalculator::calculate_amm_config_pda(&raydium_program_id, request.config_index);
+        let (config_address, _bump) =
+            utils::solana::PDACalculator::calculate_amm_config_pda(&raydium_program_id, request.config_index);
 
         info!("📍 计算得到的配置地址: {}", config_address);
 
@@ -437,8 +457,16 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         )?;
 
         // 5. 构建、签名并发送交易
-        let recent_blockhash = self.rpc_client.get_latest_blockhash().map_err(|e| anyhow::anyhow!("获取最新区块哈希失败: {}", e))?;
-        let transaction = solana_sdk::transaction::Transaction::new_signed_with_payer(&[create_instruction], Some(&admin_keypair.pubkey()), &[&admin_keypair], recent_blockhash);
+        let recent_blockhash = self
+            .rpc_client
+            .get_latest_blockhash()
+            .map_err(|e| anyhow::anyhow!("获取最新区块哈希失败: {}", e))?;
+        let transaction = solana_sdk::transaction::Transaction::new_signed_with_payer(
+            &[create_instruction],
+            Some(&admin_keypair.pubkey()),
+            &[&admin_keypair],
+            recent_blockhash,
+        );
 
         // 6. 发送交易
         info!("📡 发送创建AMM配置交易...");
@@ -537,7 +565,7 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         }
 
         let repository = self.get_repository();
-        
+
         // 使用真正的批量查询 (MongoDB $in 操作符)
         match repository.get_configs_by_addresses_batch(config_addresses).await {
             Ok(configs) => {
@@ -556,8 +584,12 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
                     .collect();
 
                 let duration = start_time.elapsed();
-                info!("✅ 批量查询完成，查询{}个地址，找到{}个配置，总耗时{:?}", 
-                      config_addresses.len(), results.len(), duration);
+                info!(
+                    "✅ 批量查询完成，查询{}个地址，找到{}个配置，总耗时{:?}",
+                    config_addresses.len(),
+                    results.len(),
+                    duration
+                );
 
                 // 性能监控：如果总耗时超过200ms，记录警告
                 if duration.as_millis() > 200 {
@@ -599,7 +631,9 @@ mod tests {
             event_listener_db_mode: "update_only".to_string(),
         });
         let database = Arc::new(Database::new(config).await.unwrap());
-        let rpc_client = Arc::new(solana_client::rpc_client::RpcClient::new("https://api.devnet.solana.com".to_string()));
+        let rpc_client = Arc::new(solana_client::rpc_client::RpcClient::new(
+            "https://api.devnet.solana.com".to_string(),
+        ));
         ClmmConfigService::new(database, rpc_client)
     }
 
@@ -649,13 +683,9 @@ mod tests {
     #[tokio::test]
     async fn test_batch_query_performance() {
         let service = create_test_service().await;
-        
+
         // 测试批量查询方法
-        let test_addresses = vec![
-            "Address1".to_string(),
-            "Address2".to_string(), 
-            "Address3".to_string(),
-        ];
+        let test_addresses = vec!["Address1".to_string(), "Address2".to_string(), "Address3".to_string()];
 
         let start_time = std::time::Instant::now();
         let result = service.get_configs_by_addresses(&test_addresses).await;
@@ -664,40 +694,37 @@ mod tests {
         // 应该成功返回结果（即使数据库中没有这些配置）
         assert!(result.is_ok());
         let configs = result.unwrap();
-        
+
         // 由于测试数据库中没有配置，应该返回空结果
         assert_eq!(configs.len(), 0);
-        
+
         // 性能检查：批量查询应该很快完成（小于100ms）
         assert!(duration.as_millis() < 100, "批量查询耗时过长: {:?}", duration);
-        
+
         println!("✅ 批量查询性能测试通过，耗时: {:?}", duration);
     }
 
     #[tokio::test]
     async fn test_empty_batch_query() {
         let service = create_test_service().await;
-        
+
         // 测试空地址列表
         let empty_addresses: Vec<String> = vec![];
         let result = service.get_configs_by_addresses(&empty_addresses).await;
-        
+
         assert!(result.is_ok());
         let configs = result.unwrap();
         assert_eq!(configs.len(), 0);
-        
+
         println!("✅ 空批量查询测试通过");
     }
 
     #[tokio::test]
     async fn test_batch_vs_individual_query_consistency() {
         let service = create_test_service().await;
-        
+
         // 准备测试地址
-        let test_addresses = vec![
-            "TestConfig1".to_string(),
-            "TestConfig2".to_string(),
-        ];
+        let test_addresses = vec!["TestConfig1".to_string(), "TestConfig2".to_string()];
 
         // 测试批量查询
         let batch_result = service.get_configs_by_addresses(&test_addresses).await;
@@ -716,7 +743,7 @@ mod tests {
 
         // 结果应该一致
         assert_eq!(batch_configs.len(), individual_configs.len());
-        
+
         println!("✅ 批量查询与单个查询一致性测试通过");
     }
 }

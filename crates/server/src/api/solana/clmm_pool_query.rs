@@ -85,7 +85,10 @@ pub async fn get_pool_by_address(
         Err(e) => {
             error!("❌ 查询池子信息失败: {:?}", e);
             let error_response = ErrorResponse::new("QUERY_POOL_ERROR", &format!("查询池子信息失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -144,7 +147,10 @@ pub async fn get_pools_by_mint(
         Err(e) => {
             error!("❌ 查询池子列表失败: {:?}", e);
             let error_response = ErrorResponse::new("QUERY_POOLS_BY_MINT_ERROR", &format!("查询池子列表失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -204,15 +210,23 @@ pub async fn get_pools_by_creator(
     info!("  创建者: {}", creator_address);
     info!("  限制: {}", limit);
 
-    match services.solana.get_pools_by_creator(&creator_address, Some(limit as i64)).await {
+    match services
+        .solana
+        .get_pools_by_creator(&creator_address, Some(limit as i64))
+        .await
+    {
         Ok(pools) => {
             info!("✅ 查询池子列表成功，找到{}个池子", pools.len());
             Ok(Json(ApiResponse::success(pools)))
         }
         Err(e) => {
             error!("❌ 查询池子列表失败: {:?}", e);
-            let error_response = ErrorResponse::new("QUERY_POOLS_BY_CREATOR_ERROR", &format!("查询池子列表失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            let error_response =
+                ErrorResponse::new("QUERY_POOLS_BY_CREATOR_ERROR", &format!("查询池子列表失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -312,7 +326,10 @@ pub async fn query_pools(
         Err(e) => {
             error!("❌ 复杂查询失败: {}", e);
             let error_response = ErrorResponse::new("QUERY_POOLS_FAILED", &format!("复杂查询失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -366,7 +383,10 @@ pub async fn get_pool_statistics(
         Err(e) => {
             error!("❌ 获取池子统计信息失败: {:?}", e);
             let error_response = ErrorResponse::new("GET_POOL_STATS_ERROR", &format!("获取池子统计信息失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -436,7 +456,10 @@ pub async fn get_pool_statistics(
 pub async fn get_pool_list(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
-) -> Result<Json<crate::dtos::solana_dto::NewPoolListResponse>, (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>)> {
+) -> Result<
+    Json<crate::dtos::solana_dto::NewPoolListResponse>,
+    (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>),
+> {
     info!("🔍 接收到获取池子列表请求");
     if let Some(ref mint_address) = params.mint_address {
         info!("  Mint地址: {}", mint_address);
@@ -444,7 +467,11 @@ pub async fn get_pool_list(
     if let Some(ref pool_type) = params.pool_type {
         info!("  类型: {}", pool_type);
     }
-    info!("  页码: {}, 限制: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+    info!(
+        "  页码: {}, 限制: {}",
+        params.page.unwrap_or(1),
+        params.page_size.unwrap_or(20)
+    );
 
     match services.solana.query_pools_with_new_format(&params).await {
         Ok(response) => {
@@ -522,7 +549,10 @@ pub async fn get_pool_list(
 pub async fn get_pools_by_ids(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
-) -> Result<Json<crate::dtos::solana_dto::NewPoolListResponse2>, (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse2>)> {
+) -> Result<
+    Json<crate::dtos::solana_dto::NewPoolListResponse2>,
+    (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse2>),
+> {
     info!("🔍 接收到根据IDs查询池子列表请求");
     if let Some(ref ids) = params.ids {
         let ids_count = ids.split(',').filter(|s| !s.trim().is_empty()).count();
@@ -532,7 +562,11 @@ pub async fn get_pools_by_ids(
     if let Some(ref pool_type) = params.pool_type {
         info!("  类型: {}", pool_type);
     }
-    info!("  页码: {}, 限制: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+    info!(
+        "  页码: {}, 限制: {}",
+        params.page.unwrap_or(1),
+        params.page_size.unwrap_or(20)
+    );
 
     // 验证必需参数
     let ids = params.ids.clone().ok_or_else(|| {
@@ -670,14 +704,21 @@ pub async fn get_pools_by_ids(
 pub async fn get_pools_by_mint_pair(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
-) -> Result<Json<crate::dtos::solana_dto::NewPoolListResponse>, (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>)> {
+) -> Result<
+    Json<crate::dtos::solana_dto::NewPoolListResponse>,
+    (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>),
+> {
     info!("🔍 接收到代币对池子查询请求");
     info!("  Mint1: {:?}", params.mint1);
     info!("  Mint2: {:?}", params.mint2);
     info!("  池子类型: {:?}", params.pool_type);
     info!("  排序字段: {:?}", params.pool_sort_field);
     info!("  排序方向: {:?}", params.sort_type);
-    info!("  页码: {}, 页大小: {}", params.page.unwrap_or(1), params.page_size.unwrap_or(20));
+    info!(
+        "  页码: {}, 页大小: {}",
+        params.page.unwrap_or(1),
+        params.page_size.unwrap_or(20)
+    );
 
     // 验证必需参数
     let mint1 = params.mint1.clone().ok_or_else(|| {
@@ -848,9 +889,10 @@ pub async fn get_pools_by_mint_pair(
 pub async fn get_pools_key_by_ids(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<crate::dtos::solana_dto::PoolKeyResponse>, (StatusCode, Json<crate::dtos::solana_dto::PoolKeyResponse>)> {
+) -> Result<Json<crate::dtos::solana_dto::PoolKeyResponse>, (StatusCode, Json<crate::dtos::solana_dto::PoolKeyResponse>)>
+{
     info!("🔍 接收到池子密钥查询请求");
-    
+
     // 验证必需参数
     let ids = params.get("ids").ok_or_else(|| {
         let error_response = crate::dtos::solana_dto::PoolKeyResponse {

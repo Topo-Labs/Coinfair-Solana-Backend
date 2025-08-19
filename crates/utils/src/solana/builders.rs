@@ -13,7 +13,10 @@ pub struct TransactionBuilder;
 
 impl TransactionBuilder {
     /// 创建基础交易消息
-    pub fn create_base_transaction_message(instructions: &[solana_sdk::instruction::Instruction], payer: &Pubkey) -> solana_sdk::message::Message {
+    pub fn create_base_transaction_message(
+        instructions: &[solana_sdk::instruction::Instruction],
+        payer: &Pubkey,
+    ) -> solana_sdk::message::Message {
         solana_sdk::message::Message::new(instructions, Some(payer))
     }
 
@@ -92,8 +95,8 @@ impl AmmConfigInstructionBuilder {
 
         // 构建账户列表
         let accounts = vec![
-            AccountMetaBuilder::signer(*owner),                                    // owner (signer)
-            AccountMetaBuilder::writable(amm_config_key, false),                   // amm_config (writable, PDA)
+            AccountMetaBuilder::signer(*owner),                  // owner (signer)
+            AccountMetaBuilder::writable(amm_config_key, false), // amm_config (writable, PDA)
             AccountMetaBuilder::readonly(solana_sdk::system_program::id(), false), // system_program
         ];
 
@@ -156,7 +159,10 @@ impl AccountMetaBuilder {
     }
 
     /// 批量创建remaining accounts
-    pub fn create_remaining_accounts(account_addresses: &[String], first_readonly: bool) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
+    pub fn create_remaining_accounts(
+        account_addresses: &[String],
+        first_readonly: bool,
+    ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
         let mut accounts = Vec::new();
         for (index, account_str) in account_addresses.iter().enumerate() {
             let pubkey = Pubkey::from_str(account_str)?;
@@ -320,66 +326,70 @@ impl SwapV3InstructionBuilder {
 
         // 构建账户列表 - 按照SwapV3合约要求的顺序
         let mut accounts = vec![
-            AccountMetaBuilder::signer(*payer),                                              // payer
-            AccountMetaBuilder::readonly(*input_mint, false),                               // input_mint
-            AccountMetaBuilder::readonly(*payer_referral, false),                           // payer_referral
+            AccountMetaBuilder::signer(*payer),                   // payer
+            AccountMetaBuilder::readonly(*input_mint, false),     // input_mint
+            AccountMetaBuilder::readonly(*payer_referral, false), // payer_referral
         ];
 
         // 添加可选的upper账户
         if let Some(upper_pubkey) = upper {
-            accounts.push(AccountMetaBuilder::readonly(*upper_pubkey, false));              // upper
+            accounts.push(AccountMetaBuilder::readonly(*upper_pubkey, false)); // upper
         } else {
-            accounts.push(AccountMetaBuilder::readonly(*program_id, false));                // 占位符
+            accounts.push(AccountMetaBuilder::readonly(*program_id, false)); // 占位符
         }
 
         // 添加可选的upper_token_account
         if let Some(upper_token_pubkey) = upper_token_account {
-            accounts.push(AccountMetaBuilder::writable(*upper_token_pubkey, false));        // upper_token_account
+            accounts.push(AccountMetaBuilder::writable(*upper_token_pubkey, false));
+        // upper_token_account
         } else {
-            accounts.push(AccountMetaBuilder::readonly(*program_id, false));                // 占位符
+            accounts.push(AccountMetaBuilder::readonly(*program_id, false)); // 占位符
         }
 
         // 添加可选的upper_referral账户
         if let Some(upper_referral_pubkey) = upper_referral {
-            accounts.push(AccountMetaBuilder::readonly(*upper_referral_pubkey, false));     // upper_referral
+            accounts.push(AccountMetaBuilder::readonly(*upper_referral_pubkey, false));
+        // upper_referral
         } else {
-            accounts.push(AccountMetaBuilder::readonly(*program_id, false));                // 占位符
+            accounts.push(AccountMetaBuilder::readonly(*program_id, false)); // 占位符
         }
 
         // 添加可选的upper_upper账户
         if let Some(upper_upper_pubkey) = upper_upper {
-            accounts.push(AccountMetaBuilder::readonly(*upper_upper_pubkey, false));        // upper_upper
+            accounts.push(AccountMetaBuilder::readonly(*upper_upper_pubkey, false));
+        // upper_upper
         } else {
-            accounts.push(AccountMetaBuilder::readonly(*program_id, false));                // 占位符
+            accounts.push(AccountMetaBuilder::readonly(*program_id, false)); // 占位符
         }
 
         // 添加可选的upper_upper_token_account
         if let Some(upper_upper_token_pubkey) = upper_upper_token_account {
-            accounts.push(AccountMetaBuilder::writable(*upper_upper_token_pubkey, false));  // upper_upper_token_account
+            accounts.push(AccountMetaBuilder::writable(*upper_upper_token_pubkey, false));
+        // upper_upper_token_account
         } else {
-            accounts.push(AccountMetaBuilder::readonly(*program_id, false));                // 占位符
+            accounts.push(AccountMetaBuilder::readonly(*program_id, false)); // 占位符
         }
 
         // 添加必需的项目方代币账户
-        accounts.push(AccountMetaBuilder::writable(*project_token_account, false));        // project_token_account
+        accounts.push(AccountMetaBuilder::writable(*project_token_account, false)); // project_token_account
 
         // 添加核心交换账户
         accounts.extend(vec![
-            AccountMetaBuilder::readonly(*amm_config, false),                               // amm_config
-            AccountMetaBuilder::writable(*pool_state, false),                               // pool_state
-            AccountMetaBuilder::writable(*input_token_account, false),                      // input_token_account
-            AccountMetaBuilder::writable(*output_token_account, false),                     // output_token_account
-            AccountMetaBuilder::writable(*input_vault, false),                              // input_vault
-            AccountMetaBuilder::writable(*output_vault, false),                             // output_vault
-            AccountMetaBuilder::writable(*observation_state, false),                        // observation_state
-            AccountMetaBuilder::readonly(spl_token::id(), false),                           // token_program
-            AccountMetaBuilder::readonly(spl_token_2022::id(), false),                      // token_program_2022
-            AccountMetaBuilder::readonly(spl_memo::id(), false),                            // memo_program
-            AccountMetaBuilder::readonly(solana_sdk::system_program::id(), false),          // system_program
-            AccountMetaBuilder::readonly(spl_associated_token_account::id(), false),        // associated_token_program
-            AccountMetaBuilder::readonly(*referral_program_id, false),                      // referral
-            AccountMetaBuilder::readonly(*input_vault_mint, false),                         // input_vault_mint
-            AccountMetaBuilder::readonly(*output_vault_mint, false),                        // output_vault_mint
+            AccountMetaBuilder::readonly(*amm_config, false),           // amm_config
+            AccountMetaBuilder::writable(*pool_state, false),           // pool_state
+            AccountMetaBuilder::writable(*input_token_account, false),  // input_token_account
+            AccountMetaBuilder::writable(*output_token_account, false), // output_token_account
+            AccountMetaBuilder::writable(*input_vault, false),          // input_vault
+            AccountMetaBuilder::writable(*output_vault, false),         // output_vault
+            AccountMetaBuilder::writable(*observation_state, false),    // observation_state
+            AccountMetaBuilder::readonly(spl_token::id(), false),       // token_program
+            AccountMetaBuilder::readonly(spl_token_2022::id(), false),  // token_program_2022
+            AccountMetaBuilder::readonly(spl_memo::id(), false),        // memo_program
+            AccountMetaBuilder::readonly(solana_sdk::system_program::id(), false), // system_program
+            AccountMetaBuilder::readonly(spl_associated_token_account::id(), false), // associated_token_program
+            AccountMetaBuilder::readonly(*referral_program_id, false),  // referral
+            AccountMetaBuilder::readonly(*input_vault_mint, false),     // input_vault_mint
+            AccountMetaBuilder::readonly(*output_vault_mint, false),    // output_vault_mint
         ]);
 
         // 添加remaining accounts（tick arrays等）
@@ -387,7 +397,7 @@ impl SwapV3InstructionBuilder {
 
         LogUtils::log_operation_success(
             "SwapV3指令构建",
-            &format!("{}个账户, 推荐系统启用: {}", accounts.len(), upper.is_some())
+            &format!("{}个账户, 推荐系统启用: {}", accounts.len(), upper.is_some()),
         );
 
         Ok(solana_sdk::instruction::Instruction {

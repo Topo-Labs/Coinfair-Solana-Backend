@@ -92,9 +92,7 @@ impl ClmmConfigRepository {
             "$set": mongodb::bson::to_document(config)?
         };
 
-        let options = mongodb::options::UpdateOptions::builder()
-            .upsert(true)
-            .build();
+        let options = mongodb::options::UpdateOptions::builder().upsert(true).build();
 
         match self.collection.update_one(filter, update, options).await {
             Ok(result) => {
@@ -152,7 +150,7 @@ impl ClmmConfigRepository {
     /// 批量根据配置地址获取配置 (使用 $in 查询，性能优化版本)
     pub async fn get_configs_by_addresses_batch(&self, config_addresses: &[String]) -> Result<Vec<ClmmConfigModel>> {
         let start_time = std::time::Instant::now();
-        
+
         if config_addresses.is_empty() {
             info!("📋 批量查询配置地址列表为空，返回空结果");
             return Ok(Vec::new());
@@ -160,11 +158,11 @@ impl ClmmConfigRepository {
 
         info!("🔍 MongoDB批量查询{}个配置地址 (使用$in操作符)", config_addresses.len());
 
-        let filter = doc! { 
-            "configId": { 
-                "$in": config_addresses 
+        let filter = doc! {
+            "configId": {
+                "$in": config_addresses
             },
-            "enabled": true 
+            "enabled": true
         };
 
         let options = mongodb::options::FindOptions::builder()
@@ -175,15 +173,19 @@ impl ClmmConfigRepository {
             Ok(cursor) => {
                 let configs: Vec<ClmmConfigModel> = cursor.try_collect().await?;
                 let duration = start_time.elapsed();
-                
-                info!("✅ MongoDB批量查询完成: 查询{}个地址，找到{}个配置，耗时{:?}", 
-                      config_addresses.len(), configs.len(), duration);
-                
+
+                info!(
+                    "✅ MongoDB批量查询完成: 查询{}个地址，找到{}个配置，耗时{:?}",
+                    config_addresses.len(),
+                    configs.len(),
+                    duration
+                );
+
                 // 性能监控：如果查询时间超过100ms，记录警告
                 if duration.as_millis() > 100 {
                     tracing::warn!("⚠️ 批量查询耗时较长: {:?}，请检查索引配置", duration);
                 }
-                
+
                 Ok(configs)
             }
             Err(e) => {
@@ -394,35 +396,31 @@ mod tests {
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_batch_query_performance_simulation() {
         // 这是一个性能模拟测试，不需要真实数据库连接
-        
+
         let start_time = std::time::Instant::now();
-        
+
         // 模拟批量查询操作
-        let test_addresses = vec![
-            "Config1".to_string(),
-            "Config2".to_string(),
-            "Config3".to_string(),
-        ];
-        
+        let test_addresses = vec!["Config1".to_string(), "Config2".to_string(), "Config3".to_string()];
+
         // 模拟查询处理时间
         tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        
+
         let duration = start_time.elapsed();
-        
+
         // 验证性能特征
         assert!(duration.as_millis() < 50, "模拟批量查询耗时过长: {:?}", duration);
         assert!(!test_addresses.is_empty());
-        
+
         println!("✅ 批量查询性能模拟测试通过，模拟耗时: {:?}", duration);
     }
 
     #[test]
     fn test_config_model_creation() {
         let config = create_test_config("TestConfig123", 1);
-        
+
         assert_eq!(config.config_id, "TestConfig123");
         assert_eq!(config.index, 1);
         assert_eq!(config.protocol_fee_rate, 120000);
@@ -430,33 +428,29 @@ mod tests {
         assert_eq!(config.tick_spacing, 10);
         assert_eq!(config.fund_fee_rate, 40000);
         assert!(config.enabled);
-        
+
         println!("✅ 配置模型创建测试通过");
     }
 
     #[test]
     fn test_batch_query_filter_construction() {
         // 测试MongoDB过滤器构造逻辑
-        let config_addresses = vec![
-            "Config1".to_string(),
-            "Config2".to_string(),
-            "Config3".to_string(),
-        ];
+        let config_addresses = vec!["Config1".to_string(), "Config2".to_string(), "Config3".to_string()];
 
-        let filter = doc! { 
-            "configId": { 
-                "$in": config_addresses.clone() 
+        let filter = doc! {
+            "configId": {
+                "$in": config_addresses.clone()
             },
-            "enabled": true 
+            "enabled": true
         };
 
         // 验证过滤器结构
         assert!(filter.contains_key("configId"));
         assert!(filter.contains_key("enabled"));
-        
+
         let config_id_filter = filter.get("configId").unwrap();
         assert!(config_id_filter.as_document().unwrap().contains_key("$in"));
-        
+
         println!("✅ 批量查询过滤器构造测试通过");
     }
 }

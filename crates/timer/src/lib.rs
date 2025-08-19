@@ -18,7 +18,11 @@ impl Timer {
     // "59 59 11 * * *": 每天11:59:59执行
     pub fn new(time: Option<String>, services: Services, telegram: HopeBot) -> Self {
         match time {
-            Some(time) => Timer { time, services, telegram },
+            Some(time) => Timer {
+                time,
+                services,
+                telegram,
+            },
             None => Timer {
                 time: "59 59 11 * * *".to_string(),
                 services,

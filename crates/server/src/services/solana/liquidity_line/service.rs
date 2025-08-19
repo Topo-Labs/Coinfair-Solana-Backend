@@ -20,7 +20,10 @@ pub struct LiquidityLineService {
 
 impl LiquidityLineService {
     pub fn new(rpc_client: Arc<RpcClient>, database: Arc<Database>) -> Self {
-        Self { rpc_client, _database: database }
+        Self {
+            rpc_client,
+            _database: database,
+        }
     }
 
     /// 获取池子流动性分布线图
@@ -36,7 +39,10 @@ impl LiquidityLineService {
         let tick_spacing = pool_state.tick_spacing;
         let current_price = pool_state.current_price;
 
-        info!("📊 池子状态 - 当前tick: {}, tick间距: {}, 当前价格: {}", current_tick, tick_spacing, current_price);
+        info!(
+            "📊 池子状态 - 当前tick: {}, tick间距: {}, 当前价格: {}",
+            current_tick, tick_spacing, current_price
+        );
 
         // 3. 计算需要查询的tick范围
         let range = request.range.unwrap_or(2000); // 默认查询范围
@@ -46,7 +52,9 @@ impl LiquidityLineService {
         info!("🔍 查询范围 - tick下限: {}, tick上限: {}", tick_lower, tick_upper);
 
         // 4. 获取范围内的流动性数据
-        let liquidity_points = self.collect_liquidity_data(&pool_address, tick_lower, tick_upper, tick_spacing).await?;
+        let liquidity_points = self
+            .collect_liquidity_data(&pool_address, tick_lower, tick_upper, tick_spacing)
+            .await?;
 
         // 5. 转换为响应格式
         let max_points = request.max_points.unwrap_or(100) as usize;
@@ -70,7 +78,10 @@ impl LiquidityLineService {
 
         // 直接从链上获取数据
         info!("📡 从链上获取池子状态...");
-        let account = self.rpc_client.get_account(pool_address).map_err(|e| anyhow!("获取池子账户失败: {}", e))?;
+        let account = self
+            .rpc_client
+            .get_account(pool_address)
+            .map_err(|e| anyhow!("获取池子账户失败: {}", e))?;
 
         self.parse_pool_state_from_account(&account)
     }
@@ -88,7 +99,10 @@ impl LiquidityLineService {
         // 从sqrt_price_x64计算当前价格
         let current_price = self.sqrt_price_x64_to_price(sqrt_price_x64)?;
 
-        info!("📊 解析池子状态 - 当前tick: {}, tick间距: {}, 当前价格: {}", tick_current, tick_spacing, current_price);
+        info!(
+            "📊 解析池子状态 - 当前tick: {}, tick间距: {}, 当前价格: {}",
+            tick_current, tick_spacing, current_price
+        );
 
         Ok(PoolStateData {
             tick_current,
@@ -112,7 +126,13 @@ impl LiquidityLineService {
     }
 
     /// 收集指定范围内的流动性数据
-    async fn collect_liquidity_data(&self, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32, tick_spacing: u16) -> Result<Vec<LiquidityLinePoint>> {
+    async fn collect_liquidity_data(
+        &self,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+        tick_spacing: u16,
+    ) -> Result<Vec<LiquidityLinePoint>> {
         let mut liquidity_points = Vec::new();
 
         // 计算需要查询的TickArray起始索引
@@ -154,7 +174,8 @@ impl LiquidityLineService {
         while current <= end_index {
             starts.push(current);
             // tick array间距应该使用正确的spacing计算而不是固定的TICK_ARRAY_SIZE
-            current = raydium_amm_v3::states::TickArrayState::get_array_start_index(current + TICK_ARRAY_SIZE, tick_spacing);
+            current =
+                raydium_amm_v3::states::TickArrayState::get_array_start_index(current + TICK_ARRAY_SIZE, tick_spacing);
             if current <= end_index {
                 // 避免无限循环，如果计算出的current没有增长则退出
                 if starts.last() == Some(&current) {
@@ -170,12 +191,22 @@ impl LiquidityLineService {
             starts.push(end_index);
         }
 
-        info!("🔢 计算TickArray起始索引: {}..{} => {} 个数组 {:?}", start_index, end_index, starts.len(), starts);
+        info!(
+            "🔢 计算TickArray起始索引: {}..{} => {} 个数组 {:?}",
+            start_index,
+            end_index,
+            starts.len(),
+            starts
+        );
         starts
     }
 
     /// 获取单个TickArray的流动性数据
-    async fn get_tick_array_liquidity(&self, pool_address: &Pubkey, tick_array_start: i32) -> Result<Vec<LiquidityLinePoint>> {
+    async fn get_tick_array_liquidity(
+        &self,
+        pool_address: &Pubkey,
+        tick_array_start: i32,
+    ) -> Result<Vec<LiquidityLinePoint>> {
         // 计算TickArray的PDA地址
         let tick_array_address = self.calculate_tick_array_address(pool_address, tick_array_start)?;
 
@@ -199,7 +230,14 @@ impl LiquidityLineService {
         //     .map_err(|_| anyhow!("无效的Raydium程序ID"))?;
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
 
-        let (tick_array_address, _bump) = Pubkey::find_program_address(&["tick_array".as_bytes(), pool_address.as_ref(), &tick_array_start.to_be_bytes()], &raydium_program_id);
+        let (tick_array_address, _bump) = Pubkey::find_program_address(
+            &[
+                "tick_array".as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_start.to_be_bytes(),
+            ],
+            &raydium_program_id,
+        );
 
         Ok(tick_array_address)
     }
@@ -214,7 +252,10 @@ impl LiquidityLineService {
         let start_tick_index = tick_array_state.start_tick_index;
         let initialized_tick_count = tick_array_state.initialized_tick_count;
 
-        info!("🔍 解析TickArray - 起始索引: {}, 已初始化tick数: {}", start_tick_index, initialized_tick_count);
+        info!(
+            "🔍 解析TickArray - 起始索引: {}, 已初始化tick数: {}",
+            start_tick_index, initialized_tick_count
+        );
 
         // 遍历TickArray中的所有tick
         for (i, tick) in tick_array_state.ticks.iter().enumerate() {
@@ -234,7 +275,10 @@ impl LiquidityLineService {
                     tick: tick_index,
                 });
 
-                info!("  ✅ 找到流动性点 - tick: {}, 流动性: {}, 价格: {:.8}", tick_index, liquidity, price);
+                info!(
+                    "  ✅ 找到流动性点 - tick: {}, 流动性: {}, 价格: {:.8}",
+                    tick_index, liquidity, price
+                );
             }
         }
 
@@ -245,14 +289,19 @@ impl LiquidityLineService {
     /// 根据tick计算价格
     fn calculate_price_from_tick(&self, tick: i32) -> Result<f64> {
         // 使用真正的Raydium tick数学库计算价格
-        let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick).map_err(|e| anyhow!("tick {}转换为sqrt价格失败: {:?}", tick, e))?;
+        let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick)
+            .map_err(|e| anyhow!("tick {}转换为sqrt价格失败: {:?}", tick, e))?;
 
         // 从sqrt_price_x64转换为价格
         self.sqrt_price_x64_to_price(sqrt_price_x64)
     }
 
     /// 过滤和限制数据点数量
-    fn filter_and_limit_points(&self, mut points: Vec<LiquidityLinePoint>, max_points: usize) -> Vec<LiquidityLinePoint> {
+    fn filter_and_limit_points(
+        &self,
+        mut points: Vec<LiquidityLinePoint>,
+        max_points: usize,
+    ) -> Vec<LiquidityLinePoint> {
         // 过滤掉流动性为0的点
         points.retain(|p| p.liquidity != "0");
 

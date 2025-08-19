@@ -2,7 +2,10 @@ use std::net::SocketAddr;
 
 use crate::dtos::{
     solana_dto::ApiResponse,
-    static_dto::{AutoFeeConfig, ChainTimeConfig, ClmmConfig, ClmmConfigResponse, InfoResponse, MintListResponse, RpcConfig, VersionConfig},
+    static_dto::{
+        AutoFeeConfig, ChainTimeConfig, ClmmConfig, ClmmConfigResponse, InfoResponse, MintListResponse, RpcConfig,
+        VersionConfig,
+    },
 };
 use axum::{extract::ConnectInfo, response::Json, routing::get, Router};
 use tracing::info;
@@ -158,7 +161,9 @@ pub async fn get_rpcs() -> Json<ApiResponse<RpcConfig>> {
 pub async fn get_chain_time() -> Json<ApiResponse<ChainTimeConfig>> {
     info!("⏰ 获取链时间配置");
 
-    let chain_time_config = ChainTimeConfig { value: "20".to_string() };
+    let chain_time_config = ChainTimeConfig {
+        value: "20".to_string(),
+    };
 
     Json(ApiResponse::success(chain_time_config))
 }

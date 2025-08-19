@@ -120,13 +120,19 @@ pub fn get_pool_mints_transfer_fee(
 }
 
 /// Calculate the fee for output amount
-pub fn get_transfer_inverse_fee<'data, S: BaseState + Pack>(account_state: &StateWithExtensions<'data, S>, epoch: u64, post_fee_amount: u64) -> u64 {
+pub fn get_transfer_inverse_fee<'data, S: BaseState + Pack>(
+    account_state: &StateWithExtensions<'data, S>,
+    epoch: u64,
+    post_fee_amount: u64,
+) -> u64 {
     let fee = if let Ok(transfer_fee_config) = account_state.get_extension::<TransferFeeConfig>() {
         let transfer_fee = transfer_fee_config.get_epoch_fee(epoch);
         if u16::from(transfer_fee.transfer_fee_basis_points) == MAX_FEE_BASIS_POINTS {
             u64::from(transfer_fee.maximum_fee)
         } else {
-            transfer_fee_config.calculate_inverse_epoch_fee(epoch, post_fee_amount).unwrap()
+            transfer_fee_config
+                .calculate_inverse_epoch_fee(epoch, post_fee_amount)
+                .unwrap()
         }
     } else {
         0
@@ -135,7 +141,11 @@ pub fn get_transfer_inverse_fee<'data, S: BaseState + Pack>(account_state: &Stat
 }
 
 /// Calculate the fee for input amount
-pub fn get_transfer_fee<'data, S: BaseState + Pack>(account_state: &StateWithExtensions<'data, S>, epoch: u64, pre_fee_amount: u64) -> u64 {
+pub fn get_transfer_fee<'data, S: BaseState + Pack>(
+    account_state: &StateWithExtensions<'data, S>,
+    epoch: u64,
+    pre_fee_amount: u64,
+) -> u64 {
     let fee = if let Ok(transfer_fee_config) = account_state.get_extension::<TransferFeeConfig>() {
         transfer_fee_config.calculate_epoch_fee(epoch, pre_fee_amount).unwrap()
     } else {
@@ -144,7 +154,9 @@ pub fn get_transfer_fee<'data, S: BaseState + Pack>(account_state: &StateWithExt
     fee
 }
 
-pub fn get_account_extensions<'data, S: BaseState + Pack>(account_state: &StateWithExtensions<'data, S>) -> Vec<ExtensionStruct> {
+pub fn get_account_extensions<'data, S: BaseState + Pack>(
+    account_state: &StateWithExtensions<'data, S>,
+) -> Vec<ExtensionStruct> {
     let mut extensions: Vec<ExtensionStruct> = Vec::new();
     let extension_types = account_state.get_extension_types().unwrap();
     println!("extension_types:{:?}", extension_types);
@@ -399,7 +411,11 @@ fn swap_compute(
         };
         if !next_initialized_tick.is_initialized() {
             let current_vaild_tick_array_start_index = pool_state
-                .next_initialized_tick_array_start_index(&Some(*tickarray_bitmap_extension), current_vaild_tick_array_start_index, zero_for_one)
+                .next_initialized_tick_array_start_index(
+                    &Some(*tickarray_bitmap_extension),
+                    current_vaild_tick_array_start_index,
+                    zero_for_one,
+                )
                 .unwrap();
             tick_array_current = tick_arrays.pop_front().unwrap();
             if current_vaild_tick_array_start_index.is_none() {
@@ -423,12 +439,13 @@ fn swap_compute(
 
         step.sqrt_price_next_x64 = tick_math::get_sqrt_price_at_tick(step.tick_next).unwrap();
 
-        let target_price =
-            if (zero_for_one && step.sqrt_price_next_x64 < sqrt_price_limit_x64) || (!zero_for_one && step.sqrt_price_next_x64 > sqrt_price_limit_x64) {
-                sqrt_price_limit_x64
-            } else {
-                step.sqrt_price_next_x64
-            };
+        let target_price = if (zero_for_one && step.sqrt_price_next_x64 < sqrt_price_limit_x64)
+            || (!zero_for_one && step.sqrt_price_next_x64 > sqrt_price_limit_x64)
+        {
+            sqrt_price_limit_x64
+        } else {
+            step.sqrt_price_next_x64
+        };
         let swap_step = swap_math::compute_swap_step(
             state.sqrt_price_x64,
             target_price,
@@ -446,11 +463,17 @@ fn swap_compute(
         step.fee_amount = swap_step.fee_amount;
 
         if is_base_input {
-            state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(step.amount_in + step.fee_amount).unwrap();
+            state.amount_specified_remaining = state
+                .amount_specified_remaining
+                .checked_sub(step.amount_in + step.fee_amount)
+                .unwrap();
             state.amount_calculated = state.amount_calculated.checked_add(step.amount_out).unwrap();
         } else {
             state.amount_specified_remaining = state.amount_specified_remaining.checked_sub(step.amount_out).unwrap();
-            state.amount_calculated = state.amount_calculated.checked_add(step.amount_in + step.fee_amount).unwrap();
+            state.amount_calculated = state
+                .amount_calculated
+                .checked_add(step.amount_in + step.fee_amount)
+                .unwrap();
         }
 
         if state.sqrt_price_x64 == step.sqrt_price_next_x64 {
@@ -463,7 +486,11 @@ fn swap_compute(
                 state.liquidity = liquidity_math::add_delta(state.liquidity, liquidity_net).unwrap();
             }
 
-            state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
+            state.tick = if zero_for_one {
+                step.tick_next - 1
+            } else {
+                step.tick_next
+            };
         } else if state.sqrt_price_x64 != step.sqrt_price_start_x64 {
             // recompute unless we're on a lower tick boundary (i.e. already transitioned ticks), and haven't moved
             state.tick = tick_math::get_tick_at_sqrt_price(state.sqrt_price_x64).unwrap();

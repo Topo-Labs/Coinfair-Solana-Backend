@@ -159,7 +159,10 @@ impl Monitor {
 
 impl Monitor {
     async fn handle_claim(&self, minter: String, claimer: String) -> eyre::Result<()> {
-        self.services.refer.create_refer(&claimer.to_lowercase(), &minter.to_lowercase()).await?;
+        self.services
+            .refer
+            .create_refer(&claimer.to_lowercase(), &minter.to_lowercase())
+            .await?;
 
         Ok(())
     }
@@ -176,7 +179,10 @@ impl Monitor {
 
             // 2. 存储该有效新用户所触发的奖励(上级 8U对应的HOPE数量，上上级 2U对应的HOPE数量)
             let rewards = self.gen_rewards(user.clone(), price_by_usdt).await;
-            self.services.reward.create_reward(user.to_string().to_lowercase(), rewards).await?;
+            self.services
+                .reward
+                .create_reward(user.to_string().to_lowercase(), rewards)
+                .await?;
 
             Ok(())
         } else {
@@ -206,7 +212,9 @@ impl Monitor {
     }
 
     async fn get_ws_provider(rpc_url: &str) -> Provider<Ws> {
-        Provider::<Ws>::connect(rpc_url).await.expect("Cannot establish ws connection")
+        Provider::<Ws>::connect(rpc_url)
+            .await
+            .expect("Cannot establish ws connection")
     }
 
     // 有效新用户：
@@ -265,7 +273,11 @@ impl Monitor {
     async fn get_bnb_price(&self) -> Result<f64, reqwest::Error> {
         let url = "https://min-api.cryptocompare.com/data/price?fsym=BNB&tsyms=USD";
 
-        let response = reqwest::Client::new().get(url).header("Accept", "application/json").send().await?;
+        let response = reqwest::Client::new()
+            .get(url)
+            .header("Accept", "application/json")
+            .send()
+            .await?;
 
         // 解析 JSON
         let crypto_price: CryptoPrice = response.json().await?;

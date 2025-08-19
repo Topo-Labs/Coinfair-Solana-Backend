@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use crate::dtos::solana_dto::ApiResponse;
 use crate::{
     dtos::solana_dto::{
-        CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse,
-        GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse,
-        OpenPositionRequest, OpenPositionResponse, PositionInfo, UserPositionsResponse,
+        CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse,
+        DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest,
+        IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+        OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
+        UserPositionsResponse,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
@@ -34,10 +36,16 @@ impl PositionController {
             .route("/check", get(check_position_exists))
             // ============ IncreaseLiquidity API路由 ============
             .route("/increase-liquidity", post(increase_liquidity))
-            .route("/increase-liquidity-and-send-transaction", post(increase_liquidity_and_send_transaction))
+            .route(
+                "/increase-liquidity-and-send-transaction",
+                post(increase_liquidity_and_send_transaction),
+            )
             // ============ DecreaseLiquidity API路由 ============
             .route("/decrease-liquidity", post(decrease_liquidity))
-            .route("/decrease-liquidity-and-send-transaction", post(decrease_liquidity_and_send_transaction))
+            .route(
+                "/decrease-liquidity-and-send-transaction",
+                post(decrease_liquidity_and_send_transaction),
+            )
     }
 }
 
@@ -96,14 +104,20 @@ pub async fn open_position(
     info!("🎯 接收到开仓请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  用户钱包: {}", request.user_wallet);
-    info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+    info!(
+        "  价格范围: {} - {}",
+        request.tick_lower_price, request.tick_upper_price
+    );
     info!("  输入金额: {}", request.input_amount);
 
     // check if tick_lower_price is less than tick_upper_price
     if request.tick_lower_price >= request.tick_upper_price {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse::new("TICK_PRICE_ERROR", "tick_lower_price must be less than tick_upper_price")),
+            Json(ErrorResponse::new(
+                "TICK_PRICE_ERROR",
+                "tick_lower_price must be less than tick_upper_price",
+            )),
         ));
     }
 
@@ -119,7 +133,10 @@ pub async fn open_position(
             let error_msg = e.to_string();
             if error_msg.contains("相同价格范围的仓位已存在") {
                 warn!("🔄 检测到重复仓位创建尝试");
-                let error_response = ErrorResponse::new("POSITION_ALREADY_EXISTS", "相同价格范围的仓位已存在，请检查您的现有仓位或稍后重试");
+                let error_response = ErrorResponse::new(
+                    "POSITION_ALREADY_EXISTS",
+                    "相同价格范围的仓位已存在，请检查您的现有仓位或稍后重试",
+                );
                 Err((StatusCode::CONFLICT, Json(error_response)))
             } else {
                 let error_response = ErrorResponse::new("OPEN_POSITION_ERROR", &format!("开仓失败: {}", e));
@@ -183,7 +200,10 @@ pub async fn open_position_and_send_transaction(
 ) -> Result<Json<OpenPositionAndSendTransactionResponse>, (StatusCode, Json<ErrorResponse>)> {
     info!("🎯 接收到开仓请求");
     info!("  池子地址: {}", request.pool_address);
-    info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+    info!(
+        "  价格范围: {} - {}",
+        request.tick_lower_price, request.tick_upper_price
+    );
 
     match services.solana.open_position_and_send_transaction(request).await {
         Ok(response) => {
@@ -399,7 +419,11 @@ pub async fn check_position_exists(
     info!("  池子: {}", pool_address);
     info!("  Tick范围: {} - {}", tick_lower, tick_upper);
 
-    match services.solana.check_position_exists(pool_address, tick_lower, tick_upper, wallet_address).await {
+    match services
+        .solana
+        .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
+        .await
+    {
         Ok(response) => {
             if response.is_some() {
                 info!("✅ 找到相同范围的仓位");
@@ -472,12 +496,18 @@ pub async fn increase_liquidity(
     info!("🔧 接收到增加流动性请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  用户钱包: {}", request.user_wallet);
-    info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+    info!(
+        "  价格范围: {} - {}",
+        request.tick_lower_price, request.tick_upper_price
+    );
     info!("  输入金额: {}", request.input_amount);
 
     // 验证价格范围
     if request.tick_lower_price >= request.tick_upper_price {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格"))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格")),
+        ));
     }
 
     match services.solana.increase_liquidity(request).await {
@@ -492,7 +522,10 @@ pub async fn increase_liquidity(
             let error_msg = e.to_string();
             if error_msg.contains("未找到匹配的现有仓位") {
                 warn!("🔄 检测到未找到匹配仓位的错误");
-                let error_response = ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的现有仓位。增加流动性需要先有相同价格范围的仓位。");
+                let error_response = ErrorResponse::new(
+                    "POSITION_NOT_FOUND",
+                    "未找到匹配的现有仓位。增加流动性需要先有相同价格范围的仓位。",
+                );
                 Err((StatusCode::NOT_FOUND, Json(error_response)))
             } else {
                 let error_response = ErrorResponse::new("INCREASE_LIQUIDITY_ERROR", &format!("增加流动性失败: {}", e));
@@ -557,12 +590,18 @@ pub async fn increase_liquidity_and_send_transaction(
     info!("🚀 接收到增加流动性并发送交易请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  用户钱包: {}", request.user_wallet);
-    info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+    info!(
+        "  价格范围: {} - {}",
+        request.tick_lower_price, request.tick_upper_price
+    );
     info!("  输入金额: {}", request.input_amount);
 
     // 验证价格范围
     if request.tick_lower_price >= request.tick_upper_price {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格"))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("TICK_PRICE_ERROR", "下限价格必须小于上限价格")),
+        ));
     }
 
     match services.solana.increase_liquidity_and_send_transaction(request).await {
@@ -577,11 +616,17 @@ pub async fn increase_liquidity_and_send_transaction(
             let error_msg = e.to_string();
             if error_msg.contains("未找到匹配的现有仓位") {
                 warn!("🔄 检测到未找到匹配仓位的错误");
-                let error_response = ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的现有仓位。增加流动性需要先有相同价格范围的仓位。");
+                let error_response = ErrorResponse::new(
+                    "POSITION_NOT_FOUND",
+                    "未找到匹配的现有仓位。增加流动性需要先有相同价格范围的仓位。",
+                );
                 Err((StatusCode::NOT_FOUND, Json(error_response)))
             } else if error_msg.contains("AccountOwnedByWrongProgram") {
                 warn!("🔧 检测到Token Program不匹配错误，NFT可能使用Token-2022");
-                let error_response = ErrorResponse::new("TOKEN_PROGRAM_MISMATCH", "NFT账户使用了Token-2022程序，这个错误已在新版本中修复。请联系技术支持。");
+                let error_response = ErrorResponse::new(
+                    "TOKEN_PROGRAM_MISMATCH",
+                    "NFT账户使用了Token-2022程序，这个错误已在新版本中修复。请联系技术支持。",
+                );
                 Err((StatusCode::BAD_REQUEST, Json(error_response)))
             } else {
                 let error_response = ErrorResponse::new("INCREASE_LIQUIDITY_ERROR", &format!("增加流动性失败: {}", e));
@@ -650,12 +695,21 @@ pub async fn decrease_liquidity(
     info!("🔧 接收到减少流动性请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  用户钱包: {}", request.user_wallet);
-    info!("  Tick范围: {} - {}", request.tick_lower_index, request.tick_upper_index);
+    info!(
+        "  Tick范围: {} - {}",
+        request.tick_lower_index, request.tick_upper_index
+    );
     info!("  减少流动性: {:?}", request.liquidity);
 
     // 验证tick范围
     if request.tick_lower_index >= request.tick_upper_index {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引"))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new(
+                "TICK_INDEX_ERROR",
+                "下限tick索引必须小于上限tick索引",
+            )),
+        ));
     }
 
     match services.solana.decrease_liquidity(request).await {
@@ -670,7 +724,8 @@ pub async fn decrease_liquidity(
             let error_msg = e.to_string();
             if error_msg.contains("未找到匹配的仓位") {
                 warn!("🔄 检测到未找到匹配仓位的错误");
-                let error_response = ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的仓位。请检查tick索引范围和池子地址。");
+                let error_response =
+                    ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的仓位。请检查tick索引范围和池子地址。");
                 Err((StatusCode::NOT_FOUND, Json(error_response)))
             } else {
                 let error_response = ErrorResponse::new("DECREASE_LIQUIDITY_ERROR", &format!("减少流动性失败: {}", e));
@@ -736,12 +791,21 @@ pub async fn decrease_liquidity_and_send_transaction(
     info!("🚀 接收到减少流动性并发送交易请求");
     info!("  池子地址: {}", request.pool_address);
     info!("  用户钱包: {}", request.user_wallet);
-    info!("  Tick范围: {} - {}", request.tick_lower_index, request.tick_upper_index);
+    info!(
+        "  Tick范围: {} - {}",
+        request.tick_lower_index, request.tick_upper_index
+    );
     info!("  减少流动性: {:?}", request.liquidity);
 
     // 验证tick范围
     if request.tick_lower_index >= request.tick_upper_index {
-        return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("TICK_INDEX_ERROR", "下限tick索引必须小于上限tick索引"))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new(
+                "TICK_INDEX_ERROR",
+                "下限tick索引必须小于上限tick索引",
+            )),
+        ));
     }
 
     match services.solana.decrease_liquidity_and_send_transaction(request).await {
@@ -756,11 +820,15 @@ pub async fn decrease_liquidity_and_send_transaction(
             let error_msg = e.to_string();
             if error_msg.contains("未找到匹配的仓位") {
                 warn!("🔄 检测到未找到匹配仓位的错误");
-                let error_response = ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的仓位。请检查tick索引范围和池子地址。");
+                let error_response =
+                    ErrorResponse::new("POSITION_NOT_FOUND", "未找到匹配的仓位。请检查tick索引范围和池子地址。");
                 Err((StatusCode::NOT_FOUND, Json(error_response)))
             } else if error_msg.contains("AccountOwnedByWrongProgram") {
                 warn!("🔧 检测到Token Program不匹配错误，NFT可能使用Token-2022");
-                let error_response = ErrorResponse::new("TOKEN_PROGRAM_MISMATCH", "NFT账户使用了Token-2022程序，这个错误已在新版本中修复。请联系技术支持。");
+                let error_response = ErrorResponse::new(
+                    "TOKEN_PROGRAM_MISMATCH",
+                    "NFT账户使用了Token-2022程序，这个错误已在新版本中修复。请联系技术支持。",
+                );
                 Err((StatusCode::BAD_REQUEST, Json(error_response)))
             } else {
                 let error_response = ErrorResponse::new("DECREASE_LIQUIDITY_ERROR", &format!("减少流动性失败: {}", e));

@@ -46,7 +46,7 @@ pub struct SwapSingleV3<'info> {
         mut,
         constraint = payer_referral.upper.is_none() || (
             upper_token_account.owner == upper.as_ref().unwrap().key() &&
-            upper_token_account.mint == input_mint.key() //Token_Mint 
+            upper_token_account.mint == input_mint.key() //Token_Mint
         )
         @ ErrorCode::UpperTokenAccountMismatch
     )]
@@ -59,7 +59,6 @@ pub struct SwapSingleV3<'info> {
     //     constraint = payer_referral.upper.is_none() || true // Allow initialization when upper exists
     // )]
     // pub upper_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
-
     /// The user's upper PDA of referral_account(用于获取upper的upper)
     #[account(
         seeds = [b"referral", upper.as_ref().unwrap().key().as_ref()],
@@ -69,14 +68,13 @@ pub struct SwapSingleV3<'info> {
     )]
     pub upper_referral: Option<Account<'info, ReferralAccount>>,
 
-
     /// CHECK: 仅用于与 payer_referral.upper_upper 对比，不读取数据
     #[account(
         constraint = upper_referral.is_none() || upper_referral.as_ref().unwrap().upper.is_none() || (
             upper_upper.key() == upper_referral.as_ref().unwrap().upper.unwrap()
         )
         @ ErrorCode::UpperUpperMismatch
-        
+
     )]
     pub upper_upper: Option<UncheckedAccount<'info>>,
 
@@ -172,8 +170,6 @@ pub fn exact_internal_v3<'c: 'info, 'info>(
     sqrt_price_limit_x64: u128,
     is_base_input: bool,
 ) -> Result<u64> {
-
-
     // invoke_memo_instruction(SWAP_MEMO_MSG, ctx.memo_program.to_account_info())?;
 
     // 获取当前区块时间戳(确保池子已经到开启时间点)
@@ -192,14 +188,11 @@ pub fn exact_internal_v3<'c: 'info, 'info>(
     // 计算实际交换金额（考虑到转账手续费时-Token2022）
     let amount_calculate_specified = if is_base_input {
         // 当用户的输入货币是"基础货币"(即希望卖出时)，计算实际用于交换的（意味着卖不了那么多）
-        let transfer_fee =
-            util::get_transfer_fee(ctx.input_vault_mint.clone(), amount_specified).unwrap();
+        let transfer_fee = util::get_transfer_fee(ctx.input_vault_mint.clone(), amount_specified).unwrap();
         amount_specified - transfer_fee
     } else {
         // 当用户的输入货币是"报价货币"(即希望买入时)，计算实际需要输入的金额（意味着需要支付更多）
-        let transfer_fee =
-            util::get_transfer_inverse_fee(ctx.output_vault_mint.clone(), amount_specified)
-                .unwrap();
+        let transfer_fee = util::get_transfer_inverse_fee(ctx.output_vault_mint.clone(), amount_specified).unwrap();
         amount_specified + transfer_fee
     };
     #[allow(unused_assignments)]
@@ -221,11 +214,9 @@ pub fn exact_internal_v3<'c: 'info, 'info>(
         // input_vault是由客户端的用户传入; token_vault是池初始化时配置
         require!(
             if zero_for_one {
-                ctx.input_vault.key() == pool_state.token_vault_0
-                    && ctx.output_vault.key() == pool_state.token_vault_1
+                ctx.input_vault.key() == pool_state.token_vault_0 && ctx.output_vault.key() == pool_state.token_vault_1
             } else {
-                ctx.input_vault.key() == pool_state.token_vault_1
-                    && ctx.output_vault.key() == pool_state.token_vault_0
+                ctx.input_vault.key() == pool_state.token_vault_1 && ctx.output_vault.key() == pool_state.token_vault_0
             },
             ErrorCode::InvalidInputPoolVault
         );
@@ -288,32 +279,28 @@ pub fn exact_internal_v3<'c: 'info, 'info>(
             amount_0,
             amount_1
         );
-        require!(
-            amount_0 != 0 && amount_1 != 0,
-            ErrorCode::TooSmallInputOrOutputAmount
-        );
+        require!(amount_0 != 0 && amount_1 != 0, ErrorCode::TooSmallInputOrOutputAmount);
     }
 
-    let (token_account_0, token_account_1, vault_0, vault_1, vault_0_mint, vault_1_mint) =
-        if zero_for_one {
-            (
-                ctx.input_token_account.clone(),
-                ctx.output_token_account.clone(),
-                ctx.input_vault.clone(),
-                ctx.output_vault.clone(),
-                ctx.input_vault_mint.clone(),
-                ctx.output_vault_mint.clone(),
-            )
-        } else {
-            (
-                ctx.output_token_account.clone(),
-                ctx.input_token_account.clone(),
-                ctx.output_vault.clone(),
-                ctx.input_vault.clone(),
-                ctx.output_vault_mint.clone(),
-                ctx.input_vault_mint.clone(),
-            )
-        };
+    let (token_account_0, token_account_1, vault_0, vault_1, vault_0_mint, vault_1_mint) = if zero_for_one {
+        (
+            ctx.input_token_account.clone(),
+            ctx.output_token_account.clone(),
+            ctx.input_vault.clone(),
+            ctx.output_vault.clone(),
+            ctx.input_vault_mint.clone(),
+            ctx.output_vault_mint.clone(),
+        )
+    } else {
+        (
+            ctx.output_token_account.clone(),
+            ctx.input_token_account.clone(),
+            ctx.output_vault.clone(),
+            ctx.input_vault.clone(),
+            ctx.output_vault_mint.clone(),
+            ctx.input_vault_mint.clone(),
+        )
+    };
 
     // user or pool real amount delta without tranfer fee
     let amount_0_without_fee;
@@ -390,10 +377,10 @@ pub fn exact_internal_v3<'c: 'info, 'info>(
             total_reward_fee,
             //事件触发所需字段
             vault_0_mint.key(),
-            ctx.payer.key(),                                    // from: 交易发起者
-            ctx.pool_state.load()?.owner,                       // project: 项目方地址（从pool_state获取）
-            ctx.upper.as_ref().map(|u| u.key()),               // upper: 上级地址（可选）
-            ctx.upper_upper.as_ref().map(|u| u.key()),         // upper_upper: 上上级地址（可选）
+            ctx.payer.key(),                           // from: 交易发起者
+            ctx.pool_state.load()?.owner,              // project: 项目方地址（从pool_state获取）
+            ctx.upper.as_ref().map(|u| u.key()),       // upper: 上级地址（可选）
+            ctx.upper_upper.as_ref().map(|u| u.key()), // upper_upper: 上上级地址（可选）
         )?;
     } else {
         transfer_fee_0 = util::get_transfer_fee(vault_0_mint.clone(), amount_0).unwrap();
@@ -446,20 +433,20 @@ pub fn exact_internal_v3<'c: 'info, 'info>(
             total_reward_fee,
             //事件触发所需字段
             vault_1_mint.key(),
-            ctx.payer.key(),                                    // from: 交易发起者
-            ctx.pool_state.load()?.owner,                       // project: 项目方地址（从pool_state获取）
-            ctx.upper.as_ref().map(|u| u.key()),               // upper: 上级地址（可选）
-            ctx.upper_upper.as_ref().map(|u| u.key()),         // upper_upper: 上上级地址（可选）        
+            ctx.payer.key(),                           // from: 交易发起者
+            ctx.pool_state.load()?.owner,              // project: 项目方地址（从pool_state获取）
+            ctx.upper.as_ref().map(|u| u.key()),       // upper: 上级地址（可选）
+            ctx.upper_upper.as_ref().map(|u| u.key()), // upper_upper: 上上级地址（可选）
         )?;
     }
 
     // 代币转移操作会修改链上的账户数据，但这些更改不会自动反应到其内存副本中
     ctx.output_token_account.reload()?; // swap兑换
     ctx.input_token_account.reload()?; // swap兑换
-    // ctx.upper_token_account.reload()?; // 实时分佣
-    // ctx.upper_upper_token_account.reload()?; // 实时分佣
+                                       // ctx.upper_token_account.reload()?; // 实时分佣
+                                       // ctx.upper_upper_token_account.reload()?; // 实时分佣
     ctx.project_token_account.reload()?; // 实时分佣
-    
+
     // 如果 upper_token_account 存在，则调用 reload()
     if let Some(upper_token_account) = ctx.upper_token_account.as_mut() {
         upper_token_account.reload()?;
@@ -546,11 +533,7 @@ pub fn swap_v3<'a, 'b, 'c: 'info, 'info>(
             ErrorCode::TooLittleOutputReceived
         );
     } else {
-        require_gte!(
-            other_amount_threshold,
-            amount_result,
-            ErrorCode::TooMuchInputPaid
-        );
+        require_gte!(other_amount_threshold, amount_result, ErrorCode::TooMuchInputPaid);
     }
 
     Ok(())
@@ -558,119 +541,119 @@ pub fn swap_v3<'a, 'b, 'c: 'info, 'info>(
 
 // 实时分佣给swap payer的上级和上上级
 pub fn transfer_from_pool_vault_to_uppers_and_project<'info>(
-      pool_state_loader: &AccountLoader<'info, PoolState>,
-      from_vault: &AccountInfo<'info>,
-      project_token_account: &AccountInfo<'info>,
-      upper_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
-      upper_upper_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
-      mint: Option<Box<InterfaceAccount<'info, Mint>>>,
-      token_program: &AccountInfo<'info>,
-      token_program_2022: Option<AccountInfo<'info>>,
-      total_reward_fee: u64,
-      // 事件触发所需字段
-      reward_mint: Pubkey,
-      from: Pubkey,
-      project: Pubkey,
-      upper: Option<Pubkey>,
-      upper_upper: Option<Pubkey>,
-  ) -> Result<()> {
-      if total_reward_fee == 0 {
-          return Ok(());
-      }
-  
-      let project_reward_fee = total_reward_fee / 2;
-      let uppers_total_reward_fee = total_reward_fee - project_reward_fee;
-  
-      // 给项目方分佣（30%）
-      transfer_from_pool_vault_to_user(
-          pool_state_loader,
-          &from_vault.to_account_info(),
-          &project_token_account.to_account_info(),
-          mint.clone(),
-          token_program,
-          token_program_2022.clone(),
-          project_reward_fee,
-      )?;
-  
-      emit!(ReferralRewardEvent {
-          from,
-          to: project,
-          mint: reward_mint,
-          amount: project_reward_fee,
-          timestamp: Clock::get()?.unix_timestamp,
-      });
-  
-      if let (Some(upper_token_account), Some(upper_upper_token_account)) =
-          (upper_token_account.clone(), upper_upper_token_account)
-      {
-          let upper_reward_fee = uppers_total_reward_fee * 5 / 6;
-          let upper_upper_reward_fee = uppers_total_reward_fee - upper_reward_fee;
-  
-          // 给上级分佣（25%）
-          transfer_from_pool_vault_to_user(
-              pool_state_loader,
-              &from_vault.to_account_info(),
-              &upper_token_account.to_account_info(),
-              mint.clone(),
-              token_program,
-              token_program_2022.clone(),
-              upper_reward_fee,
-          )?;
-          if let Some(upper_pubkey) = upper {
-              emit!(ReferralRewardEvent {
-                  from,
-                  to: upper_pubkey,
-                  mint: reward_mint,
-                  amount: upper_reward_fee,
-                  timestamp: Clock::get()?.unix_timestamp,
-              });
-          }
-  
-          // 给上上级分佣（5%）
-          transfer_from_pool_vault_to_user(
-              pool_state_loader,
-              &from_vault.to_account_info(),
-              &upper_upper_token_account.to_account_info(),
-              mint.clone(),
-              token_program,
-              token_program_2022.clone(),
-              upper_upper_reward_fee,
-          )?;
-          if let Some(upper_upper_pubkey) = upper_upper {
-              emit!(ReferralRewardEvent {
-                  from,
-                  to: upper_upper_pubkey,
-                  mint: reward_mint,
-                  amount: upper_upper_reward_fee,
-                  timestamp: Clock::get()?.unix_timestamp,
-              });
-          }
-      } else if let Some(upper_token_account) = upper_token_account {
-          // 全给上级分佣（30%）
-          transfer_from_pool_vault_to_user(
-              pool_state_loader,
-              &from_vault.to_account_info(),
-              &upper_token_account.to_account_info(),
-              mint,
-              token_program,
-              token_program_2022,
-              uppers_total_reward_fee,
-          )?;
-          if let Some(upper_pubkey) = upper {
-              emit!(ReferralRewardEvent {
-                  from,
-                  to: upper_pubkey,
-                  mint: reward_mint,
-                  amount: uppers_total_reward_fee,
-                  timestamp: Clock::get()?.unix_timestamp,
-              });
-          }
-      }
-  
-      return Ok(());
-  }
+    pool_state_loader: &AccountLoader<'info, PoolState>,
+    from_vault: &AccountInfo<'info>,
+    project_token_account: &AccountInfo<'info>,
+    upper_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
+    upper_upper_token_account: Option<InterfaceAccount<'info, TokenAccount>>,
+    mint: Option<Box<InterfaceAccount<'info, Mint>>>,
+    token_program: &AccountInfo<'info>,
+    token_program_2022: Option<AccountInfo<'info>>,
+    total_reward_fee: u64,
+    // 事件触发所需字段
+    reward_mint: Pubkey,
+    from: Pubkey,
+    project: Pubkey,
+    upper: Option<Pubkey>,
+    upper_upper: Option<Pubkey>,
+) -> Result<()> {
+    if total_reward_fee == 0 {
+        return Ok(());
+    }
 
-  #[event]
+    let project_reward_fee = total_reward_fee / 2;
+    let uppers_total_reward_fee = total_reward_fee - project_reward_fee;
+
+    // 给项目方分佣（30%）
+    transfer_from_pool_vault_to_user(
+        pool_state_loader,
+        &from_vault.to_account_info(),
+        &project_token_account.to_account_info(),
+        mint.clone(),
+        token_program,
+        token_program_2022.clone(),
+        project_reward_fee,
+    )?;
+
+    emit!(ReferralRewardEvent {
+        from,
+        to: project,
+        mint: reward_mint,
+        amount: project_reward_fee,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    if let (Some(upper_token_account), Some(upper_upper_token_account)) =
+        (upper_token_account.clone(), upper_upper_token_account)
+    {
+        let upper_reward_fee = uppers_total_reward_fee * 5 / 6;
+        let upper_upper_reward_fee = uppers_total_reward_fee - upper_reward_fee;
+
+        // 给上级分佣（25%）
+        transfer_from_pool_vault_to_user(
+            pool_state_loader,
+            &from_vault.to_account_info(),
+            &upper_token_account.to_account_info(),
+            mint.clone(),
+            token_program,
+            token_program_2022.clone(),
+            upper_reward_fee,
+        )?;
+        if let Some(upper_pubkey) = upper {
+            emit!(ReferralRewardEvent {
+                from,
+                to: upper_pubkey,
+                mint: reward_mint,
+                amount: upper_reward_fee,
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
+
+        // 给上上级分佣（5%）
+        transfer_from_pool_vault_to_user(
+            pool_state_loader,
+            &from_vault.to_account_info(),
+            &upper_upper_token_account.to_account_info(),
+            mint.clone(),
+            token_program,
+            token_program_2022.clone(),
+            upper_upper_reward_fee,
+        )?;
+        if let Some(upper_upper_pubkey) = upper_upper {
+            emit!(ReferralRewardEvent {
+                from,
+                to: upper_upper_pubkey,
+                mint: reward_mint,
+                amount: upper_upper_reward_fee,
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
+    } else if let Some(upper_token_account) = upper_token_account {
+        // 全给上级分佣（30%）
+        transfer_from_pool_vault_to_user(
+            pool_state_loader,
+            &from_vault.to_account_info(),
+            &upper_token_account.to_account_info(),
+            mint,
+            token_program,
+            token_program_2022,
+            uppers_total_reward_fee,
+        )?;
+        if let Some(upper_pubkey) = upper {
+            emit!(ReferralRewardEvent {
+                from,
+                to: upper_pubkey,
+                mint: reward_mint,
+                amount: uppers_total_reward_fee,
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
+    }
+
+    return Ok(());
+}
+
+#[event]
 pub struct ReferralRewardEvent {
     pub from: Pubkey,   // Payer
     pub to: Pubkey,     // Upper or Lower

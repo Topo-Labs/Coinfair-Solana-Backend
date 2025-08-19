@@ -69,10 +69,7 @@ pub struct UpdateProtocolWallet<'info> {
     pub admin: Signer<'info>,
 }
 
-pub fn update_protocol_wallet(
-    ctx: Context<UpdateProtocolWallet>,
-    new_wallet: Pubkey,
-) -> Result<()> {
+pub fn update_protocol_wallet(ctx: Context<UpdateProtocolWallet>, new_wallet: Pubkey) -> Result<()> {
     ctx.accounts.config.protocol_wallet = new_wallet;
     Ok(())
 }

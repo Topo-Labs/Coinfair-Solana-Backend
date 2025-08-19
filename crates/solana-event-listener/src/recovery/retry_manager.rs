@@ -1,9 +1,6 @@
-use crate::{
-    config::EventListenerConfig,
-    error::Result,
-};
 #[cfg(test)]
 use crate::error::EventListenerError;
+use crate::{config::EventListenerConfig, error::Result};
 use backoff::{future::retry, ExponentialBackoff};
 use std::{
     collections::VecDeque,
@@ -54,7 +51,7 @@ impl<T> RetryTask<T> {
     pub fn record_failure(&mut self, error: String, base_delay: Duration) {
         self.retry_count += 1;
         self.error_history.push(error);
-        
+
         // 指数退避：base_delay * 2^retry_count
         let delay = base_delay * (2_u32.pow(self.retry_count.min(10))); // 限制最大指数
         self.next_retry_at = Instant::now() + delay;
@@ -77,7 +74,7 @@ impl<T> RetryTask<T> {
 }
 
 /// 重试管理器
-/// 
+///
 /// 负责:
 /// - 管理失败任务的重试队列
 /// - 实现指数退避重试策略
@@ -85,22 +82,22 @@ impl<T> RetryTask<T> {
 /// - 处理任务的生命周期管理
 pub struct RetryManager<T: Clone + Send + Sync + 'static> {
     config: Arc<EventListenerConfig>,
-    
+
     // 重试配置
     max_retries: u32,
     base_delay: Duration,
     max_queue_size: usize,
-    
+
     // 重试队列
     retry_queue: Arc<Mutex<VecDeque<RetryTask<T>>>>,
-    
+
     // 统计信息
     tasks_added: Arc<AtomicU64>,
     tasks_retried: Arc<AtomicU64>,
     tasks_succeeded: Arc<AtomicU64>,
     tasks_failed: Arc<AtomicU64>,
     tasks_expired: Arc<AtomicU64>,
-    
+
     // 运行状态
     is_running: Arc<RwLock<bool>>,
 }
@@ -121,7 +118,7 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
     /// 创建新的重试管理器
     pub fn new(config: &EventListenerConfig) -> Self {
         let config = Arc::new(config.clone());
-        
+
         Self {
             config: Arc::clone(&config),
             max_retries: config.listener.max_retries,
@@ -155,13 +152,13 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
 
         let manager = self.clone();
         let retry_handler = Arc::new(retry_handler);
-        
+
         tokio::spawn(async move {
             manager.retry_loop(retry_handler).await;
-            
+
             let mut is_running = manager.is_running.write().await;
             *is_running = false;
-            
+
             info!("🔄 重试管理器已停止");
         });
 
@@ -179,20 +176,20 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
     /// 添加任务到重试队列
     pub async fn add_task(&self, id: String, data: T) -> Result<()> {
         let mut queue = self.retry_queue.lock().await;
-        
+
         // 检查队列大小
         if queue.len() >= self.max_queue_size {
             warn!("⚠️ 重试队列已满，移除最旧的任务");
             queue.pop_front();
             self.tasks_expired.fetch_add(1, Ordering::Relaxed);
         }
-        
+
         let task = RetryTask::new(id.clone(), data, self.max_retries);
         queue.push_back(task);
-        
+
         self.tasks_added.fetch_add(1, Ordering::Relaxed);
         debug!("📥 添加任务到重试队列: {}", id);
-        
+
         Ok(())
     }
 
@@ -203,15 +200,15 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
         Fut: std::future::Future<Output = Result<()>> + Send,
     {
         let mut retry_interval = tokio::time::interval(Duration::from_millis(1000)); // 每秒检查一次
-        
+
         while *self.is_running.read().await {
             retry_interval.tick().await;
-            
+
             // 处理重试队列
             if let Err(e) = self.process_retry_queue(&retry_handler).await {
                 error!("❌ 处理重试队列失败: {}", e);
             }
-            
+
             // 清理过期任务
             self.cleanup_expired_tasks().await;
         }
@@ -225,12 +222,12 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
     {
         let mut tasks_to_retry = Vec::new();
         let mut tasks_to_remove = Vec::new();
-        
+
         // 收集需要重试的任务
         {
             let queue = self.retry_queue.lock().await;
             let len = queue.len();
-            
+
             for i in 0..len {
                 if let Some(task) = queue.get(i) {
                     if task.can_retry() {
@@ -247,8 +244,7 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
             let mut queue = self.retry_queue.lock().await;
             for &index in tasks_to_remove.iter().rev() {
                 if let Some(task) = queue.remove(index) {
-                    warn!("❌ 任务重试次数已用完，移除: {} (重试{}次)", 
-                          task.id, task.retry_count);
+                    warn!("❌ 任务重试次数已用完，移除: {} (重试{}次)", task.id, task.retry_count);
                     self.tasks_failed.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -257,9 +253,9 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
         // 执行重试任务
         for (_queue_index, mut task) in tasks_to_retry {
             debug!("🔄 重试任务: {} (第{}次)", task.id, task.retry_count + 1);
-            
+
             let task_id = task.id.clone(); // 克隆task.id用于后续使用
-            
+
             match retry_handler(task.data.clone()).await {
                 Ok(()) => {
                     // 重试成功，从队列中移除
@@ -270,14 +266,14 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
                             queue.remove(pos);
                         }
                     }
-                    
+
                     self.tasks_succeeded.fetch_add(1, Ordering::Relaxed);
                     info!("✅ 任务重试成功: {}", task_id);
                 }
                 Err(e) => {
                     // 重试失败，更新任务状态
                     task.record_failure(e.to_string(), self.base_delay);
-                    
+
                     {
                         let mut queue = self.retry_queue.lock().await;
                         if let Some(pos) = queue.iter().position(|t| t.id == task_id) {
@@ -286,7 +282,7 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
                             }
                         }
                     }
-                    
+
                     self.tasks_retried.fetch_add(1, Ordering::Relaxed);
                     warn!("⚠️ 任务重试失败: {} - {}", task_id, e);
                 }
@@ -300,11 +296,11 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
     async fn cleanup_expired_tasks(&self) {
         let max_age = Duration::from_secs(3600); // 1小时后过期
         let mut expired_count = 0;
-        
+
         {
             let mut queue = self.retry_queue.lock().await;
             let _initial_len = queue.len();
-            
+
             queue.retain(|task| {
                 if task.age() > max_age {
                     expired_count += 1;
@@ -313,12 +309,12 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
                     true
                 }
             });
-            
+
             if expired_count > 0 {
                 info!("🗑️ 清理了 {} 个过期任务", expired_count);
             }
         }
-        
+
         if expired_count > 0 {
             self.tasks_expired.fetch_add(expired_count, Ordering::Relaxed);
         }
@@ -356,12 +352,12 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
             let queue = self.retry_queue.lock().await;
             queue.len()
         };
-        
+
         let tasks_added = self.tasks_added.load(Ordering::Relaxed);
         let tasks_succeeded = self.tasks_succeeded.load(Ordering::Relaxed);
         let tasks_failed = self.tasks_failed.load(Ordering::Relaxed);
         let total_completed = tasks_succeeded + tasks_failed;
-        
+
         let success_rate = if total_completed > 0 {
             tasks_succeeded as f64 / total_completed as f64
         } else {
@@ -385,7 +381,7 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
         let mut queue = self.retry_queue.lock().await;
         let count = queue.len();
         queue.clear();
-        
+
         info!("🗑️ 清空重试队列，移除了 {} 个任务", count);
         count
     }
@@ -393,10 +389,18 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
     /// 获取队列中的任务列表（用于调试）
     pub async fn get_queue_tasks(&self) -> Vec<String> {
         let queue = self.retry_queue.lock().await;
-        queue.iter().map(|task| {
-            format!("ID: {}, 重试次数: {}/{}, 年龄: {:?}", 
-                   task.id, task.retry_count, task.max_retries, task.age())
-        }).collect()
+        queue
+            .iter()
+            .map(|task| {
+                format!(
+                    "ID: {}, 重试次数: {}/{}, 年龄: {:?}",
+                    task.id,
+                    task.retry_count,
+                    task.max_retries,
+                    task.age()
+                )
+            })
+            .collect()
     }
 
     /// 检查重试管理器是否健康
@@ -406,7 +410,7 @@ impl<T: Clone + Send + Sync + 'static> RetryManager<T> {
             let queue = self.retry_queue.lock().await;
             queue.len()
         };
-        
+
         // 运行中且队列未过载
         is_running && queue_size < self.max_queue_size
     }
@@ -471,7 +475,7 @@ mod tests {
     #[test]
     fn test_retry_task_creation() {
         let task = RetryTask::new("test_task".to_string(), "test_data".to_string(), 3);
-        
+
         assert_eq!(task.id, "test_task");
         assert_eq!(task.data, "test_data");
         assert_eq!(task.retry_count, 0);
@@ -484,18 +488,18 @@ mod tests {
     fn test_retry_task_failure_recording() {
         let mut task = RetryTask::new("test_task".to_string(), "test_data".to_string(), 3);
         let base_delay = Duration::from_millis(100);
-        
+
         // 记录第一次失败
         task.record_failure("Error 1".to_string(), base_delay);
         assert_eq!(task.retry_count, 1);
         assert_eq!(task.error_history.len(), 1);
         assert!(!task.is_exhausted());
-        
+
         // 记录第二次失败
         task.record_failure("Error 2".to_string(), base_delay);
         assert_eq!(task.retry_count, 2);
         assert_eq!(task.error_history.len(), 2);
-        
+
         // 记录第三次失败
         task.record_failure("Error 3".to_string(), base_delay);
         assert_eq!(task.retry_count, 3);
@@ -506,7 +510,7 @@ mod tests {
     async fn test_retry_manager_creation() {
         let config = create_test_config();
         let manager: RetryManager<String> = RetryManager::new(&config);
-        
+
         let stats = manager.get_stats().await;
         assert_eq!(stats.queue_size, 0);
         assert_eq!(stats.tasks_added, 0);
@@ -517,9 +521,12 @@ mod tests {
     async fn test_add_task() {
         let config = create_test_config();
         let manager: RetryManager<String> = RetryManager::new(&config);
-        
-        manager.add_task("task1".to_string(), "data1".to_string()).await.unwrap();
-        
+
+        manager
+            .add_task("task1".to_string(), "data1".to_string())
+            .await
+            .unwrap();
+
         let stats = manager.get_stats().await;
         assert_eq!(stats.queue_size, 1);
         assert_eq!(stats.tasks_added, 1);
@@ -529,11 +536,9 @@ mod tests {
     async fn test_retry_with_backoff_success() {
         let config = create_test_config();
         let manager: RetryManager<String> = RetryManager::new(&config);
-        
-        let result = manager.retry_with_backoff(|| async {
-            Ok("success".to_string())
-        }).await;
-        
+
+        let result = manager.retry_with_backoff(|| async { Ok("success".to_string()) }).await;
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "success");
     }
@@ -542,22 +547,24 @@ mod tests {
     async fn test_retry_with_backoff_failure() {
         let config = create_test_config();
         let manager: RetryManager<String> = RetryManager::new(&config);
-        
+
         let attempt_count = Arc::new(AtomicU32::new(0));
         let attempt_count_clone = Arc::clone(&attempt_count);
-        
-        let result = manager.retry_with_backoff(|| {
-            let count = Arc::clone(&attempt_count_clone);
-            async move {
-                let current = count.fetch_add(1, Ordering::Relaxed);
-                if current < 2 {
-                    Err(EventListenerError::Unknown("Temporary failure".to_string()))
-                } else {
-                    Ok("success after retries".to_string())
+
+        let result = manager
+            .retry_with_backoff(|| {
+                let count = Arc::clone(&attempt_count_clone);
+                async move {
+                    let current = count.fetch_add(1, Ordering::Relaxed);
+                    if current < 2 {
+                        Err(EventListenerError::Unknown("Temporary failure".to_string()))
+                    } else {
+                        Ok("success after retries".to_string())
+                    }
                 }
-            }
-        }).await;
-        
+            })
+            .await;
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "success after retries");
         assert!(attempt_count.load(Ordering::Relaxed) >= 3); // 至少重试了2次
@@ -567,18 +574,24 @@ mod tests {
     async fn test_clear_queue() {
         let config = create_test_config();
         let manager: RetryManager<String> = RetryManager::new(&config);
-        
+
         // 添加一些任务
-        manager.add_task("task1".to_string(), "data1".to_string()).await.unwrap();
-        manager.add_task("task2".to_string(), "data2".to_string()).await.unwrap();
-        
+        manager
+            .add_task("task1".to_string(), "data1".to_string())
+            .await
+            .unwrap();
+        manager
+            .add_task("task2".to_string(), "data2".to_string())
+            .await
+            .unwrap();
+
         let initial_stats = manager.get_stats().await;
         assert_eq!(initial_stats.queue_size, 2);
-        
+
         // 清空队列
         let cleared_count = manager.clear_queue().await;
         assert_eq!(cleared_count, 2);
-        
+
         let final_stats = manager.get_stats().await;
         assert_eq!(final_stats.queue_size, 0);
     }
@@ -587,16 +600,16 @@ mod tests {
     async fn test_is_healthy() {
         let config = create_test_config();
         let manager: RetryManager<String> = RetryManager::new(&config);
-        
+
         // 初始状态不健康（未运行）
         assert!(!manager.is_healthy().await);
-        
+
         // 模拟运行状态
         {
             let mut is_running = manager.is_running.write().await;
             *is_running = true;
         }
-        
+
         // 运行状态下应该健康
         assert!(manager.is_healthy().await);
     }

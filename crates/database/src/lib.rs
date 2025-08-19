@@ -9,18 +9,18 @@
 
 use mongodb::{Client, Collection}; // 源码中集成了mongodb，因此数据是直接存储在这个程序中的(此处的是driver还是mongodb本身?)
 use std::sync::Arc;
-use tracing::{info, error};
+use tracing::{error, info};
 use utils::{AppConfig, AppResult};
 
-pub mod refer;
-pub mod user;
-pub mod reward;
-pub mod clmm_pool;
 pub mod clmm_config;
-pub mod position;
-pub mod permission_config;
-pub mod token_info;
+pub mod clmm_pool;
 pub mod event_model;
+pub mod permission_config;
+pub mod position;
+pub mod refer;
+pub mod reward;
+pub mod token_info;
+pub mod user;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -82,14 +82,20 @@ impl Database {
 
         // 初始化仓库层
         let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
-        let global_permission_repository = permission_config::repository::GlobalPermissionConfigRepository::new(global_permission_configs.clone());
-        let api_permission_repository = permission_config::repository::ApiPermissionConfigRepository::new(api_permission_configs.clone());
-        let permission_log_repository = permission_config::repository::PermissionConfigLogRepository::new(permission_config_logs.clone());
+        let global_permission_repository =
+            permission_config::repository::GlobalPermissionConfigRepository::new(global_permission_configs.clone());
+        let api_permission_repository =
+            permission_config::repository::ApiPermissionConfigRepository::new(api_permission_configs.clone());
+        let permission_log_repository =
+            permission_config::repository::PermissionConfigLogRepository::new(permission_config_logs.clone());
         let token_info_repository = token_info::repository::TokenInfoRepository::new(token_infos.clone());
         // 事件仓库
-        let clmm_pool_event_repository = event_model::repository::ClmmPoolEventRepository::new(clmm_pool_events.clone());
-        let nft_claim_event_repository = event_model::repository::NftClaimEventRepository::new(nft_claim_events.clone());
-        let reward_distribution_event_repository = event_model::repository::RewardDistributionEventRepository::new(reward_distribution_events.clone());
+        let clmm_pool_event_repository =
+            event_model::repository::ClmmPoolEventRepository::new(clmm_pool_events.clone());
+        let nft_claim_event_repository =
+            event_model::repository::NftClaimEventRepository::new(nft_claim_events.clone());
+        let reward_distribution_event_repository =
+            event_model::repository::RewardDistributionEventRepository::new(reward_distribution_events.clone());
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -122,18 +128,18 @@ impl Database {
     pub async fn init_permission_indexes(&self) -> AppResult<()> {
         // 初始化权限配置索引
         let _result = self.api_permission_repository.init_indexes().await;
-        
+
         // 初始化权限配置日志索引
         let _result = self.permission_log_repository.init_indexes().await;
-        
+
         // 初始化代币信息索引
         let _result = self.token_info_repository.init_indexes().await;
-        
+
         // 初始化事件索引
         let _result = self.clmm_pool_event_repository.init_indexes().await;
         let _result = self.nft_claim_event_repository.init_indexes().await;
         let _result = self.reward_distribution_event_repository.init_indexes().await;
-        
+
         info!("✅ 权限配置和事件索引初始化完成");
         Ok(())
     }
@@ -141,20 +147,26 @@ impl Database {
     /// 初始化默认权限配置
     pub async fn init_default_permission_config(&self) -> AppResult<()> {
         // 1. 获取或创建全局配置（会自动创建默认配置如果不存在）
-        let _global_config = self.global_permission_repository.find_global_config().await
+        let _global_config = self
+            .global_permission_repository
+            .find_global_config()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to init global permission config: {}", e))?;
-        
+
         // 2. 检查API配置是否已存在，如果不存在则创建默认配置
-        let existing_configs = self.api_permission_repository.count_total_configs().await
+        let existing_configs = self
+            .api_permission_repository
+            .count_total_configs()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to count API configs: {}", e))?;
-        
+
         if existing_configs == 0 {
             info!("🔧 数据库中没有API权限配置，正在创建默认配置...");
             self.create_default_api_configs().await?;
         } else {
             info!("📊 数据库中已有{}个API权限配置，跳过默认配置创建", existing_configs);
         }
-        
+
         info!("✅ 默认权限配置初始化完成");
         Ok(())
     }
@@ -162,78 +174,157 @@ impl Database {
     /// 创建默认的API权限配置到数据库
     async fn create_default_api_configs(&self) -> AppResult<()> {
         use permission_config::model::SolanaApiPermissionConfigModel;
-        
+
         let now = chrono::Utc::now().timestamp() as u64;
-        
+
         // 定义默认API配置（与solana_permissions.rs中的配置保持一致）
         let default_apis = vec![
             // 交换相关 API
-            ("/api/v1/solana/swap", "代币交换", "交换", 
-                r#"{"RequirePermission":"ReadPool"}"#, 
-                r#"{"RequirePermissionAndTier":["CreatePosition","Basic"]}"#),
-            ("/api/v1/solana/quote", "价格报价", "交换", 
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/balance", "余额查询", "查询", 
-                r#""Allow""#, r#""Deny""#),
-            
+            (
+                "/api/v1/solana/swap",
+                "代币交换",
+                "交换",
+                r#"{"RequirePermission":"ReadPool"}"#,
+                r#"{"RequirePermissionAndTier":["CreatePosition","Basic"]}"#,
+            ),
+            ("/api/v1/solana/quote", "价格报价", "交换", r#""Allow""#, r#""Deny""#),
+            ("/api/v1/solana/balance", "余额查询", "查询", r#""Allow""#, r#""Deny""#),
             // 仓位相关 API
-            ("/api/v1/solana/position/open", "开仓", "仓位",
+            (
+                "/api/v1/solana/position/open",
+                "开仓",
+                "仓位",
                 r#"{"RequirePermission":"ReadPosition"}"#,
-                r#"{"RequirePermissionAndTier":["CreatePosition","Premium"]}"#),
-            ("/api/v1/solana/position/open-and-send-transaction", "开仓并发送交易", "仓位",
+                r#"{"RequirePermissionAndTier":["CreatePosition","Premium"]}"#,
+            ),
+            (
+                "/api/v1/solana/position/open-and-send-transaction",
+                "开仓并发送交易",
+                "仓位",
                 r#"{"RequirePermission":"ReadPosition"}"#,
-                r#"{"RequirePermissionAndTier":["CreatePosition","Premium"]}"#),
-            ("/api/v1/solana/position/increase-liquidity", "增加流动性", "仓位",
+                r#"{"RequirePermissionAndTier":["CreatePosition","Premium"]}"#,
+            ),
+            (
+                "/api/v1/solana/position/increase-liquidity",
+                "增加流动性",
+                "仓位",
                 r#"{"RequirePermission":"ReadPosition"}"#,
-                r#"{"RequirePermissionAndTier":["CreatePosition","Basic"]}"#),
-            ("/api/v1/solana/position/decrease-liquidity", "减少流动性", "仓位",
+                r#"{"RequirePermissionAndTier":["CreatePosition","Basic"]}"#,
+            ),
+            (
+                "/api/v1/solana/position/decrease-liquidity",
+                "减少流动性",
+                "仓位",
                 r#"{"RequirePermission":"ReadPosition"}"#,
-                r#"{"RequirePermissionAndTier":["CreatePosition","Basic"]}"#),
-            ("/api/v1/solana/position/list", "仓位列表", "查询",
-                r#"{"RequirePermission":"ReadPosition"}"#, r#""Deny""#),
-            ("/api/v1/solana/position/info", "仓位信息", "查询",
-                r#"{"RequirePermission":"ReadPosition"}"#, r#""Deny""#),
-            
+                r#"{"RequirePermissionAndTier":["CreatePosition","Basic"]}"#,
+            ),
+            (
+                "/api/v1/solana/position/list",
+                "仓位列表",
+                "查询",
+                r#"{"RequirePermission":"ReadPosition"}"#,
+                r#""Deny""#,
+            ),
+            (
+                "/api/v1/solana/position/info",
+                "仓位信息",
+                "查询",
+                r#"{"RequirePermission":"ReadPosition"}"#,
+                r#""Deny""#,
+            ),
             // 池子相关 API
-            ("/api/v1/solana/pool/create/clmm", "创建CLMM池", "池子",
+            (
+                "/api/v1/solana/pool/create/clmm",
+                "创建CLMM池",
+                "池子",
                 r#"{"RequirePermission":"ReadPool"}"#,
-                r#"{"RequirePermissionAndTier":["CreatePool","VIP"]}"#),
-            ("/api/v1/solana/pool/create/cpmm", "创建CPMM池", "池子",
+                r#"{"RequirePermissionAndTier":["CreatePool","VIP"]}"#,
+            ),
+            (
+                "/api/v1/solana/pool/create/cpmm",
+                "创建CPMM池",
+                "池子",
                 r#"{"RequirePermission":"ReadPool"}"#,
-                r#"{"RequirePermissionAndTier":["CreatePool","VIP"]}"#),
-            ("/api/v1/solana/pools/info/list", "池子列表", "查询",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/pools/info/mint", "按代币对查询池子", "查询",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/pools/info/ids", "按ID查询池子", "查询",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/pools/key/ids", "池子密钥信息", "查询",
-                r#"{"RequirePermission":"ReadPool"}"#, r#""Deny""#),
-            
-            // 流动性相关 API
-            ("/api/v1/solana/pools/line/*", "流动性分布图", "查询",
-                r#""Allow""#, r#""Deny""#),
-            
-            // 配置相关 API
-            ("/api/v1/solana/main/clmm-config/*", "CLMM配置", "配置",
+                r#"{"RequirePermissionAndTier":["CreatePool","VIP"]}"#,
+            ),
+            (
+                "/api/v1/solana/pools/info/list",
+                "池子列表",
+                "查询",
                 r#""Allow""#,
-                r#"{"RequirePermissionAndTier":["AdminConfig","Admin"]}"#),
-            
+                r#""Deny""#,
+            ),
+            (
+                "/api/v1/solana/pools/info/mint",
+                "按代币对查询池子",
+                "查询",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
+            (
+                "/api/v1/solana/pools/info/ids",
+                "按ID查询池子",
+                "查询",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
+            (
+                "/api/v1/solana/pools/key/ids",
+                "池子密钥信息",
+                "查询",
+                r#"{"RequirePermission":"ReadPool"}"#,
+                r#""Deny""#,
+            ),
+            // 流动性相关 API
+            (
+                "/api/v1/solana/pools/line/*",
+                "流动性分布图",
+                "查询",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
+            // 配置相关 API
+            (
+                "/api/v1/solana/main/clmm-config/*",
+                "CLMM配置",
+                "配置",
+                r#""Allow""#,
+                r#"{"RequirePermissionAndTier":["AdminConfig","Admin"]}"#,
+            ),
             // 静态配置 API
-            ("/api/v1/solana/main/version", "版本信息", "配置",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/main/auto-fee", "自动手续费", "配置",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/main/rpcs", "RPC信息", "配置",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/main/chain-time", "链时间", "配置",
-                r#""Allow""#, r#""Deny""#),
-            ("/api/v1/solana/mint/list", "代币列表", "配置",
-                r#""Allow""#, r#""Deny""#),
+            (
+                "/api/v1/solana/main/version",
+                "版本信息",
+                "配置",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
+            (
+                "/api/v1/solana/main/auto-fee",
+                "自动手续费",
+                "配置",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
+            ("/api/v1/solana/main/rpcs", "RPC信息", "配置", r#""Allow""#, r#""Deny""#),
+            (
+                "/api/v1/solana/main/chain-time",
+                "链时间",
+                "配置",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
+            (
+                "/api/v1/solana/mint/list",
+                "代币列表",
+                "配置",
+                r#""Allow""#,
+                r#""Deny""#,
+            ),
         ];
 
         let mut created_count = 0;
-        
+
         for (endpoint, name, category, read_policy, write_policy) in default_apis {
             let config_model = SolanaApiPermissionConfigModel {
                 id: None,
@@ -270,25 +361,22 @@ pub use clmm_config::{model as clmm_config_model, repository as clmm_config_repo
 
 // Export specific items from clmm_pool, excluding TokenInfo to avoid conflict
 pub use clmm_pool::{
-    model::{ClmmPool, PriceInfo, VaultInfo, ExtensionInfo, TransactionInfo, SyncStatus, 
-           PoolStatus, TransactionStatus, PoolStats, PoolQueryParams, PoolType},
-    repository as clmm_pool_repository, migration
+    migration,
+    model::{
+        ClmmPool, ExtensionInfo, PoolQueryParams, PoolStats, PoolStatus, PoolType, PriceInfo, SyncStatus,
+        TransactionInfo, TransactionStatus, VaultInfo,
+    },
+    repository as clmm_pool_repository,
 };
 
 // Re-export clmm_pool::TokenInfo with alias if needed
 pub use clmm_pool::model::TokenInfo as ClmmTokenInfo;
 
 // Export all from permission_config with aliases to avoid conflicts
-pub use permission_config::{
-    model as permission_config_model,
-    repository as permission_config_repository
-};
+pub use permission_config::{model as permission_config_model, repository as permission_config_repository};
 
-// Export all from position (no conflicts)  
+// Export all from position (no conflicts)
 pub use position::*;
 
 // Export all from token_info with aliases to avoid conflicts
-pub use token_info::{
-    model as token_info_model,
-    repository as token_info_repository
-};
+pub use token_info::{model as token_info_model, repository as token_info_repository};

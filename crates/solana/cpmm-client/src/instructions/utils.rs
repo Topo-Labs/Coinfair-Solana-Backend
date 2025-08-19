@@ -115,9 +115,7 @@ pub fn get_transfer_fee<'data, S: BaseState>(
     pre_fee_amount: u64,
 ) -> u64 {
     let fee = if let Ok(transfer_fee_config) = account_state.get_extension::<TransferFeeConfig>() {
-        transfer_fee_config
-            .calculate_epoch_fee(epoch, pre_fee_amount)
-            .unwrap()
+        transfer_fee_config.calculate_epoch_fee(epoch, pre_fee_amount).unwrap()
     } else {
         0
     };

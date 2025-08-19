@@ -32,13 +32,17 @@ mod hot_reload_tests {
         let user = create_test_user();
 
         // 1. 测试初始状态
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_ok());
 
         // 2. 禁用全局写入权限
         service.toggle_global_write(false).await.unwrap();
 
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_err());
 
         // 3. 手动重载配置（模拟从数据库重载，但由于没有真实数据库，这里主要测试方法调用）
@@ -46,7 +50,9 @@ mod hot_reload_tests {
         assert!(reload_result.is_ok());
 
         // 4. 验证重载后状态（没有数据库，配置不会改变）
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_err()); // 仍然被禁用，因为没有真实的数据库重载
     }
 
@@ -188,10 +194,15 @@ mod hot_reload_tests {
             updated_at: chrono::Utc::now().timestamp() as u64,
         };
 
-        service.update_api_config("/api/v1/solana/hot-reload-test".to_string(), custom_config).await.unwrap();
+        service
+            .update_api_config("/api/v1/solana/hot-reload-test".to_string(), custom_config)
+            .await
+            .unwrap();
 
         // 3. 验证配置变更生效
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_err()); // 全局写入被禁用
 
         // 注意：在维护模式下，Basic用户无法访问，所以我们用Admin用户测试
@@ -206,10 +217,14 @@ mod hot_reload_tests {
             permissions: admin_permissions,
         };
 
-        let result = service.check_api_permission("/api/v1/solana/hot-reload-test", &SolanaApiAction::Read, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/hot-reload-test", &SolanaApiAction::Read, &admin_user)
+            .await;
         assert!(result.is_ok()); // 管理员可以在维护模式下读取
 
-        let result = service.check_api_permission("/api/v1/solana/hot-reload-test", &SolanaApiAction::Write, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/hot-reload-test", &SolanaApiAction::Write, &admin_user)
+            .await;
         assert!(result.is_err()); // 即使是管理员，全局写入权限被禁用时也无法写入
 
         // 4. 模拟重载配置
@@ -242,9 +257,13 @@ mod hot_reload_tests {
         let cloned_service = original_service.clone();
 
         // 验证克隆的服务有相同的配置
-        let result1 = original_service.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user).await;
+        let result1 = original_service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user)
+            .await;
 
-        let result2 = cloned_service.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user).await;
+        let result2 = cloned_service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user)
+            .await;
 
         // 两个服务应该有相同的行为
         assert_eq!(result1.is_ok(), result2.is_ok());

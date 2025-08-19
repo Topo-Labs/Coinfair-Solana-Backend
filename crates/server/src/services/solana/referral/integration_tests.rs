@@ -192,7 +192,9 @@ mod integration_tests {
         ];
 
         for case in edge_cases {
-            let request = GetUpperRequest { user_wallet: case.to_string() };
+            let request = GetUpperRequest {
+                user_wallet: case.to_string(),
+            };
 
             let result = service.get_upper(request).await;
 
@@ -335,7 +337,8 @@ mod integration_tests {
 
         // 手动使用与CLI完全相同的逻辑计算PDA
         let referral_program_id = service.get_referral_program_id().unwrap();
-        let (cli_pda, _) = Pubkey::find_program_address(&[b"mint_counter", &user_wallet.to_bytes()], &referral_program_id);
+        let (cli_pda, _) =
+            Pubkey::find_program_address(&[b"mint_counter", &user_wallet.to_bytes()], &referral_program_id);
 
         // 两种方式计算的PDA应该完全一致
         assert_eq!(expected_pda, cli_pda);
@@ -385,7 +388,10 @@ mod integration_tests {
             let pda = Pubkey::from_str(&response.mint_counter_account).unwrap();
             pdas.push(pda);
 
-            println!("User: {} -> MintCounter PDA: {}", user_str, response.mint_counter_account);
+            println!(
+                "User: {} -> MintCounter PDA: {}",
+                user_str, response.mint_counter_account
+            );
         }
 
         // 验证所有PDA都不相同

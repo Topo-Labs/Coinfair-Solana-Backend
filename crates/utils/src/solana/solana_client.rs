@@ -74,6 +74,8 @@ impl SolanaClient {
     }
 
     pub fn get_account_data(&self, pubkey: &solana_sdk::pubkey::Pubkey) -> Result<Vec<u8>> {
-        self.rpc_client.get_account_data(pubkey).map_err(|e| anyhow::anyhow!("获取账户数据失败: {}", e))
+        self.rpc_client
+            .get_account_data(pubkey)
+            .map_err(|e| anyhow::anyhow!("获取账户数据失败: {}", e))
     }
 }

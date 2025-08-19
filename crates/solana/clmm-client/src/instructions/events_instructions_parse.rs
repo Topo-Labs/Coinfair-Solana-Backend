@@ -69,8 +69,14 @@ impl Execution {
         *logs = &logs[1..];
 
         let re = Regex::new(r"^Program (.*) invoke.*$").unwrap();
-        let c = re.captures(l).ok_or_else(|| ClientError::LogParseError(l.to_string()))?;
-        let program = c.get(1).ok_or_else(|| ClientError::LogParseError(l.to_string()))?.as_str().to_string();
+        let c = re
+            .captures(l)
+            .ok_or_else(|| ClientError::LogParseError(l.to_string()))?;
+        let program = c
+            .get(1)
+            .ok_or_else(|| ClientError::LogParseError(l.to_string()))?
+            .as_str()
+            .to_string();
         Ok(Self { stack: vec![program] })
     }
 
@@ -93,7 +99,11 @@ impl Execution {
     }
 }
 
-pub fn handle_program_log(self_program_str: &str, l: &str, with_prefix: bool) -> Result<(Option<String>, bool), ClientError> {
+pub fn handle_program_log(
+    self_program_str: &str,
+    l: &str,
+    with_prefix: bool,
+) -> Result<(Option<String>, bool), ClientError> {
     // Log emitted from the current program.
     if let Some(log) = if with_prefix {
         l.strip_prefix(PROGRAM_LOG).or_else(|| l.strip_prefix(PROGRAM_DATA))
@@ -180,7 +190,8 @@ fn handle_system_log(this_program_str: &str, log: &str) -> (Option<String>, bool
 }
 
 fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(slice: &mut &[u8]) -> Result<T, ClientError> {
-    let event: T = anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|e| ClientError::LogParseError(e.to_string()))?;
+    let event: T =
+        anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|e| ClientError::LogParseError(e.to_string()))?;
     Ok(event)
 }
 
@@ -245,7 +256,10 @@ pub fn parse_program_instruction(
                                 if (ui_compiled_instruction.program_id_index as usize) == program_index {
                                     let out_put = format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
                                     println!("{}", out_put.gradient(Color::Green));
-                                    handle_program_instruction(&ui_compiled_instruction.data, InstructionDecodeType::Base58)?;
+                                    handle_program_instruction(
+                                        &ui_compiled_instruction.data,
+                                        InstructionDecodeType::Base58,
+                                    )?;
                                 }
                             }
                             _ => {}
@@ -409,7 +423,9 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             impl From<instruction::TransferRewardOwner> for TransferRewardOwner {
                 fn from(instr: instruction::TransferRewardOwner) -> TransferRewardOwner {
-                    TransferRewardOwner { new_owner: instr.new_owner }
+                    TransferRewardOwner {
+                        new_owner: instr.new_owner,
+                    }
                 }
             }
             println!("{:#?}", TransferRewardOwner::from(ix));
@@ -735,7 +751,10 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
     Ok(())
 }
 
-fn decode_instruction<T: anchor_lang::AnchorDeserialize>(slice: &mut &[u8]) -> Result<T, anchor_lang::error::ErrorCode> {
-    let instruction: T = anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|_| anchor_lang::error::ErrorCode::InstructionDidNotDeserialize)?;
+fn decode_instruction<T: anchor_lang::AnchorDeserialize>(
+    slice: &mut &[u8],
+) -> Result<T, anchor_lang::error::ErrorCode> {
+    let instruction: T = anchor_lang::AnchorDeserialize::deserialize(slice)
+        .map_err(|_| anchor_lang::error::ErrorCode::InstructionDidNotDeserialize)?;
     Ok(instruction)
 }

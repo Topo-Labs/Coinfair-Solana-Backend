@@ -66,10 +66,16 @@ pub async fn set_rewards(
         (status = 404, description = "未找到奖励信息")
     )
 )]
-pub async fn get_reward(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<Reward>> {
+pub async fn get_reward(
+    Extension(services): Extension<Services>,
+    Path(address): Path<String>,
+) -> AppResult<Json<Reward>> {
     match services.reward.get_reward(address.to_string()).await? {
         Some(reward) => Ok(Json(reward)),
-        None => Err(AppError::NotFound(format!("Reward with address {} not found.", address))),
+        None => Err(AppError::NotFound(format!(
+            "Reward with address {} not found.",
+            address
+        ))),
     }
 }
 
@@ -85,7 +91,10 @@ pub async fn get_reward(Extension(services): Extension<Services>, Path(address):
         (status = 200, description = "成功返回当日奖励列表", body = Vec<RewardItem>)
     )
 )]
-pub async fn get_rewards_by_day(Extension(services): Extension<Services>, Path(day): Path<String>) -> AppResult<Json<Vec<RewardItem>>> {
+pub async fn get_rewards_by_day(
+    Extension(services): Extension<Services>,
+    Path(day): Path<String>,
+) -> AppResult<Json<Vec<RewardItem>>> {
     let rewards = services.reward.get_rewards_by_day(day.to_string()).await?;
 
     Ok(Json(rewards))
@@ -166,8 +175,14 @@ pub async fn get_rank_rewards(Extension(services): Extension<Services>) -> AppRe
         (status = 200, description = "成功返回奖励历史", body = Vec<RewardItemWithTime>)
     )
 )]
-pub async fn list_rewards_by_address(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<Vec<RewardItemWithTime>>> {
-    let rewards = services.reward.list_rewards_by_address(address.to_string().to_lowercase()).await?;
+pub async fn list_rewards_by_address(
+    Extension(services): Extension<Services>,
+    Path(address): Path<String>,
+) -> AppResult<Json<Vec<RewardItemWithTime>>> {
+    let rewards = services
+        .reward
+        .list_rewards_by_address(address.to_string().to_lowercase())
+        .await?;
 
     Ok(Json(rewards))
 }

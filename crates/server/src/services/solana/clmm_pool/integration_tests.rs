@@ -9,7 +9,9 @@ mod integration_tests {
     use crate::services::solana::clmm_pool::storage::ClmmPoolStorageService;
     use crate::services::solana::config::ClmmConfigService;
     use crate::services::solana::shared::SharedContext;
-    use database::clmm_pool::{ClmmPool, ExtensionInfo, PoolQueryParams, PoolStatus, PriceInfo, SyncStatus, TokenInfo, VaultInfo};
+    use database::clmm_pool::{
+        ClmmPool, ExtensionInfo, PoolQueryParams, PoolStatus, PriceInfo, SyncStatus, TokenInfo, VaultInfo,
+    };
     use std::sync::Arc;
 
     /// 集成测试辅助结构
@@ -38,7 +40,10 @@ mod integration_tests {
             storage_service.init_indexes().await?;
 
             // 创建配置服务
-            let config_service = Arc::new(ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone()));
+            let config_service = Arc::new(ClmmConfigService::new(
+                Arc::new(database.clone()),
+                shared_context.rpc_client.clone(),
+            ));
 
             // 创建池子服务
             let pool_service = ClmmPoolService::new(shared_context.clone(), &database, config_service);
@@ -67,7 +72,7 @@ mod integration_tests {
         let request = CreatePoolRequest {
             config_index: 0,
             price: 100.0,
-            mint0: "So11111111111111111111111111111111111111112".to_string(),  // SOL
+            mint0: "So11111111111111111111111111111111111111112".to_string(), // SOL
             mint1: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
             open_time: 0,
             user_wallet: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string(),
@@ -316,13 +321,13 @@ mod integration_tests {
             api_created_at: chrono::Utc::now().timestamp() as u64,
             api_created_slot: None,
             updated_at: chrono::Utc::now().timestamp() as u64,
-            
+
             // 链上事件字段
             event_signature: None,
             event_updated_slot: None,
             event_confirmed_at: None,
             event_updated_at: None,
-            
+
             transaction_info: None,
             status: PoolStatus::Created,
             sync_status: SyncStatus {

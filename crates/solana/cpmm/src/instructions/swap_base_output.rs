@@ -6,76 +6,53 @@ use crate::utils::token::*;
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program;
 
-pub fn swap_base_output(
-    ctx: Context<Swap>,
-    max_amount_in: u64,
-    amount_out_less_fee: u64,
-) -> Result<()> {
+pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_less_fee: u64) -> Result<()> {
     require_gt!(amount_out_less_fee, 0, ErrorCode::InvalidInput);
     let block_timestamp = solana_program::clock::Clock::get()?.unix_timestamp as u64;
     let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
-    if !pool_state.get_status_by_bit(PoolStatusBitIndex::Swap)
-        || block_timestamp < pool_state.open_time
-    {
+    if !pool_state.get_status_by_bit(PoolStatusBitIndex::Swap) || block_timestamp < pool_state.open_time {
         return err!(ErrorCode::NotApproved);
     }
-    let out_transfer_fee = get_transfer_inverse_fee(
-        &ctx.accounts.output_token_mint.to_account_info(),
-        amount_out_less_fee,
-    )?;
+    let out_transfer_fee =
+        get_transfer_inverse_fee(&ctx.accounts.output_token_mint.to_account_info(), amount_out_less_fee)?;
     let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
 
     // Calculate the trade amounts and the price before swap
-    let (
-        trade_direction,
-        total_input_token_amount,
-        total_output_token_amount,
-        token_0_price_x64,
-        token_1_price_x64,
-    ) = if ctx.accounts.input_vault.key() == pool_state.token_0_vault
-        && ctx.accounts.output_vault.key() == pool_state.token_1_vault
-    {
-        let (total_input_token_amount, total_output_token_amount) = pool_state
-            .vault_amount_without_fee(
-                ctx.accounts.input_vault.amount,
-                ctx.accounts.output_vault.amount,
-            );
-        let (token_0_price_x64, token_1_price_x64) = pool_state.token_price_x32(
-            ctx.accounts.input_vault.amount,
-            ctx.accounts.output_vault.amount,
-        );
+    let (trade_direction, total_input_token_amount, total_output_token_amount, token_0_price_x64, token_1_price_x64) =
+        if ctx.accounts.input_vault.key() == pool_state.token_0_vault
+            && ctx.accounts.output_vault.key() == pool_state.token_1_vault
+        {
+            let (total_input_token_amount, total_output_token_amount) =
+                pool_state.vault_amount_without_fee(ctx.accounts.input_vault.amount, ctx.accounts.output_vault.amount);
+            let (token_0_price_x64, token_1_price_x64) =
+                pool_state.token_price_x32(ctx.accounts.input_vault.amount, ctx.accounts.output_vault.amount);
 
-        (
-            TradeDirection::ZeroForOne,
-            total_input_token_amount,
-            total_output_token_amount,
-            token_0_price_x64,
-            token_1_price_x64,
-        )
-    } else if ctx.accounts.input_vault.key() == pool_state.token_1_vault
-        && ctx.accounts.output_vault.key() == pool_state.token_0_vault
-    {
-        let (total_output_token_amount, total_input_token_amount) = pool_state
-            .vault_amount_without_fee(
-                ctx.accounts.output_vault.amount,
-                ctx.accounts.input_vault.amount,
-            );
-        let (token_0_price_x64, token_1_price_x64) = pool_state.token_price_x32(
-            ctx.accounts.output_vault.amount,
-            ctx.accounts.input_vault.amount,
-        );
+            (
+                TradeDirection::ZeroForOne,
+                total_input_token_amount,
+                total_output_token_amount,
+                token_0_price_x64,
+                token_1_price_x64,
+            )
+        } else if ctx.accounts.input_vault.key() == pool_state.token_1_vault
+            && ctx.accounts.output_vault.key() == pool_state.token_0_vault
+        {
+            let (total_output_token_amount, total_input_token_amount) =
+                pool_state.vault_amount_without_fee(ctx.accounts.output_vault.amount, ctx.accounts.input_vault.amount);
+            let (token_0_price_x64, token_1_price_x64) =
+                pool_state.token_price_x32(ctx.accounts.output_vault.amount, ctx.accounts.input_vault.amount);
 
-        (
-            TradeDirection::OneForZero,
-            total_input_token_amount,
-            total_output_token_amount,
-            token_0_price_x64,
-            token_1_price_x64,
-        )
-    } else {
-        return err!(ErrorCode::InvalidVault);
-    };
+            (
+                TradeDirection::OneForZero,
+                total_input_token_amount,
+                total_output_token_amount,
+                token_0_price_x64,
+                token_1_price_x64,
+            )
+        } else {
+            return err!(ErrorCode::InvalidVault);
+        };
     let constant_before = u128::from(total_input_token_amount)
         .checked_mul(u128::from(total_output_token_amount))
         .unwrap();
@@ -90,14 +67,9 @@ pub fn swap_base_output(
     )
     .ok_or(ErrorCode::ZeroTradingTokens)?;
 
-    let constant_after = u128::from(
-        result
-            .new_swap_source_amount
-            .checked_sub(result.trade_fee)
-            .unwrap(),
-    )
-    .checked_mul(u128::from(result.new_swap_destination_amount))
-    .unwrap();
+    let constant_after = u128::from(result.new_swap_source_amount.checked_sub(result.trade_fee).unwrap())
+        .checked_mul(u128::from(result.new_swap_destination_amount))
+        .unwrap();
 
     #[cfg(feature = "enable-log")]
     msg!(
@@ -113,16 +85,10 @@ pub fn swap_base_output(
     let (input_transfer_amount, input_transfer_fee) = {
         let source_amount_swapped = u64::try_from(result.source_amount_swapped).unwrap();
         require_gt!(source_amount_swapped, 0, ErrorCode::InvalidInput);
-        let transfer_fee = get_transfer_inverse_fee(
-            &ctx.accounts.input_token_mint.to_account_info(),
-            source_amount_swapped,
-        )?;
+        let transfer_fee =
+            get_transfer_inverse_fee(&ctx.accounts.input_token_mint.to_account_info(), source_amount_swapped)?;
         let input_transfer_amount = source_amount_swapped.checked_add(transfer_fee).unwrap();
-        require_gte!(
-            max_amount_in,
-            input_transfer_amount,
-            ErrorCode::ExceededSlippage
-        );
+        require_gte!(max_amount_in, input_transfer_amount, ErrorCode::ExceededSlippage);
         (input_transfer_amount, transfer_fee)
     };
     require_eq!(
@@ -137,20 +103,12 @@ pub fn swap_base_output(
 
     match trade_direction {
         TradeDirection::ZeroForOne => {
-            pool_state.protocol_fees_token_0 = pool_state
-                .protocol_fees_token_0
-                .checked_add(protocol_fee)
-                .unwrap();
-            pool_state.fund_fees_token_0 =
-                pool_state.fund_fees_token_0.checked_add(fund_fee).unwrap();
+            pool_state.protocol_fees_token_0 = pool_state.protocol_fees_token_0.checked_add(protocol_fee).unwrap();
+            pool_state.fund_fees_token_0 = pool_state.fund_fees_token_0.checked_add(fund_fee).unwrap();
         }
         TradeDirection::OneForZero => {
-            pool_state.protocol_fees_token_1 = pool_state
-                .protocol_fees_token_1
-                .checked_add(protocol_fee)
-                .unwrap();
-            pool_state.fund_fees_token_1 =
-                pool_state.fund_fees_token_1.checked_add(fund_fee).unwrap();
+            pool_state.protocol_fees_token_1 = pool_state.protocol_fees_token_1.checked_add(protocol_fee).unwrap();
+            pool_state.fund_fees_token_1 = pool_state.fund_fees_token_1.checked_add(fund_fee).unwrap();
         }
     };
 
@@ -188,11 +146,10 @@ pub fn swap_base_output(
     )?;
 
     // update the previous price to the observation
-    ctx.accounts.observation_state.load_mut()?.update(
-        oracle::block_timestamp(),
-        token_0_price_x64,
-        token_1_price_x64,
-    );
+    ctx.accounts
+        .observation_state
+        .load_mut()?
+        .update(oracle::block_timestamp(), token_0_price_x64, token_1_price_x64);
     pool_state.recent_epoch = Clock::get()?.epoch;
 
     Ok(())

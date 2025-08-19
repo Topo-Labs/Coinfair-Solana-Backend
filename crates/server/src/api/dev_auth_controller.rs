@@ -101,7 +101,10 @@ pub struct TokenInfoResponse {
         (status = 500, description = "令牌生成失败")
     )
 )]
-pub async fn generate_admin_token(Extension(jwt_manager): Extension<Arc<JwtManager>>, Json(request): Json<AdminTokenRequest>) -> Result<Json<DevTokenResponse>, StatusCode> {
+pub async fn generate_admin_token(
+    Extension(jwt_manager): Extension<Arc<JwtManager>>,
+    Json(request): Json<AdminTokenRequest>,
+) -> Result<Json<DevTokenResponse>, StatusCode> {
     // 检查是否为开发环境
     if !is_development_environment() {
         warn!("🚫 Admin token generation blocked in production environment");
@@ -128,7 +131,12 @@ pub async fn generate_admin_token(Extension(jwt_manager): Extension<Arc<JwtManag
 
     // 生成JWT令牌
     let token = jwt_manager
-        .generate_token(&user_id, request.wallet_address.as_deref(), admin_permissions.clone(), UserTier::Admin)
+        .generate_token(
+            &user_id,
+            request.wallet_address.as_deref(),
+            admin_permissions.clone(),
+            UserTier::Admin,
+        )
         .map_err(|e| {
             tracing::error!("Failed to generate admin token: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -173,7 +181,10 @@ pub async fn generate_admin_token(Extension(jwt_manager): Extension<Arc<JwtManag
         (status = 500, description = "令牌生成失败")
     )
 )]
-pub async fn generate_user_token(Extension(jwt_manager): Extension<Arc<JwtManager>>, Json(request): Json<UserTokenRequest>) -> Result<Json<DevTokenResponse>, StatusCode> {
+pub async fn generate_user_token(
+    Extension(jwt_manager): Extension<Arc<JwtManager>>,
+    Json(request): Json<UserTokenRequest>,
+) -> Result<Json<DevTokenResponse>, StatusCode> {
     // 检查是否为开发环境
     if !is_development_environment() {
         warn!("🚫 User token generation blocked in production environment");
@@ -194,7 +205,12 @@ pub async fn generate_user_token(Extension(jwt_manager): Extension<Arc<JwtManage
 
     // 生成JWT令牌
     let token = jwt_manager
-        .generate_token(&request.user_id, request.wallet_address.as_deref(), valid_permissions.clone(), request.tier.clone())
+        .generate_token(
+            &request.user_id,
+            request.wallet_address.as_deref(),
+            valid_permissions.clone(),
+            request.tier.clone(),
+        )
         .map_err(|e| {
             tracing::error!("Failed to generate user token: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -215,7 +231,10 @@ pub async fn generate_user_token(Extension(jwt_manager): Extension<Arc<JwtManage
         usage: format!("在请求头中添加: Authorization: Bearer YOUR_TOKEN\n示例: curl -H \"Authorization: Bearer YOUR_TOKEN\" http://localhost:8000/api/v1/solana/main/version"),
     };
 
-    info!("🔓 Generated user token for: {} with tier: {:?} (development only)", request.user_id, request.tier);
+    info!(
+        "🔓 Generated user token for: {} with tier: {:?} (development only)",
+        request.user_id, request.tier
+    );
 
     Ok(Json(response))
 }
@@ -236,7 +255,10 @@ pub async fn generate_user_token(Extension(jwt_manager): Extension<Arc<JwtManage
         (status = 403, description = "生产环境禁止使用")
     )
 )]
-pub async fn get_token_info(Extension(jwt_manager): Extension<Arc<JwtManager>>, request: axum::extract::Request) -> Result<Json<TokenInfoResponse>, StatusCode> {
+pub async fn get_token_info(
+    Extension(jwt_manager): Extension<Arc<JwtManager>>,
+    request: axum::extract::Request,
+) -> Result<Json<TokenInfoResponse>, StatusCode> {
     // 检查是否为开发环境
     if !is_development_environment() {
         warn!("🚫 Token info blocked in production environment");

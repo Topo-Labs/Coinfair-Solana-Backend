@@ -1,4 +1,7 @@
-use crate::dtos::solana_dto::{GetUpperAndVerifyResponse, GetUpperRequest, GetUpperResponse, ReferralAccountData, GetMintCounterRequest, GetMintCounterResponse, GetMintCounterAndVerifyResponse, MintCounterData};
+use crate::dtos::solana_dto::{
+    GetMintCounterAndVerifyResponse, GetMintCounterRequest, GetMintCounterResponse, GetUpperAndVerifyResponse,
+    GetUpperRequest, GetUpperResponse, MintCounterData, ReferralAccountData,
+};
 
 use super::super::shared::SharedContext;
 
@@ -34,16 +37,16 @@ impl AccountDeserialize for ReferralAccount {
             return Err(anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into());
         }
         *buf = &buf[8..];
-        
+
         // 反序列化字段
         use anchor_lang::AnchorDeserialize;
-        
+
         let user = Pubkey::deserialize(buf)?;
         let upper = Option::<Pubkey>::deserialize(buf)?;
         let upper_upper = Option::<Pubkey>::deserialize(buf)?;
         let nft_mint = Pubkey::deserialize(buf)?;
         let bump = u8::deserialize(buf)?;
-        
+
         Ok(Self {
             user,
             upper,
@@ -75,15 +78,15 @@ impl AccountDeserialize for MintCounter {
             return Err(anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into());
         }
         *buf = &buf[8..];
-        
+
         // 反序列化字段
         use anchor_lang::AnchorDeserialize;
-        
+
         let minter = Pubkey::deserialize(buf)?;
         let total_mint = u64::deserialize(buf)?;
         let remain_mint = u64::deserialize(buf)?;
         let bump = u8::deserialize(buf)?;
-        
+
         Ok(Self {
             minter,
             total_mint,
@@ -117,23 +120,21 @@ impl ReferralService {
         info!("  推荐程序ID: {}", referral_program_id);
 
         // 计算推荐账户PDA (完全对应CLI第1720行)
-        let (referral_account, _) = Pubkey::find_program_address(
-            &[b"referral", &user_wallet.to_bytes()],
-            &referral_program_id,
-        );
+        let (referral_account, _) =
+            Pubkey::find_program_address(&[b"referral", &user_wallet.to_bytes()], &referral_program_id);
         info!("  推荐账户PDA: {}", referral_account);
 
         // 使用RPC客户端查询账户 (对应CLI中的anchor client)
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
-        
+
         match rpc_client.get_account(&referral_account) {
             Ok(account_data) => {
                 // 反序列化ReferralAccount数据 (对应CLI第1722行)
                 let referral_account_data = self.deserialize_referral_account(&account_data)?;
-                
+
                 // 提取upper字段 (对应CLI第1723行)
                 let upper = referral_account_data.upper.map(|p| p.to_string());
-                
+
                 info!("✅ 成功查询到用户上级: {:?}", upper);
 
                 Ok(GetUpperResponse {
@@ -146,7 +147,7 @@ impl ReferralService {
             }
             Err(e) => {
                 warn!("❌ 推荐账户不存在或查询失败: {}", e);
-                
+
                 // 账户不存在时返回None，而不是错误
                 Ok(GetUpperResponse {
                     user_wallet: request.user_wallet,
@@ -170,21 +171,19 @@ impl ReferralService {
         let referral_program_id = self.get_referral_program_id_internal()?;
 
         // 计算推荐账户PDA
-        let (referral_account, _) = Pubkey::find_program_address(
-            &[b"referral", &user_wallet.to_bytes()],
-            &referral_program_id,
-        );
+        let (referral_account, _) =
+            Pubkey::find_program_address(&[b"referral", &user_wallet.to_bytes()], &referral_program_id);
 
         // 使用RPC客户端查询账户
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
-        
+
         let (account_exists, referral_account_data, upper) = match rpc_client.get_account(&referral_account) {
             Ok(account_data) => {
                 // 反序列化ReferralAccount数据
                 let referral_data = self.deserialize_referral_account(&account_data)?;
-                
+
                 let upper = referral_data.upper.map(|p| p.to_string());
-                
+
                 let account_data_dto = Some(ReferralAccountData {
                     user: referral_data.user.to_string(),
                     upper: referral_data.upper.map(|p| p.to_string()),
@@ -192,19 +191,21 @@ impl ReferralService {
                     nft_mint: referral_data.nft_mint.to_string(),
                     bump: referral_data.bump,
                 });
-                
+
                 (true, account_data_dto, upper)
             }
-            Err(_) => {
-                (false, None, None)
-            }
+            Err(_) => (false, None, None),
         };
 
         let base_response = GetUpperResponse {
             user_wallet: request.user_wallet,
             upper,
             referral_account: referral_account.to_string(),
-            status: if account_exists { "Success".to_string() } else { "AccountNotFound".to_string() },
+            status: if account_exists {
+                "Success".to_string()
+            } else {
+                "AccountNotFound".to_string()
+            },
             timestamp: Utc::now().timestamp(),
         };
 
@@ -230,25 +231,26 @@ impl ReferralService {
         info!("  推荐程序ID: {}", referral_program_id);
 
         // 计算mint_counter账户PDA (完全对应CLI第1730行)
-        let (mint_counter_account, _) = Pubkey::find_program_address(
-            &[b"mint_counter", &user_wallet.to_bytes()],
-            &referral_program_id,
-        );
+        let (mint_counter_account, _) =
+            Pubkey::find_program_address(&[b"mint_counter", &user_wallet.to_bytes()], &referral_program_id);
         info!("  MintCounter账户PDA: {}", mint_counter_account);
 
         // 使用RPC客户端查询账户 (对应CLI中的anchor client)
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
-        
+
         match rpc_client.get_account(&mint_counter_account) {
             Ok(account_data) => {
                 // 反序列化MintCounter数据 (对应CLI第1732行)
                 let mint_counter_data = self.deserialize_mint_counter(&account_data)?;
-                
+
                 // 提取total_mint和remain_mint字段 (对应CLI第1733行)
                 let total_mint = mint_counter_data.total_mint;
                 let remain_mint = mint_counter_data.remain_mint;
-                
-                info!("✅ 成功查询到用户MintCounter: total_mint={}, remain_mint={}", total_mint, remain_mint);
+
+                info!(
+                    "✅ 成功查询到用户MintCounter: total_mint={}, remain_mint={}",
+                    total_mint, remain_mint
+                );
 
                 Ok(GetMintCounterResponse {
                     user_wallet: request.user_wallet,
@@ -261,7 +263,7 @@ impl ReferralService {
             }
             Err(e) => {
                 warn!("❌ MintCounter账户不存在或查询失败: {}", e);
-                
+
                 // 账户不存在时返回0值，而不是错误
                 Ok(GetMintCounterResponse {
                     user_wallet: request.user_wallet,
@@ -276,7 +278,10 @@ impl ReferralService {
     }
 
     /// 获取用户的MintCounter信息并进行本地验证（用于测试）
-    pub async fn get_mint_counter_and_verify(&self, request: GetMintCounterRequest) -> Result<GetMintCounterAndVerifyResponse> {
+    pub async fn get_mint_counter_and_verify(
+        &self,
+        request: GetMintCounterRequest,
+    ) -> Result<GetMintCounterAndVerifyResponse> {
         info!("🎯 开始查询用户的MintCounter信息并验证");
         info!("  用户钱包: {}", request.user_wallet);
 
@@ -286,46 +291,50 @@ impl ReferralService {
         let referral_program_id = self.get_referral_program_id_internal()?;
 
         // 计算mint_counter账户PDA
-        let (mint_counter_account, _) = Pubkey::find_program_address(
-            &[b"mint_counter", &user_wallet.to_bytes()],
-            &referral_program_id,
-        );
+        let (mint_counter_account, _) =
+            Pubkey::find_program_address(&[b"mint_counter", &user_wallet.to_bytes()], &referral_program_id);
 
         // 使用RPC客户端查询账户
         let rpc_client = RpcClient::new(&self.shared.swap_config.rpc_url);
-        
-        let (account_exists, mint_counter_data, total_mint, remain_mint) = match rpc_client.get_account(&mint_counter_account) {
-            Ok(account_data) => {
-                // 反序列化MintCounter数据
-                let mint_counter = self.deserialize_mint_counter(&account_data)?;
-                
-                let total_mint = mint_counter.total_mint;
-                let remain_mint = mint_counter.remain_mint;
-                
-                let counter_data_dto = Some(MintCounterData {
-                    minter: mint_counter.minter.to_string(),
-                    total_mint: mint_counter.total_mint,
-                    remain_mint: mint_counter.remain_mint,
-                    bump: mint_counter.bump,
-                });
-                
-                (true, counter_data_dto, total_mint, remain_mint)
-            }
-            Err(_) => {
-                (false, None, 0, 0)
-            }
-        };
+
+        let (account_exists, mint_counter_data, total_mint, remain_mint) =
+            match rpc_client.get_account(&mint_counter_account) {
+                Ok(account_data) => {
+                    // 反序列化MintCounter数据
+                    let mint_counter = self.deserialize_mint_counter(&account_data)?;
+
+                    let total_mint = mint_counter.total_mint;
+                    let remain_mint = mint_counter.remain_mint;
+
+                    let counter_data_dto = Some(MintCounterData {
+                        minter: mint_counter.minter.to_string(),
+                        total_mint: mint_counter.total_mint,
+                        remain_mint: mint_counter.remain_mint,
+                        bump: mint_counter.bump,
+                    });
+
+                    (true, counter_data_dto, total_mint, remain_mint)
+                }
+                Err(_) => (false, None, 0, 0),
+            };
 
         let base_response = GetMintCounterResponse {
             user_wallet: request.user_wallet,
             total_mint,
             remain_mint,
             mint_counter_account: mint_counter_account.to_string(),
-            status: if account_exists { "Success".to_string() } else { "AccountNotFound".to_string() },
+            status: if account_exists {
+                "Success".to_string()
+            } else {
+                "AccountNotFound".to_string()
+            },
             timestamp: Utc::now().timestamp(),
         };
 
-        info!("✅ 查询完成，账户存在: {}, total_mint={}, remain_mint={}", account_exists, total_mint, remain_mint);
+        info!(
+            "✅ 查询完成，账户存在: {}, total_mint={}, remain_mint={}",
+            account_exists, total_mint, remain_mint
+        );
 
         Ok(GetMintCounterAndVerifyResponse {
             base: base_response,
@@ -350,25 +359,20 @@ impl ReferralService {
     /// 反序列化Anchor账户数据
     fn deserialize_referral_account(&self, account: &solana_sdk::account::Account) -> Result<ReferralAccount> {
         let mut data: &[u8] = &account.data;
-        ReferralAccount::try_deserialize(&mut data)
-            .map_err(|e| anyhow!("反序列化ReferralAccount失败: {}", e))
+        ReferralAccount::try_deserialize(&mut data).map_err(|e| anyhow!("反序列化ReferralAccount失败: {}", e))
     }
 
     /// 反序列化MintCounter账户数据
     fn deserialize_mint_counter(&self, account: &solana_sdk::account::Account) -> Result<MintCounter> {
         let mut data: &[u8] = &account.data;
-        MintCounter::try_deserialize(&mut data)
-            .map_err(|e| anyhow!("反序列化MintCounter失败: {}", e))
+        MintCounter::try_deserialize(&mut data).map_err(|e| anyhow!("反序列化MintCounter失败: {}", e))
     }
 
     /// 计算推荐账户PDA（测试用）
     #[cfg(test)]
     pub fn calculate_referral_account_pda(&self, user_wallet: &Pubkey) -> Result<(Pubkey, u8)> {
         let referral_program_id = self.get_referral_program_id_internal()?;
-        let (pda, bump) = Pubkey::find_program_address(
-            &[b"referral", user_wallet.as_ref()],
-            &referral_program_id,
-        );
+        let (pda, bump) = Pubkey::find_program_address(&[b"referral", user_wallet.as_ref()], &referral_program_id);
         Ok((pda, bump))
     }
 
@@ -376,10 +380,7 @@ impl ReferralService {
     #[cfg(test)]
     pub fn calculate_mint_counter_pda(&self, user_wallet: &Pubkey) -> Result<(Pubkey, u8)> {
         let referral_program_id = self.get_referral_program_id_internal()?;
-        let (pda, bump) = Pubkey::find_program_address(
-            &[b"mint_counter", user_wallet.as_ref()],
-            &referral_program_id,
-        );
+        let (pda, bump) = Pubkey::find_program_address(&[b"mint_counter", user_wallet.as_ref()], &referral_program_id);
         Ok((pda, bump))
     }
 }

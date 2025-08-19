@@ -32,7 +32,10 @@ impl AmmConfig {
     pub const LEN: usize = 8 + 1 + 2 + 32 + 4 + 4 + 2 + 64;
 
     pub fn is_authorized<'info>(&self, signer: &Signer<'info>, expect_pubkey: Pubkey) -> Result<()> {
-        require!(signer.key() == self.owner || expect_pubkey == signer.key(), ErrorCode::NotApproved);
+        require!(
+            signer.key() == self.owner || expect_pubkey == signer.key(),
+            ErrorCode::NotApproved
+        );
         Ok(())
     }
 }

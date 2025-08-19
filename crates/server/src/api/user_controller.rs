@@ -24,7 +24,10 @@ use utils::{AppError, AppResult};
 pub async fn user(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<User>> {
     match services.user.get_user(address.to_string()).await? {
         Some(user) => Ok(Json(user)),
-        None => Err(AppError::NotFound(format!("New User with address {} not found.", address))),
+        None => Err(AppError::NotFound(format!(
+            "New User with address {} not found.",
+            address
+        ))),
     }
 }
 
@@ -51,6 +54,8 @@ pub async fn mock_users(
 pub struct UserController;
 impl UserController {
     pub fn app() -> Router {
-        Router::new().route("/user/:address", get(user)).route("/mock_users", post(mock_users))
+        Router::new()
+            .route("/user/:address", get(user))
+            .route("/mock_users", post(mock_users))
     }
 }

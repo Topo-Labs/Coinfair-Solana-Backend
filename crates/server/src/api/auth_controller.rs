@@ -1,6 +1,5 @@
 use crate::auth::{
-    AuthResponse, AuthUser, GenerateAuthMessageRequest, JwtManager, SolanaAuthService,
-    SolanaLoginRequest, UserInfo,
+    AuthResponse, AuthUser, GenerateAuthMessageRequest, JwtManager, SolanaAuthService, SolanaLoginRequest, UserInfo,
 };
 use axum::{
     extract::{Extension, Request},
@@ -140,23 +139,14 @@ pub async fn refresh_token(
         (status = 401, description = "未认证")
     )
 )]
-pub async fn get_user_profile(
-    request: Request,
-) -> Result<Json<UserInfo>, StatusCode> {
-    let auth_user = request
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+pub async fn get_user_profile(request: Request) -> Result<Json<UserInfo>, StatusCode> {
+    let auth_user = request.extensions().get::<AuthUser>().ok_or(StatusCode::UNAUTHORIZED)?;
 
     let user_info = UserInfo {
         user_id: auth_user.user_id.clone(),
         wallet_address: auth_user.wallet_address.clone(),
         tier: auth_user.tier.clone(),
-        permissions: auth_user
-            .permissions
-            .iter()
-            .map(|p| p.as_str().to_string())
-            .collect(),
+        permissions: auth_user.permissions.iter().map(|p| p.as_str().to_string()).collect(),
     };
 
     Ok(Json(user_info))
@@ -175,13 +165,8 @@ pub async fn get_user_profile(
         (status = 401, description = "未认证")
     )
 )]
-pub async fn logout(
-    request: Request,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let auth_user = request
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+pub async fn logout(request: Request) -> Result<Json<serde_json::Value>, StatusCode> {
+    let auth_user = request.extensions().get::<AuthUser>().ok_or(StatusCode::UNAUTHORIZED)?;
 
     tracing::info!("User {} logged out", auth_user.user_id);
 
@@ -210,10 +195,7 @@ pub async fn check_auth_status(
     Extension(jwt_manager): Extension<Arc<JwtManager>>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let auth_user = request
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let auth_user = request.extensions().get::<AuthUser>().ok_or(StatusCode::UNAUTHORIZED)?;
 
     // 检查令牌是否即将过期
     let auth_header = request
@@ -223,9 +205,7 @@ pub async fn check_auth_status(
         .and_then(|header| header.strip_prefix("Bearer "))
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
-    let is_expiring_soon = jwt_manager
-        .is_token_expiring_soon(auth_header)
-        .unwrap_or(false);
+    let is_expiring_soon = jwt_manager.is_token_expiring_soon(auth_header).unwrap_or(false);
 
     Ok(Json(json!({
         "authenticated": true,
@@ -262,13 +242,8 @@ impl AdminAuthController {
         (status = 403, description = "权限不足")
     )
 )]
-pub async fn list_authenticated_users(
-    request: Request,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let auth_user = request
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+pub async fn list_authenticated_users(request: Request) -> Result<Json<serde_json::Value>, StatusCode> {
+    let auth_user = request.extensions().get::<AuthUser>().ok_or(StatusCode::UNAUTHORIZED)?;
 
     if !auth_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
@@ -300,13 +275,8 @@ pub async fn list_authenticated_users(
         (status = 404, description = "用户不存在")
     )
 )]
-pub async fn get_user_permissions(
-    request: Request,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let auth_user = request
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+pub async fn get_user_permissions(request: Request) -> Result<Json<serde_json::Value>, StatusCode> {
+    let auth_user = request.extensions().get::<AuthUser>().ok_or(StatusCode::UNAUTHORIZED)?;
 
     if !auth_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
@@ -339,13 +309,8 @@ pub async fn get_user_permissions(
         (status = 404, description = "用户不存在")
     )
 )]
-pub async fn update_user_permissions(
-    request: Request,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    let auth_user = request
-        .extensions()
-        .get::<AuthUser>()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+pub async fn update_user_permissions(request: Request) -> Result<Json<serde_json::Value>, StatusCode> {
+    let auth_user = request.extensions().get::<AuthUser>().ok_or(StatusCode::UNAUTHORIZED)?;
 
     if !auth_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);

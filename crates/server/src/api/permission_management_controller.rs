@@ -1,5 +1,8 @@
 use crate::auth::SolanaMiddlewareBuilder; // 添加中间件构建器导入
-use crate::auth::{AuthUser, GlobalSolanaPermissionConfig, Permission, SolanaApiAction, SolanaApiPermissionConfig, SolanaPermissionPolicy, UserTier};
+use crate::auth::{
+    AuthUser, GlobalSolanaPermissionConfig, Permission, SolanaApiAction, SolanaApiPermissionConfig,
+    SolanaPermissionPolicy, UserTier,
+};
 use crate::services::Services;
 use axum::{
     extract::{Extension, Path, Query},
@@ -215,7 +218,10 @@ pub async fn get_global_config(
     // 检查管理员权限
     if !auth_user.is_admin() {
         warn!("Non-admin user {} attempted to access global config", auth_user.user_id);
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.get_global_config().await {
@@ -225,7 +231,10 @@ pub async fn get_global_config(
         }
         Err(e) => {
             error!("Failed to get global config: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("获取全局配置失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("获取全局配置失败".to_string())),
+            ))
         }
     }
 }
@@ -252,7 +261,10 @@ pub async fn update_global_config(
     // 检查管理员权限
     if !auth_user.is_admin() {
         warn!("Non-admin user {} attempted to update global config", auth_user.user_id);
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     // 获取当前配置
@@ -260,7 +272,10 @@ pub async fn update_global_config(
         Ok(config) => config,
         Err(e) => {
             error!("Failed to get current global config: {}", e);
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("获取当前配置失败".to_string()))));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("获取当前配置失败".to_string())),
+            ));
         }
     };
 
@@ -273,14 +288,21 @@ pub async fn update_global_config(
     current_config.last_updated = chrono::Utc::now().timestamp() as u64;
     current_config.updated_by = auth_user.user_id.clone();
 
-    match services.solana_permission.update_global_config(current_config.clone()).await {
+    match services
+        .solana_permission
+        .update_global_config(current_config.clone())
+        .await
+    {
         Ok(_) => {
             info!("Admin {} updated global permission config", auth_user.user_id);
             Ok(Json(ApiResponse::success(current_config)))
         }
         Err(e) => {
             error!("Failed to update global config: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("更新全局配置失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("更新全局配置失败".to_string())),
+            ))
         }
     }
 }
@@ -305,18 +327,27 @@ pub async fn toggle_global_read(
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.toggle_global_read(request.enabled).await {
         Ok(_) => {
             let message = format!("全局读取权限已{}", if request.enabled { "启用" } else { "禁用" });
-            info!("Admin {} toggled global read permission to {}", auth_user.user_id, request.enabled);
+            info!(
+                "Admin {} toggled global read permission to {}",
+                auth_user.user_id, request.enabled
+            );
             Ok(Json(ApiResponse::success(message)))
         }
         Err(e) => {
             error!("Failed to toggle global read permission: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("操作失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("操作失败".to_string())),
+            ))
         }
     }
 }
@@ -341,18 +372,27 @@ pub async fn toggle_global_write(
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.toggle_global_write(request.enabled).await {
         Ok(_) => {
             let message = format!("全局写入权限已{}", if request.enabled { "启用" } else { "禁用" });
-            info!("Admin {} toggled global write permission to {}", auth_user.user_id, request.enabled);
+            info!(
+                "Admin {} toggled global write permission to {}",
+                auth_user.user_id, request.enabled
+            );
             Ok(Json(ApiResponse::success(message)))
         }
         Err(e) => {
             error!("Failed to toggle global write permission: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("操作失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("操作失败".to_string())),
+            ))
         }
     }
 }
@@ -377,7 +417,10 @@ pub async fn emergency_shutdown(
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.emergency_shutdown(request.enabled).await {
@@ -398,7 +441,10 @@ pub async fn emergency_shutdown(
         }
         Err(e) => {
             error!("Failed to toggle emergency shutdown: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("操作失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("操作失败".to_string())),
+            ))
         }
     }
 }
@@ -423,18 +469,31 @@ pub async fn toggle_maintenance_mode(
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
-    match services.solana_permission.toggle_maintenance_mode(request.enabled).await {
+    match services
+        .solana_permission
+        .toggle_maintenance_mode(request.enabled)
+        .await
+    {
         Ok(_) => {
             let message = format!("维护模式已{}", if request.enabled { "开启" } else { "关闭" });
-            info!("Admin {} toggled maintenance mode to {}", auth_user.user_id, request.enabled);
+            info!(
+                "Admin {} toggled maintenance mode to {}",
+                auth_user.user_id, request.enabled
+            );
             Ok(Json(ApiResponse::success(message)))
         }
         Err(e) => {
             error!("Failed to toggle maintenance mode: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("操作失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("操作失败".to_string())),
+            ))
         }
     }
 }
@@ -457,7 +516,10 @@ pub async fn get_all_api_configs(
 ) -> Result<Json<ApiResponse<HashMap<String, SolanaApiPermissionConfig>>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.get_all_api_configs().await {
@@ -467,7 +529,10 @@ pub async fn get_all_api_configs(
         }
         Err(e) => {
             error!("Failed to get API configs: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("获取API配置失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("获取API配置失败".to_string())),
+            ))
         }
     }
 }
@@ -490,7 +555,10 @@ pub async fn get_api_configs_stats(
 ) -> Result<Json<ApiResponse<ApiConfigStatsResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.get_permission_stats().await {
@@ -505,7 +573,10 @@ pub async fn get_api_configs_stats(
         }
         Err(e) => {
             error!("Failed to get API config stats: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("获取统计信息失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("获取统计信息失败".to_string())),
+            ))
         }
     }
 }
@@ -530,7 +601,10 @@ pub async fn test_permission(
 ) -> Result<Json<ApiResponse<TestPermissionResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     // 构造测试用户
@@ -550,7 +624,10 @@ pub async fn test_permission(
     };
 
     // 执行权限测试
-    let test_result = services.solana_permission.check_api_permission(&request.endpoint, &request.action, &test_user).await;
+    let test_result = services
+        .solana_permission
+        .check_api_permission(&request.endpoint, &request.action, &test_user)
+        .await;
 
     // 获取全局配置信息
     let global_config = match services.solana_permission.get_global_config().await {
@@ -577,7 +654,10 @@ pub async fn test_permission(
         global_config,
     };
 
-    info!("Admin {} performed permission test for endpoint {}", auth_user.user_id, request.endpoint);
+    info!(
+        "Admin {} performed permission test for endpoint {}",
+        auth_user.user_id, request.endpoint
+    );
     Ok(Json(ApiResponse::success(response)))
 }
 
@@ -599,7 +679,10 @@ pub async fn reload_configuration(
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 检查管理员权限
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.reload_configuration().await {
@@ -609,7 +692,10 @@ pub async fn reload_configuration(
         }
         Err(e) => {
             error!("Failed to reload configuration: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("配置重载失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("配置重载失败".to_string())),
+            ))
         }
     }
 }
@@ -623,19 +709,33 @@ pub async fn get_api_config(
     Path(endpoint): Path<String>,
 ) -> Result<Json<ApiResponse<SolanaApiPermissionConfig>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     let decoded_endpoint = urlencoding::decode(&endpoint)
-        .map_err(|_| (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::error("端点路径解码失败".to_string()))))?
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error("端点路径解码失败".to_string())),
+            )
+        })?
         .to_string();
 
     match services.solana_permission.get_api_config(&decoded_endpoint).await {
         Ok(Some(config)) => Ok(Json(ApiResponse::success(config))),
-        Ok(None) => Err((StatusCode::NOT_FOUND, Json(ApiResponse::<()>::error("API配置未找到".to_string())))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("API配置未找到".to_string())),
+        )),
         Err(e) => {
             error!("Failed to get API config: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("获取API配置失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("获取API配置失败".to_string())),
+            ))
         }
     }
 }
@@ -648,11 +748,19 @@ pub async fn update_api_config(
     Json(request): Json<UpdateApiConfigRequest>,
 ) -> Result<Json<ApiResponse<SolanaApiPermissionConfig>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     let decoded_endpoint = urlencoding::decode(&endpoint)
-        .map_err(|_| (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::error("端点路径解码失败".to_string()))))?
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error("端点路径解码失败".to_string())),
+            )
+        })?
         .to_string();
 
     let updated_config = SolanaApiPermissionConfig {
@@ -666,14 +774,24 @@ pub async fn update_api_config(
         updated_at: chrono::Utc::now().timestamp() as u64,
     };
 
-    match services.solana_permission.update_api_config(decoded_endpoint, updated_config.clone()).await {
+    match services
+        .solana_permission
+        .update_api_config(decoded_endpoint, updated_config.clone())
+        .await
+    {
         Ok(_) => {
-            info!("Admin {} updated API config for {}", auth_user.user_id, updated_config.endpoint);
+            info!(
+                "Admin {} updated API config for {}",
+                auth_user.user_id, updated_config.endpoint
+            );
             Ok(Json(ApiResponse::success(updated_config)))
         }
         Err(e) => {
             error!("Failed to update API config: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("更新API配置失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("更新API配置失败".to_string())),
+            ))
         }
     }
 }
@@ -685,11 +803,19 @@ pub async fn delete_api_config(
     Path(endpoint): Path<String>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     let decoded_endpoint = urlencoding::decode(&endpoint)
-        .map_err(|_| (StatusCode::BAD_REQUEST, Json(ApiResponse::<()>::error("端点路径解码失败".to_string()))))?
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::<()>::error("端点路径解码失败".to_string())),
+            )
+        })?
         .to_string();
 
     // 注意：这里实际上不会删除配置，而是禁用它
@@ -698,21 +824,37 @@ pub async fn delete_api_config(
             config.enabled = false;
             config.updated_at = chrono::Utc::now().timestamp() as u64;
 
-            match services.solana_permission.update_api_config(decoded_endpoint.clone(), config).await {
+            match services
+                .solana_permission
+                .update_api_config(decoded_endpoint.clone(), config)
+                .await
+            {
                 Ok(_) => {
-                    info!("Admin {} disabled API config for {}", auth_user.user_id, decoded_endpoint);
+                    info!(
+                        "Admin {} disabled API config for {}",
+                        auth_user.user_id, decoded_endpoint
+                    );
                     Ok(Json(ApiResponse::success("API配置已禁用".to_string())))
                 }
                 Err(e) => {
                     error!("Failed to disable API config: {}", e);
-                    Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("禁用API配置失败".to_string()))))
+                    Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ApiResponse::<()>::error("禁用API配置失败".to_string())),
+                    ))
                 }
             }
         }
-        Ok(None) => Err((StatusCode::NOT_FOUND, Json(ApiResponse::<()>::error("API配置未找到".to_string())))),
+        Ok(None) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::<()>::error("API配置未找到".to_string())),
+        )),
         Err(e) => {
             error!("Failed to get API config for deletion: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("操作失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("操作失败".to_string())),
+            ))
         }
     }
 }
@@ -724,7 +866,10 @@ pub async fn batch_update_api_configs(
     Json(request): Json<BatchUpdateApiConfigsRequest>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     let mut configs_to_update = HashMap::new();
@@ -743,14 +888,21 @@ pub async fn batch_update_api_configs(
         configs_to_update.insert(endpoint, config);
     }
 
-    match services.solana_permission.batch_update_api_configs(configs_to_update).await {
+    match services
+        .solana_permission
+        .batch_update_api_configs(configs_to_update)
+        .await
+    {
         Ok(_) => {
             info!("Admin {} performed batch update of API configs", auth_user.user_id);
             Ok(Json(ApiResponse::success("批量更新完成".to_string())))
         }
         Err(e) => {
             error!("Failed to batch update API configs: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("批量更新失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("批量更新失败".to_string())),
+            ))
         }
     }
 }
@@ -762,18 +914,27 @@ pub async fn get_api_configs_by_category(
     Path(category): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<SolanaApiPermissionConfig>>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     match services.solana_permission.get_all_api_configs().await {
         Ok(all_configs) => {
-            let filtered_configs: Vec<SolanaApiPermissionConfig> = all_configs.into_values().filter(|config| config.category == category).collect();
+            let filtered_configs: Vec<SolanaApiPermissionConfig> = all_configs
+                .into_values()
+                .filter(|config| config.category == category)
+                .collect();
 
             Ok(Json(ApiResponse::success(filtered_configs)))
         }
         Err(e) => {
             error!("Failed to get API configs by category: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<()>::error("获取分类配置失败".to_string()))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::<()>::error("获取分类配置失败".to_string())),
+            ))
         }
     }
 }
@@ -785,7 +946,10 @@ pub async fn get_permission_logs(
     Query(_query): Query<PermissionLogQuery>,
 ) -> Result<Json<ApiResponse<PermissionLogResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     // TODO: 实现权限日志查询
@@ -807,7 +971,10 @@ pub async fn get_logs_by_operator(
     Path(_operator_id): Path<String>,
 ) -> Result<Json<ApiResponse<Vec<PermissionLogEntry>>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     // TODO: 实现根据操作者查询日志
@@ -822,7 +989,10 @@ pub async fn get_logs_by_target(
     Path((_target_type, _target_id)): Path<(String, String)>,
 ) -> Result<Json<ApiResponse<Vec<PermissionLogEntry>>>, (StatusCode, Json<ApiResponse<()>>)> {
     if !auth_user.is_admin() {
-        return Err((StatusCode::FORBIDDEN, Json(ApiResponse::<()>::error("需要管理员权限".to_string()))));
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(ApiResponse::<()>::error("需要管理员权限".to_string())),
+        ));
     }
 
     // TODO: 实现根据目标查询日志

@@ -145,15 +145,8 @@ impl RateLimitService {
     }
 
     /// 检查速率限制
-    pub async fn check_rate_limit(
-        &self,
-        key: &RateLimitKey,
-        config: &RateLimitConfig,
-    ) -> Result<RateLimitResult> {
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+    pub async fn check_rate_limit(&self, key: &RateLimitKey, config: &RateLimitConfig) -> Result<RateLimitResult> {
+        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
         // 检查分钟限制
         let minute_result = self
@@ -200,7 +193,7 @@ impl RateLimitService {
 
         // 简单的Redis计数实现
         let current_count: u32 = conn.incr(key, 1).await.unwrap_or(0);
-        
+
         if current_count == 1 {
             // 设置过期时间
             let _: () = conn.expire(key, 60).await?;
@@ -224,7 +217,7 @@ impl RateLimitService {
         current_time: u64,
     ) -> Result<RateLimitResult> {
         let mut store = self.memory_store.write().await;
-        
+
         let record = store.entry(key.to_string()).or_insert(RateLimitRecord {
             count: 0,
             window_start,
@@ -267,18 +260,13 @@ impl RateLimitService {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300));
-            
+
             loop {
                 interval.tick().await;
-                let current_time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
+                let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
                 let mut store_guard = store.write().await;
-                store_guard.retain(|_, record| {
-                    current_time - record.last_request < 3600
-                });
+                store_guard.retain(|_, record| current_time - record.last_request < 3600);
             }
         });
     }
@@ -308,30 +296,42 @@ impl MultiDimensionalRateLimit {
         _endpoint_configs: Option<HashMap<String, RateLimitConfig>>,
     ) -> Self {
         let default_tier_configs = HashMap::from([
-            (UserTier::Basic, RateLimitConfig {
-                requests_per_minute: 30,
-                requests_per_hour: 500,
-                requests_per_day: 5000,
-                burst_limit: 50,
-            }),
-            (UserTier::Premium, RateLimitConfig {
-                requests_per_minute: 100,
-                requests_per_hour: 2000,
-                requests_per_day: 20000,
-                burst_limit: 150,
-            }),
-            (UserTier::VIP, RateLimitConfig {
-                requests_per_minute: 300,
-                requests_per_hour: 10000,
-                requests_per_day: 100000,
-                burst_limit: 500,
-            }),
-            (UserTier::Admin, RateLimitConfig {
-                requests_per_minute: 1000,
-                requests_per_hour: 50000,
-                requests_per_day: 500000,
-                burst_limit: 2000,
-            }),
+            (
+                UserTier::Basic,
+                RateLimitConfig {
+                    requests_per_minute: 30,
+                    requests_per_hour: 500,
+                    requests_per_day: 5000,
+                    burst_limit: 50,
+                },
+            ),
+            (
+                UserTier::Premium,
+                RateLimitConfig {
+                    requests_per_minute: 100,
+                    requests_per_hour: 2000,
+                    requests_per_day: 20000,
+                    burst_limit: 150,
+                },
+            ),
+            (
+                UserTier::VIP,
+                RateLimitConfig {
+                    requests_per_minute: 300,
+                    requests_per_hour: 10000,
+                    requests_per_day: 100000,
+                    burst_limit: 500,
+                },
+            ),
+            (
+                UserTier::Admin,
+                RateLimitConfig {
+                    requests_per_minute: 1000,
+                    requests_per_hour: 50000,
+                    requests_per_day: 500000,
+                    burst_limit: 2000,
+                },
+            ),
         ]);
 
         Self {
@@ -342,11 +342,7 @@ impl MultiDimensionalRateLimit {
     }
 
     /// 速率限制中间件函数
-    pub async fn middleware(
-        &self,
-        request: Request,
-        next: Next,
-    ) -> Result<Response, StatusCode> {
+    pub async fn middleware(&self, request: Request, next: Next) -> Result<Response, StatusCode> {
         let uri = request.uri().path().to_string();
         let client_ip = self.extract_client_ip(&request);
         let auth_user = request.extensions().get::<AuthUser>().cloned();

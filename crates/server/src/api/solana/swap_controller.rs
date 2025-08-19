@@ -1,6 +1,7 @@
 use crate::{
     dtos::solana_dto::{
-        ApiResponse, BalanceResponse, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse, WalletInfo,
+        ApiResponse, BalanceResponse, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse,
+        WalletInfo,
     },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
@@ -75,7 +76,10 @@ pub async fn swap_tokens(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<SwapRequest>,
 ) -> Result<Json<ApiResponse<SwapResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
-    info!("🔄 收到交换请求: {} {} -> {}", request.amount, request.from_token, request.to_token);
+    info!(
+        "🔄 收到交换请求: {} {} -> {}",
+        request.amount, request.from_token, request.to_token
+    );
 
     match services.solana.swap_tokens(request).await {
         Ok(response) => {
@@ -85,7 +89,10 @@ pub async fn swap_tokens(
         Err(e) => {
             error!("❌ 交换失败: {:?}", e);
             let error_response = ErrorResponse::new("SWAP_FAILED", &format!("交换失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -118,18 +125,26 @@ pub async fn swap_tokens(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_balance(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_balance(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<BalanceResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 查询账户余额");
 
     match services.solana.get_balance().await {
         Ok(balance) => {
-            info!("✅ 余额查询成功: SOL {:.6}, USDC {:.2}", balance.sol_balance, balance.usdc_balance);
+            info!(
+                "✅ 余额查询成功: SOL {:.6}, USDC {:.2}",
+                balance.sol_balance, balance.usdc_balance
+            );
             Ok(Json(ApiResponse::success(balance)))
         }
         Err(e) => {
             error!("❌ 余额查询失败: {:?}", e);
             let error_response = ErrorResponse::new("BALANCE_QUERY_FAILED", &format!("余额查询失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -180,17 +195,26 @@ pub async fn get_price_quote(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<PriceQuoteRequest>,
 ) -> Result<Json<ApiResponse<PriceQuoteResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
-    info!("💰 获取价格报价: {} {} -> {}", request.amount, request.from_token, request.to_token);
+    info!(
+        "💰 获取价格报价: {} {} -> {}",
+        request.amount, request.from_token, request.to_token
+    );
 
     match services.solana.get_price_quote(request).await {
         Ok(quote) => {
-            info!("✅ 价格查询成功: {} -> {}, 价格: {:.6}", quote.from_token, quote.to_token, quote.price);
+            info!(
+                "✅ 价格查询成功: {} -> {}, 价格: {:.6}",
+                quote.from_token, quote.to_token, quote.price
+            );
             Ok(Json(ApiResponse::success(quote)))
         }
         Err(e) => {
             error!("❌ 价格查询失败: {:?}", e);
             let error_response = ErrorResponse::new("QUOTE_FAILED", &format!("价格查询失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -220,18 +244,31 @@ pub async fn get_price_quote(
     ),
     tag = "Solana交换"
 )]
-pub async fn get_wallet_info(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn get_wallet_info(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<WalletInfo>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔍 查询钱包信息");
 
     match services.solana.get_wallet_info().await {
         Ok(wallet_info) => {
-            info!("✅ 钱包信息查询成功: {} ({})", wallet_info.address, if wallet_info.connected { "已连接" } else { "未连接" });
+            info!(
+                "✅ 钱包信息查询成功: {} ({})",
+                wallet_info.address,
+                if wallet_info.connected {
+                    "已连接"
+                } else {
+                    "未连接"
+                }
+            );
             Ok(Json(ApiResponse::success(wallet_info)))
         }
         Err(e) => {
             error!("❌ 钱包信息查询失败: {:?}", e);
             let error_response = ErrorResponse::new("WALLET_INFO_FAILED", &format!("钱包信息查询失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -257,7 +294,9 @@ pub async fn get_wallet_info(Extension(services): Extension<Services>) -> Result
     ),
     tag = "Solana交换"
 )]
-pub async fn health_check(Extension(services): Extension<Services>) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+pub async fn health_check(
+    Extension(services): Extension<Services>,
+) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     match services.solana.health_check().await {
         Ok(status) => {
             info!("✅ Solana服务健康检查: {}", status);
@@ -266,7 +305,10 @@ pub async fn health_check(Extension(services): Extension<Services>) -> Result<Js
         Err(e) => {
             error!("❌ Solana服务健康检查失败: {:?}", e);
             let error_response = ErrorResponse::new("HEALTH_CHECK_FAILED", &format!("健康检查失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }

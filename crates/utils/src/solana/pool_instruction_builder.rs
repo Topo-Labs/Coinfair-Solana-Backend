@@ -40,7 +40,8 @@ impl PoolInstructionBuilder {
         let (token_vault_0, _) = PDACalculator::calculate_pool_vault_pda(&raydium_program_id, &pool_key, mint0);
         let (token_vault_1, _) = PDACalculator::calculate_pool_vault_pda(&raydium_program_id, &pool_key, mint1);
         let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_key);
-        let (tick_array_bitmap, _) = PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, &pool_key);
+        let (tick_array_bitmap, _) =
+            PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, &pool_key);
 
         info!("📋 计算的PDA地址:");
         info!("  AMM配置: {}", amm_config_key);
@@ -55,15 +56,15 @@ impl PoolInstructionBuilder {
 
         // 构建账户元数据
         let accounts = vec![
-            solana_sdk::instruction::AccountMeta::new(*pool_creator, true),            // pool_creator (signer)
+            solana_sdk::instruction::AccountMeta::new(*pool_creator, true), // pool_creator (signer)
             solana_sdk::instruction::AccountMeta::new_readonly(amm_config_key, false), // amm_config
-            solana_sdk::instruction::AccountMeta::new(pool_key, false),                // pool_state
-            solana_sdk::instruction::AccountMeta::new_readonly(*mint0, false),         // token_mint_0
-            solana_sdk::instruction::AccountMeta::new_readonly(*mint1, false),         // token_mint_1
-            solana_sdk::instruction::AccountMeta::new(token_vault_0, false),           // token_vault_0
-            solana_sdk::instruction::AccountMeta::new(token_vault_1, false),           // token_vault_1
-            solana_sdk::instruction::AccountMeta::new(observation_key, false),         // observation_state
-            solana_sdk::instruction::AccountMeta::new(tick_array_bitmap, false),       // tick_array_bitmap
+            solana_sdk::instruction::AccountMeta::new(pool_key, false),     // pool_state
+            solana_sdk::instruction::AccountMeta::new_readonly(*mint0, false), // token_mint_0
+            solana_sdk::instruction::AccountMeta::new_readonly(*mint1, false), // token_mint_1
+            solana_sdk::instruction::AccountMeta::new(token_vault_0, false), // token_vault_0
+            solana_sdk::instruction::AccountMeta::new(token_vault_1, false), // token_vault_1
+            solana_sdk::instruction::AccountMeta::new(observation_key, false), // observation_state
+            solana_sdk::instruction::AccountMeta::new(tick_array_bitmap, false), // tick_array_bitmap
             solana_sdk::instruction::AccountMeta::new_readonly(*token_program_0, false), // token_program_0
             solana_sdk::instruction::AccountMeta::new_readonly(*token_program_1, false), // token_program_1
             solana_sdk::instruction::AccountMeta::new_readonly(system_program::id(), false), // system_program
@@ -110,7 +111,8 @@ impl PoolInstructionBuilder {
         let (token_vault_0, _) = PDACalculator::calculate_pool_vault_pda(&raydium_program_id, &pool_key, mint0);
         let (token_vault_1, _) = PDACalculator::calculate_pool_vault_pda(&raydium_program_id, &pool_key, mint1);
         let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_key);
-        let (tick_array_bitmap, _) = PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, &pool_key);
+        let (tick_array_bitmap, _) =
+            PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, &pool_key);
 
         Ok(PoolAddresses {
             amm_config: amm_config_key,
@@ -169,7 +171,14 @@ impl ClassicAmmInstructionBuilder {
         info!("  开放时间: {}", open_time);
 
         // 计算V2 AMM初始化参数
-        let params = V2AmmParameterCalculator::calculate_initialize_params(&v2_amm_program_id, mint0, mint1, init_amount_0, init_amount_1, open_time)?;
+        let params = V2AmmParameterCalculator::calculate_initialize_params(
+            &v2_amm_program_id,
+            mint0,
+            mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        )?;
 
         info!("📋 计算的V2 AMM参数:");
         info!("  池子ID: {}", params.pool_id);
@@ -182,7 +191,12 @@ impl ClassicAmmInstructionBuilder {
         info!("  Withdraw Queue: {}", params.withdraw_queue);
 
         // 构建Initialize指令数据
-        let instruction_data = Self::build_initialize_instruction_data(params.nonce, params.open_time, params.init_pc_amount, params.init_coin_amount)?;
+        let instruction_data = Self::build_initialize_instruction_data(
+            params.nonce,
+            params.open_time,
+            params.init_pc_amount,
+            params.init_coin_amount,
+        )?;
 
         // 确定coin和pc mint的顺序
         let (coin_mint, pc_mint) = if mint0.to_bytes() < mint1.to_bytes() {
@@ -242,7 +256,12 @@ impl ClassicAmmInstructionBuilder {
     ///
     /// # Returns
     /// * `Result<Vec<u8>>` - 序列化的指令数据
-    fn build_initialize_instruction_data(nonce: u8, open_time: u64, init_pc_amount: u64, init_coin_amount: u64) -> Result<Vec<u8>> {
+    fn build_initialize_instruction_data(
+        nonce: u8,
+        open_time: u64,
+        init_pc_amount: u64,
+        init_coin_amount: u64,
+    ) -> Result<Vec<u8>> {
         // 使用预定义的discriminator常量 - V2 AMM Initialize指令
         let discriminator = cp_instruction::Initialize::DISCRIMINATOR;
 
@@ -358,7 +377,12 @@ mod tests {
         let init_pc_amount = 100_000_000u64; // 100 USDC
         let init_coin_amount = 1_000_000_000u64; // 1 SOL
 
-        let result = ClassicAmmInstructionBuilder::build_initialize_instruction_data(nonce, open_time, init_pc_amount, init_coin_amount);
+        let result = ClassicAmmInstructionBuilder::build_initialize_instruction_data(
+            nonce,
+            open_time,
+            init_pc_amount,
+            init_coin_amount,
+        );
 
         assert!(result.is_ok());
         let data = result.unwrap();
@@ -417,7 +441,12 @@ mod tests {
         let init_pc_amount = u64::MAX;
         let init_coin_amount = u64::MAX;
 
-        let result = ClassicAmmInstructionBuilder::build_initialize_instruction_data(nonce, open_time, init_pc_amount, init_coin_amount);
+        let result = ClassicAmmInstructionBuilder::build_initialize_instruction_data(
+            nonce,
+            open_time,
+            init_pc_amount,
+            init_coin_amount,
+        );
 
         assert!(result.is_ok());
         let data = result.unwrap();
@@ -585,7 +614,14 @@ mod tests {
         let init_amount_1 = 100_000_000u64;
         let open_time = 0u64;
 
-        let result = ClassicAmmInstructionBuilder::build_initialize_instruction(&pool_creator, &mint0, &mint1, init_amount_0, init_amount_1, open_time);
+        let result = ClassicAmmInstructionBuilder::build_initialize_instruction(
+            &pool_creator,
+            &mint0,
+            &mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        );
 
         assert!(result.is_ok());
         let instructions = result.unwrap();
@@ -688,8 +724,18 @@ mod tests {
         let init_coin_amount = 1_000_000_000u64;
 
         // Build instruction data multiple times
-        let result1 = ClassicAmmInstructionBuilder::build_initialize_instruction_data(nonce, open_time, init_pc_amount, init_coin_amount);
-        let result2 = ClassicAmmInstructionBuilder::build_initialize_instruction_data(nonce, open_time, init_pc_amount, init_coin_amount);
+        let result1 = ClassicAmmInstructionBuilder::build_initialize_instruction_data(
+            nonce,
+            open_time,
+            init_pc_amount,
+            init_coin_amount,
+        );
+        let result2 = ClassicAmmInstructionBuilder::build_initialize_instruction_data(
+            nonce,
+            open_time,
+            init_pc_amount,
+            init_coin_amount,
+        );
 
         assert!(result1.is_ok());
         assert!(result2.is_ok());
@@ -714,10 +760,24 @@ mod tests {
         let open_time = 0u64;
 
         // Test with mint0, mint1 order
-        let result1 = ClassicAmmInstructionBuilder::build_initialize_instruction(&pool_creator, &mint0, &mint1, init_amount_0, init_amount_1, open_time);
+        let result1 = ClassicAmmInstructionBuilder::build_initialize_instruction(
+            &pool_creator,
+            &mint0,
+            &mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        );
 
         // Test with mint1, mint0 order (reversed)
-        let result2 = ClassicAmmInstructionBuilder::build_initialize_instruction(&pool_creator, &mint1, &mint0, init_amount_1, init_amount_0, open_time);
+        let result2 = ClassicAmmInstructionBuilder::build_initialize_instruction(
+            &pool_creator,
+            &mint1,
+            &mint0,
+            init_amount_1,
+            init_amount_0,
+            open_time,
+        );
 
         assert!(result1.is_ok());
         assert!(result2.is_ok());

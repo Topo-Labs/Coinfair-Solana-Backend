@@ -1125,24 +1125,26 @@ impl SwapService {
         // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
             info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
-            let create_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_ata_ix);
         }
 
         // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
             info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
-            let create_upper_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper_upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper_upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_upper_ata_ix);
         }
 
@@ -1349,24 +1351,26 @@ impl SwapService {
         // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
             info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
-            let create_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_ata_ix);
         }
 
         // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
             info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
-            let create_upper_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper_upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper_upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_upper_ata_ix);
         }
 
@@ -1629,24 +1633,26 @@ impl SwapService {
         // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
             info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
-            let create_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_ata_ix);
         }
 
         // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
             info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
-            let create_upper_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper_upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper_upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_upper_ata_ix);
         }
 
@@ -1862,24 +1868,26 @@ impl SwapService {
         // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
             info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
-            let create_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_ata_ix);
         }
 
         // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
             info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
-            let create_upper_upper_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &user_wallet,
-                &upper_upper.unwrap(),
-                &input_mint_pubkey,
-                &input_token_program,
-            );
+            let create_upper_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &user_wallet,
+                    &upper_upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
             instructions.push(create_upper_upper_ata_ix);
         }
 

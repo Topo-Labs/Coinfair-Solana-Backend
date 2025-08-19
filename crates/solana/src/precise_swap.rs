@@ -45,16 +45,32 @@ impl PreciseSwapService {
         // 第二步：确定交换方向
         let zero_for_one = self.determine_swap_direction(&input_mint_pubkey, &output_mint_pubkey, &pool_data)?;
 
-        info!("  交换方向: {}", if zero_for_one { "Token0 -> Token1" } else { "Token1 -> Token0" });
+        info!(
+            "  交换方向: {}",
+            if zero_for_one {
+                "Token0 -> Token1"
+            } else {
+                "Token1 -> Token0"
+            }
+        );
 
         // 第三步：加载所需的tick数组
-        let mut tick_arrays = self.load_required_tick_arrays(&pool_pubkey, &pool_data, &tick_bitmap, zero_for_one).await?;
+        let mut tick_arrays = self
+            .load_required_tick_arrays(&pool_pubkey, &pool_data, &tick_bitmap, zero_for_one)
+            .await?;
 
         // 第四步：调用client的精确计算方法
         // 注意：这里需要将pool_data反序列化为正确的结构体
         // 在真实环境中，你需要引入raydium AMM的状态结构
         let output_amount = self
-            .call_client_calculation_method(input_amount, zero_for_one, &pool_data, &amm_config, &tick_bitmap, &mut tick_arrays)
+            .call_client_calculation_method(
+                input_amount,
+                zero_for_one,
+                &pool_data,
+                &amm_config,
+                &tick_bitmap,
+                &mut tick_arrays,
+            )
             .await?;
 
         info!("  💰 精确计算输出: {}", output_amount);
@@ -64,7 +80,11 @@ impl PreciseSwapService {
         let min_output_with_slippage = self.apply_slippage(output_amount, slippage_rate);
         let price_impact = self.calculate_price_impact(input_amount, output_amount);
 
-        info!("  🛡️ 滑点保护 ({:.2}%): {}", slippage_rate * 100.0, min_output_with_slippage);
+        info!(
+            "  🛡️ 滑点保护 ({:.2}%): {}",
+            slippage_rate * 100.0,
+            min_output_with_slippage
+        );
         info!("  💥 价格影响: {:.4}%", price_impact * 100.0);
 
         Ok(PreciseSwapResult {
@@ -119,7 +139,13 @@ impl PreciseSwapService {
     }
 
     /// 加载交换所需的tick数组
-    async fn load_required_tick_arrays(&self, pool_pubkey: &Pubkey, _pool_data: &[u8], _tick_bitmap: &[u8], _zero_for_one: bool) -> Result<VecDeque<Vec<u8>>> {
+    async fn load_required_tick_arrays(
+        &self,
+        pool_pubkey: &Pubkey,
+        _pool_data: &[u8],
+        _tick_bitmap: &[u8],
+        _zero_for_one: bool,
+    ) -> Result<VecDeque<Vec<u8>>> {
         info!("📊 加载所需的tick数组...");
 
         let mut tick_arrays = VecDeque::new();
@@ -216,7 +242,12 @@ impl PreciseSwapService {
         let fee_rate = 0.0025; // 0.25%
         let output_after_fee = (input_amount as f64 * (1.0 - fee_rate)) as u64;
 
-        info!("  📊 简化计算: {} -> {} (扣除{}%手续费)", input_amount, output_after_fee, fee_rate * 100.0);
+        info!(
+            "  📊 简化计算: {} -> {} (扣除{}%手续费)",
+            input_amount,
+            output_after_fee,
+            fee_rate * 100.0
+        );
 
         Ok(output_after_fee)
     }
@@ -239,7 +270,14 @@ impl PreciseSwapService {
 
     /// 获取tick数组地址
     fn get_tick_array_address(&self, pool_pubkey: &Pubkey, start_index: i32) -> Result<Pubkey> {
-        let (pubkey, _) = Pubkey::find_program_address(&["tick_array".as_bytes(), pool_pubkey.as_ref(), &start_index.to_be_bytes()], &self.program_id);
+        let (pubkey, _) = Pubkey::find_program_address(
+            &[
+                "tick_array".as_bytes(),
+                pool_pubkey.as_ref(),
+                &start_index.to_be_bytes(),
+            ],
+            &self.program_id,
+        );
         Ok(pubkey)
     }
 

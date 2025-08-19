@@ -20,7 +20,10 @@ use utils::{AppError, AppResult};
         (status = 404, description = "未找到上级推荐人")
     )
 )]
-pub async fn get_upper(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<String>> {
+pub async fn get_upper(
+    Extension(services): Extension<Services>,
+    Path(address): Path<String>,
+) -> AppResult<Json<String>> {
     match services.refer.get_upper(address.to_string()).await? {
         Some(upper) => Ok(Json(upper)),
         None => Err(AppError::NotFound(format!("Upper of address {} not found.", address))),
@@ -39,7 +42,10 @@ pub async fn get_upper(Extension(services): Extension<Services>, Path(address): 
         (status = 200, description = "成功返回完整推荐链", body = Vec<String>)
     )
 )]
-pub async fn get_uppers(Extension(services): Extension<Services>, Path(address): Path<String>) -> AppResult<Json<Vec<String>>> {
+pub async fn get_uppers(
+    Extension(services): Extension<Services>,
+    Path(address): Path<String>,
+) -> AppResult<Json<Vec<String>>> {
     let uppers = services.refer.get_uppers(address.to_string()).await?;
 
     Ok(Json(uppers))

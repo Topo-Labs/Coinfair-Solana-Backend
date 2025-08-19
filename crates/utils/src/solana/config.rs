@@ -10,19 +10,22 @@ pub struct ConfigManager;
 impl ConfigManager {
     /// 获取Raydium程序ID (V3 CLMM)
     pub fn get_raydium_program_id() -> Result<Pubkey> {
-        let program_id_str = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
+        let program_id_str =
+            std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 
     /// 获取Raydium V2 AMM程序ID (Classic AMM)
     pub fn get_raydium_v2_amm_program_id() -> Result<Pubkey> {
-        let program_id_str = std::env::var("RAYDIUM_V2_AMM_PROGRAM_ID").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_V2_AMM_PROGRAM_ID.to_string());
+        let program_id_str = std::env::var("RAYDIUM_V2_AMM_PROGRAM_ID")
+            .unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_V2_AMM_PROGRAM_ID.to_string());
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 
     /// 获取Raydium V3 AMM程序ID (CLMM)
     pub fn get_raydium_v3_program_id() -> Result<Pubkey> {
-        let program_id_str = std::env::var("RAYDIUM_V3_PROGRAM").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
+        let program_id_str =
+            std::env::var("RAYDIUM_V3_PROGRAM").unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 
@@ -56,14 +59,17 @@ impl ConfigManager {
         // 支持多种私钥格式
         let keypair = if private_key_str.starts_with('[') && private_key_str.ends_with(']') {
             // JSON 数组格式 [1,2,3,...]
-            let bytes: Vec<u8> = serde_json::from_str(&private_key_str).map_err(|e| anyhow::anyhow!("解析私钥JSON格式失败: {}", e))?;
+            let bytes: Vec<u8> =
+                serde_json::from_str(&private_key_str).map_err(|e| anyhow::anyhow!("解析私钥JSON格式失败: {}", e))?;
             if bytes.len() != 64 {
                 return Err(anyhow::anyhow!("私钥长度必须是64字节"));
             }
             Keypair::from_bytes(&bytes)?
         } else {
             // Base58 格式
-            let bytes = bs58::decode(&private_key_str).into_vec().map_err(|e| anyhow::anyhow!("解码Base58私钥失败: {}", e))?;
+            let bytes = bs58::decode(&private_key_str)
+                .into_vec()
+                .map_err(|e| anyhow::anyhow!("解码Base58私钥失败: {}", e))?;
             if bytes.len() != 64 {
                 return Err(anyhow::anyhow!("私钥长度必须是64字节"));
             }
@@ -87,14 +93,17 @@ impl ConfigManager {
         // 支持多种私钥格式
         let keypair = if private_key_str.starts_with('[') && private_key_str.ends_with(']') {
             // JSON 数组格式 [1,2,3,...]
-            let bytes: Vec<u8> = serde_json::from_str(&private_key_str).map_err(|e| anyhow::anyhow!("解析私钥JSON格式失败: {}", e))?;
+            let bytes: Vec<u8> =
+                serde_json::from_str(&private_key_str).map_err(|e| anyhow::anyhow!("解析私钥JSON格式失败: {}", e))?;
             if bytes.len() != 64 {
                 return Err(anyhow::anyhow!("私钥长度必须是64字节"));
             }
             Keypair::from_bytes(&bytes)?
         } else {
             // Base58 格式
-            let bytes = bs58::decode(&private_key_str).into_vec().map_err(|e| anyhow::anyhow!("解码Base58私钥失败: {}", e))?;
+            let bytes = bs58::decode(&private_key_str)
+                .into_vec()
+                .map_err(|e| anyhow::anyhow!("解码Base58私钥失败: {}", e))?;
             if bytes.len() != 64 {
                 return Err(anyhow::anyhow!("私钥长度必须是64字节"));
             }
@@ -106,8 +115,8 @@ impl ConfigManager {
 
     /// 获取推荐系统程序ID
     pub fn get_referral_program_id() -> Result<Pubkey> {
-        let program_id_str = std::env::var("REFERRAL_PROGRAM_ID")
-            .unwrap_or_else(|_| constants::DEFAULT_REFERRAL_PROGRAM_ID.to_string());
+        let program_id_str =
+            std::env::var("REFERRAL_PROGRAM_ID").unwrap_or_else(|_| constants::DEFAULT_REFERRAL_PROGRAM_ID.to_string());
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 

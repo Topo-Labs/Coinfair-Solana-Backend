@@ -34,7 +34,13 @@ pub fn update_nft_mint_instr(config: &ClientConfig, new_nft_mint: Pubkey) -> Res
     Ok(instructions)
 }
 
-pub fn init_referral_config_instr(config: &ClientConfig, admin: Pubkey, nft_mint: Pubkey, protocol_wallet: Pubkey, claim_fee: u64) -> Result<Vec<Instruction>> {
+pub fn init_referral_config_instr(
+    config: &ClientConfig,
+    admin: Pubkey,
+    nft_mint: Pubkey,
+    protocol_wallet: Pubkey,
+    claim_fee: u64,
+) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.admin_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let client = Client::new(url, Rc::new(payer));

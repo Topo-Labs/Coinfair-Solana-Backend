@@ -46,7 +46,9 @@ impl ClmmPoolRepository {
             // 状态索引
             IndexModel::builder().keys(doc! { "status": 1 }).build(),
             // 价格范围索引
-            IndexModel::builder().keys(doc! { "price_info.initial_price": 1 }).build(),
+            IndexModel::builder()
+                .keys(doc! { "price_info.initial_price": 1 })
+                .build(),
             // API创建时间索引
             IndexModel::builder().keys(doc! { "api_created_at": -1 }).build(),
             // 开放时间索引
@@ -78,9 +80,11 @@ impl ClmmPoolRepository {
                     "chain_confirmed": 1,
                     "api_created_at": 1
                 })
-                .options(IndexOptions::builder()
-                    .name("idx_chain_confirmed_created".to_string())
-                    .build())
+                .options(
+                    IndexOptions::builder()
+                        .name("idx_chain_confirmed_created".to_string())
+                        .build(),
+                )
                 .build(),
             // 池子地址和事件slot索引（用于版本控制）
             IndexModel::builder()
@@ -88,22 +92,20 @@ impl ClmmPoolRepository {
                     "pool_address": 1,
                     "event_updated_slot": -1
                 })
-                .options(IndexOptions::builder()
-                    .name("idx_pool_slot".to_string())
-                    .build())
+                .options(IndexOptions::builder().name("idx_pool_slot".to_string()).build())
                 .build(),
             // 事件签名索引（稀疏索引）
             IndexModel::builder()
                 .keys(doc! { "event_signature": 1 })
-                .options(IndexOptions::builder()
-                    .sparse(true)
-                    .name("idx_event_signature".to_string())
-                    .build())
+                .options(
+                    IndexOptions::builder()
+                        .sparse(true)
+                        .name("idx_event_signature".to_string())
+                        .build(),
+                )
                 .build(),
             // 数据来源索引
-            IndexModel::builder()
-                .keys(doc! { "data_source": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "data_source": 1 }).build(),
         ];
 
         self.collection.create_indexes(indexes, None).await?;
@@ -132,7 +134,10 @@ impl ClmmPoolRepository {
             ]
         };
 
-        let options = FindOptions::builder().limit(limit.unwrap_or(50)).sort(doc! { "api_created_at": -1 }).build();
+        let options = FindOptions::builder()
+            .limit(limit.unwrap_or(50))
+            .sort(doc! { "api_created_at": -1 })
+            .build();
 
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
@@ -148,7 +153,10 @@ impl ClmmPoolRepository {
     pub async fn find_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
         let filter = doc! { "creator_wallet": creator_wallet };
 
-        let options = FindOptions::builder().limit(limit.unwrap_or(50)).sort(doc! { "api_created_at": -1 }).build();
+        let options = FindOptions::builder()
+            .limit(limit.unwrap_or(50))
+            .sort(doc! { "api_created_at": -1 })
+            .build();
 
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
@@ -170,7 +178,13 @@ impl ClmmPoolRepository {
         }
 
         if let Some(mint_address) = &params.mint_address {
-            filter.insert("$or", vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }]);
+            filter.insert(
+                "$or",
+                vec![
+                    doc! { "mint0.mint_address": mint_address },
+                    doc! { "mint1.mint_address": mint_address },
+                ],
+            );
         }
 
         if let Some(creator_wallet) = &params.creator_wallet {
@@ -220,7 +234,11 @@ impl ClmmPoolRepository {
 
         // 排序
         let sort_field = params.sort_by.as_deref().unwrap_or("api_created_at");
-        let sort_order = if params.sort_order.as_deref() == Some("asc") { 1 } else { -1 };
+        let sort_order = if params.sort_order.as_deref() == Some("asc") {
+            1
+        } else {
+            -1
+        };
         options.sort = Some(doc! { sort_field: sort_order });
 
         // 执行查询
@@ -295,7 +313,10 @@ impl ClmmPoolRepository {
     /// 获取需要同步的池子列表
     pub async fn get_pools_need_sync(&self, limit: Option<i64>) -> AppResult<Vec<ClmmPool>> {
         let filter = doc! { "sync_status.needs_sync": true };
-        let options = FindOptions::builder().limit(limit.unwrap_or(100)).sort(doc! { "sync_status.last_sync_at": 1 }).build();
+        let options = FindOptions::builder()
+            .limit(limit.unwrap_or(100))
+            .sort(doc! { "sync_status.last_sync_at": 1 })
+            .build();
 
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
@@ -313,11 +334,22 @@ impl ClmmPoolRepository {
         let total_pools = self.collection.count_documents(doc! {}, None).await?;
 
         // 活跃池子数量
-        let active_pools = self.collection.count_documents(doc! { "status": "Active" }, None).await?;
+        let active_pools = self
+            .collection
+            .count_documents(doc! { "status": "Active" }, None)
+            .await?;
 
         // 今日新增池子数量
-        let today_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp() as f64;
-        let today_new_pools = self.collection.count_documents(doc! { "api_created_at": { "$gte": today_start } }, None).await?;
+        let today_start = chrono::Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp() as f64;
+        let today_new_pools = self
+            .collection
+            .count_documents(doc! { "api_created_at": { "$gte": today_start } }, None)
+            .await?;
 
         // 按状态分组统计 (使用聚合管道)
         let status_pipeline = vec![doc! {
@@ -426,7 +458,13 @@ impl ClmmPoolRepository {
 
         // 代币mint地址过滤 (兼容原有的单代币查询)
         if let Some(mint_address) = &params.mint_address {
-            filter.insert("$or", vec![doc! { "mint0.mint_address": mint_address }, doc! { "mint1.mint_address": mint_address }]);
+            filter.insert(
+                "$or",
+                vec![
+                    doc! { "mint0.mint_address": mint_address },
+                    doc! { "mint1.mint_address": mint_address },
+                ],
+            );
         }
 
         // 双代币精确查询过滤 (mint1 和 mint2)
@@ -451,11 +489,23 @@ impl ClmmPoolRepository {
                 );
             } else {
                 // 只有mint1，按单代币逻辑查询
-                filter.insert("$or", vec![doc! { "mint0.mint_address": mint1 }, doc! { "mint1.mint_address": mint1 }]);
+                filter.insert(
+                    "$or",
+                    vec![
+                        doc! { "mint0.mint_address": mint1 },
+                        doc! { "mint1.mint_address": mint1 },
+                    ],
+                );
             }
         } else if let Some(mint2) = &params.mint2 {
             // 只有mint2，按单代币逻辑查询
-            filter.insert("$or", vec![doc! { "mint0.mint_address": mint2 }, doc! { "mint1.mint_address": mint2 }]);
+            filter.insert(
+                "$or",
+                vec![
+                    doc! { "mint0.mint_address": mint2 },
+                    doc! { "mint1.mint_address": mint2 },
+                ],
+            );
         }
 
         // 状态过滤
@@ -474,7 +524,11 @@ impl ClmmPoolRepository {
 
         // 多个池子地址查询过滤 (按逗号分隔的地址列表)
         if let Some(ids_str) = &params.ids {
-            let pool_addresses: Vec<String> = ids_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let pool_addresses: Vec<String> = ids_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
 
             if !pool_addresses.is_empty() {
                 filter.insert("pool_address", doc! { "$in": pool_addresses });
@@ -493,7 +547,11 @@ impl ClmmPoolRepository {
             _ => "api_created_at", // 默认排序字段
         };
 
-        let sort_direction = if params.sort_type.as_deref() == Some("asc") { 1 } else { -1 };
+        let sort_direction = if params.sort_type.as_deref() == Some("asc") {
+            1
+        } else {
+            -1
+        };
         let sort_doc = doc! { sort_field: sort_direction };
 
         // 计算分页参数
@@ -502,7 +560,11 @@ impl ClmmPoolRepository {
         let skip = (page - 1) * page_size;
 
         // 构建查询选项
-        let options = FindOptions::builder().sort(sort_doc).skip(skip).limit(page_size as i64).build();
+        let options = FindOptions::builder()
+            .sort(sort_doc)
+            .skip(skip)
+            .limit(page_size as i64)
+            .build();
 
         // 执行查询
         let mut cursor = self.collection.find(filter, options).await?;
@@ -513,7 +575,11 @@ impl ClmmPoolRepository {
         }
 
         // 计算分页元数据
-        let total_pages = if total_count == 0 { 0 } else { (total_count + page_size - 1) / page_size };
+        let total_pages = if total_count == 0 {
+            0
+        } else {
+            (total_count + page_size - 1) / page_size
+        };
 
         let pagination = PaginationMeta {
             current_page: page,
@@ -527,7 +593,11 @@ impl ClmmPoolRepository {
         // 构建过滤器摘要
         let filters = self.build_filter_summary(params).await?;
 
-        Ok(PoolListResponse { pools, pagination, filters })
+        Ok(PoolListResponse {
+            pools,
+            pagination,
+            filters,
+        })
     }
 
     /// 构建过滤器摘要，包含池子类型统计
@@ -566,72 +636,75 @@ impl ClmmPoolRepository {
         let filter = doc! {
             "pool_address": &pool.pool_address
         };
-        
+
         // 将池子对象转换为文档
         let mut pool_doc = mongodb::bson::to_document(&pool)?;
-        
+
         // 从$set中移除api_created_at，因为它会在$setOnInsert中处理
         let api_created_at = pool_doc.remove("api_created_at");
-        
+
         let mut update = doc! {
             "$set": pool_doc,
         };
-        
+
         // 只有在api_created_at存在时才添加到$setOnInsert
         if let Some(created_at_value) = api_created_at {
-            update.insert("$setOnInsert", doc! {
-                "api_created_at": created_at_value
-            });
+            update.insert(
+                "$setOnInsert",
+                doc! {
+                    "api_created_at": created_at_value
+                },
+            );
         } else {
-            update.insert("$setOnInsert", doc! {
-                "api_created_at": chrono::Utc::now().timestamp()
-            });
+            update.insert(
+                "$setOnInsert",
+                doc! {
+                    "api_created_at": chrono::Utc::now().timestamp()
+                },
+            );
         }
-        
-        let options = UpdateOptions::builder()
-            .upsert(true)
-            .build();
-        
-        self.collection
-            .update_one(filter, update, options)
-            .await?;
-        
+
+        let options = UpdateOptions::builder().upsert(true).build();
+
+        self.collection.update_one(filter, update, options).await?;
+
         Ok(())
     }
-    
+
     /// 条件更新池子（带版本控制）
     pub async fn update_pool_with_version_check(
         &self,
         pool_address: &str,
         update_doc: Document,
-        min_slot: Option<u64>
+        min_slot: Option<u64>,
     ) -> AppResult<bool> {
         let mut filter = doc! {
             "pool_address": pool_address
         };
-        
+
         // 添加版本控制条件
         if let Some(slot) = min_slot {
-            filter.insert("$or", vec![
-                doc! { "event_updated_slot": { "$exists": false } },
-                doc! { "event_updated_slot": { "$lte": slot as i64 } }
-            ]);
+            filter.insert(
+                "$or",
+                vec![
+                    doc! { "event_updated_slot": { "$exists": false } },
+                    doc! { "event_updated_slot": { "$lte": slot as i64 } },
+                ],
+            );
         }
-        
-        let result = self.collection
-            .update_one(filter, update_doc, None)
-            .await?;
-        
+
+        let result = self.collection.update_one(filter, update_doc, None).await?;
+
         Ok(result.modified_count > 0)
     }
-    
+
     /// 根据地址更新池子
     pub async fn update_pool_by_address(&self, pool_address: &str, update_doc: Document) -> AppResult<()> {
         let filter = doc! { "pool_address": pool_address };
         self.collection.update_one(filter, update_doc, None).await?;
         Ok(())
     }
-    
+
     /// 批量查询需要同步的池子
     pub async fn find_pools_need_sync(&self, limit: i64) -> AppResult<Vec<ClmmPool>> {
         let filter = doc! {
@@ -640,22 +713,22 @@ impl ClmmPoolRepository {
                 { "sync_status.needs_sync": true }
             ]
         };
-        
+
         let options = FindOptions::builder()
             .limit(limit)
-            .sort(doc! { "api_created_at": 1 })  // 优先处理早创建的
+            .sort(doc! { "api_created_at": 1 }) // 优先处理早创建的
             .build();
-        
+
         let mut cursor = self.collection.find(filter, options).await?;
         let mut pools = Vec::new();
-        
+
         while cursor.advance().await? {
             pools.push(cursor.deserialize_current()?);
         }
-        
+
         Ok(pools)
     }
-    
+
     /// 插入池子
     pub async fn insert_pool(&self, pool: ClmmPool) -> AppResult<()> {
         self.collection.insert_one(pool, None).await?;
@@ -672,7 +745,9 @@ mod tests {
 
     // Helper function to create test database
     async fn setup_test_db() -> Database {
-        let client = Client::with_uri_str("mongodb://localhost:27017").await.expect("Failed to connect to MongoDB");
+        let client = Client::with_uri_str("mongodb://localhost:27017")
+            .await
+            .expect("Failed to connect to MongoDB");
         let db_name = format!("test_clmm_pool_{}", Utc::now().timestamp());
         client.database(&db_name)
     }
@@ -1009,7 +1084,10 @@ mod tests {
         let result = repository.query_pools_with_pagination(&params).await.unwrap();
 
         assert_eq!(result.pools.len(), 1);
-        assert!(result.pools[0].mint0.mint_address == "mint0111111111111111111111111111111" || result.pools[0].mint1.mint_address == "mint0111111111111111111111111111111");
+        assert!(
+            result.pools[0].mint0.mint_address == "mint0111111111111111111111111111111"
+                || result.pools[0].mint1.mint_address == "mint0111111111111111111111111111111"
+        );
 
         // Cleanup
         db.drop(None).await.unwrap();
@@ -1127,9 +1205,21 @@ mod tests {
 
         // If we have type counts, verify them
         if !result.filters.type_counts.is_empty() {
-            let concentrated_count = result.filters.type_counts.iter().find(|tc| tc.pool_type == "concentrated").map(|tc| tc.count).unwrap_or(0);
+            let concentrated_count = result
+                .filters
+                .type_counts
+                .iter()
+                .find(|tc| tc.pool_type == "concentrated")
+                .map(|tc| tc.count)
+                .unwrap_or(0);
 
-            let standard_count = result.filters.type_counts.iter().find(|tc| tc.pool_type == "standard").map(|tc| tc.count).unwrap_or(0);
+            let standard_count = result
+                .filters
+                .type_counts
+                .iter()
+                .find(|tc| tc.pool_type == "standard")
+                .map(|tc| tc.count)
+                .unwrap_or(0);
 
             // At least verify that we have some counts
             assert!(concentrated_count > 0 || standard_count > 0);

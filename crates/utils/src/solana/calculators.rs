@@ -61,30 +61,60 @@ pub struct PDACalculator;
 impl PDACalculator {
     /// 计算AMM配置PDA
     pub fn calculate_amm_config_pda(raydium_program_id: &Pubkey, amm_config_index: u16) -> (Pubkey, u8) {
-        info!("计算AMM配置PDA: raydium_program_id: {:?}, amm_config_index: {:?}", raydium_program_id, amm_config_index);
-        Pubkey::find_program_address(&["amm_config".as_bytes(), &amm_config_index.to_be_bytes()], raydium_program_id)
+        info!(
+            "计算AMM配置PDA: raydium_program_id: {:?}, amm_config_index: {:?}",
+            raydium_program_id, amm_config_index
+        );
+        Pubkey::find_program_address(
+            &["amm_config".as_bytes(), &amm_config_index.to_be_bytes()],
+            raydium_program_id,
+        )
     }
 
     /// 计算池子PDA
-    pub fn calculate_pool_pda(raydium_program_id: &Pubkey, amm_config_key: &Pubkey, mint0: &Pubkey, mint1: &Pubkey) -> (Pubkey, u8) {
+    pub fn calculate_pool_pda(
+        raydium_program_id: &Pubkey,
+        amm_config_key: &Pubkey,
+        mint0: &Pubkey,
+        mint1: &Pubkey,
+    ) -> (Pubkey, u8) {
         info!(
             "计算池子PDA: raydium_program_id: {:?}, amm_config_key: {:?}, mint0: {:?}, mint1: {:?}",
             raydium_program_id, amm_config_key, mint0, mint1
         );
         Pubkey::find_program_address(
-            &["pool".as_bytes(), amm_config_key.to_bytes().as_ref(), mint0.to_bytes().as_ref(), mint1.to_bytes().as_ref()],
+            &[
+                "pool".as_bytes(),
+                amm_config_key.to_bytes().as_ref(),
+                mint0.to_bytes().as_ref(),
+                mint1.to_bytes().as_ref(),
+            ],
             raydium_program_id,
         )
     }
 
     /// 计算tick array bitmap extension PDA
     pub fn calculate_tickarray_bitmap_extension_pda(raydium_program_id: &Pubkey, pool_pubkey: &Pubkey) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&["pool_tick_array_bitmap_extension".as_bytes(), pool_pubkey.as_ref()], raydium_program_id)
+        Pubkey::find_program_address(
+            &["pool_tick_array_bitmap_extension".as_bytes(), pool_pubkey.as_ref()],
+            raydium_program_id,
+        )
     }
 
     /// 计算tick array PDA
-    pub fn calculate_tick_array_pda(raydium_program_id: &Pubkey, pool_pubkey: &Pubkey, tick_index: i32) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&["tick_array".as_bytes(), pool_pubkey.as_ref(), tick_index.to_be_bytes().as_ref()], raydium_program_id)
+    pub fn calculate_tick_array_pda(
+        raydium_program_id: &Pubkey,
+        pool_pubkey: &Pubkey,
+        tick_index: i32,
+    ) -> (Pubkey, u8) {
+        Pubkey::find_program_address(
+            &[
+                "tick_array".as_bytes(),
+                pool_pubkey.as_ref(),
+                tick_index.to_be_bytes().as_ref(),
+            ],
+            raydium_program_id,
+        )
     }
 
     /// 计算observation PDA
@@ -94,7 +124,10 @@ impl PDACalculator {
 
     /// 计算池子vault PDA
     pub fn calculate_pool_vault_pda(raydium_program_id: &Pubkey, pool_pubkey: &Pubkey, mint: &Pubkey) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&["pool_vault".as_bytes(), pool_pubkey.as_ref(), mint.as_ref()], raydium_program_id)
+        Pubkey::find_program_address(
+            &["pool_vault".as_bytes(), pool_pubkey.as_ref(), mint.as_ref()],
+            raydium_program_id,
+        )
     }
 
     // ============ V2 AMM (Classic AMM) PDA Calculations ============
@@ -102,19 +135,32 @@ impl PDACalculator {
     /// 计算V2 AMM池子PDA
     /// 基于Raydium V2 AMM程序的池子地址计算
     pub fn calculate_v2_amm_pool_pda(program_id: &Pubkey, mint0: &Pubkey, mint1: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM池子PDA: program_id: {:?}, mint0: {:?}, mint1: {:?}", program_id, mint0, mint1);
+        info!(
+            "计算V2 AMM池子PDA: program_id: {:?}, mint0: {:?}, mint1: {:?}",
+            program_id, mint0, mint1
+        );
 
         // Raydium V2 AMM uses "amm_associated_seed" as the seed for pool PDA
         // The order of mints matters - typically sorted by pubkey bytes
-        let (mint_a, mint_b) = if mint0.to_bytes() < mint1.to_bytes() { (mint0, mint1) } else { (mint1, mint0) };
+        let (mint_a, mint_b) = if mint0.to_bytes() < mint1.to_bytes() {
+            (mint0, mint1)
+        } else {
+            (mint1, mint0)
+        };
 
-        Pubkey::find_program_address(&["amm_associated_seed".as_bytes(), mint_a.as_ref(), mint_b.as_ref()], program_id)
+        Pubkey::find_program_address(
+            &["amm_associated_seed".as_bytes(), mint_a.as_ref(), mint_b.as_ref()],
+            program_id,
+        )
     }
 
     /// 计算V2 AMM池子coin token账户PDA
     /// coin token通常是第一个token mint
     pub fn calculate_v2_pool_coin_token_account(program_id: &Pubkey, pool_id: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM coin token账户PDA: program_id: {:?}, pool_id: {:?}", program_id, pool_id);
+        info!(
+            "计算V2 AMM coin token账户PDA: program_id: {:?}, pool_id: {:?}",
+            program_id, pool_id
+        );
 
         Pubkey::find_program_address(&["coin_vault_associated_seed".as_bytes(), pool_id.as_ref()], program_id)
     }
@@ -122,7 +168,10 @@ impl PDACalculator {
     /// 计算V2 AMM池子PC token账户PDA
     /// PC (Price Currency) token通常是第二个token mint (如USDC)
     pub fn calculate_v2_pool_pc_token_account(program_id: &Pubkey, pool_id: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM PC token账户PDA: program_id: {:?}, pool_id: {:?}", program_id, pool_id);
+        info!(
+            "计算V2 AMM PC token账户PDA: program_id: {:?}, pool_id: {:?}",
+            program_id, pool_id
+        );
 
         Pubkey::find_program_address(&["pc_vault_associated_seed".as_bytes(), pool_id.as_ref()], program_id)
     }
@@ -130,7 +179,10 @@ impl PDACalculator {
     /// 计算V2 AMM LP mint PDA
     /// LP token mint用于表示流动性提供者的份额
     pub fn calculate_v2_lp_mint_pda(program_id: &Pubkey, pool_id: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM LP mint PDA: program_id: {:?}, pool_id: {:?}", program_id, pool_id);
+        info!(
+            "计算V2 AMM LP mint PDA: program_id: {:?}, pool_id: {:?}",
+            program_id, pool_id
+        );
 
         Pubkey::find_program_address(&["lp_mint_associated_seed".as_bytes(), pool_id.as_ref()], program_id)
     }
@@ -138,7 +190,10 @@ impl PDACalculator {
     /// 计算V2 AMM open orders PDA
     /// 用于Serum市场集成的open orders账户
     pub fn calculate_v2_open_orders_pda(program_id: &Pubkey, pool_id: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM open orders PDA: program_id: {:?}, pool_id: {:?}", program_id, pool_id);
+        info!(
+            "计算V2 AMM open orders PDA: program_id: {:?}, pool_id: {:?}",
+            program_id, pool_id
+        );
 
         Pubkey::find_program_address(&["open_order_associated_seed".as_bytes(), pool_id.as_ref()], program_id)
     }
@@ -146,7 +201,10 @@ impl PDACalculator {
     /// 计算V2 AMM target orders PDA
     /// 用于目标订单管理
     pub fn calculate_v2_target_orders_pda(program_id: &Pubkey, pool_id: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM target orders PDA: program_id: {:?}, pool_id: {:?}", program_id, pool_id);
+        info!(
+            "计算V2 AMM target orders PDA: program_id: {:?}, pool_id: {:?}",
+            program_id, pool_id
+        );
 
         Pubkey::find_program_address(&["target_associated_seed".as_bytes(), pool_id.as_ref()], program_id)
     }
@@ -154,7 +212,10 @@ impl PDACalculator {
     /// 计算V2 AMM withdraw queue PDA
     /// 用于管理提取队列
     pub fn calculate_v2_withdraw_queue_pda(program_id: &Pubkey, pool_id: &Pubkey) -> (Pubkey, u8) {
-        info!("计算V2 AMM withdraw queue PDA: program_id: {:?}, pool_id: {:?}", program_id, pool_id);
+        info!(
+            "计算V2 AMM withdraw queue PDA: program_id: {:?}, pool_id: {:?}",
+            program_id, pool_id
+        );
 
         Pubkey::find_program_address(&["withdraw_associated_seed".as_bytes(), pool_id.as_ref()], program_id)
     }
@@ -239,7 +300,14 @@ impl V2AmmParameterCalculator {
     ///
     /// # Returns
     /// * `Result<V2InitializeParams>` - 包含所有初始化参数的结构体
-    pub fn calculate_initialize_params(program_id: &Pubkey, mint0: &Pubkey, mint1: &Pubkey, init_amount_0: u64, init_amount_1: u64, open_time: u64) -> Result<V2InitializeParams> {
+    pub fn calculate_initialize_params(
+        program_id: &Pubkey,
+        mint0: &Pubkey,
+        mint1: &Pubkey,
+        init_amount_0: u64,
+        init_amount_1: u64,
+        open_time: u64,
+    ) -> Result<V2InitializeParams> {
         info!(
             "计算V2 AMM初始化参数: program_id: {:?}, mint0: {:?}, mint1: {:?}, amounts: ({}, {}), open_time: {}",
             program_id, mint0, mint1, init_amount_0, init_amount_1, open_time
@@ -296,7 +364,12 @@ impl V2AmmParameterCalculator {
     ///
     /// # Returns
     /// * `Result<()>` - 验证成功返回Ok，失败返回错误
-    pub fn validate_initialize_params(mint0: &Pubkey, mint1: &Pubkey, init_amount_0: u64, init_amount_1: u64) -> Result<()> {
+    pub fn validate_initialize_params(
+        mint0: &Pubkey,
+        mint1: &Pubkey,
+        init_amount_0: u64,
+        init_amount_1: u64,
+    ) -> Result<()> {
         // 验证mint地址不能相同
         if mint0 == mint1 {
             return Err(anyhow!("Token mint addresses cannot be the same: {:?}", mint0));
@@ -440,7 +513,8 @@ mod tests {
 
         // Test with different pool_id should produce different result
         let different_pool_id = Pubkey::new_unique();
-        let (different_coin_token_account, _) = PDACalculator::calculate_v2_pool_coin_token_account(&program_id, &different_pool_id);
+        let (different_coin_token_account, _) =
+            PDACalculator::calculate_v2_pool_coin_token_account(&program_id, &different_pool_id);
         assert_ne!(coin_token_account, different_coin_token_account);
     }
 
@@ -456,7 +530,8 @@ mod tests {
 
         // Test with different pool_id should produce different result
         let different_pool_id = Pubkey::new_unique();
-        let (different_pc_token_account, _) = PDACalculator::calculate_v2_pool_pc_token_account(&program_id, &different_pool_id);
+        let (different_pc_token_account, _) =
+            PDACalculator::calculate_v2_pool_pc_token_account(&program_id, &different_pool_id);
         assert_ne!(pc_token_account, different_pc_token_account);
     }
 
@@ -504,7 +579,8 @@ mod tests {
 
         // Test with different pool_id should produce different result
         let different_pool_id = Pubkey::new_unique();
-        let (different_target_orders, _) = PDACalculator::calculate_v2_target_orders_pda(&program_id, &different_pool_id);
+        let (different_target_orders, _) =
+            PDACalculator::calculate_v2_target_orders_pda(&program_id, &different_pool_id);
         assert_ne!(target_orders, different_target_orders);
     }
 
@@ -520,7 +596,8 @@ mod tests {
 
         // Test with different pool_id should produce different result
         let different_pool_id = Pubkey::new_unique();
-        let (different_withdraw_queue, _) = PDACalculator::calculate_v2_withdraw_queue_pda(&program_id, &different_pool_id);
+        let (different_withdraw_queue, _) =
+            PDACalculator::calculate_v2_withdraw_queue_pda(&program_id, &different_pool_id);
         assert_ne!(withdraw_queue, different_withdraw_queue);
     }
 
@@ -542,7 +619,15 @@ mod tests {
         let (withdraw_queue, _) = PDACalculator::calculate_v2_withdraw_queue_pda(&program_id, &pool_id);
 
         // Verify all PDAs are different from each other
-        let pdas = vec![pool_id, coin_token_account, pc_token_account, lp_mint, open_orders, target_orders, withdraw_queue];
+        let pdas = vec![
+            pool_id,
+            coin_token_account,
+            pc_token_account,
+            lp_mint,
+            open_orders,
+            target_orders,
+            withdraw_queue,
+        ];
 
         for (i, pda1) in pdas.iter().enumerate() {
             for (j, pda2) in pdas.iter().enumerate() {
@@ -619,11 +704,17 @@ mod tests {
         // The implementation should sort by bytes
         if mint0_bytes < mint1_bytes {
             // mint0 should be first in the seed
-            let expected_pda = Pubkey::find_program_address(&["amm_associated_seed".as_bytes(), mint0.as_ref(), mint1.as_ref()], &program_id);
+            let expected_pda = Pubkey::find_program_address(
+                &["amm_associated_seed".as_bytes(), mint0.as_ref(), mint1.as_ref()],
+                &program_id,
+            );
             assert_eq!(pool_pda_order1, expected_pda.0);
         } else {
             // mint1 should be first in the seed
-            let expected_pda = Pubkey::find_program_address(&["amm_associated_seed".as_bytes(), mint1.as_ref(), mint0.as_ref()], &program_id);
+            let expected_pda = Pubkey::find_program_address(
+                &["amm_associated_seed".as_bytes(), mint1.as_ref(), mint0.as_ref()],
+                &program_id,
+            );
             assert_eq!(pool_pda_order1, expected_pda.0);
         }
     }
@@ -639,7 +730,14 @@ mod tests {
         let init_amount_1 = 100_000_000; // 100 USDC
         let open_time = 1640995200; // 2022-01-01 00:00:00 UTC
 
-        let result = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, init_amount_0, init_amount_1, open_time);
+        let result = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        );
 
         assert!(result.is_ok());
         let params = result.unwrap();
@@ -681,7 +779,14 @@ mod tests {
         let init_amount_1 = 100_000_000;
         let open_time = 0; // Immediate open
 
-        let result = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, init_amount_0, init_amount_1, open_time);
+        let result = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        );
 
         assert!(result.is_ok());
         let params = result.unwrap();
@@ -842,9 +947,25 @@ mod tests {
         let mint0 = Pubkey::from_str(TEST_SOL_MINT).unwrap();
         let mint1 = Pubkey::from_str(TEST_USDC_MINT).unwrap();
 
-        let params1 = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, 1_000_000_000, 100_000_000, 0).unwrap();
+        let params1 = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            1_000_000_000,
+            100_000_000,
+            0,
+        )
+        .unwrap();
 
-        let params2 = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, 1_000_000_000, 100_000_000, 0).unwrap();
+        let params2 = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            1_000_000_000,
+            100_000_000,
+            0,
+        )
+        .unwrap();
 
         // Test that the struct implements PartialEq correctly
         assert_eq!(params1, params2);
@@ -868,15 +989,39 @@ mod tests {
         let open_time = 1640995200;
 
         // Calculate parameters multiple times
-        let params1 = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, init_amount_0, init_amount_1, open_time).unwrap();
+        let params1 = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        )
+        .unwrap();
 
-        let params2 = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, init_amount_0, init_amount_1, open_time).unwrap();
+        let params2 = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            init_amount_0,
+            init_amount_1,
+            open_time,
+        )
+        .unwrap();
 
         // Results should be identical
         assert_eq!(params1, params2);
 
         // Test with reversed mint order
-        let params3 = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint1, &mint0, init_amount_1, init_amount_0, open_time).unwrap();
+        let params3 = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint1,
+            &mint0,
+            init_amount_1,
+            init_amount_0,
+            open_time,
+        )
+        .unwrap();
 
         // Pool ID and nonce should be the same (due to mint sorting)
         assert_eq!(params1.pool_id, params3.pool_id);
@@ -906,7 +1051,14 @@ mod tests {
 
         // Test with large but valid amounts
         let large_amount = u64::MAX / 4; // Safe large amount
-        let result = V2AmmParameterCalculator::calculate_initialize_params(&program_id, &mint0, &mint1, large_amount, large_amount, 0);
+        let result = V2AmmParameterCalculator::calculate_initialize_params(
+            &program_id,
+            &mint0,
+            &mint1,
+            large_amount,
+            large_amount,
+            0,
+        );
         assert!(result.is_ok());
     }
 }

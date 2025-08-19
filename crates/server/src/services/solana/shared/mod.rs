@@ -1,3 +1,4 @@
+use crate::services::data_transform::DataTransformService;
 use ::utils::solana::swap_services::SwapV2InstructionBuilder;
 use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SwapConfig, SwapV2Service};
 use ::utils::AppConfig;
@@ -6,7 +7,6 @@ use solana_client::rpc_client::RpcClient;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use utils::ServiceHelpers;
-use crate::services::data_transform::DataTransformService;
 
 pub mod config;
 pub mod helpers;
@@ -137,7 +137,10 @@ impl SharedContext {
             }
         } else if let Some(private_key) = &self.app_config.private_key {
             // If private key is configured but raydium is not initialized, show first 8 chars as identifier
-            format!("{}...(private key configured)", &private_key[..8.min(private_key.len())])
+            format!(
+                "{}...(private key configured)",
+                &private_key[..8.min(private_key.len())]
+            )
         } else {
             "Private key not configured".to_string()
         }

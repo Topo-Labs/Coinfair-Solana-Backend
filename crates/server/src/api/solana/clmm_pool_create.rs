@@ -1,5 +1,7 @@
 use crate::{
-    dtos::solana_dto::{ApiResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, ErrorResponse},
+    dtos::solana_dto::{
+        ApiResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, ErrorResponse,
+    },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
 };
@@ -80,14 +82,20 @@ pub async fn create_pool(
 
     // 验证价格范围
     if request.price <= 0.0 {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0")))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0"))),
+        ));
     }
 
     // 验证mint地址不能相同
     if request.mint0 == request.mint1 {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::error(ErrorResponse::new("SAME_MINT_ERROR", "两个代币mint地址不能相同"))),
+            Json(ApiResponse::error(ErrorResponse::new(
+                "SAME_MINT_ERROR",
+                "两个代币mint地址不能相同",
+            ))),
         ));
     }
 
@@ -102,7 +110,10 @@ pub async fn create_pool(
         Err(e) => {
             error!("❌ 创建池子失败: {:?}", e);
             let error_response = ErrorResponse::new("CREATE_POOL_ERROR", &format!("创建池子失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -169,14 +180,20 @@ pub async fn create_pool_and_send_transaction(
 
     // 验证价格范围
     if request.price <= 0.0 {
-        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0")))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::error(ErrorResponse::new("INVALID_PRICE", "价格必须大于0"))),
+        ));
     }
 
     // 验证mint地址不能相同
     if request.mint0 == request.mint1 {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(ApiResponse::error(ErrorResponse::new("SAME_MINT_ERROR", "两个代币mint地址不能相同"))),
+            Json(ApiResponse::error(ErrorResponse::new(
+                "SAME_MINT_ERROR",
+                "两个代币mint地址不能相同",
+            ))),
         ));
     }
 
@@ -194,11 +211,17 @@ pub async fn create_pool_and_send_transaction(
             let error_msg = e.to_string();
             if error_msg.contains("already in use") || error_msg.contains("池子已存在") {
                 warn!("🔄 检测到池子已存在");
-                let error_response = ErrorResponse::new("POOL_ALREADY_EXISTS", "该配置和代币对的池子已存在，请检查参数或使用现有池子");
+                let error_response = ErrorResponse::new(
+                    "POOL_ALREADY_EXISTS",
+                    "该配置和代币对的池子已存在，请检查参数或使用现有池子",
+                );
                 Err((StatusCode::CONFLICT, Json(ApiResponse::error(error_response))))
             } else {
                 let error_response = ErrorResponse::new("CREATE_POOL_ERROR", &format!("创建池子失败: {}", e));
-                Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ApiResponse::error(error_response)),
+                ))
             }
         }
     }

@@ -105,7 +105,11 @@ impl AppError {
                             validation_errors
                                 .entry(Cow::from(struct_property))
                                 .or_insert_with(Vec::new)
-                                .push(error.message.unwrap_or_else(|| Cow::from(format!("{} is required", struct_property))));
+                                .push(
+                                    error
+                                        .message
+                                        .unwrap_or_else(|| Cow::from(format!("{} is required", struct_property))),
+                                );
                         }
                     }
                 }

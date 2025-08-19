@@ -59,15 +59,24 @@ impl PositionInstructionBuilder {
             &raydium_program_id,
         );
 
-        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
+        let (personal_position, _) =
+            Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
 
         let (tick_array_lower, _) = Pubkey::find_program_address(
-            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_lower_start_index.to_be_bytes()],
+            &[
+                TICK_ARRAY_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_lower_start_index.to_be_bytes(),
+            ],
             &raydium_program_id,
         );
 
         let (tick_array_upper, _) = Pubkey::find_program_address(
-            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_upper_start_index.to_be_bytes()],
+            &[
+                TICK_ARRAY_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_upper_start_index.to_be_bytes(),
+            ],
             &raydium_program_id,
         );
 
@@ -266,15 +275,24 @@ impl PositionInstructionBuilder {
             &raydium_program_id,
         );
 
-        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
+        let (personal_position, _) =
+            Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
 
         let (tick_array_lower, _) = Pubkey::find_program_address(
-            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_lower_start_index.to_be_bytes()],
+            &[
+                TICK_ARRAY_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_lower_start_index.to_be_bytes(),
+            ],
             &raydium_program_id,
         );
 
         let (tick_array_upper, _) = Pubkey::find_program_address(
-            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_upper_start_index.to_be_bytes()],
+            &[
+                TICK_ARRAY_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_upper_start_index.to_be_bytes(),
+            ],
             &raydium_program_id,
         );
 
@@ -317,7 +335,11 @@ impl PositionInstructionBuilder {
     }
 
     /// 构建IncreaseLiquidityV2指令数据（支持Token-2022）
-    fn build_increase_liquidity_instruction_data(liquidity: u128, amount_0_max: u64, amount_1_max: u64) -> Result<Vec<u8>> {
+    fn build_increase_liquidity_instruction_data(
+        liquidity: u128,
+        amount_0_max: u64,
+        amount_1_max: u64,
+    ) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
         // 使用预定义的discriminator常量 - IncreaseLiquidityV2指令
@@ -358,7 +380,8 @@ impl PositionInstructionBuilder {
         let mut instructions = Vec::new();
 
         // 1. 计算所有需要的PDA地址
-        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
+        let (personal_position, _) =
+            Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
 
         let (protocol_position, _) = Pubkey::find_program_address(
             &[
@@ -371,12 +394,20 @@ impl PositionInstructionBuilder {
         );
 
         let (tick_array_lower, _) = Pubkey::find_program_address(
-            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_lower_start_index.to_be_bytes()],
+            &[
+                TICK_ARRAY_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_lower_start_index.to_be_bytes(),
+            ],
             &raydium_program_id,
         );
 
         let (tick_array_upper, _) = Pubkey::find_program_address(
-            &[TICK_ARRAY_SEED.as_bytes(), pool_address.as_ref(), &tick_array_upper_start_index.to_be_bytes()],
+            &[
+                TICK_ARRAY_SEED.as_bytes(),
+                pool_address.as_ref(),
+                &tick_array_upper_start_index.to_be_bytes(),
+            ],
             &raydium_program_id,
         );
 
@@ -438,7 +469,11 @@ impl PositionInstructionBuilder {
     }
 
     /// 构建DecreaseLiquidityV2指令数据
-    fn build_decrease_liquidity_instruction_data(liquidity: u128, amount_0_min: u64, amount_1_min: u64) -> Result<Vec<u8>> {
+    fn build_decrease_liquidity_instruction_data(
+        liquidity: u128,
+        amount_0_min: u64,
+        amount_1_min: u64,
+    ) -> Result<Vec<u8>> {
         let mut data = Vec::new();
 
         // 使用预定义的discriminator常量 - DecreaseLiquidityV2指令
@@ -454,14 +489,20 @@ impl PositionInstructionBuilder {
     }
 
     /// 构建ClosePosition指令
-    pub fn build_close_position_instructions(nft_mint: &Pubkey, nft_token_account: &Pubkey, nft_token_program: &Pubkey, user_wallet: &Pubkey) -> Result<Vec<Instruction>> {
+    pub fn build_close_position_instructions(
+        nft_mint: &Pubkey,
+        nft_token_account: &Pubkey,
+        nft_token_program: &Pubkey,
+        user_wallet: &Pubkey,
+    ) -> Result<Vec<Instruction>> {
         info!("🔨 构建ClosePosition指令");
 
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let mut instructions = Vec::new();
 
         // 1. 计算personal position PDA
-        let (personal_position, _) = Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
+        let (personal_position, _) =
+            Pubkey::find_program_address(&[POSITION_SEED.as_bytes(), nft_mint.as_ref()], &raydium_program_id);
 
         // 2. 构建账户列表
         let accounts = vec![

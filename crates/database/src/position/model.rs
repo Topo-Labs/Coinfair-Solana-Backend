@@ -48,15 +48,15 @@ pub struct Position {
     /// 链上仓位键值（唯一标识）
     #[validate(length(min = 32, max = 44))]
     pub position_key: String,
-    
+
     /// NFT Mint地址
     #[validate(length(min = 32, max = 44))]
     pub nft_mint: String,
-    
+
     /// 用户钱包地址
     #[validate(length(min = 32, max = 44))]
     pub user_wallet: String,
-    
+
     /// 池子地址
     #[validate(length(min = 32, max = 44))]
     pub pool_address: String,
@@ -64,14 +64,14 @@ pub struct Position {
     // ============ 价格范围信息 ============
     /// 下限tick索引
     pub tick_lower_index: i32,
-    
+
     /// 上限tick索引
     pub tick_upper_index: i32,
-    
+
     /// 下限价格
     #[validate(range(min = 0.0))]
     pub tick_lower_price: f64,
-    
+
     /// 上限价格
     #[validate(range(min = 0.0))]
     pub tick_upper_price: f64,
@@ -79,14 +79,14 @@ pub struct Position {
     // ============ 流动性信息 ============
     /// 初始流动性数量（字符串避免精度丢失）
     pub initial_liquidity: String,
-    
+
     /// 当前流动性数量
     pub current_liquidity: String,
-    
+
     /// 累计增加的流动性
     #[serde(default = "String::new")]
     pub total_liquidity_added: String,
-    
+
     /// 累计减少的流动性
     #[serde(default = "String::new")]
     pub total_liquidity_removed: String,
@@ -94,13 +94,13 @@ pub struct Position {
     // ============ 代币数量信息 ============
     /// 初始token0数量
     pub initial_amount_0: u64,
-    
+
     /// 初始token1数量
     pub initial_amount_1: u64,
-    
+
     /// 当前token0数量
     pub current_amount_0: u64,
-    
+
     /// 当前token1数量
     pub current_amount_1: u64,
 
@@ -108,11 +108,11 @@ pub struct Position {
     /// 仓位状态
     #[serde(default)]
     pub status: PositionStatus,
-    
+
     /// 是否活跃
     #[serde(default = "default_true")]
     pub is_active: bool,
-    
+
     /// 是否在价格范围内
     #[serde(default = "default_true")]
     pub is_in_range: bool,
@@ -121,15 +121,15 @@ pub struct Position {
     /// 累计赚取的token0手续费
     #[serde(default)]
     pub fees_earned_0: u64,
-    
+
     /// 累计赚取的token1手续费
     #[serde(default)]
     pub fees_earned_1: u64,
-    
+
     /// 未领取的token0手续费
     #[serde(default)]
     pub unclaimed_fees_0: u64,
-    
+
     /// 未领取的token1手续费
     #[serde(default)]
     pub unclaimed_fees_1: u64,
@@ -138,7 +138,7 @@ pub struct Position {
     /// 总操作次数
     #[serde(default = "default_one")]
     pub total_operations: u32,
-    
+
     /// 最后操作类型
     pub last_operation_type: Option<String>,
 
@@ -146,11 +146,11 @@ pub struct Position {
     /// 创建时间戳
     #[serde(with = "mongodb::bson::serde_helpers::u64_as_f64")]
     pub created_at: u64,
-    
+
     /// 最后更新时间戳
     #[serde(with = "mongodb::bson::serde_helpers::u64_as_f64")]
     pub updated_at: u64,
-    
+
     /// 最后同步链上状态时间戳
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_sync_at: Option<u64>,
@@ -176,7 +176,7 @@ impl Position {
         initial_amount_1: u64,
     ) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
-        
+
         Self {
             id: None,
             position_key,
@@ -210,7 +210,7 @@ impl Position {
             metadata: None,
         }
     }
-    
+
     /// 更新流动性信息
     pub fn update_liquidity(
         &mut self,
@@ -222,13 +222,13 @@ impl Position {
         operation_type: String,
     ) {
         self.current_liquidity = new_liquidity;
-        
+
         if is_increase {
             // 增加流动性
             let current_added = self.total_liquidity_added.parse::<u128>().unwrap_or(0);
             let change_amount = liquidity_change.parse::<u128>().unwrap_or(0);
             self.total_liquidity_added = (current_added + change_amount).to_string();
-            
+
             self.current_amount_0 = self.current_amount_0.saturating_add(amount_0_change);
             self.current_amount_1 = self.current_amount_1.saturating_add(amount_1_change);
         } else {
@@ -236,22 +236,22 @@ impl Position {
             let current_removed = self.total_liquidity_removed.parse::<u128>().unwrap_or(0);
             let change_amount = liquidity_change.parse::<u128>().unwrap_or(0);
             self.total_liquidity_removed = (current_removed + change_amount).to_string();
-            
+
             self.current_amount_0 = self.current_amount_0.saturating_sub(amount_0_change);
             self.current_amount_1 = self.current_amount_1.saturating_sub(amount_1_change);
         }
-        
+
         self.total_operations += 1;
         self.last_operation_type = Some(operation_type);
         self.updated_at = chrono::Utc::now().timestamp() as u64;
-        
+
         // 如果流动性归零，更新状态
         if self.current_liquidity == "0" {
             self.status = PositionStatus::Closed;
             self.is_active = false;
         }
     }
-    
+
     /// 更新手续费信息
     pub fn update_fees(&mut self, fees_0: u64, fees_1: u64) {
         self.unclaimed_fees_0 += fees_0;
@@ -260,13 +260,13 @@ impl Position {
         self.fees_earned_1 += fees_1;
         self.updated_at = chrono::Utc::now().timestamp() as u64;
     }
-    
+
     /// 标记为已同步
     pub fn mark_synced(&mut self) {
         self.last_sync_at = Some(chrono::Utc::now().timestamp() as u64);
         self.updated_at = chrono::Utc::now().timestamp() as u64;
     }
-    
+
     /// 关闭仓位
     pub fn close(&mut self) {
         self.status = PositionStatus::Closed;
@@ -275,7 +275,7 @@ impl Position {
         self.last_operation_type = Some("close".to_string());
         self.updated_at = chrono::Utc::now().timestamp() as u64;
     }
-    
+
     /// 设置元数据
     pub fn set_metadata(&mut self, metadata: PositionMetadata) {
         self.metadata = Some(metadata);

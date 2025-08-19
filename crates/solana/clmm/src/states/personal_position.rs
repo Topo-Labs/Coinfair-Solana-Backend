@@ -70,7 +70,10 @@ impl PersonalPositionState {
                     .to_underflow_u64();
 
                 // Overflows not allowed. Must collect rewards owed before overflow.
-                self.reward_infos[i].reward_amount_owed = curr_reward_info.reward_amount_owed.checked_add(amount_owed_delta).unwrap();
+                self.reward_infos[i].reward_amount_owed = curr_reward_info
+                    .reward_amount_owed
+                    .checked_add(amount_owed_delta)
+                    .unwrap();
 
                 #[cfg(feature = "enable-log")]
                 msg!("update personal reward, index:{}, owed_before:{:?}, amount_owed_delta:{}, owed_after:{}, reward_growth_delta:{}, self.liquidity:{}", i, curr_reward_info.reward_amount_owed,amount_owed_delta, self.reward_infos[i].reward_amount_owed,reward_growth_delta,self.liquidity );

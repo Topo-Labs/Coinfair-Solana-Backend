@@ -1,6 +1,6 @@
 use crate::auth::{Permission, UserTier};
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 
 /// 权限管理器
 pub struct PermissionManager {
@@ -16,7 +16,7 @@ impl PermissionManager {
             tier_permissions: HashMap::new(),
             endpoint_permissions: HashMap::new(),
         };
-        
+
         manager.initialize_default_permissions();
         manager.initialize_endpoint_permissions();
         manager
@@ -30,21 +30,17 @@ impl PermissionManager {
             Permission::ReadPool,
             Permission::ReadPosition,
             Permission::ReadReward,
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
 
         // Premium用户权限（包含Basic权限+创建权限）
         let mut premium_permissions = basic_permissions.clone();
-        premium_permissions.extend(vec![
-            Permission::CreateUser,
-            Permission::CreatePosition,
-        ]);
+        premium_permissions.extend(vec![Permission::CreateUser, Permission::CreatePosition]);
 
         // VIP用户权限（包含Premium权限+管理部分奖励）
         let mut vip_permissions = premium_permissions.clone();
-        vip_permissions.extend(vec![
-            Permission::CreatePool,
-            Permission::ManageReward,
-        ]);
+        vip_permissions.extend(vec![Permission::CreatePool, Permission::ManageReward]);
 
         // Admin用户权限（所有权限）
         let admin_permissions = vec![
@@ -59,7 +55,9 @@ impl PermissionManager {
             Permission::AdminConfig,
             Permission::SystemMonitor,
             Permission::UserManagement,
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
 
         self.tier_permissions.insert(UserTier::Basic, basic_permissions);
         self.tier_permissions.insert(UserTier::Premium, premium_permissions);
@@ -70,68 +68,44 @@ impl PermissionManager {
     /// 初始化API端点权限要求
     fn initialize_endpoint_permissions(&mut self) {
         // 用户相关端点
-        self.endpoint_permissions.insert(
-            "/api/v1/user/user/*".to_string(),
-            vec![Permission::ReadUser]
-        );
-        self.endpoint_permissions.insert(
-            "/api/v1/user/mock_users".to_string(),
-            vec![Permission::CreateUser]
-        );
+        self.endpoint_permissions
+            .insert("/api/v1/user/user/*".to_string(), vec![Permission::ReadUser]);
+        self.endpoint_permissions
+            .insert("/api/v1/user/mock_users".to_string(), vec![Permission::CreateUser]);
 
         // 池子相关端点
-        self.endpoint_permissions.insert(
-            "/api/v1/solana/pools/*".to_string(),
-            vec![Permission::ReadPool]
-        );
-        self.endpoint_permissions.insert(
-            "/api/v1/solana/pools/create".to_string(),
-            vec![Permission::CreatePool]
-        );
+        self.endpoint_permissions
+            .insert("/api/v1/solana/pools/*".to_string(), vec![Permission::ReadPool]);
+        self.endpoint_permissions
+            .insert("/api/v1/solana/pools/create".to_string(), vec![Permission::CreatePool]);
 
         // 仓位相关端点
-        self.endpoint_permissions.insert(
-            "/api/v1/solana/positions/*".to_string(),
-            vec![Permission::ReadPosition]
-        );
+        self.endpoint_permissions
+            .insert("/api/v1/solana/positions/*".to_string(), vec![Permission::ReadPosition]);
         self.endpoint_permissions.insert(
             "/api/v1/solana/positions/create".to_string(),
-            vec![Permission::CreatePosition]
+            vec![Permission::CreatePosition],
         );
 
         // 奖励相关端点
-        self.endpoint_permissions.insert(
-            "/api/v1/reward/*".to_string(),
-            vec![Permission::ReadReward]
-        );
-        self.endpoint_permissions.insert(
-            "/api/v1/reward/manage".to_string(),
-            vec![Permission::ManageReward]
-        );
+        self.endpoint_permissions
+            .insert("/api/v1/reward/*".to_string(), vec![Permission::ReadReward]);
+        self.endpoint_permissions
+            .insert("/api/v1/reward/manage".to_string(), vec![Permission::ManageReward]);
 
         // 管理端点
-        self.endpoint_permissions.insert(
-            "/api/v1/admin/config".to_string(),
-            vec![Permission::AdminConfig]
-        );
-        self.endpoint_permissions.insert(
-            "/api/v1/admin/monitor".to_string(),
-            vec![Permission::SystemMonitor]
-        );
-        self.endpoint_permissions.insert(
-            "/api/v1/admin/users".to_string(),
-            vec![Permission::UserManagement]
-        );
+        self.endpoint_permissions
+            .insert("/api/v1/admin/config".to_string(), vec![Permission::AdminConfig]);
+        self.endpoint_permissions
+            .insert("/api/v1/admin/monitor".to_string(), vec![Permission::SystemMonitor]);
+        self.endpoint_permissions
+            .insert("/api/v1/admin/users".to_string(), vec![Permission::UserManagement]);
 
         // 交换相关端点（需要创建仓位权限）
-        self.endpoint_permissions.insert(
-            "/api/v1/solana/swap".to_string(),
-            vec![Permission::CreatePosition]
-        );
-        self.endpoint_permissions.insert(
-            "/api/v1/solana/swap/estimate".to_string(),
-            vec![Permission::ReadPool]
-        );
+        self.endpoint_permissions
+            .insert("/api/v1/solana/swap".to_string(), vec![Permission::CreatePosition]);
+        self.endpoint_permissions
+            .insert("/api/v1/solana/swap/estimate".to_string(), vec![Permission::ReadPool]);
     }
 
     /// 获取用户等级的默认权限
@@ -205,9 +179,10 @@ impl PermissionManager {
     /// 检查权限层级关系
     pub fn is_permission_hierarchy_valid(&self, user_permissions: &HashSet<Permission>, required: &Permission) -> bool {
         // 管理员权限可以访问所有资源
-        if user_permissions.contains(&Permission::AdminConfig) ||
-           user_permissions.contains(&Permission::SystemMonitor) ||
-           user_permissions.contains(&Permission::UserManagement) {
+        if user_permissions.contains(&Permission::AdminConfig)
+            || user_permissions.contains(&Permission::SystemMonitor)
+            || user_permissions.contains(&Permission::UserManagement)
+        {
             return true;
         }
 
@@ -305,12 +280,8 @@ impl AdvancedPermissionManager {
                 let now = chrono::Utc::now().timestamp() as u64;
                 now >= *start && now <= *end
             }
-            PolicyCondition::IpWhitelist { ips } => {
-                ips.contains(&client_ip.to_string())
-            }
-            PolicyCondition::MinUserTier { tier } => {
-                self.tier_meets_minimum(user_tier, tier)
-            }
+            PolicyCondition::IpWhitelist { ips } => ips.contains(&client_ip.to_string()),
+            PolicyCondition::MinUserTier { tier } => self.tier_meets_minimum(user_tier, tier),
             PolicyCondition::WalletWhitelist { addresses } => {
                 if let Some(wallet) = user_wallet {
                     addresses.contains(wallet)
@@ -374,7 +345,7 @@ mod tests {
     #[test]
     fn test_permission_manager_initialization() {
         let manager = PermissionManager::new();
-        
+
         // 测试Basic用户权限
         let basic_perms = manager.get_tier_permissions(&UserTier::Basic);
         assert!(basic_perms.contains(&Permission::ReadUser));
@@ -389,7 +360,7 @@ mod tests {
     #[test]
     fn test_endpoint_permission_matching() {
         let manager = PermissionManager::new();
-        
+
         // 测试精确匹配
         let perms = manager.get_endpoint_permissions("/api/v1/user/mock_users");
         assert_eq!(perms, vec![Permission::CreateUser]);
@@ -402,13 +373,13 @@ mod tests {
     #[test]
     fn test_permission_hierarchy() {
         let manager = PermissionManager::new();
-        
+
         let mut user_permissions = HashSet::new();
         user_permissions.insert(Permission::CreateUser);
-        
+
         // 创建权限应该包含读取权限
         assert!(manager.is_permission_hierarchy_valid(&user_permissions, &Permission::ReadUser));
-        
+
         // 但不应该包含其他权限
         assert!(!manager.is_permission_hierarchy_valid(&user_permissions, &Permission::CreatePool));
     }
@@ -416,19 +387,21 @@ mod tests {
     #[test]
     fn test_advanced_permission_policies() {
         let mut manager = AdvancedPermissionManager::new();
-        
+
         let policy = PermissionPolicy {
             name: "vip_trading".to_string(),
             description: "VIP trading permissions".to_string(),
             permissions: vec![Permission::CreatePosition, Permission::ManageReward],
             conditions: vec![
                 PolicyCondition::MinUserTier { tier: UserTier::VIP },
-                PolicyCondition::RateLimit { requests_per_minute: 100 },
+                PolicyCondition::RateLimit {
+                    requests_per_minute: 100,
+                },
             ],
         };
-        
+
         manager.add_policy(policy);
-        
+
         let retrieved_policy = manager.get_policy("vip_trading");
         assert!(retrieved_policy.is_some());
         assert_eq!(retrieved_policy.unwrap().permissions.len(), 2);
@@ -437,12 +410,16 @@ mod tests {
     #[test]
     fn test_policy_conditions() {
         let manager = AdvancedPermissionManager::new();
-        
+
         let conditions = vec![
-            PolicyCondition::MinUserTier { tier: UserTier::Premium },
-            PolicyCondition::IpWhitelist { ips: vec!["127.0.0.1".to_string()] },
+            PolicyCondition::MinUserTier {
+                tier: UserTier::Premium,
+            },
+            PolicyCondition::IpWhitelist {
+                ips: vec!["127.0.0.1".to_string()],
+            },
         ];
-        
+
         // 测试满足条件的情况
         assert!(manager.check_policy_conditions(
             &conditions,
@@ -450,7 +427,7 @@ mod tests {
             &Some("test_wallet".to_string()),
             "127.0.0.1"
         ));
-        
+
         // 测试不满足条件的情况
         assert!(!manager.check_policy_conditions(
             &conditions,

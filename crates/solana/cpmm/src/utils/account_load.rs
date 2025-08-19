@@ -17,7 +17,10 @@ pub struct AccountLoad<'info, T: ZeroCopy + Owner> {
 
 impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
     fn new(acc_info: AccountInfo<'info>) -> AccountLoad<'info, T> {
-        Self { acc_info, phantom: PhantomData }
+        Self {
+            acc_info,
+            phantom: PhantomData,
+        }
     }
 
     /// Constructs a new `Loader` from a previously initialized account.
@@ -70,7 +73,9 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         // write discriminator
         data[..8].copy_from_slice(&T::DISCRIMINATOR);
 
-        Ok(RefMut::map(data, |data| bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])))
+        Ok(RefMut::map(data, |data| {
+            bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])
+        }))
     }
 
     /// Returns a `RefMut` to the account data structure for reading or writing directly.
@@ -94,7 +99,9 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
-        Ok(RefMut::map(data, |data| bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])))
+        Ok(RefMut::map(data, |data| {
+            bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])
+        }))
     }
 
     /// Returns a Ref to the account data structure for reading.
@@ -109,7 +116,9 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
-        Ok(Ref::map(data, |data| bytemuck::from_bytes(&data[8..mem::size_of::<T>() + 8])))
+        Ok(Ref::map(data, |data| {
+            bytemuck::from_bytes(&data[8..mem::size_of::<T>() + 8])
+        }))
     }
 
     /// Returns a `RefMut` to the account data structure for reading or writing.
@@ -130,7 +139,9 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
         }
 
-        Ok(RefMut::map(data, |data| bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])))
+        Ok(RefMut::map(data, |data| {
+            bytemuck::from_bytes_mut(&mut data.deref_mut()[8..mem::size_of::<T>() + 8])
+        }))
     }
 }
 

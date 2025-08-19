@@ -13,8 +13,7 @@ use anchor_spl::{
         },
     },
     token_interface::{
-        initialize_account3, spl_token_2022::extension::BaseStateWithExtensions,
-        InitializeAccount3, Mint,
+        initialize_account3, spl_token_2022::extension::BaseStateWithExtensions, InitializeAccount3, Mint,
     },
 };
 use std::collections::HashSet;
@@ -116,11 +115,7 @@ pub fn token_burn<'a>(
     token_2022::burn(
         CpiContext::new_with_signer(
             token_program.to_account_info(),
-            token_2022::Burn {
-                from,
-                authority,
-                mint,
-            },
+            token_2022::Burn { from, authority, mint },
             signer_seeds,
         ),
         amount,
@@ -209,14 +204,10 @@ pub fn create_token_account<'a>(
         let mint_info = mint_account.to_account_info();
         if *mint_info.owner == token_2022::Token2022::id() {
             let mint_data = mint_info.try_borrow_data()?;
-            let mint_state =
-                StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+            let mint_state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
             let mint_extensions = mint_state.get_extension_types()?;
-            let required_extensions =
-                ExtensionType::get_required_init_account_extensions(&mint_extensions);
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
-                &required_extensions,
-            )?
+            let required_extensions = ExtensionType::get_required_init_account_extensions(&mint_extensions);
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&required_extensions)?
         } else {
             TokenAccount::LEN
         }
@@ -264,10 +255,7 @@ pub fn create_or_allocate_account<'a>(
             program_id,
         )?;
     } else {
-        let required_lamports = rent
-            .minimum_balance(space)
-            .max(1)
-            .saturating_sub(current_lamports);
+        let required_lamports = rent.minimum_balance(space).max(1).saturating_sub(current_lamports);
         if required_lamports > 0 {
             let cpi_accounts = system_program::Transfer {
                 from: payer.to_account_info(),
@@ -280,10 +268,7 @@ pub fn create_or_allocate_account<'a>(
             account_to_allocate: target_account.clone(),
         };
         let cpi_context = CpiContext::new(system_program.clone(), cpi_accounts);
-        system_program::allocate(
-            cpi_context.with_signer(&[siger_seed]),
-            u64::try_from(space).unwrap(),
-        )?;
+        system_program::allocate(cpi_context.with_signer(&[siger_seed]), u64::try_from(space).unwrap())?;
 
         let cpi_accounts = system_program::Assign {
             account_to_assign: target_account.clone(),

@@ -1,11 +1,11 @@
 use crate::auth::{
-    SolanaPermissionManager, GlobalSolanaPermissionConfig, SolanaApiPermissionConfig,
-    SolanaApiAction, SolanaPermissionPolicy, AuthUser
+    AuthUser, GlobalSolanaPermissionConfig, SolanaApiAction, SolanaApiPermissionConfig, SolanaPermissionManager,
+    SolanaPermissionPolicy,
 };
-use std::sync::{Arc, RwLock};
-use std::collections::HashMap;
 use anyhow::Result;
-use tracing::{info, warn, error};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use tracing::{error, info, warn};
 
 /// Solana 权限服务接口
 #[async_trait::async_trait]
@@ -123,34 +123,40 @@ impl SolanaPermissionService {
     pub async fn load_from_database(&self) -> Result<()> {
         if let Some(db) = &self.database {
             info!("🔄 从数据库加载权限配置...");
-            
+
             // 1. 加载全局配置
             if let Ok(global_configs) = db.global_permission_repository.find_global_config().await {
                 if let Some(global_config_model) = global_configs.first() {
                     let global_config = self.convert_model_to_global_config(global_config_model)?;
-                    let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+                    let mut manager = self
+                        .manager
+                        .write()
+                        .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
                     manager.update_global_config(global_config);
                     info!("📥 已加载全局权限配置，版本: {}", global_config_model.version);
                 }
             }
-            
+
             // 2. 加载API配置
             if let Ok(api_config_models) = db.api_permission_repository.find_all_api_configs().await {
                 let config_count = api_config_models.len();
                 let mut api_configs = std::collections::HashMap::new();
-                
+
                 for model in api_config_models {
                     let api_config = self.convert_model_to_api_config(&model)?;
                     api_configs.insert(model.endpoint.clone(), api_config);
                 }
-                
+
                 if !api_configs.is_empty() {
-                    let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+                    let mut manager = self
+                        .manager
+                        .write()
+                        .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
                     manager.batch_update_api_configs(api_configs);
                     info!("📥 已加载{}个API权限配置", config_count);
                 }
             }
-            
+
             info!("✅ 权限配置加载完成");
         } else {
             warn!("⚠️ 未配置数据库，使用默认权限配置");
@@ -163,23 +169,33 @@ impl SolanaPermissionService {
         if let Some(db) = &self.database {
             // 1. 保存全局配置（先获取数据再释放锁）
             let global_config = {
-                let manager = self.manager.read().map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
+                let manager = self
+                    .manager
+                    .read()
+                    .map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
                 manager.get_global_config().clone()
             };
-            
+
             let global_config_model = self.convert_global_config_to_model(&global_config)?;
-            
-            if let Err(e) = db.global_permission_repository.upsert_global_config(global_config_model).await {
+
+            if let Err(e) = db
+                .global_permission_repository
+                .upsert_global_config(global_config_model)
+                .await
+            {
                 error!("保存全局权限配置失败: {}", e);
                 return Err(anyhow::anyhow!("保存全局权限配置失败: {}", e));
             }
-            
+
             // 2. 保存API配置（先获取数据再释放锁）
             let api_configs = {
-                let manager = self.manager.read().map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
+                let manager = self
+                    .manager
+                    .read()
+                    .map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
                 manager.get_all_api_configs().clone()
             };
-            
+
             for (endpoint, config) in api_configs {
                 let api_config_model = self.convert_api_config_to_model(&config)?;
                 if let Err(e) = db.api_permission_repository.upsert_api_config(api_config_model).await {
@@ -187,19 +203,22 @@ impl SolanaPermissionService {
                     // 继续保存其他配置，不中断整个流程
                 }
             }
-            
+
             info!("💾 权限配置已保存到数据库");
         }
         Ok(())
     }
 
     /// 转换数据库模型到全局配置
-    fn convert_model_to_global_config(&self, model: &database::permission_config::GlobalSolanaPermissionConfigModel) -> Result<GlobalSolanaPermissionConfig> {
+    fn convert_model_to_global_config(
+        &self,
+        model: &database::permission_config::GlobalSolanaPermissionConfigModel,
+    ) -> Result<GlobalSolanaPermissionConfig> {
         let default_read_policy: SolanaPermissionPolicy = serde_json::from_str(&model.default_read_policy)
             .map_err(|e| anyhow::anyhow!("解析默认读取策略失败: {}", e))?;
         let default_write_policy: SolanaPermissionPolicy = serde_json::from_str(&model.default_write_policy)
             .map_err(|e| anyhow::anyhow!("解析默认写入策略失败: {}", e))?;
-        
+
         Ok(GlobalSolanaPermissionConfig {
             global_read_enabled: model.global_read_enabled,
             global_write_enabled: model.global_write_enabled,
@@ -214,12 +233,15 @@ impl SolanaPermissionService {
     }
 
     /// 转换数据库模型到API配置
-    fn convert_model_to_api_config(&self, model: &database::permission_config::SolanaApiPermissionConfigModel) -> Result<SolanaApiPermissionConfig> {
-        let read_policy: SolanaPermissionPolicy = serde_json::from_str(&model.read_policy)
-            .map_err(|e| anyhow::anyhow!("解析读取策略失败: {}", e))?;
-        let write_policy: SolanaPermissionPolicy = serde_json::from_str(&model.write_policy)
-            .map_err(|e| anyhow::anyhow!("解析写入策略失败: {}", e))?;
-        
+    fn convert_model_to_api_config(
+        &self,
+        model: &database::permission_config::SolanaApiPermissionConfigModel,
+    ) -> Result<SolanaApiPermissionConfig> {
+        let read_policy: SolanaPermissionPolicy =
+            serde_json::from_str(&model.read_policy).map_err(|e| anyhow::anyhow!("解析读取策略失败: {}", e))?;
+        let write_policy: SolanaPermissionPolicy =
+            serde_json::from_str(&model.write_policy).map_err(|e| anyhow::anyhow!("解析写入策略失败: {}", e))?;
+
         Ok(SolanaApiPermissionConfig {
             endpoint: model.endpoint.clone(),
             name: model.name.clone(),
@@ -233,12 +255,15 @@ impl SolanaPermissionService {
     }
 
     /// 转换全局配置到数据库模型
-    fn convert_global_config_to_model(&self, config: &GlobalSolanaPermissionConfig) -> Result<database::permission_config::GlobalSolanaPermissionConfigModel> {
+    fn convert_global_config_to_model(
+        &self,
+        config: &GlobalSolanaPermissionConfig,
+    ) -> Result<database::permission_config::GlobalSolanaPermissionConfigModel> {
         let default_read_policy = serde_json::to_string(&config.default_read_policy)
             .map_err(|e| anyhow::anyhow!("序列化默认读取策略失败: {}", e))?;
         let default_write_policy = serde_json::to_string(&config.default_write_policy)
             .map_err(|e| anyhow::anyhow!("序列化默认写入策略失败: {}", e))?;
-        
+
         Ok(database::permission_config::GlobalSolanaPermissionConfigModel {
             id: None,
             config_type: "global".to_string(),
@@ -256,12 +281,15 @@ impl SolanaPermissionService {
     }
 
     /// 转换API配置到数据库模型
-    fn convert_api_config_to_model(&self, config: &SolanaApiPermissionConfig) -> Result<database::permission_config::SolanaApiPermissionConfigModel> {
-        let read_policy = serde_json::to_string(&config.read_policy)
-            .map_err(|e| anyhow::anyhow!("序列化读取策略失败: {}", e))?;
-        let write_policy = serde_json::to_string(&config.write_policy)
-            .map_err(|e| anyhow::anyhow!("序列化写入策略失败: {}", e))?;
-        
+    fn convert_api_config_to_model(
+        &self,
+        config: &SolanaApiPermissionConfig,
+    ) -> Result<database::permission_config::SolanaApiPermissionConfigModel> {
+        let read_policy =
+            serde_json::to_string(&config.read_policy).map_err(|e| anyhow::anyhow!("序列化读取策略失败: {}", e))?;
+        let write_policy =
+            serde_json::to_string(&config.write_policy).map_err(|e| anyhow::anyhow!("序列化写入策略失败: {}", e))?;
+
         Ok(database::permission_config::SolanaApiPermissionConfigModel {
             id: None,
             endpoint: config.endpoint.clone(),
@@ -282,13 +310,13 @@ impl SolanaPermissionService {
         }
 
         let service_clone = self.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(reload_interval_seconds));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 if let Err(e) = service_clone.load_from_database().await {
                     error!("热重载权限配置失败: {}", e);
                 } else {
@@ -313,13 +341,13 @@ impl SolanaPermissionService {
     pub async fn setup_config_change_listener(&self) -> Result<()> {
         // 可以实现基于文件系统监控或消息队列的配置变更通知
         // 这里提供一个基础的实现框架
-        
+
         info!("🎧 设置权限配置变更监听器...");
-        
+
         // TODO: 可以集成 notify crate 进行文件监控
         // TODO: 可以集成 Redis pub/sub 进行实时通知
         // TODO: 可以集成 webhook 进行远程通知
-        
+
         info!("✅ 权限配置变更监听器设置完成");
         Ok(())
     }
@@ -338,13 +366,22 @@ impl SolanaPermissionService {
     }
 
     /// 记录权限检查日志
-    fn log_permission_check(&self, endpoint: &str, action: &SolanaApiAction, user_id: &str, result: &Result<(), String>) {
+    fn log_permission_check(
+        &self,
+        endpoint: &str,
+        action: &SolanaApiAction,
+        user_id: &str,
+        result: &Result<(), String>,
+    ) {
         match result {
             Ok(_) => {
                 info!("✅ 权限检查通过: 用户={} 端点={} 操作={:?}", user_id, endpoint, action);
             }
             Err(error) => {
-                warn!("❌ 权限检查失败: 用户={} 端点={} 操作={:?} 原因={}", user_id, endpoint, action, error);
+                warn!(
+                    "❌ 权限检查失败: 用户={} 端点={} 操作={:?} 原因={}",
+                    user_id, endpoint, action, error
+                );
             }
         }
     }
@@ -363,7 +400,10 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
         auth_user: &AuthUser,
     ) -> Result<(), String> {
         let result = {
-            let manager = self.manager.read().map_err(|e| format!("获取权限管理器读锁失败: {}", e))?;
+            let manager = self
+                .manager
+                .read()
+                .map_err(|e| format!("获取权限管理器读锁失败: {}", e))?;
             manager.check_api_permission(endpoint, action, &auth_user.permissions, &auth_user.tier)
         };
 
@@ -378,7 +418,10 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
         self.validate_config(&config)?;
 
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.update_global_config(config);
         }
 
@@ -390,13 +433,19 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
     }
 
     async fn get_global_config(&self) -> Result<GlobalSolanaPermissionConfig> {
-        let manager = self.manager.read().map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
+        let manager = self
+            .manager
+            .read()
+            .map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
         Ok(manager.get_global_config().clone())
     }
 
     async fn update_api_config(&self, endpoint: String, config: SolanaApiPermissionConfig) -> Result<()> {
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.update_api_config(endpoint.clone(), config);
         }
 
@@ -409,9 +458,12 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
 
     async fn batch_update_api_configs(&self, configs: HashMap<String, SolanaApiPermissionConfig>) -> Result<()> {
         let count = configs.len();
-        
+
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.batch_update_api_configs(configs);
         }
 
@@ -423,18 +475,27 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
     }
 
     async fn get_all_api_configs(&self) -> Result<HashMap<String, SolanaApiPermissionConfig>> {
-        let manager = self.manager.read().map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
+        let manager = self
+            .manager
+            .read()
+            .map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
         Ok(manager.get_all_api_configs().clone())
     }
 
     async fn get_api_config(&self, endpoint: &str) -> Result<Option<SolanaApiPermissionConfig>> {
-        let manager = self.manager.read().map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
+        let manager = self
+            .manager
+            .read()
+            .map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
         Ok(manager.get_api_config(endpoint).cloned())
     }
 
     async fn toggle_global_read(&self, enabled: bool) -> Result<()> {
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.toggle_global_read(enabled);
         }
 
@@ -447,7 +508,10 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
 
     async fn toggle_global_write(&self, enabled: bool) -> Result<()> {
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.toggle_global_write(enabled);
         }
 
@@ -460,7 +524,10 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
 
     async fn emergency_shutdown(&self, shutdown: bool) -> Result<()> {
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.emergency_shutdown(shutdown);
         }
 
@@ -477,7 +544,10 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
 
     async fn toggle_maintenance_mode(&self, maintenance: bool) -> Result<()> {
         {
-            let mut manager = self.manager.write().map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
+            let mut manager = self
+                .manager
+                .write()
+                .map_err(|e| anyhow::anyhow!("获取权限管理器写锁失败: {}", e))?;
             manager.toggle_maintenance_mode(maintenance);
         }
 
@@ -491,20 +561,23 @@ impl SolanaPermissionServiceTrait for SolanaPermissionService {
     /// 重载权限配置
     async fn reload_configuration(&self) -> Result<()> {
         info!("🔄 重载权限配置...");
-        
+
         // 从数据库重新加载配置
         self.reload_from_database().await?;
-        
+
         info!("✅ 权限配置重载完成");
         Ok(())
     }
 
     async fn get_permission_stats(&self) -> Result<PermissionStats> {
-        let manager = self.manager.read().map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
-        
+        let manager = self
+            .manager
+            .read()
+            .map_err(|e| anyhow::anyhow!("获取权限管理器读锁失败: {}", e))?;
+
         let global_config = manager.get_global_config();
         let api_configs = manager.get_all_api_configs();
-        
+
         let total_apis = api_configs.len();
         let enabled_apis = api_configs.values().filter(|config| config.enabled).count();
         let disabled_apis = total_apis - enabled_apis;
@@ -535,14 +608,14 @@ pub type DynSolanaPermissionService = Arc<dyn SolanaPermissionServiceTrait>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::{UserTier, Permission};
+    use crate::auth::{Permission, UserTier};
     use std::collections::HashSet;
 
     fn create_test_auth_user() -> AuthUser {
         let mut permissions = HashSet::new();
         permissions.insert(Permission::ReadPool);
         permissions.insert(Permission::CreatePosition);
-        
+
         AuthUser {
             user_id: "test_user".to_string(),
             wallet_address: Some("test_wallet".to_string()),
@@ -555,7 +628,7 @@ mod tests {
     async fn test_permission_service_creation() {
         let service = SolanaPermissionService::new();
         let stats = service.get_permission_stats().await.unwrap();
-        
+
         assert!(stats.total_apis > 0);
         assert!(stats.global_read_enabled);
         assert!(stats.global_write_enabled);
@@ -566,7 +639,7 @@ mod tests {
     #[tokio::test]
     async fn test_global_permission_toggle() {
         let service = SolanaPermissionService::new();
-        
+
         // 测试全局读取权限切换
         service.toggle_global_read(false).await.unwrap();
         let config = service.get_global_config().await.unwrap();
@@ -584,19 +657,15 @@ mod tests {
         let auth_user = create_test_auth_user();
 
         // 测试允许的操作
-        let result = service.check_api_permission(
-            "/api/v1/solana/pools/info/list",
-            &SolanaApiAction::Read,
-            &auth_user
-        ).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &auth_user)
+            .await;
         assert!(result.is_ok());
 
         // 测试需要权限的操作
-        let result = service.check_api_permission(
-            "/api/v1/solana/swap",
-            &SolanaApiAction::Write,
-            &auth_user
-        ).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &auth_user)
+            .await;
         assert!(result.is_ok()); // 用户有 CreatePosition 权限
     }
 
@@ -606,20 +675,16 @@ mod tests {
         let auth_user = create_test_auth_user();
 
         // 正常情况下应该允许
-        let result = service.check_api_permission(
-            "/api/v1/solana/pools/info/list",
-            &SolanaApiAction::Read,
-            &auth_user
-        ).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &auth_user)
+            .await;
         assert!(result.is_ok());
 
         // 紧急停用后应该拒绝
         service.emergency_shutdown(true).await.unwrap();
-        let result = service.check_api_permission(
-            "/api/v1/solana/pools/info/list",
-            &SolanaApiAction::Read,
-            &auth_user
-        ).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &auth_user)
+            .await;
         assert!(result.is_err());
     }
 
@@ -627,7 +692,7 @@ mod tests {
     async fn test_permission_stats() {
         let service = SolanaPermissionService::new();
         let stats = service.get_permission_stats().await.unwrap();
-        
+
         assert!(stats.total_apis > 0);
         assert_eq!(stats.enabled_apis + stats.disabled_apis, stats.total_apis);
         assert!(stats.config_version > 0);

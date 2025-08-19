@@ -51,12 +51,8 @@ impl JwtManager {
 
     /// 验证JWT令牌
     pub fn verify_token(&self, token: &str) -> Result<Claims> {
-        let token_data = decode::<Claims>(
-            token,
-            &self.decoding_key,
-            &Validation::default(),
-        )
-        .map_err(|e| anyhow!("Invalid JWT token: {}", e))?;
+        let token_data = decode::<Claims>(token, &self.decoding_key, &Validation::default())
+            .map_err(|e| anyhow!("Invalid JWT token: {}", e))?;
 
         // 检查令牌是否过期
         let now = Utc::now().timestamp() as u64;
@@ -70,14 +66,9 @@ impl JwtManager {
     /// 刷新令牌
     pub fn refresh_token(&self, old_token: &str) -> Result<String> {
         let claims = self.verify_token(old_token)?;
-        
+
         // 生成新的令牌，保持原有权限和用户信息
-        self.generate_token(
-            &claims.sub,
-            claims.wallet.as_deref(),
-            claims.permissions,
-            claims.tier,
-        )
+        self.generate_token(&claims.sub, claims.wallet.as_deref(), claims.permissions, claims.tier)
     }
 
     /// 从token中提取用户ID
@@ -91,7 +82,7 @@ impl JwtManager {
         let claims = self.verify_token(token)?;
         let now = Utc::now().timestamp() as u64;
         let one_hour = 3600;
-        
+
         Ok(claims.exp - now <= one_hour)
     }
 
@@ -193,7 +184,7 @@ mod tests {
         let claims = jwt_manager.verify_token(&token).unwrap();
         assert!(claims.sub.starts_with("api_key:user123:key456"));
         assert_eq!(claims.iss, "coinfair-api-key");
-        
+
         let is_api_key = jwt_manager.is_api_key_token(&token).unwrap();
         assert!(is_api_key);
     }
@@ -219,7 +210,7 @@ mod tests {
             .unwrap();
 
         let refreshed_token = jwt_manager.refresh_token(&original_token).unwrap();
-        
+
         let original_claims = jwt_manager.verify_token(&original_token).unwrap();
         let refreshed_claims = jwt_manager.verify_token(&refreshed_token).unwrap();
 

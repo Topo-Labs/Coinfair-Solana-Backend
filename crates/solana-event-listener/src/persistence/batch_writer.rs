@@ -182,15 +182,15 @@ impl BatchWriter {
     }
 
     /// 批量提交多个事件到写入队列
-    /// 
+    ///
     /// 这个方法比多次调用 submit_event 更高效，因为它减少了通道操作的开销
-    /// 
+    ///
     /// # 参数
     /// * `events` - 要提交的事件向量
-    /// 
+    ///
     /// # 返回值
     /// 如果所有事件都成功提交则返回 Ok(())，否则返回第一个遇到的错误
-    /// 
+    ///
     /// # 注意
     /// 如果在提交过程中遇到错误，已提交的事件不会回滚
     pub async fn submit_events(&self, events: Vec<ParsedEvent>) -> Result<()> {
@@ -203,7 +203,7 @@ impl BatchWriter {
         }
 
         let event_count = events.len();
-        
+
         // 批量发送所有事件
         for event in events {
             self.event_sender
@@ -213,7 +213,7 @@ impl BatchWriter {
 
         // 更新统计计数器
         self.events_queued.fetch_add(event_count as u64, Ordering::Relaxed);
-        
+
         debug!("📦 批量提交{}个事件到写入队列", event_count);
         Ok(())
     }
@@ -259,15 +259,15 @@ impl BatchWriter {
     /// 批量写入循环
     async fn batch_write_loop(&self) {
         info!("💾 启动批量写入循环");
-        info!("📊 批量配置 - batch_size: {}, max_wait: {:?}", 
-              self.batch_size, self.max_wait_duration);
+        info!(
+            "📊 批量配置 - batch_size: {}, max_wait: {:?}",
+            self.batch_size, self.max_wait_duration
+        );
 
         // 使用较短的检查间隔，但基于时间窗口决定是否写入
-        let check_interval = Duration::from_millis(
-            std::cmp::min(1000, self.max_wait_duration.as_millis() as u64)
-        );
+        let check_interval = Duration::from_millis(std::cmp::min(1000, self.max_wait_duration.as_millis() as u64));
         let mut write_interval = interval(check_interval);
-        
+
         // 记录上次写入时间，用于时间窗口判断
         let mut last_write_time = Instant::now();
 
@@ -285,18 +285,18 @@ impl BatchWriter {
             }
 
             let time_since_last_write = last_write_time.elapsed();
-            
+
             // 满足以下任一条件就触发批量写入：
             // 1. 缓冲区达到批量大小阈值
             // 2. 有事件且等待时间超过最大等待时间
-            let should_write = buffer_size >= self.batch_size || 
-                               time_since_last_write >= self.max_wait_duration;
+            let should_write = buffer_size >= self.batch_size || time_since_last_write >= self.max_wait_duration;
 
             if should_write {
-                debug!("🔍 触发批量写入 - 缓冲区: {}/{}, 等待时间: {:?}/{:?}", 
-                       buffer_size, self.batch_size, 
-                       time_since_last_write, self.max_wait_duration);
-                       
+                debug!(
+                    "🔍 触发批量写入 - 缓冲区: {}/{}, 等待时间: {:?}/{:?}",
+                    buffer_size, self.batch_size, time_since_last_write, self.max_wait_duration
+                );
+
                 if let Err(e) = self.write_batch().await {
                     error!("❌ 批量写入失败: {}", e);
                 } else {
@@ -352,7 +352,10 @@ impl BatchWriter {
                     *last_write = Some(Instant::now());
                 }
 
-                info!("✅ 批量写入完成，写入: {}/{} 事件，耗时: {:?}", written_count, batch_size, duration);
+                info!(
+                    "✅ 批量写入完成，写入: {}/{} 事件，耗时: {:?}",
+                    written_count, batch_size, duration
+                );
             }
             Err(e) => {
                 // 更新失败统计
@@ -388,7 +391,12 @@ impl BatchWriter {
     }
 
     /// 判断是否应该重试批量写入
-    async fn should_retry_batch_internal(&self, batch: &[ParsedEvent], error: &EventListenerError, batch_id: &str) -> bool {
+    async fn should_retry_batch_internal(
+        &self,
+        batch: &[ParsedEvent],
+        error: &EventListenerError,
+        batch_id: &str,
+    ) -> bool {
         // 根据错误类型决定是否重试
         let is_retryable_error = match error {
             EventListenerError::Database(_) => true,            // 数据库连接问题可重试
@@ -425,7 +433,12 @@ impl BatchWriter {
         // 增加重试计数
         retry_counts.insert(batch_id.to_string(), current_retries + 1);
 
-        info!("🔄 批次 {} 将进行第 {} 次重试（批次大小: {}）", batch_id, current_retries + 1, batch.len());
+        info!(
+            "🔄 批次 {} 将进行第 {} 次重试（批次大小: {}）",
+            batch_id,
+            current_retries + 1,
+            batch.len()
+        );
 
         true
     }
@@ -471,7 +484,12 @@ impl BatchWriter {
                 break;
             }
 
-            info!("💾 刷新剩余 {} 个事件 (尝试 {}/{})", buffer_size, attempts + 1, MAX_ATTEMPTS);
+            info!(
+                "💾 刷新剩余 {} 个事件 (尝试 {}/{})",
+                buffer_size,
+                attempts + 1,
+                MAX_ATTEMPTS
+            );
 
             match self.write_batch().await {
                 Ok(()) => {
@@ -513,9 +531,17 @@ impl BatchWriter {
         let batches_written = self.batches_written.load(Ordering::Relaxed);
         let total_events = events_written + events_failed;
 
-        let success_rate = if total_events > 0 { events_written as f64 / total_events as f64 } else { 1.0 };
+        let success_rate = if total_events > 0 {
+            events_written as f64 / total_events as f64
+        } else {
+            1.0
+        };
 
-        let average_batch_size = if batches_written > 0 { events_written as f64 / batches_written as f64 } else { 0.0 };
+        let average_batch_size = if batches_written > 0 {
+            events_written as f64 / batches_written as f64
+        } else {
+            0.0
+        };
 
         let buffer_size = {
             let buffer = self.event_buffer.lock().await;
@@ -574,9 +600,9 @@ impl Clone for BatchWriter {
 
 #[cfg(test)]
 mod tests {
-    use solana_sdk::pubkey::Pubkey;
     use super::*;
     use crate::parser::{event_parser::TokenCreationEventData, ParsedEvent};
+    use solana_sdk::pubkey::Pubkey;
 
     fn create_test_config() -> EventListenerConfig {
         EventListenerConfig {
@@ -668,11 +694,7 @@ mod tests {
         writer.is_running.store(true, Ordering::Relaxed);
 
         // 创建多个测试事件
-        let events = vec![
-            create_test_event(),
-            create_test_event(),
-            create_test_event(),
-        ];
+        let events = vec![create_test_event(), create_test_event(), create_test_event()];
         let event_count = events.len();
 
         writer.submit_events(events).await.unwrap();
@@ -711,14 +733,22 @@ mod tests {
 
         // 测试不可重试错误
         let non_retryable_error = EventListenerError::EventParsing("解析失败".to_string());
-        assert!(!writer.should_retry_batch(&test_batch, &non_retryable_error, batch_id).await);
+        assert!(
+            !writer
+                .should_retry_batch(&test_batch, &non_retryable_error, batch_id)
+                .await
+        );
 
         // 测试重试次数限制
         let database_error = EventListenerError::Persistence("连接失败".to_string());
         let batch_id_limit = "test-batch-limit";
 
         // 第一次重试应该成功
-        assert!(writer.should_retry_batch(&test_batch, &database_error, batch_id_limit).await);
+        assert!(
+            writer
+                .should_retry_batch(&test_batch, &database_error, batch_id_limit)
+                .await
+        );
 
         // 模拟达到最大重试次数
         {
@@ -727,7 +757,11 @@ mod tests {
         }
 
         // 达到最大重试次数后应该拒绝重试
-        assert!(!writer.should_retry_batch(&test_batch, &database_error, batch_id_limit).await);
+        assert!(
+            !writer
+                .should_retry_batch(&test_batch, &database_error, batch_id_limit)
+                .await
+        );
     }
 
     #[tokio::test]

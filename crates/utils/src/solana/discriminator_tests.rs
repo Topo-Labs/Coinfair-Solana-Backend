@@ -21,7 +21,11 @@ mod discriminator_verification_tests {
         if manual_discriminator != predefined_discriminator {
             println!("⚠️  OpenPositionV2不匹配，尝试其他可能的指令名称...");
 
-            let alt_names = ["global:open_position_v2", "global:open_position", "global:openPositionV2"];
+            let alt_names = [
+                "global:open_position_v2",
+                "global:open_position",
+                "global:openPositionV2",
+            ];
 
             for name in alt_names {
                 let alt_hash = hash(name.as_bytes()).to_bytes();
@@ -112,8 +116,14 @@ mod discriminator_verification_tests {
         let discriminators = vec![
             ("CreatePool", clmm_instruction::CreatePool::DISCRIMINATOR),
             ("OpenPositionV2", clmm_instruction::OpenPositionV2::DISCRIMINATOR),
-            ("IncreaseLiquidityV2", clmm_instruction::IncreaseLiquidityV2::DISCRIMINATOR),
-            ("DecreaseLiquidityV2", clmm_instruction::DecreaseLiquidityV2::DISCRIMINATOR),
+            (
+                "IncreaseLiquidityV2",
+                clmm_instruction::IncreaseLiquidityV2::DISCRIMINATOR,
+            ),
+            (
+                "DecreaseLiquidityV2",
+                clmm_instruction::DecreaseLiquidityV2::DISCRIMINATOR,
+            ),
             ("ClosePosition", clmm_instruction::ClosePosition::DISCRIMINATOR),
             ("SwapV2", clmm_instruction::SwapV2::DISCRIMINATOR),
             ("CP-Initialize", cp_instruction::Initialize::DISCRIMINATOR),

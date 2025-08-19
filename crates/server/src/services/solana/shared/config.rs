@@ -1,8 +1,8 @@
 use super::types::constants::{DEFAULT_RAYDIUM_PROGRAM_ID, USDC_MINT_STANDARD};
+use ::utils::solana::swap_services::SwapV2InstructionBuilder;
+use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SolanaClient, SwapConfig, SwapV2Service};
 use ::utils::AppConfig;
 use anyhow::Result;
-use ::utils::solana::{RaydiumApiClient, RaydiumSwap, SolanaClient, SwapConfig, SwapV2Service};
-use ::utils::solana::swap_services::SwapV2InstructionBuilder;
 use solana_client::rpc_client::RpcClient;
 use std::sync::Arc;
 use tracing::info;
@@ -32,7 +32,8 @@ impl ConfigurationManager {
         info!("🔍 Loading Solana configuration...");
 
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let amm_program_id = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
+        let amm_program_id =
+            std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
 
         let config = SwapConfig {
             rpc_url: rpc_url.clone(),
@@ -59,7 +60,9 @@ impl ConfigurationManager {
             .app_config
             .private_key
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Private key not configured, please check PRIVATE_KEY in .env.development file"))?
+            .ok_or_else(|| {
+                anyhow::anyhow!("Private key not configured, please check PRIVATE_KEY in .env.development file")
+            })?
             .clone();
 
         let config = SwapConfig {
@@ -108,11 +111,16 @@ impl ConfigurationManager {
         let rpc_url = &self.app_config.rpc_url;
         let raydium_program_id = &self.app_config.raydium_program_id;
 
-        SwapV2InstructionBuilder::new(rpc_url, raydium_program_id, 0).map_err(|e| anyhow::anyhow!("Failed to create SwapV2InstructionBuilder: {}", e))
+        SwapV2InstructionBuilder::new(rpc_url, raydium_program_id, 0)
+            .map_err(|e| anyhow::anyhow!("Failed to create SwapV2InstructionBuilder: {}", e))
     }
 
     /// Initialize SwapV2 instruction builder with custom parameters
-    pub fn create_swap_v2_builder_with_params(rpc_url: &str, raydium_program_id: &str, amm_config_index: u16) -> Result<SwapV2InstructionBuilder> {
+    pub fn create_swap_v2_builder_with_params(
+        rpc_url: &str,
+        raydium_program_id: &str,
+        amm_config_index: u16,
+    ) -> Result<SwapV2InstructionBuilder> {
         SwapV2InstructionBuilder::new(rpc_url, raydium_program_id, amm_config_index)
             .map_err(|e| anyhow::anyhow!("Failed to create SwapV2InstructionBuilder: {}", e))
     }
@@ -170,7 +178,8 @@ impl ConfigurationManager {
     /// Get environment-specific configuration
     pub fn get_env_config() -> Result<SwapConfig> {
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let amm_program_id = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
+        let amm_program_id =
+            std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
         let private_key = std::env::var("PRIVATE_KEY").unwrap_or_default();
 
         Ok(SwapConfig {
@@ -189,7 +198,14 @@ pub struct ClientFactory;
 
 impl ClientFactory {
     /// Create all necessary clients for the service
-    pub fn create_all_clients(app_config: AppConfig) -> Result<(Arc<RpcClient>, RaydiumApiClient, SwapV2Service, SwapV2InstructionBuilder)> {
+    pub fn create_all_clients(
+        app_config: AppConfig,
+    ) -> Result<(
+        Arc<RpcClient>,
+        RaydiumApiClient,
+        SwapV2Service,
+        SwapV2InstructionBuilder,
+    )> {
         let config_manager = ConfigurationManager::new(app_config);
 
         let rpc_client = config_manager.create_rpc_client();
@@ -201,15 +217,21 @@ impl ClientFactory {
     }
 
     /// Create clients with environment variables
-    pub fn create_clients_from_env() -> Result<(Arc<RpcClient>, RaydiumApiClient, SwapV2Service, SwapV2InstructionBuilder)> {
+    pub fn create_clients_from_env() -> Result<(
+        Arc<RpcClient>,
+        RaydiumApiClient,
+        SwapV2Service,
+        SwapV2InstructionBuilder,
+    )> {
         let rpc_url = std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-        let raydium_program_id = std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
+        let raydium_program_id =
+            std::env::var("RAYDIUM_PROGRAM_ID").unwrap_or_else(|_| DEFAULT_RAYDIUM_PROGRAM_ID.to_string());
 
         let rpc_client = Arc::new(RpcClient::new(rpc_url.clone()));
         let api_client = RaydiumApiClient::new();
         let swap_v2_service = SwapV2Service::new(&rpc_url);
-        let swap_v2_builder =
-            SwapV2InstructionBuilder::new(&rpc_url, &raydium_program_id, 0).map_err(|e| anyhow::anyhow!("Failed to create SwapV2InstructionBuilder: {}", e))?;
+        let swap_v2_builder = SwapV2InstructionBuilder::new(&rpc_url, &raydium_program_id, 0)
+            .map_err(|e| anyhow::anyhow!("Failed to create SwapV2InstructionBuilder: {}", e))?;
 
         Ok((rpc_client, api_client, swap_v2_service, swap_v2_builder))
     }

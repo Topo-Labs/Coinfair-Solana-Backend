@@ -35,7 +35,11 @@ impl SolanaSwap {
         let usdc_mint = self.config.get_usdc_mint()?;
         let usdc_token_account = get_associated_token_address(&owner, &usdc_mint);
 
-        let usdc_balance = match self.client.get_rpc_client().get_token_account_balance(&usdc_token_account) {
+        let usdc_balance = match self
+            .client
+            .get_rpc_client()
+            .get_token_account_balance(&usdc_token_account)
+        {
             Ok(balance) => balance.amount.parse::<u64>().unwrap_or(0),
             Err(_) => {
                 warn!("USDC 代币账户不存在或获取余额失败");
@@ -43,15 +47,29 @@ impl SolanaSwap {
             }
         };
 
-        info!("SOL 余额: {} lamports ({} SOL)", sol_balance, sol_balance as f64 / 1_000_000_000.0);
-        info!("USDC 余额: {} ({} USDC)", usdc_balance, usdc_balance as f64 / 1_000_000.0);
+        info!(
+            "SOL 余额: {} lamports ({} SOL)",
+            sol_balance,
+            sol_balance as f64 / 1_000_000_000.0
+        );
+        info!(
+            "USDC 余额: {} ({} USDC)",
+            usdc_balance,
+            usdc_balance as f64 / 1_000_000.0
+        );
 
         Ok((sol_balance, usdc_balance))
     }
 
     /// 创建基本的swap指令 - 简化版本
     /// 注意：这是一个简化的实现，实际的Raydium AMM需要更复杂的逻辑
-    pub async fn create_simple_swap_instruction(&self, input_mint: &Pubkey, output_mint: &Pubkey, amount: u64, minimum_amount_out: u64) -> Result<Instruction> {
+    pub async fn create_simple_swap_instruction(
+        &self,
+        input_mint: &Pubkey,
+        output_mint: &Pubkey,
+        amount: u64,
+        minimum_amount_out: u64,
+    ) -> Result<Instruction> {
         let owner = self.client.get_wallet().pubkey();
 
         // 获取用户的代币账户
@@ -65,7 +83,10 @@ impl SolanaSwap {
 
         // 这里返回一个简单的memo指令作为示例
         // 在实际实现中，这里应该是Raydium的swap指令
-        let memo_instruction = spl_memo::build_memo(format!("Swap {} {} to {}", amount, input_mint, output_mint).as_bytes(), &[&owner]);
+        let memo_instruction = spl_memo::build_memo(
+            format!("Swap {} {} to {}", amount, input_mint, output_mint).as_bytes(),
+            &[&owner],
+        );
 
         Ok(memo_instruction)
     }
@@ -97,7 +118,12 @@ impl SolanaSwap {
         let recent_blockhash = self.client.get_latest_blockhash()?;
         let owner = self.client.get_wallet().pubkey();
 
-        let transaction = Transaction::new_signed_with_payer(&[swap_instruction], Some(&owner), &[self.client.get_wallet()], recent_blockhash);
+        let transaction = Transaction::new_signed_with_payer(
+            &[swap_instruction],
+            Some(&owner),
+            &[self.client.get_wallet()],
+            recent_blockhash,
+        );
 
         // 发送交易
         info!("📝 注意: 这是一个演示版本的交换，实际并不执行真实的代币交换");
@@ -138,7 +164,12 @@ impl SolanaSwap {
         let recent_blockhash = self.client.get_latest_blockhash()?;
         let owner = self.client.get_wallet().pubkey();
 
-        let transaction = Transaction::new_signed_with_payer(&[swap_instruction], Some(&owner), &[self.client.get_wallet()], recent_blockhash);
+        let transaction = Transaction::new_signed_with_payer(
+            &[swap_instruction],
+            Some(&owner),
+            &[self.client.get_wallet()],
+            recent_blockhash,
+        );
 
         // 发送交易
         info!("📝 注意: 这是一个演示版本的交换，实际并不执行真实的代币交换");
@@ -178,7 +209,10 @@ impl SolanaSwap {
         info!("💰 模拟价格计算:");
         info!("   输入: {}", input_amount);
         info!("   输出: {}", output_amount);
-        info!("   方向: {}", if is_sol_to_usdc { "SOL -> USDC" } else { "USDC -> SOL" });
+        info!(
+            "   方向: {}",
+            if is_sol_to_usdc { "SOL -> USDC" } else { "USDC -> SOL" }
+        );
 
         Ok(output_amount)
     }

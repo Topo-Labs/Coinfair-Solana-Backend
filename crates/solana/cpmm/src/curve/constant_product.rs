@@ -37,9 +37,7 @@ impl ConstantProductCurve {
         // (x + delta_x) * (y - delta_y) = x * y
         // delta_x = (x * delta_y) / (y - delta_y)
         let numerator = swap_source_amount.checked_mul(destinsation_amount).unwrap();
-        let denominator = swap_destination_amount
-            .checked_sub(destinsation_amount)
-            .unwrap();
+        let denominator = swap_destination_amount.checked_sub(destinsation_amount).unwrap();
         let (source_amount_swapped, _) = numerator.checked_ceil_div(denominator).unwrap();
         source_amount_swapped
     }
@@ -98,8 +96,8 @@ mod tests {
         super::*,
         crate::curve::calculator::{
             test::{
-                check_curve_value_from_swap, check_pool_value_from_deposit,
-                check_pool_value_from_withdraw, total_and_intermediate,
+                check_curve_value_from_swap, check_pool_value_from_deposit, check_pool_value_from_withdraw,
+                total_and_intermediate,
             },
             RoundDirection, TradeDirection,
         },
@@ -135,21 +133,9 @@ mod tests {
 
     #[test]
     fn fail_trading_token_conversion() {
-        let results = ConstantProductCurve::lp_tokens_to_trading_tokens(
-            5,
-            10,
-            u128::MAX,
-            0,
-            RoundDirection::Floor,
-        );
+        let results = ConstantProductCurve::lp_tokens_to_trading_tokens(5, 10, u128::MAX, 0, RoundDirection::Floor);
         assert!(results.is_none());
-        let results = ConstantProductCurve::lp_tokens_to_trading_tokens(
-            5,
-            10,
-            0,
-            u128::MAX,
-            RoundDirection::Floor,
-        );
+        let results = ConstantProductCurve::lp_tokens_to_trading_tokens(5, 10, 0, u128::MAX, RoundDirection::Floor);
         assert!(results.is_none());
     }
 
@@ -167,12 +153,9 @@ mod tests {
             swap_destination_amount,
         );
         assert_eq!(source_amount, expected_source_amount_swapped);
-        assert_eq!(
-            destination_amount_swapped,
-            expected_destination_amount_swapped
-        );
-        let new_invariant = (swap_source_amount + source_amount)
-            * (swap_destination_amount - destination_amount_swapped);
+        assert_eq!(destination_amount_swapped, expected_destination_amount_swapped);
+        let new_invariant =
+            (swap_source_amount + source_amount) * (swap_destination_amount - destination_amount_swapped);
         assert!(new_invariant >= invariant);
     }
 

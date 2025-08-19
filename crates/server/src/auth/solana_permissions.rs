@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 pub enum SolanaApiAction {
     /// 读取操作
     Read,
-    /// 写入操作  
+    /// 写入操作
     Write,
 }
 
@@ -124,8 +124,20 @@ impl SolanaPermissionManager {
                 SolanaPermissionPolicy::RequirePermission(Permission::ReadPool),
                 SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::Basic),
             ),
-            ("/api/v1/solana/quote", "价格报价", "交换", SolanaPermissionPolicy::Allow, SolanaPermissionPolicy::Deny),
-            ("/api/v1/solana/balance", "余额查询", "查询", SolanaPermissionPolicy::Allow, SolanaPermissionPolicy::Deny),
+            (
+                "/api/v1/solana/quote",
+                "价格报价",
+                "交换",
+                SolanaPermissionPolicy::Allow,
+                SolanaPermissionPolicy::Deny,
+            ),
+            (
+                "/api/v1/solana/balance",
+                "余额查询",
+                "查询",
+                SolanaPermissionPolicy::Allow,
+                SolanaPermissionPolicy::Deny,
+            ),
             // 仓位相关 API
             (
                 "/api/v1/solana/position/open",
@@ -243,7 +255,13 @@ impl SolanaPermissionManager {
                 SolanaPermissionPolicy::Allow,
                 SolanaPermissionPolicy::Deny,
             ),
-            ("/api/v1/solana/main/rpcs", "RPC信息", "配置", SolanaPermissionPolicy::Allow, SolanaPermissionPolicy::Deny),
+            (
+                "/api/v1/solana/main/rpcs",
+                "RPC信息",
+                "配置",
+                SolanaPermissionPolicy::Allow,
+                SolanaPermissionPolicy::Deny,
+            ),
             (
                 "/api/v1/solana/main/chain-time",
                 "链时间",
@@ -251,7 +269,13 @@ impl SolanaPermissionManager {
                 SolanaPermissionPolicy::Allow,
                 SolanaPermissionPolicy::Deny,
             ),
-            ("/api/v1/solana/mint/list", "代币列表", "配置", SolanaPermissionPolicy::Allow, SolanaPermissionPolicy::Deny),
+            (
+                "/api/v1/solana/mint/list",
+                "代币列表",
+                "配置",
+                SolanaPermissionPolicy::Allow,
+                SolanaPermissionPolicy::Deny,
+            ),
         ];
 
         let now = chrono::Utc::now().timestamp() as u64;
@@ -276,7 +300,10 @@ impl SolanaPermissionManager {
     fn rebuild_cache(&mut self) {
         self.policy_cache.clear();
         for (endpoint, config) in &self.api_configs {
-            self.policy_cache.insert(endpoint.clone(), (config.read_policy.clone(), config.write_policy.clone()));
+            self.policy_cache.insert(
+                endpoint.clone(),
+                (config.read_policy.clone(), config.write_policy.clone()),
+            );
         }
     }
 
@@ -346,7 +373,12 @@ impl SolanaPermissionManager {
     }
 
     /// 检查权限策略
-    pub fn check_permission_policy(&self, policy: &SolanaPermissionPolicy, user_permissions: &std::collections::HashSet<Permission>, user_tier: &UserTier) -> Result<(), String> {
+    pub fn check_permission_policy(
+        &self,
+        policy: &SolanaPermissionPolicy,
+        user_permissions: &std::collections::HashSet<Permission>,
+        user_tier: &UserTier,
+    ) -> Result<(), String> {
         match policy {
             SolanaPermissionPolicy::Allow => Ok(()),
             SolanaPermissionPolicy::Deny => Err("操作被拒绝".to_string()),
@@ -450,7 +482,8 @@ impl SolanaPermissionManager {
         self.api_configs.insert(endpoint.clone(), updated_config.clone());
 
         // 更新缓存
-        self.policy_cache.insert(endpoint, (updated_config.read_policy, updated_config.write_policy));
+        self.policy_cache
+            .insert(endpoint, (updated_config.read_policy, updated_config.write_policy));
     }
 
     /// 批量更新 API 配置
@@ -462,7 +495,8 @@ impl SolanaPermissionManager {
             self.api_configs.insert(endpoint.clone(), config.clone());
 
             // 更新缓存
-            self.policy_cache.insert(endpoint, (config.read_policy, config.write_policy));
+            self.policy_cache
+                .insert(endpoint, (config.read_policy, config.write_policy));
         }
     }
 
@@ -548,12 +582,22 @@ mod tests {
         manager.emergency_shutdown(false);
 
         // 正常情况下应该允许
-        let result = manager.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user_perms, &UserTier::Basic);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Basic,
+        );
         assert!(result.is_ok());
 
         // 紧急停用后应该拒绝
         manager.emergency_shutdown(true);
-        let result = manager.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user_perms, &UserTier::Basic);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Basic,
+        );
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "系统紧急停用中");
     }
@@ -568,12 +612,22 @@ mod tests {
         manager.toggle_maintenance_mode(true);
 
         // 普通用户应该被拒绝
-        let result = manager.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user_perms, &UserTier::Basic);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Basic,
+        );
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "系统维护模式，仅管理员可访问");
 
         // 管理员应该可以访问
-        let result = manager.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &user_perms, &UserTier::Admin);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &user_perms,
+            &UserTier::Admin,
+        );
         assert!(result.is_ok());
     }
 
@@ -588,7 +642,12 @@ mod tests {
         premium_perms.insert(Permission::CreatePosition);
 
         // 测试读取权限 - 应该允许 (Allow policy)
-        let result = manager.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &basic_perms, &UserTier::Basic);
+        let result = manager.check_api_permission(
+            "/api/v1/solana/pools/info/list",
+            &SolanaApiAction::Read,
+            &basic_perms,
+            &UserTier::Basic,
+        );
         assert!(result.is_ok());
 
         // 测试交换写入权限 - 需要 CreatePosition 权限和 Basic 等级
@@ -616,7 +675,10 @@ mod tests {
 
         // 测试通配符匹配
         assert!(manager.matches_endpoint_pattern("/api/v1/solana/pools/line/position", "/api/v1/solana/pools/line/*"));
-        assert!(manager.matches_endpoint_pattern("/api/v1/solana/main/clmm-config/list", "/api/v1/solana/main/clmm-config/*"));
+        assert!(manager.matches_endpoint_pattern(
+            "/api/v1/solana/main/clmm-config/list",
+            "/api/v1/solana/main/clmm-config/*"
+        ));
 
         // 测试精确匹配
         assert!(manager.matches_endpoint_pattern("/api/v1/solana/swap", "/api/v1/solana/swap"));

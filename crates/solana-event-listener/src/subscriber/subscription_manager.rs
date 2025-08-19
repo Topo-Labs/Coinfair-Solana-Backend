@@ -321,10 +321,12 @@ impl SubscriptionManager {
             .await
         {
             Ok(parsed_events) if !parsed_events.is_empty() => {
-                info!("✅ 事件解析成功: {} -> 发现{}个事件: {:?}", 
-                      signature, 
-                      parsed_events.len(),
-                      parsed_events.iter().map(|e| e.event_type()).collect::<Vec<_>>());
+                info!(
+                    "✅ 事件解析成功: {} -> 发现{}个事件: {:?}",
+                    signature,
+                    parsed_events.len(),
+                    parsed_events.iter().map(|e| e.event_type()).collect::<Vec<_>>()
+                );
 
                 // 尝试从日志中提取程序ID用于监控
                 let program_id = self.extract_program_id_from_logs(&log_response.logs);
@@ -357,7 +359,7 @@ impl SubscriptionManager {
                     }
                 }
                 self.processed_events.fetch_add(event_count as u64, Ordering::Relaxed);
-                
+
                 info!("📊 事务处理完成: {} -> 成功处理{}个事件", signature, event_count);
             }
             Ok(_) => {
@@ -374,7 +376,9 @@ impl SubscriptionManager {
                 self.failed_events.fetch_add(1, Ordering::Relaxed);
                 self.metrics.record_event_failed().await?;
                 if let Some(prog_id) = program_id {
-                    self.metrics.record_event_failed_for_program(&prog_id, &error_type).await?;
+                    self.metrics
+                        .record_event_failed_for_program(&prog_id, &error_type)
+                        .await?;
                 }
                 return Err(e);
             }
@@ -512,7 +516,11 @@ impl SubscriptionManager {
         let processed = self.processed_events.load(Ordering::Relaxed);
         let failed = self.failed_events.load(Ordering::Relaxed);
         let total = processed + failed;
-        let success_rate = if total > 0 { processed as f64 / total as f64 } else { 1.0 };
+        let success_rate = if total > 0 {
+            processed as f64 / total as f64
+        } else {
+            1.0
+        };
 
         SubscriptionStats {
             is_running: self.is_running.load(Ordering::Relaxed),
@@ -707,7 +715,12 @@ mod tests {
         // 测试智能路由是否正确调用parse_event_with_context
         let result = manager
             .parser_registry
-            .parse_event_with_context(&logs_with_program_invocation, "test_signature", 12345, &manager.config.solana.program_ids)
+            .parse_event_with_context(
+                &logs_with_program_invocation,
+                "test_signature",
+                12345,
+                &manager.config.solana.program_ids,
+            )
             .await;
 
         // 验证调用成功（即使数据无效，智能路由流程应该正常工作
@@ -730,7 +743,7 @@ mod tests {
     #[tokio::test]
     async fn test_parse_all_events_integration() {
         let config = create_test_config();
-        
+
         // 创建所有必需的组件
         let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
         let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
@@ -753,7 +766,12 @@ mod tests {
         // 测试新的 parse_all_events_with_context 方法
         let all_events_result = manager
             .parser_registry
-            .parse_all_events_with_context(&logs_with_multiple_program_data, "test_signature", 12345, &manager.config.solana.program_ids)
+            .parse_all_events_with_context(
+                &logs_with_multiple_program_data,
+                "test_signature",
+                12345,
+                &manager.config.solana.program_ids,
+            )
             .await;
 
         // 验证方法调用成功
@@ -764,7 +782,10 @@ mod tests {
                 // 但重要的是验证方法能够正常调用并处理多个 Program data
             }
             Err(e) => {
-                println!("✅ parse_all_events_with_context 调用成功，数据解析失败（预期结果）: {}", e);
+                println!(
+                    "✅ parse_all_events_with_context 调用成功，数据解析失败（预期结果）: {}",
+                    e
+                );
                 // 这也是预期的，因为测试数据是无效的
             }
         }
@@ -772,16 +793,19 @@ mod tests {
         // 对比测试：验证原有的 parse_event_with_context 仍然正常工作
         let single_event_result = manager
             .parser_registry
-            .parse_event_with_context(&logs_with_multiple_program_data, "test_signature", 12345, &manager.config.solana.program_ids)
+            .parse_event_with_context(
+                &logs_with_multiple_program_data,
+                "test_signature",
+                12345,
+                &manager.config.solana.program_ids,
+            )
             .await;
 
         match single_event_result {
-            Ok(event) => {
-                match event {
-                    Some(_) => println!("✅ parse_event_with_context 返回了1个事件"),
-                    None => println!("✅ parse_event_with_context 没有找到有效事件"),
-                }
-            }
+            Ok(event) => match event {
+                Some(_) => println!("✅ parse_event_with_context 返回了1个事件"),
+                None => println!("✅ parse_event_with_context 没有找到有效事件"),
+            },
             Err(e) => {
                 println!("✅ parse_event_with_context 数据解析失败（预期结果）: {}", e);
             }

@@ -73,18 +73,28 @@ impl SolanaAuthService {
 
         // 存储待验证消息
         {
-            let mut pending = self.pending_messages.lock().map_err(|_| anyhow!("Failed to acquire lock on pending messages"))?;
+            let mut pending = self
+                .pending_messages
+                .lock()
+                .map_err(|_| anyhow!("Failed to acquire lock on pending messages"))?;
             pending.insert(nonce.clone(), pending_message);
         }
 
-        Ok(AuthMessageResponse { message, nonce, expires_at })
+        Ok(AuthMessageResponse {
+            message,
+            nonce,
+            expires_at,
+        })
     }
 
     /// 验证Solana钱包签名并生成JWT令牌
     pub async fn authenticate_wallet(&self, request: SolanaLoginRequest) -> Result<AuthResponse> {
         // 验证消息是否存在且未过期
         let pending_message = {
-            let mut pending = self.pending_messages.lock().map_err(|_| anyhow!("Failed to acquire lock on pending messages"))?;
+            let mut pending = self
+                .pending_messages
+                .lock()
+                .map_err(|_| anyhow!("Failed to acquire lock on pending messages"))?;
 
             pending
                 .remove(&self.extract_nonce_from_message(&request.message)?)
@@ -114,9 +124,12 @@ impl SolanaAuthService {
         let (permissions, tier) = self.get_user_permissions_and_tier(&request.wallet_address).await?;
 
         // 生成JWT令牌
-        let access_token = self
-            .jwt_manager
-            .generate_token(&request.wallet_address, Some(&request.wallet_address), permissions.clone(), tier.clone())?;
+        let access_token = self.jwt_manager.generate_token(
+            &request.wallet_address,
+            Some(&request.wallet_address),
+            permissions.clone(),
+            tier.clone(),
+        )?;
 
         Ok(AuthResponse {
             access_token,
@@ -134,24 +147,36 @@ impl SolanaAuthService {
     /// 验证Solana Ed25519签名
     fn verify_solana_signature(&self, wallet_address: &str, message: &str, signature_str: &str) -> Result<()> {
         // 解码钱包地址（Base58）
-        let wallet_bytes = bs58::decode(wallet_address).into_vec().map_err(|e| anyhow!("Invalid wallet address format: {}", e))?;
+        let wallet_bytes = bs58::decode(wallet_address)
+            .into_vec()
+            .map_err(|e| anyhow!("Invalid wallet address format: {}", e))?;
 
         if wallet_bytes.len() != 32 {
             return Err(anyhow!("Invalid wallet address length"));
         }
 
         // 解码签名（Base58）
-        let signature_bytes = bs58::decode(signature_str).into_vec().map_err(|e| anyhow!("Invalid signature format: {}", e))?;
+        let signature_bytes = bs58::decode(signature_str)
+            .into_vec()
+            .map_err(|e| anyhow!("Invalid signature format: {}", e))?;
 
         if signature_bytes.len() != 64 {
             return Err(anyhow!("Invalid signature length"));
         }
 
         // 创建公钥和签名对象
-        let public_key =
-            VerifyingKey::from_bytes(&wallet_bytes.try_into().map_err(|_| anyhow!("Invalid wallet address length"))?).map_err(|e| anyhow!("Invalid public key: {}", e))?;
+        let public_key = VerifyingKey::from_bytes(
+            &wallet_bytes
+                .try_into()
+                .map_err(|_| anyhow!("Invalid wallet address length"))?,
+        )
+        .map_err(|e| anyhow!("Invalid public key: {}", e))?;
 
-        let signature = Signature::from_bytes(&signature_bytes.try_into().map_err(|_| anyhow!("Invalid signature length"))?);
+        let signature = Signature::from_bytes(
+            &signature_bytes
+                .try_into()
+                .map_err(|_| anyhow!("Invalid signature length"))?,
+        );
 
         // 验证签名
         public_key

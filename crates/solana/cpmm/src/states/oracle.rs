@@ -71,12 +71,7 @@ impl ObservationState {
     /// # Return
     /// * `next_observation_index` - The new index of element to update in the oracle array
     ///
-    pub fn update(
-        &mut self,
-        block_timestamp: u64,
-        token_0_price_x32: u128,
-        token_1_price_x32: u128,
-    ) {
+    pub fn update(&mut self, block_timestamp: u64, token_0_price_x32: u128, token_1_price_x32: u128) {
         let observation_index = self.observation_index;
         if !self.initialized {
             // skip the pool init price
@@ -99,14 +94,12 @@ impl ObservationState {
             };
             self.observations[next_observation_index as usize].block_timestamp = block_timestamp;
             // cumulative_token_price_x32 only occupies the first 64 bits, and the remaining 64 bits are used to store overflow data
-            self.observations[next_observation_index as usize].cumulative_token_0_price_x32 =
-                last_observation
-                    .cumulative_token_0_price_x32
-                    .wrapping_add(delta_token_0_price_x32);
-            self.observations[next_observation_index as usize].cumulative_token_1_price_x32 =
-                last_observation
-                    .cumulative_token_1_price_x32
-                    .wrapping_add(delta_token_1_price_x32);
+            self.observations[next_observation_index as usize].cumulative_token_0_price_x32 = last_observation
+                .cumulative_token_0_price_x32
+                .wrapping_add(delta_token_0_price_x32);
+            self.observations[next_observation_index as usize].cumulative_token_1_price_x32 = last_observation
+                .cumulative_token_1_price_x32
+                .wrapping_add(delta_token_1_price_x32);
             self.observation_index = next_observation_index;
         }
     }
@@ -120,8 +113,5 @@ pub fn block_timestamp() -> u64 {
 
 #[cfg(test)]
 pub fn block_timestamp_mock() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
 }

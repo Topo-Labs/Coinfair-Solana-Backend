@@ -24,7 +24,7 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 /// WebSocket连接管理器
-/// 
+///
 /// 负责:
 /// - 维护与Solana WebSocket的持久连接
 /// - 实现断线重连和指数退避
@@ -54,11 +54,11 @@ impl WebSocketManager {
     /// 创建新的WebSocket管理器
     pub fn new(config: Arc<EventListenerConfig>) -> Result<Self> {
         let program_ids = config.solana.program_ids.clone();
-        
+
         if program_ids.is_empty() {
             return Err(EventListenerError::Config("程序ID列表不能为空".to_string()));
         }
-        
+
         let (event_sender, event_receiver) = broadcast::channel(10240); // 增加到10倍缓冲区
 
         Ok(Self {
@@ -81,12 +81,19 @@ impl WebSocketManager {
         }
 
         self.is_running.store(true, Ordering::Relaxed);
-        info!("🔌 启动WebSocket连接管理器，监听{}个程序: {:?}", self.program_ids.len(), self.program_ids);
+        info!(
+            "🔌 启动WebSocket连接管理器，监听{}个程序: {:?}",
+            self.program_ids.len(),
+            self.program_ids
+        );
 
         // 根据配置选择重连策略
         if self.config.listener.backoff.enable_simple_reconnect {
-            info!("🔄 使用简单重连策略: {}ms间隔, 无限重试", self.config.listener.backoff.simple_reconnect_interval_ms);
-            
+            info!(
+                "🔄 使用简单重连策略: {}ms间隔, 无限重试",
+                self.config.listener.backoff.simple_reconnect_interval_ms
+            );
+
             // 创建简单的固定间隔重连循环
             let manager = self.clone();
             loop {
@@ -102,9 +109,12 @@ impl WebSocketManager {
                     Err(e) => {
                         error!("❌ WebSocket连接失败: {}", e);
                         manager.is_connected.store(false, Ordering::Relaxed);
-                        
+
                         // 固定间隔延迟
-                        sleep(Duration::from_millis(self.config.listener.backoff.simple_reconnect_interval_ms)).await;
+                        sleep(Duration::from_millis(
+                            self.config.listener.backoff.simple_reconnect_interval_ms,
+                        ))
+                        .await;
                     }
                 }
             }
@@ -176,7 +186,12 @@ impl WebSocketManager {
         // 为每个程序ID创建独立的订阅
         for (index, program_id) in self.program_ids.iter().enumerate() {
             let program_id_string = program_id.to_string();
-            info!("📡 订阅程序 {}/{}: {}", index + 1, self.program_ids.len(), program_id_string);
+            info!(
+                "📡 订阅程序 {}/{}: {}",
+                index + 1,
+                self.program_ids.len(),
+                program_id_string
+            );
 
             // 为单个程序ID创建订阅
             let (logs_subscription, logs_unsubscribe) = pubsub_client
@@ -203,11 +218,14 @@ impl WebSocketManager {
             *last_time = Some(Instant::now());
         }
 
-        info!("✅ WebSocket连接建立，开始监听{}个订阅流的事件", all_subscriptions.len());
+        info!(
+            "✅ WebSocket连接建立，开始监听{}个订阅流的事件",
+            all_subscriptions.len()
+        );
 
         // 使用select_all合并所有订阅流
         use futures::stream::select_all;
-        
+
         // 将所有订阅流合并为一个流
         let streams: Vec<_> = all_subscriptions
             .into_iter()
@@ -216,7 +234,7 @@ impl WebSocketManager {
                 subscription.map(move |log_response| (i, program_index, log_response))
             })
             .collect();
-        
+
         let mut merged_stream = select_all(streams);
 
         // 处理合并后的事件流
@@ -224,7 +242,10 @@ impl WebSocketManager {
             match merged_stream.next().await {
                 Some((_subscription_idx, program_idx, log_response)) => {
                     let program_id = &self.program_ids[program_idx];
-                    debug!("📨 接收到程序 {} 的日志事件: {}", program_id, log_response.value.signature);
+                    debug!(
+                        "📨 接收到程序 {} 的日志事件: {}",
+                        program_id, log_response.value.signature
+                    );
 
                     // 广播事件给所有订阅者
                     match self.event_sender.send(log_response.value) {
@@ -239,9 +260,7 @@ impl WebSocketManager {
                 None => {
                     warn!("📡 所有WebSocket订阅意外断开");
                     self.is_connected.store(false, Ordering::Relaxed);
-                    return Err(EventListenerError::WebSocket(
-                        "所有WebSocket订阅意外断开".to_string(),
-                    ));
+                    return Err(EventListenerError::WebSocket("所有WebSocket订阅意外断开".to_string()));
                 }
             }
         }
@@ -278,10 +297,10 @@ impl WebSocketManager {
     pub async fn reconnect(&self) -> Result<()> {
         info!("🔄 手动重连WebSocket");
         self.is_connected.store(false, Ordering::Relaxed);
-        
+
         // 等待一段时间再重连
         sleep(Duration::from_millis(1000)).await;
-        
+
         self.connect_and_subscribe().await
     }
 }
@@ -354,7 +373,7 @@ mod tests {
     async fn test_websocket_manager_creation() {
         let config = Arc::new(create_test_config());
         let manager = WebSocketManager::new(config).unwrap();
-        
+
         assert!(!manager.is_connected.load(Ordering::Relaxed));
         assert!(!manager.is_running.load(Ordering::Relaxed));
     }
@@ -363,7 +382,7 @@ mod tests {
     async fn test_websocket_manager_stats() {
         let config = Arc::new(create_test_config());
         let manager = WebSocketManager::new(config).unwrap();
-        
+
         let stats = manager.get_stats().await;
         assert!(!stats.is_connected);
         assert!(!stats.is_running);
@@ -378,7 +397,7 @@ mod tests {
         let confirmed = parse_commitment_config("confirmed");
         let finalized = parse_commitment_config("finalized");
         let _invalid = parse_commitment_config("invalid");
-        
+
         // 验证它们不相等（这样测试不同的配置产生不同的结果）
         assert!(processed.commitment != finalized.commitment);
         assert!(confirmed.commitment != processed.commitment);

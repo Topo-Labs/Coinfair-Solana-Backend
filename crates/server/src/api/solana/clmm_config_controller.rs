@@ -1,4 +1,7 @@
-use crate::{dtos::solana_dto::ErrorResponse, dtos::static_dto::ApiResponse, extractors::validation_extractor::ValidationExtractor, services::Services};
+use crate::{
+    dtos::solana_dto::ErrorResponse, dtos::static_dto::ApiResponse,
+    extractors::validation_extractor::ValidationExtractor, services::Services,
+};
 use axum::{
     extract::Extension,
     http::StatusCode,
@@ -153,7 +156,7 @@ pub async fn save_clmm_config(
 /// - `configIndex`: 配置索引，必须是未使用的唯一值 (0-65535)
 /// - `tickSpacing`: tick间距，决定价格点之间的间隔 (1-1000)
 /// - `tradeFeeRate`: 交易费率，以百万分之一为单位 (0-1000000)
-/// - `protocolFeeRate`: 协议费率，以百万分之一为单位 (0-1000000)  
+/// - `protocolFeeRate`: 协议费率，以百万分之一为单位 (0-1000000)
 /// - `fundFeeRate`: 基金费率，以百万分之一为单位 (0-1000000)
 ///
 /// # 响应示例
@@ -229,7 +232,7 @@ pub async fn create_amm_config(
 /// - `configIndex`: 配置索引，必须是未使用的唯一值 (0-65535)
 /// - `tickSpacing`: tick间距，决定价格点之间的间隔 (1-1000)
 /// - `tradeFeeRate`: 交易费率，以百万分之一为单位 (0-1000000)
-/// - `protocolFeeRate`: 协议费率，以百万分之一为单位 (0-1000000)  
+/// - `protocolFeeRate`: 协议费率，以百万分之一为单位 (0-1000000)
 /// - `fundFeeRate`: 基金费率，以百万分之一为单位 (0-1000000)
 ///
 /// # 响应示例
@@ -270,7 +273,10 @@ pub async fn create_amm_config(
 pub async fn create_amm_config_and_send_transaction(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<crate::dtos::static_dto::CreateAmmConfigRequest>,
-) -> Result<Json<ApiResponse<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse>>, (StatusCode, Json<ErrorResponse>)> {
+) -> Result<
+    Json<ApiResponse<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse>>,
+    (StatusCode, Json<ErrorResponse>),
+> {
     info!("🚀 创建AMM配置并发送交易，索引: {}", request.config_index);
     info!("  tick间距: {}", request.tick_spacing);
     info!("  交易费率: {}", request.trade_fee_rate);

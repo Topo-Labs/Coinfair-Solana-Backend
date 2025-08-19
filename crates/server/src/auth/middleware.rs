@@ -36,7 +36,11 @@ impl AuthState {
 }
 
 impl SolanaAuthState {
-    pub fn new(jwt_manager: JwtManager, permission_service: DynSolanaPermissionService, auth_config: crate::auth::models::AuthConfig) -> Self {
+    pub fn new(
+        jwt_manager: JwtManager,
+        permission_service: DynSolanaPermissionService,
+        auth_config: crate::auth::models::AuthConfig,
+    ) -> Self {
         Self {
             jwt_manager: Arc::new(jwt_manager),
             permission_service,
@@ -46,7 +50,11 @@ impl SolanaAuthState {
 }
 
 /// JWT认证中间件
-pub async fn jwt_auth_middleware(State(auth_state): State<AuthState>, mut request: Request, next: Next) -> AnyhowResult<Response, StatusCode> {
+pub async fn jwt_auth_middleware(
+    State(auth_state): State<AuthState>,
+    mut request: Request,
+    next: Next,
+) -> AnyhowResult<Response, StatusCode> {
     // 检查认证开关
     if auth_state.auth_config.auth_disabled {
         tracing::info!("🔓 认证已禁用，创建匿名用户直接通过");
@@ -102,7 +110,11 @@ pub async fn jwt_auth_middleware(State(auth_state): State<AuthState>, mut reques
 }
 
 /// 可选认证中间件（允许匿名访问但提取用户信息）
-pub async fn optional_auth_middleware(State(auth_state): State<AuthState>, mut request: Request, next: Next) -> AnyhowResult<Response, StatusCode> {
+pub async fn optional_auth_middleware(
+    State(auth_state): State<AuthState>,
+    mut request: Request,
+    next: Next,
+) -> AnyhowResult<Response, StatusCode> {
     // 检查认证开关
     if auth_state.auth_config.auth_disabled {
         tracing::info!("🔓 认证已禁用，创建匿名用户直接通过");
@@ -143,7 +155,9 @@ pub async fn optional_auth_middleware(State(auth_state): State<AuthState>, mut r
 }
 
 /// 权限检查中间件
-pub fn require_permission(required_permission: Permission) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+pub fn require_permission(
+    required_permission: Permission,
+) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
     move |request: Request, next: Next| {
         let required_perm = required_permission.clone();
         Box::pin(async move {
@@ -152,7 +166,11 @@ pub fn require_permission(required_permission: Permission) -> impl Fn(Request, N
                     if auth_user.has_permission(&required_perm) || auth_user.is_admin() {
                         Ok(next.run(request).await)
                     } else {
-                        tracing::warn!("User {} lacks required permission: {:?}", auth_user.user_id, required_perm);
+                        tracing::warn!(
+                            "User {} lacks required permission: {:?}",
+                            auth_user.user_id,
+                            required_perm
+                        );
                         Err(StatusCode::FORBIDDEN)
                     }
                 }
@@ -166,7 +184,9 @@ pub fn require_permission(required_permission: Permission) -> impl Fn(Request, N
 }
 
 /// 权限检查中间件（需要任一权限）
-pub fn require_any_permission(required_permissions: Vec<Permission>) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+pub fn require_any_permission(
+    required_permissions: Vec<Permission>,
+) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
     move |request: Request, next: Next| {
         let required_perms = required_permissions.clone();
         Box::pin(async move {
@@ -175,7 +195,11 @@ pub fn require_any_permission(required_permissions: Vec<Permission>) -> impl Fn(
                     if auth_user.has_any_permission(&required_perms) || auth_user.is_admin() {
                         Ok(next.run(request).await)
                     } else {
-                        tracing::warn!("User {} lacks any of required permissions: {:?}", auth_user.user_id, required_perms);
+                        tracing::warn!(
+                            "User {} lacks any of required permissions: {:?}",
+                            auth_user.user_id,
+                            required_perms
+                        );
                         Err(StatusCode::FORBIDDEN)
                     }
                 }
@@ -226,7 +250,11 @@ pub fn create_auth_error_response(status: StatusCode, message: &str) -> Response
 /// 从JWT Claims创建AuthUser
 fn create_auth_user_from_claims(claims: Claims) -> AuthUser {
     use std::collections::HashSet;
-    let permissions: HashSet<Permission> = claims.permissions.iter().filter_map(|p| Permission::from_str(p)).collect();
+    let permissions: HashSet<Permission> = claims
+        .permissions
+        .iter()
+        .filter_map(|p| Permission::from_str(p))
+        .collect();
 
     AuthUser {
         user_id: claims.sub,
@@ -252,7 +280,10 @@ impl AuthUserExtractor {
 
     /// 从请求中提取钱包地址
     pub fn extract_wallet_address(request: &Request) -> Option<&String> {
-        request.extensions().get::<AuthUser>().and_then(|user| user.wallet_address.as_ref())
+        request
+            .extensions()
+            .get::<AuthUser>()
+            .and_then(|user| user.wallet_address.as_ref())
     }
 }
 
@@ -270,7 +301,9 @@ impl MiddlewareBuilder {
     }
 
     /// 构建JWT认证中间件
-    pub fn jwt_auth(&self) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+    pub fn jwt_auth(
+        &self,
+    ) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
         let auth_state = self.auth_state.clone();
         move |request: Request, next: Next| {
             let auth_state = auth_state.clone();
@@ -279,7 +312,9 @@ impl MiddlewareBuilder {
     }
 
     /// 构建可选认证中间件
-    pub fn optional_auth(&self) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+    pub fn optional_auth(
+        &self,
+    ) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
         let auth_state = self.auth_state.clone();
         move |request: Request, next: Next| {
             let auth_state = auth_state.clone();
@@ -289,7 +324,11 @@ impl MiddlewareBuilder {
 }
 
 /// Solana API 权限检查中间件
-pub async fn solana_permission_middleware(State(solana_auth_state): State<SolanaAuthState>, mut request: Request, next: Next) -> AnyhowResult<Response, StatusCode> {
+pub async fn solana_permission_middleware(
+    State(solana_auth_state): State<SolanaAuthState>,
+    mut request: Request,
+    next: Next,
+) -> AnyhowResult<Response, StatusCode> {
     // 检查认证开关
     if solana_auth_state.auth_config.auth_disabled {
         tracing::info!("🔓 Solana认证已禁用，创建匿名用户直接通过");
@@ -364,10 +403,22 @@ pub async fn solana_permission_middleware(State(solana_auth_state): State<Solana
                     };
 
                     // 检查权限
-                    tracing::info!("🔍 开始Solana API权限检查: 用户={} 端点={} 操作={:?}", auth_user.user_id, endpoint, action);
-                    match solana_auth_state.permission_service.check_api_permission(&endpoint, &action, &auth_user).await {
+                    tracing::info!(
+                        "🔍 开始Solana API权限检查: 用户={} 端点={} 操作={:?}",
+                        auth_user.user_id,
+                        endpoint,
+                        action
+                    );
+                    match solana_auth_state
+                        .permission_service
+                        .check_api_permission(&endpoint, &action, &auth_user)
+                        .await
+                    {
                         Ok(_) => {
-                            info!("✅ Solana API权限检查通过: 用户={} 端点={} 操作={:?}", auth_user.user_id, endpoint, action);
+                            info!(
+                                "✅ Solana API权限检查通过: 用户={} 端点={} 操作={:?}",
+                                auth_user.user_id, endpoint, action
+                            );
                             // 将认证用户信息添加到请求扩展中
                             request.extensions_mut().insert(auth_user);
                             Ok(next.run(request).await)
@@ -395,7 +446,11 @@ pub async fn solana_permission_middleware(State(solana_auth_state): State<Solana
 }
 
 /// Solana API 可选权限检查中间件（允许匿名访问但检查权限）
-pub async fn solana_optional_permission_middleware(State(solana_auth_state): State<SolanaAuthState>, mut request: Request, next: Next) -> AnyhowResult<Response, StatusCode> {
+pub async fn solana_optional_permission_middleware(
+    State(solana_auth_state): State<SolanaAuthState>,
+    mut request: Request,
+    next: Next,
+) -> AnyhowResult<Response, StatusCode> {
     // 检查认证开关
     if solana_auth_state.auth_config.auth_disabled {
         tracing::info!("🔓 Solana认证已禁用，创建匿名用户直接通过");
@@ -441,7 +496,11 @@ pub async fn solana_optional_permission_middleware(State(solana_auth_state): Sta
         }
     };
 
-    tracing::debug!("🔍 可选权限检查路径重建: 原始路径={}, 重建路径={}", request.uri().path(), endpoint);
+    tracing::debug!(
+        "🔍 可选权限检查路径重建: 原始路径={}, 重建路径={}",
+        request.uri().path(),
+        endpoint
+    );
 
     let method = request.method().as_str();
 
@@ -467,10 +526,22 @@ pub async fn solana_optional_permission_middleware(State(solana_auth_state): Sta
             let auth_user = create_auth_user_from_claims(claims);
 
             // 检查权限
-            tracing::info!("🔍 开始Solana API可选权限检查: 用户={} 端点={} 操作={:?}", auth_user.user_id, endpoint, action);
-            match solana_auth_state.permission_service.check_api_permission(&endpoint, &action, &auth_user).await {
+            tracing::info!(
+                "🔍 开始Solana API可选权限检查: 用户={} 端点={} 操作={:?}",
+                auth_user.user_id,
+                endpoint,
+                action
+            );
+            match solana_auth_state
+                .permission_service
+                .check_api_permission(&endpoint, &action, &auth_user)
+                .await
+            {
                 Ok(_) => {
-                    info!("✅ Solana API可选权限检查通过: 用户={} 端点={} 操作={:?}", auth_user.user_id, endpoint, action);
+                    info!(
+                        "✅ Solana API可选权限检查通过: 用户={} 端点={} 操作={:?}",
+                        auth_user.user_id, endpoint, action
+                    );
                     request.extensions_mut().insert(auth_user);
                 }
                 Err(permission_error) => {
@@ -494,13 +565,20 @@ pub async fn solana_optional_permission_middleware(State(solana_auth_state): Sta
             permissions: HashSet::new(),
         };
 
-        match solana_auth_state.permission_service.check_api_permission(&endpoint, &action, &anonymous_user).await {
+        match solana_auth_state
+            .permission_service
+            .check_api_permission(&endpoint, &action, &anonymous_user)
+            .await
+        {
             Ok(_) => {
                 info!("✅ Solana API匿名访问允许: 端点={} 操作={:?}", endpoint, action);
                 // 不添加用户信息到扩展中，表示匿名访问
             }
             Err(permission_error) => {
-                warn!("❌ Solana API匿名访问被拒绝: 端点={} 操作={:?} 原因={}", endpoint, action, permission_error);
+                warn!(
+                    "❌ Solana API匿名访问被拒绝: 端点={} 操作={:?} 原因={}",
+                    endpoint, action, permission_error
+                );
                 return Err(StatusCode::UNAUTHORIZED);
             }
         }
@@ -510,17 +588,25 @@ pub async fn solana_optional_permission_middleware(State(solana_auth_state): Sta
 }
 
 /// Solana 特定权限检查中间件（需要特定权限）
-pub fn solana_require_permission(required_permission: Permission) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+pub fn solana_require_permission(
+    required_permission: Permission,
+) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
     move |request: Request, next: Next| {
         let required_perm = required_permission.clone();
         Box::pin(async move {
             match request.extensions().get::<AuthUser>() {
                 Some(auth_user) => {
                     if auth_user.has_permission(&required_perm) || auth_user.is_admin() {
-                        info!("✅ Solana特定权限检查通过: 用户={} 权限={:?}", auth_user.user_id, required_perm);
+                        info!(
+                            "✅ Solana特定权限检查通过: 用户={} 权限={:?}",
+                            auth_user.user_id, required_perm
+                        );
                         Ok(next.run(request).await)
                     } else {
-                        warn!("❌ Solana特定权限检查失败: 用户={} 缺少权限={:?}", auth_user.user_id, required_perm);
+                        warn!(
+                            "❌ Solana特定权限检查失败: 用户={} 缺少权限={:?}",
+                            auth_user.user_id, required_perm
+                        );
                         Err(StatusCode::FORBIDDEN)
                     }
                 }
@@ -540,14 +626,20 @@ pub struct SolanaMiddlewareBuilder {
 }
 
 impl SolanaMiddlewareBuilder {
-    pub fn new(jwt_manager: JwtManager, permission_service: DynSolanaPermissionService, auth_config: crate::auth::models::AuthConfig) -> Self {
+    pub fn new(
+        jwt_manager: JwtManager,
+        permission_service: DynSolanaPermissionService,
+        auth_config: crate::auth::models::AuthConfig,
+    ) -> Self {
         Self {
             solana_auth_state: SolanaAuthState::new(jwt_manager, permission_service, auth_config),
         }
     }
 
     /// 构建Solana权限检查中间件
-    pub fn solana_auth(&self) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+    pub fn solana_auth(
+        &self,
+    ) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
         let auth_state = self.solana_auth_state.clone();
         move |request: Request, next: Next| {
             let auth_state = auth_state.clone();
@@ -556,7 +648,9 @@ impl SolanaMiddlewareBuilder {
     }
 
     /// 构建Solana可选权限检查中间件
-    pub fn solana_optional_auth(&self) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
+    pub fn solana_optional_auth(
+        &self,
+    ) -> impl Fn(Request, Next) -> futures::future::BoxFuture<'static, AnyhowResult<Response, StatusCode>> + Clone {
         let auth_state = self.solana_auth_state.clone();
         move |request: Request, next: Next| {
             let auth_state = auth_state.clone();

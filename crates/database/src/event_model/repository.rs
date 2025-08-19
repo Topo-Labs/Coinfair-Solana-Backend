@@ -104,8 +104,16 @@ impl ClmmPoolEventRepository {
         let total_pools = self.collection.count_documents(doc! {}, None).await? as u64;
 
         // 统计今日新增池子
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
-        let today_new_pools = self.collection.count_documents(doc! { "created_at": { "$gte": today_start } }, None).await? as u64;
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let today_new_pools = self
+            .collection
+            .count_documents(doc! { "created_at": { "$gte": today_start } }, None)
+            .await? as u64;
 
         // 统计不同费率的池子数量
         let fee_rate_pipeline = vec![
@@ -201,9 +209,9 @@ impl NftClaimEventRepository {
         let reward_multiplier_index = IndexModel::builder().keys(doc! { "reward_multiplier": 1 }).build();
 
         let indexes = vec![
-            nft_signature_index, 
-            claimer_index, 
-            claimed_at_index, 
+            nft_signature_index,
+            claimer_index,
+            claimed_at_index,
             tier_index,
             referrer_index,
             has_referrer_index,
@@ -257,8 +265,16 @@ impl NftClaimEventRepository {
         let total_claims = self.collection.count_documents(doc! {}, None).await? as u64;
 
         // 统计今日领取次数
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
-        let today_claims = self.collection.count_documents(doc! { "claimed_at": { "$gte": today_start } }, None).await? as u64;
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let today_claims = self
+            .collection
+            .count_documents(doc! { "claimed_at": { "$gte": today_start } }, None)
+            .await? as u64;
 
         // 统计等级分布
         let tier_pipeline = vec![
@@ -278,7 +294,11 @@ impl NftClaimEventRepository {
 
         let mut tier_distribution = Vec::new();
         while let Some(doc) = cursor.try_next().await? {
-            if let (Some(tier), Some(count), Some(total_amount)) = (doc.get_i32("_id").ok(), doc.get_i32("count").ok(), doc.get_i64("total_amount").ok()) {
+            if let (Some(tier), Some(count), Some(total_amount)) = (
+                doc.get_i32("_id").ok(),
+                doc.get_i32("count").ok(),
+                doc.get_i64("total_amount").ok(),
+            ) {
                 tier_distribution.push((tier as u8, count as u64, total_amount as u64));
             }
         }
@@ -382,10 +402,10 @@ impl RewardDistributionEventRepository {
             .build();
 
         let indexes = vec![
-            distribution_signature_index, 
-            recipient_index, 
-            distributed_at_index, 
-            reward_type_index, 
+            distribution_signature_index,
+            recipient_index,
+            distributed_at_index,
+            reward_type_index,
             locked_index,
             // 高级查询索引
             referrer_index,
@@ -441,11 +461,22 @@ impl RewardDistributionEventRepository {
         let total_distributions = self.collection.count_documents(doc! {}, None).await? as u64;
 
         // 统计今日分发次数
-        let today_start = Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
-        let today_distributions = self.collection.count_documents(doc! { "distributed_at": { "$gte": today_start } }, None).await? as u64;
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let today_distributions = self
+            .collection
+            .count_documents(doc! { "distributed_at": { "$gte": today_start } }, None)
+            .await? as u64;
 
         // 统计锁定中的奖励
-        let locked_rewards = self.collection.count_documents(doc! { "is_locked": true }, None).await? as u64;
+        let locked_rewards = self
+            .collection
+            .count_documents(doc! { "is_locked": true }, None)
+            .await? as u64;
 
         // 统计奖励类型分布
         let reward_type_pipeline = vec![
@@ -465,7 +496,11 @@ impl RewardDistributionEventRepository {
 
         let mut reward_type_distribution = Vec::new();
         while let Some(doc) = cursor.try_next().await? {
-            if let (Some(reward_type), Some(count), Some(total_amount)) = (doc.get_i32("_id").ok(), doc.get_i32("count").ok(), doc.get_i64("total_amount").ok()) {
+            if let (Some(reward_type), Some(count), Some(total_amount)) = (
+                doc.get_i32("_id").ok(),
+                doc.get_i32("count").ok(),
+                doc.get_i64("total_amount").ok(),
+            ) {
                 reward_type_distribution.push((reward_type as u8, count as u64, total_amount as u64));
             }
         }

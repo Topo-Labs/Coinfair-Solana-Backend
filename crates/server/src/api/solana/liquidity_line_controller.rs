@@ -96,13 +96,19 @@ pub async fn get_pool_liquidity_line(
     // 验证池子地址格式
     if validated_params.id.len() < 32 || validated_params.id.len() > 44 {
         warn!("⚠️ 无效的池子地址长度: {}", validated_params.id);
-        return Err((StatusCode::BAD_REQUEST, create_error_response("池子地址格式无效", Some("INVALID_POOL_ADDRESS"))));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            create_error_response("池子地址格式无效", Some("INVALID_POOL_ADDRESS")),
+        ));
     }
 
     // 调用服务层获取流动性线图数据
     match services.solana.get_pool_liquidity_line(&validated_params).await {
         Ok(liquidity_line_data) => {
-            info!("✅ 成功获取流动性线图 - 请求ID: {}, 数据点数: {}", request_id, liquidity_line_data.count);
+            info!(
+                "✅ 成功获取流动性线图 - 请求ID: {}, 数据点数: {}",
+                request_id, liquidity_line_data.count
+            );
 
             let response = PoolLiquidityLineResponse {
                 id: request_id,
@@ -116,10 +122,20 @@ pub async fn get_pool_liquidity_line(
             error!("❌ 获取流动性线图失败 - 请求ID: {}, 错误: {:?}", request_id, e);
 
             let (status_code, error_code, error_msg) = match e.to_string().as_str() {
-                s if s.contains("pool not found") || s.contains("池子不存在") => (StatusCode::NOT_FOUND, "POOL_NOT_FOUND", "池子不存在或地址无效"),
-                s if s.contains("invalid pool address") || s.contains("无效的池子地址") => (StatusCode::BAD_REQUEST, "INVALID_POOL_ADDRESS", "池子地址格式无效"),
-                s if s.contains("RPC") || s.contains("network") => (StatusCode::SERVICE_UNAVAILABLE, "RPC_ERROR", "网络连接错误，请稍后重试"),
-                s if s.contains("tick array") => (StatusCode::INTERNAL_SERVER_ERROR, "TICK_ARRAY_ERROR", "获取流动性数据失败"),
+                s if s.contains("pool not found") || s.contains("池子不存在") => {
+                    (StatusCode::NOT_FOUND, "POOL_NOT_FOUND", "池子不存在或地址无效")
+                }
+                s if s.contains("invalid pool address") || s.contains("无效的池子地址") => {
+                    (StatusCode::BAD_REQUEST, "INVALID_POOL_ADDRESS", "池子地址格式无效")
+                }
+                s if s.contains("RPC") || s.contains("network") => {
+                    (StatusCode::SERVICE_UNAVAILABLE, "RPC_ERROR", "网络连接错误，请稍后重试")
+                }
+                s if s.contains("tick array") => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "TICK_ARRAY_ERROR",
+                    "获取流动性数据失败",
+                ),
                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务器内部错误"),
             };
 

@@ -1,11 +1,11 @@
-use crate::dtos::static_dto::{MintListResponse, TokenInfo as DtoTokenInfo, TokenIdResponse};
+use crate::dtos::static_dto::{MintListResponse, TokenIdResponse, TokenInfo as DtoTokenInfo};
 use database::token_info::{
-    TokenInfo, TokenListQuery, TokenListResponse, TokenPushRequest, TokenPushResponse,
-    TokenInfoRepository, TokenStats, StaticTokenInfo,
+    StaticTokenInfo, TokenInfo, TokenInfoRepository, TokenListQuery, TokenListResponse, TokenPushRequest,
+    TokenPushResponse, TokenStats,
 };
 use database::Database;
 use std::sync::Arc;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 use utils::AppResult;
 
 /// Token 服务层 - 处理代币相关的业务逻辑
@@ -68,38 +68,32 @@ impl TokenService {
     pub fn validate_push_request(&self, request: &TokenPushRequest) -> AppResult<()> {
         // 验证地址格式
         if request.address.len() < 32 || request.address.len() > 44 {
-            return Err(utils::AppError::BadRequest(
-                "代币地址格式无效".to_string()
-            ));
+            return Err(utils::AppError::BadRequest("代币地址格式无效".to_string()));
         }
 
         // 验证符号长度
         if request.symbol.is_empty() || request.symbol.len() > 20 {
             return Err(utils::AppError::BadRequest(
-                "代币符号长度必须在1-20字符之间".to_string()
+                "代币符号长度必须在1-20字符之间".to_string(),
             ));
         }
 
         // 验证名称长度
         if request.name.is_empty() || request.name.len() > 100 {
             return Err(utils::AppError::BadRequest(
-                "代币名称长度必须在1-100字符之间".to_string()
+                "代币名称长度必须在1-100字符之间".to_string(),
             ));
         }
 
         // 验证小数位数
         if request.decimals > 18 {
-            return Err(utils::AppError::BadRequest(
-                "代币小数位数不能超过18".to_string()
-            ));
+            return Err(utils::AppError::BadRequest("代币小数位数不能超过18".to_string()));
         }
 
         // 验证日交易量
         if let Some(volume) = request.daily_volume {
             if volume < 0.0 {
-                return Err(utils::AppError::BadRequest(
-                    "日交易量不能为负数".to_string()
-                ));
+                return Err(utils::AppError::BadRequest("日交易量不能为负数".to_string()));
             }
         }
 
@@ -114,9 +108,11 @@ impl TokenService {
         let response = self.get_repository().query_tokens(&query).await?;
 
         // 转换为静态 DTO 格式
-        let mint_list: Vec<DtoTokenInfo> = response.mint_list.into_iter().map(|static_token| {
-            self.static_to_dto(static_token)
-        }).collect();
+        let mint_list: Vec<DtoTokenInfo> = response
+            .mint_list
+            .into_iter()
+            .map(|static_token| self.static_to_dto(static_token))
+            .collect();
         let blacklist = response.blacklist;
         let white_list = response.white_list;
 
@@ -171,7 +167,10 @@ impl TokenService {
         info!("🔍 按符号搜索代币: {}", symbol);
 
         let tokens = self.get_repository().find_by_symbol(symbol).await?;
-        let static_tokens: Vec<DtoTokenInfo> = tokens.into_iter().map(|t| self.static_to_dto(t.to_static_dto())).collect();
+        let static_tokens: Vec<DtoTokenInfo> = tokens
+            .into_iter()
+            .map(|t| self.static_to_dto(t.to_static_dto()))
+            .collect();
 
         info!("✅ 找到 {} 个匹配的代币", static_tokens.len());
         Ok(static_tokens)
@@ -186,7 +185,10 @@ impl TokenService {
         }
 
         let tokens = self.get_repository().search_tokens(keyword, limit).await?;
-        let static_tokens: Vec<DtoTokenInfo> = tokens.into_iter().map(|t| self.static_to_dto(t.to_static_dto())).collect();
+        let static_tokens: Vec<DtoTokenInfo> = tokens
+            .into_iter()
+            .map(|t| self.static_to_dto(t.to_static_dto()))
+            .collect();
 
         info!("✅ 搜索完成: 找到 {} 个匹配的代币", static_tokens.len());
         Ok(static_tokens)
@@ -197,7 +199,10 @@ impl TokenService {
         info!("📈 获取热门代币: limit={:?}", limit);
 
         let tokens = self.get_repository().get_trending_tokens(limit).await?;
-        let static_tokens: Vec<DtoTokenInfo> = tokens.into_iter().map(|t| self.static_to_dto(t.to_static_dto())).collect();
+        let static_tokens: Vec<DtoTokenInfo> = tokens
+            .into_iter()
+            .map(|t| self.static_to_dto(t.to_static_dto()))
+            .collect();
 
         info!("✅ 获取热门代币完成: {} 个代币", static_tokens.len());
         Ok(static_tokens)
@@ -208,7 +213,10 @@ impl TokenService {
         info!("🆕 获取新上线代币: limit={:?}", limit);
 
         let tokens = self.get_repository().get_new_tokens(limit).await?;
-        let static_tokens: Vec<DtoTokenInfo> = tokens.into_iter().map(|t| self.static_to_dto(t.to_static_dto())).collect();
+        let static_tokens: Vec<DtoTokenInfo> = tokens
+            .into_iter()
+            .map(|t| self.static_to_dto(t.to_static_dto()))
+            .collect();
 
         info!("✅ 获取新代币完成: {} 个代币", static_tokens.len());
         Ok(static_tokens)
@@ -241,7 +249,10 @@ impl TokenService {
     ) -> AppResult<bool> {
         info!("🔄 更新代币验证状态: {} -> {:?}", address, verification);
 
-        let updated = self.get_repository().update_token_verification(address, verification).await?;
+        let updated = self
+            .get_repository()
+            .update_token_verification(address, verification)
+            .await?;
 
         if updated {
             info!("✅ 代币验证状态更新成功: {}", address);
@@ -302,9 +313,9 @@ impl TokenService {
         }
 
         // 简单验证是否为 Base58 字符
-        let is_base58 = address.chars().all(|c| {
-            matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z')
-        });
+        let is_base58 = address
+            .chars()
+            .all(|c| matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z'));
 
         if !is_base58 {
             return Err(utils::AppError::BadRequest("代币地址包含无效字符".to_string()));
@@ -338,7 +349,7 @@ impl TokenService {
         // 2. 检查是否为重复推送
         if let Some(existing) = self.get_repository().find_by_address(&request.address).await? {
             info!("ℹ️ 发现现有代币记录: {} ({})", existing.symbol, existing.name);
-            
+
             // 检查是否需要更新
             if self.should_update_token(&existing, &request) {
                 info!("🔄 代币信息需要更新");
@@ -368,10 +379,11 @@ impl TokenService {
     /// 判断是否需要更新代币信息
     fn should_update_token(&self, existing: &TokenInfo, request: &TokenPushRequest) -> bool {
         // 检查关键字段是否有变化
-        if existing.name != request.name 
-            || existing.symbol != request.symbol 
-            || existing.decimals != request.decimals 
-            || existing.logo_uri != request.logo_uri {
+        if existing.name != request.name
+            || existing.symbol != request.symbol
+            || existing.decimals != request.decimals
+            || existing.logo_uri != request.logo_uri
+        {
             return true;
         }
 
@@ -383,7 +395,7 @@ impl TokenService {
             } else {
                 1.0 // 从0变为非0，认为是显著变化
             };
-            
+
             if relative_change > 0.1 {
                 return true;
             }
@@ -424,9 +436,7 @@ impl TokenService {
 
         // 验证地址数量限制
         if addresses.len() > 50 {
-            return Err(utils::AppError::BadRequest(
-                "单次查询地址数量不能超过50个".to_string()
-            ));
+            return Err(utils::AppError::BadRequest("单次查询地址数量不能超过50个".to_string()));
         }
 
         // 验证每个地址格式

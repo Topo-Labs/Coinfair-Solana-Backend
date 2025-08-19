@@ -153,7 +153,10 @@ mod tests {
     #[test]
     fn test_v2_amm_program_id_format() {
         // Verify the program ID matches the expected Raydium V2 AMM program ID
-        assert_eq!(DEFAULT_RAYDIUM_V2_AMM_PROGRAM_ID, "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
+        assert_eq!(
+            DEFAULT_RAYDIUM_V2_AMM_PROGRAM_ID,
+            "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+        );
     }
 
     #[test]
@@ -180,12 +183,27 @@ mod tests {
 
     #[test]
     fn test_solana_chain_id_from_network_name() {
-        assert_eq!(SolanaChainId::from_network_name("mainnet"), Some(SolanaChainId::Mainnet));
-        assert_eq!(SolanaChainId::from_network_name("MAINNET"), Some(SolanaChainId::Mainnet));
-        assert_eq!(SolanaChainId::from_network_name("mainnet-beta"), Some(SolanaChainId::Mainnet));
-        assert_eq!(SolanaChainId::from_network_name("testnet"), Some(SolanaChainId::Testnet));
+        assert_eq!(
+            SolanaChainId::from_network_name("mainnet"),
+            Some(SolanaChainId::Mainnet)
+        );
+        assert_eq!(
+            SolanaChainId::from_network_name("MAINNET"),
+            Some(SolanaChainId::Mainnet)
+        );
+        assert_eq!(
+            SolanaChainId::from_network_name("mainnet-beta"),
+            Some(SolanaChainId::Mainnet)
+        );
+        assert_eq!(
+            SolanaChainId::from_network_name("testnet"),
+            Some(SolanaChainId::Testnet)
+        );
         assert_eq!(SolanaChainId::from_network_name("devnet"), Some(SolanaChainId::Devnet));
-        assert_eq!(SolanaChainId::from_network_name("development"), Some(SolanaChainId::Devnet));
+        assert_eq!(
+            SolanaChainId::from_network_name("development"),
+            Some(SolanaChainId::Devnet)
+        );
         assert_eq!(SolanaChainId::from_network_name("invalid"), None);
     }
 
@@ -220,8 +238,14 @@ mod tests {
 
     #[test]
     fn test_solana_chain_id_default_rpc_urls() {
-        assert_eq!(SolanaChainId::Mainnet.default_rpc_url(), "https://api.mainnet-beta.solana.com");
-        assert_eq!(SolanaChainId::Testnet.default_rpc_url(), "https://api.testnet.solana.com");
+        assert_eq!(
+            SolanaChainId::Mainnet.default_rpc_url(),
+            "https://api.mainnet-beta.solana.com"
+        );
+        assert_eq!(
+            SolanaChainId::Testnet.default_rpc_url(),
+            "https://api.testnet.solana.com"
+        );
         assert_eq!(SolanaChainId::Devnet.default_rpc_url(), "https://api.devnet.solana.com");
     }
 

@@ -1,10 +1,11 @@
 use crate::permission_config::model::{
-    GlobalSolanaPermissionConfigModel, SolanaApiPermissionConfigModel, PermissionConfigLogModel
+    GlobalSolanaPermissionConfigModel, PermissionConfigLogModel, SolanaApiPermissionConfigModel,
 };
 use anyhow::{anyhow, Result};
 use mongodb::{
     bson::{doc, oid::ObjectId, Document},
-    Collection, options::FindOptions,
+    options::FindOptions,
+    Collection,
 };
 use std::collections::HashMap;
 use tracing::{error, info, warn};
@@ -23,7 +24,7 @@ impl GlobalPermissionConfigRepository {
     /// 获取全局配置（单例模式）- 简化方法
     pub async fn find_global_config(&self) -> Result<Vec<GlobalSolanaPermissionConfigModel>> {
         let filter = doc! { "config_type": "global" };
-        
+
         match self.collection.find_one(filter, None).await? {
             Some(config) => Ok(vec![config]),
             None => {
@@ -53,12 +54,10 @@ impl GlobalPermissionConfigRepository {
             }
         };
 
-        let options = mongodb::options::UpdateOptions::builder()
-            .upsert(true)
-            .build();
+        let options = mongodb::options::UpdateOptions::builder().upsert(true).build();
 
         let result = self.collection.update_one(filter, update_doc, options).await?;
-        
+
         if result.matched_count > 0 || result.upserted_id.is_some() {
             info!("✅ 全局权限配置保存成功");
             Ok(())
@@ -70,7 +69,7 @@ impl GlobalPermissionConfigRepository {
     /// 创建全局配置
     pub async fn create_global_config(&self, config: GlobalSolanaPermissionConfigModel) -> Result<ObjectId> {
         let result = self.collection.insert_one(config, None).await?;
-        
+
         if let Some(object_id) = result.inserted_id.as_object_id() {
             info!("✅ 全局权限配置创建成功: {}", object_id);
             Ok(object_id)
@@ -97,7 +96,7 @@ impl GlobalPermissionConfigRepository {
         };
 
         let result = self.collection.update_one(filter, update_doc, None).await?;
-        
+
         if result.matched_count > 0 {
             info!("✅ 全局权限配置更新成功");
             Ok(())
@@ -138,13 +137,9 @@ impl ApiPermissionConfigRepository {
             .options(IndexOptions::builder().unique(true).build())
             .build();
 
-        let category_index = IndexModel::builder()
-            .keys(doc! { "category": 1, "enabled": 1 })
-            .build();
+        let category_index = IndexModel::builder().keys(doc! { "category": 1, "enabled": 1 }).build();
 
-        let updated_at_index = IndexModel::builder()
-            .keys(doc! { "updated_at": -1 })
-            .build();
+        let updated_at_index = IndexModel::builder().keys(doc! { "updated_at": -1 }).build();
 
         self.collection
             .create_indexes(vec![endpoint_index, category_index, updated_at_index], None)
@@ -157,7 +152,7 @@ impl ApiPermissionConfigRepository {
     /// 创建API配置
     pub async fn create_api_config(&self, config: SolanaApiPermissionConfigModel) -> Result<ObjectId> {
         let result = self.collection.insert_one(config.clone(), None).await?;
-        
+
         if let Some(object_id) = result.inserted_id.as_object_id() {
             info!("✅ API权限配置创建成功: {} -> {}", config.endpoint, object_id);
             Ok(object_id)
@@ -202,12 +197,10 @@ impl ApiPermissionConfigRepository {
             }
         };
 
-        let options = mongodb::options::UpdateOptions::builder()
-            .upsert(true)
-            .build();
+        let options = mongodb::options::UpdateOptions::builder().upsert(true).build();
 
         let result = self.collection.update_one(filter, update_doc, options).await?;
-        
+
         if result.matched_count > 0 || result.upserted_id.is_some() {
             info!("✅ API权限配置保存成功: {}", config.endpoint);
             Ok(())
@@ -244,7 +237,7 @@ impl ApiPermissionConfigRepository {
         };
 
         let result = self.collection.update_one(filter, update_doc, None).await?;
-        
+
         if result.matched_count > 0 {
             info!("✅ API权限配置更新成功: {}", endpoint);
             Ok(())
@@ -255,7 +248,10 @@ impl ApiPermissionConfigRepository {
     }
 
     /// 批量更新API配置
-    pub async fn batch_update_api_configs(&self, configs: HashMap<String, SolanaApiPermissionConfigModel>) -> Result<usize> {
+    pub async fn batch_update_api_configs(
+        &self,
+        configs: HashMap<String, SolanaApiPermissionConfigModel>,
+    ) -> Result<usize> {
         let mut updated_count = 0;
 
         for (endpoint, config) in configs {
@@ -276,7 +272,7 @@ impl ApiPermissionConfigRepository {
     pub async fn delete_api_config(&self, endpoint: &str) -> Result<()> {
         let filter = doc! { "endpoint": endpoint };
         let result = self.collection.delete_one(filter, None).await?;
-        
+
         if result.deleted_count > 0 {
             info!("✅ API权限配置删除成功: {}", endpoint);
             Ok(())
@@ -304,24 +300,19 @@ impl ApiPermissionConfigRepository {
         let disabled_configs = total_configs - enabled_configs;
 
         // 获取分类统计
-        let pipeline = vec![
-            doc! {
-                "$group": {
-                    "_id": "$category",
-                    "count": { "$sum": 1 }
-                }
+        let pipeline = vec![doc! {
+            "$group": {
+                "_id": "$category",
+                "count": { "$sum": 1 }
             }
-        ];
+        }];
 
         let mut cursor = self.collection.aggregate(pipeline, None).await?;
         let mut category_stats = HashMap::new();
 
         while cursor.advance().await? {
             let doc = cursor.current();
-            if let (Ok(category), Ok(count)) = (
-                doc.get_str("_id"),
-                doc.get_i32("count")
-            ) {
+            if let (Ok(category), Ok(count)) = (doc.get_str("_id"), doc.get_i32("count")) {
                 category_stats.insert(category.to_string(), count as u64);
             }
         }
@@ -358,9 +349,7 @@ impl PermissionConfigLogRepository {
             .keys(doc! { "target_type": 1, "target_id": 1, "operation_time": -1 })
             .build();
 
-        let time_index = IndexModel::builder()
-            .keys(doc! { "operation_time": -1 })
-            .build();
+        let time_index = IndexModel::builder().keys(doc! { "operation_time": -1 }).build();
 
         self.collection
             .create_indexes(vec![operator_index, target_index, time_index], None)
@@ -373,7 +362,7 @@ impl PermissionConfigLogRepository {
     /// 记录操作日志
     pub async fn log_operation(&self, log: PermissionConfigLogModel) -> Result<ObjectId> {
         let result = self.collection.insert_one(log.clone(), None).await?;
-        
+
         if let Some(object_id) = result.inserted_id.as_object_id() {
             info!("✅ 权限操作日志记录成功: {} -> {}", log.operation_type, object_id);
             Ok(object_id)
@@ -390,7 +379,7 @@ impl PermissionConfigLogRepository {
         filter: Option<Document>,
     ) -> Result<(Vec<PermissionConfigLogModel>, u64)> {
         let skip = (page - 1) * page_size;
-        
+
         let find_options = FindOptions::builder()
             .skip(skip)
             .limit(page_size as i64)
@@ -398,7 +387,7 @@ impl PermissionConfigLogRepository {
             .build();
 
         let filter_doc = filter.unwrap_or_else(|| doc! {});
-        
+
         let mut cursor = self.collection.find(filter_doc.clone(), find_options).await?;
         let mut logs = Vec::new();
 
@@ -412,7 +401,11 @@ impl PermissionConfigLogRepository {
     }
 
     /// 根据操作者获取日志
-    pub async fn get_logs_by_operator(&self, operator_id: &str, limit: Option<i64>) -> Result<Vec<PermissionConfigLogModel>> {
+    pub async fn get_logs_by_operator(
+        &self,
+        operator_id: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<PermissionConfigLogModel>> {
         let filter = doc! { "operator_id": operator_id };
         let find_options = FindOptions::builder()
             .limit(limit.unwrap_or(100))
@@ -430,8 +423,13 @@ impl PermissionConfigLogRepository {
     }
 
     /// 根据目标获取日志
-    pub async fn get_logs_by_target(&self, target_type: &str, target_id: &str, limit: Option<i64>) -> Result<Vec<PermissionConfigLogModel>> {
-        let filter = doc! { 
+    pub async fn get_logs_by_target(
+        &self,
+        target_type: &str,
+        target_id: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<PermissionConfigLogModel>> {
+        let filter = doc! {
             "target_type": target_type,
             "target_id": target_id
         };
@@ -454,13 +452,13 @@ impl PermissionConfigLogRepository {
     pub async fn cleanup_old_logs(&self, retain_days: i64) -> Result<u64> {
         let cutoff_time = chrono::Utc::now().timestamp() - (retain_days * 24 * 60 * 60);
         let filter = doc! { "operation_time": { "$lt": cutoff_time } };
-        
+
         let result = self.collection.delete_many(filter, None).await?;
-        
+
         if result.deleted_count > 0 {
             info!("✅ 清理过期权限日志: {} 条", result.deleted_count);
         }
-        
+
         Ok(result.deleted_count)
     }
 }

@@ -1,7 +1,10 @@
 //! Solana权限系统集成测试
 //! 测试完整的权限管理流程，包括与数据库、API控制器的集成
 
-use crate::auth::{AuthConfig, AuthUser, JwtManager, Permission, SolanaApiAction, SolanaApiPermissionConfig, SolanaPermissionPolicy, UserTier};
+use crate::auth::{
+    AuthConfig, AuthUser, JwtManager, Permission, SolanaApiAction, SolanaApiPermissionConfig, SolanaPermissionPolicy,
+    UserTier,
+};
 use crate::services::solana_permission_service::{SolanaPermissionService, SolanaPermissionServiceTrait};
 use std::collections::{HashMap, HashSet};
 use tokio;
@@ -51,21 +54,39 @@ mod permission_service_integration_tests {
 
         // 2. 创建不同角色的用户
         let basic_user = create_auth_user("basic_001", UserTier::Basic, vec![Permission::ReadPool]);
-        let premium_user = create_auth_user("premium_001", UserTier::Premium, vec![Permission::ReadPool, Permission::CreatePosition]);
-        let vip_user = create_auth_user("vip_001", UserTier::VIP, vec![Permission::ReadPool, Permission::CreatePosition, Permission::ReadPosition]);
+        let premium_user = create_auth_user(
+            "premium_001",
+            UserTier::Premium,
+            vec![Permission::ReadPool, Permission::CreatePosition],
+        );
+        let vip_user = create_auth_user(
+            "vip_001",
+            UserTier::VIP,
+            vec![
+                Permission::ReadPool,
+                Permission::CreatePosition,
+                Permission::ReadPosition,
+            ],
+        );
         let admin_user = create_auth_user("admin_001", UserTier::Admin, vec![]);
 
         // 3. 测试默认权限配置
         // 基础用户应该可以读取池子信息
-        let result = service.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &basic_user)
+            .await;
         assert!(result.is_ok());
 
         // 基础用户应该可以进行交换（有CreatePosition权限和Basic等级要求）
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &basic_user)
+            .await;
         assert!(result.is_err()); // basic_user没有CreatePosition权限
 
         // Premium用户应该可以交换
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &premium_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &premium_user)
+            .await;
         assert!(result.is_ok());
 
         // 4. 测试精细化权限配置
@@ -80,40 +101,59 @@ mod permission_service_integration_tests {
             updated_at: chrono::Utc::now().timestamp() as u64,
         };
 
-        service.update_api_config("/api/v1/solana/advanced-trading".to_string(), custom_api_config).await.unwrap();
+        service
+            .update_api_config("/api/v1/solana/advanced-trading".to_string(), custom_api_config)
+            .await
+            .unwrap();
 
         // 验证配置生效
-        let result = service.check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Read, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Read, &basic_user)
+            .await;
         assert!(result.is_err()); // Basic用户无法读取
 
-        let result = service.check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Read, &premium_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Read, &premium_user)
+            .await;
         assert!(result.is_ok()); // Premium用户可以读取
 
         let result = service
-            .check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Write, &premium_user)
+            .check_api_permission(
+                "/api/v1/solana/advanced-trading",
+                &SolanaApiAction::Write,
+                &premium_user,
+            )
             .await;
         assert!(result.is_err()); // Premium用户无法写入（需要VIP）
 
-        let result = service.check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Write, &vip_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/advanced-trading", &SolanaApiAction::Write, &vip_user)
+            .await;
         assert!(result.is_ok()); // VIP用户可以写入
 
         // 5. 测试全局权限控制
         service.toggle_global_write(false).await.unwrap();
 
         // 所有写入操作都应该被禁止
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &vip_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &vip_user)
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("全局写入权限已关闭"));
 
         // 读取操作应该仍然正常
-        let result = service.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &basic_user)
+            .await;
         assert!(result.is_ok());
 
         // 6. 测试紧急停用
         service.emergency_shutdown(true).await.unwrap();
 
         // 所有操作都应该被禁止，包括管理员
-        let result = service.check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &admin_user)
+            .await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "系统紧急停用中");
 
@@ -122,7 +162,9 @@ mod permission_service_integration_tests {
         service.toggle_global_write(true).await.unwrap();
 
         // 验证恢复正常
-        let result = service.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &premium_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &premium_user)
+            .await;
         assert!(result.is_ok());
 
         // 8. 验证统计信息
@@ -176,7 +218,10 @@ mod permission_service_integration_tests {
                 name: "期货交易".to_string(),
                 category: "交易".to_string(),
                 read_policy: SolanaPermissionPolicy::RequireMinTier(UserTier::VIP),
-                write_policy: SolanaPermissionPolicy::RequirePermissionAndTier(Permission::CreatePosition, UserTier::VIP),
+                write_policy: SolanaPermissionPolicy::RequirePermissionAndTier(
+                    Permission::CreatePosition,
+                    UserTier::VIP,
+                ),
                 enabled: true,
                 created_at: chrono::Utc::now().timestamp() as u64,
                 updated_at: chrono::Utc::now().timestamp() as u64,
@@ -208,30 +253,50 @@ mod permission_service_integration_tests {
         let admin_user = create_auth_user("admin_batch", UserTier::Admin, vec![]);
 
         // 验证现货交易权限
-        let result = service.check_api_permission("/api/v1/solana/trade/spot", &SolanaApiAction::Read, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/trade/spot", &SolanaApiAction::Read, &basic_user)
+            .await;
         assert!(result.is_ok());
-        let result = service.check_api_permission("/api/v1/solana/trade/spot", &SolanaApiAction::Write, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/trade/spot", &SolanaApiAction::Write, &basic_user)
+            .await;
         assert!(result.is_ok());
 
         // 验证保证金交易权限
-        let result = service.check_api_permission("/api/v1/solana/trade/margin", &SolanaApiAction::Read, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/trade/margin", &SolanaApiAction::Read, &basic_user)
+            .await;
         assert!(result.is_err()); // Basic用户无法访问
-        let result = service.check_api_permission("/api/v1/solana/trade/margin", &SolanaApiAction::Read, &premium_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/trade/margin", &SolanaApiAction::Read, &premium_user)
+            .await;
         assert!(result.is_ok()); // Premium用户可以访问
 
         // 验证期货交易权限
-        let result = service.check_api_permission("/api/v1/solana/trade/futures", &SolanaApiAction::Read, &premium_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/trade/futures", &SolanaApiAction::Read, &premium_user)
+            .await;
         assert!(result.is_err()); // Premium用户无法访问
-        let result = service.check_api_permission("/api/v1/solana/trade/futures", &SolanaApiAction::Write, &vip_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/trade/futures", &SolanaApiAction::Write, &vip_user)
+            .await;
         assert!(result.is_ok()); // VIP用户可以访问
 
         // 验证管理功能权限
         let result = service
-            .check_api_permission("/api/v1/solana/admin/pool-management", &SolanaApiAction::Read, &vip_user)
+            .check_api_permission(
+                "/api/v1/solana/admin/pool-management",
+                &SolanaApiAction::Read,
+                &vip_user,
+            )
             .await;
         assert!(result.is_err()); // VIP用户无法访问管理功能
         let result = service
-            .check_api_permission("/api/v1/solana/admin/pool-management", &SolanaApiAction::Write, &admin_user)
+            .check_api_permission(
+                "/api/v1/solana/admin/pool-management",
+                &SolanaApiAction::Write,
+                &admin_user,
+            )
             .await;
         assert!(result.is_ok()); // 管理员可以访问
 
@@ -261,12 +326,19 @@ mod permission_service_integration_tests {
             updated_at: chrono::Utc::now().timestamp() as u64,
         };
 
-        service.update_api_config("/api/v1/solana/test-disable".to_string(), test_config).await.unwrap();
+        service
+            .update_api_config("/api/v1/solana/test-disable".to_string(), test_config)
+            .await
+            .unwrap();
 
         // 验证API正常工作
-        let result = service.check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Read, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Read, &user)
+            .await;
         assert!(result.is_ok());
-        let result = service.check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_ok());
 
         // 禁用API
@@ -281,14 +353,21 @@ mod permission_service_integration_tests {
             updated_at: chrono::Utc::now().timestamp() as u64,
         };
 
-        service.update_api_config("/api/v1/solana/test-disable".to_string(), disabled_config).await.unwrap();
+        service
+            .update_api_config("/api/v1/solana/test-disable".to_string(), disabled_config)
+            .await
+            .unwrap();
 
         // 验证API被禁用
-        let result = service.check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Read, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Read, &user)
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("已禁用"));
 
-        let result = service.check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("已禁用"));
 
@@ -304,12 +383,19 @@ mod permission_service_integration_tests {
             updated_at: chrono::Utc::now().timestamp() as u64,
         };
 
-        service.update_api_config("/api/v1/solana/test-disable".to_string(), enabled_config).await.unwrap();
+        service
+            .update_api_config("/api/v1/solana/test-disable".to_string(), enabled_config)
+            .await
+            .unwrap();
 
         // 验证API恢复正常
-        let result = service.check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Read, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Read, &user)
+            .await;
         assert!(result.is_ok());
-        let result = service.check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Write, &user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/test-disable", &SolanaApiAction::Write, &user)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -332,23 +418,34 @@ mod permission_service_integration_tests {
             updated_at: chrono::Utc::now().timestamp() as u64,
         };
 
-        service.update_api_config("/api/v1/solana/strict-api".to_string(), strict_config).await.unwrap();
+        service
+            .update_api_config("/api/v1/solana/strict-api".to_string(), strict_config)
+            .await
+            .unwrap();
 
         // Basic用户应该无法访问
-        let result = service.check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &basic_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &basic_user)
+            .await;
         assert!(result.is_err());
 
         // 管理员应该可以访问（无视权限和等级要求）
-        let result = service.check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &admin_user)
+            .await;
         assert!(result.is_ok());
-        let result = service.check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Write, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Write, &admin_user)
+            .await;
         assert!(result.is_ok());
 
         // 测试全局权限覆盖
         service.toggle_global_read(false).await.unwrap();
 
         // 即使是管理员也应该受全局权限限制
-        let result = service.check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &admin_user)
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("全局读取权限已关闭"));
 
@@ -357,7 +454,9 @@ mod permission_service_integration_tests {
         service.emergency_shutdown(true).await.unwrap();
 
         // 即使是管理员也无法在紧急停用时访问
-        let result = service.check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &admin_user).await;
+        let result = service
+            .check_api_permission("/api/v1/solana/strict-api", &SolanaApiAction::Read, &admin_user)
+            .await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), "系统紧急停用中");
     }
@@ -373,11 +472,17 @@ mod permission_service_integration_tests {
         // 并发进行多种权限操作
         for i in 0..10 {
             let service_clone = Arc::clone(&service);
-            let user = create_auth_user(&format!("concurrent_user_{}", i), UserTier::Premium, vec![Permission::CreatePosition]);
+            let user = create_auth_user(
+                &format!("concurrent_user_{}", i),
+                UserTier::Premium,
+                vec![Permission::CreatePosition],
+            );
 
             join_set.spawn(async move {
                 // 并发进行权限检查
-                let result = service_clone.check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user).await;
+                let result = service_clone
+                    .check_api_permission("/api/v1/solana/swap", &SolanaApiAction::Write, &user)
+                    .await;
                 result.is_ok()
             });
         }
@@ -397,7 +502,9 @@ mod permission_service_integration_tests {
                     updated_at: chrono::Utc::now().timestamp() as u64,
                 };
 
-                let result = service_clone.update_api_config(format!("/api/v1/solana/concurrent-test-{}", i), config).await;
+                let result = service_clone
+                    .update_api_config(format!("/api/v1/solana/concurrent-test-{}", i), config)
+                    .await;
                 result.is_ok()
             });
         }
@@ -436,7 +543,12 @@ mod auth_and_permission_integration_tests {
 
         // 创建不同等级的JWT token
         let basic_token = jwt_manager
-            .generate_token("integration_basic_user", Some("basic_wallet_address"), vec!["read:pool".to_string()], UserTier::Basic)
+            .generate_token(
+                "integration_basic_user",
+                Some("basic_wallet_address"),
+                vec!["read:pool".to_string()],
+                UserTier::Basic,
+            )
             .unwrap();
 
         let premium_token = jwt_manager
@@ -478,7 +590,11 @@ mod auth_and_permission_integration_tests {
 
         // 测试权限检查
         let result = permission_service
-            .check_api_permission("/api/v1/solana/pools/info/list", &SolanaApiAction::Read, &basic_auth_user)
+            .check_api_permission(
+                "/api/v1/solana/pools/info/list",
+                &SolanaApiAction::Read,
+                &basic_auth_user,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -515,7 +631,12 @@ mod auth_and_permission_integration_tests {
 
         // 1. 生成JWT token（模拟登录成功）
         let jwt_token = jwt_manager
-            .generate_token(user_wallet, Some(user_wallet), user_permissions.clone(), user_tier.clone())
+            .generate_token(
+                user_wallet,
+                Some(user_wallet),
+                user_permissions.clone(),
+                user_tier.clone(),
+            )
             .unwrap();
 
         // 2. 验证token（模拟中间件验证）

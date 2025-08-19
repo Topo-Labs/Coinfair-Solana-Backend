@@ -6,11 +6,17 @@ use solana_client::{
     rpc_response::{RpcResult, RpcSimulateTransactionResult},
 };
 use solana_sdk::{
-    account::Account, commitment_config::CommitmentConfig, program_pack::Pack as TokenPack, pubkey::Pubkey, signature::Signature, transaction::Transaction,
+    account::Account, commitment_config::CommitmentConfig, program_pack::Pack as TokenPack, pubkey::Pubkey,
+    signature::Signature, transaction::Transaction,
 };
 use std::convert::Into;
 
-pub fn simulate_transaction(client: &RpcClient, transaction: &Transaction, sig_verify: bool, cfg: CommitmentConfig) -> RpcResult<RpcSimulateTransactionResult> {
+pub fn simulate_transaction(
+    client: &RpcClient,
+    transaction: &Transaction,
+    sig_verify: bool,
+    cfg: CommitmentConfig,
+) -> RpcResult<RpcSimulateTransactionResult> {
     let serialized_encoded = bs58::encode(bincode::serialize(transaction).unwrap()).into_string();
     client.send(
         RpcRequest::SimulateTransaction,

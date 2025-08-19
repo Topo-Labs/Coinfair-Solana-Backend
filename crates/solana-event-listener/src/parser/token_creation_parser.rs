@@ -62,7 +62,9 @@ impl TokenCreationParser {
 
     /// 初始化数据库连接
     pub async fn init_database(&mut self, config: &EventListenerConfig) -> Result<()> {
-        let client = Client::with_uri_str(&config.database.uri).await.map_err(|e| EventListenerError::Database(e))?;
+        let client = Client::with_uri_str(&config.database.uri)
+            .await
+            .map_err(|e| EventListenerError::Database(e))?;
 
         let database = client.database(&config.database.database_name);
         let collection = database.collection::<TokenInfo>("token_info");
@@ -95,7 +97,9 @@ impl TokenCreationParser {
 
         if data.len() < 8 {
             info!("❌ 数据长度不足，无法包含discriminator: {} < 8", data.len());
-            return Err(EventListenerError::EventParsing("数据长度不足，无法包含discriminator".to_string()));
+            return Err(EventListenerError::EventParsing(
+                "数据长度不足，无法包含discriminator".to_string(),
+            ));
         }
 
         // 验证discriminator
@@ -182,7 +186,10 @@ impl TokenCreationParser {
 
         // 验证白名单截止时间
         if event.has_whitelist && event.whitelist_deadline <= 0 {
-            warn!("⚠️ 启用白名单但截止时间无效: {} ({})", event.whitelist_deadline, event.mint_address);
+            warn!(
+                "⚠️ 启用白名单但截止时间无效: {} ({})",
+                event.whitelist_deadline, event.mint_address
+            );
         }
 
         Ok(true)
@@ -208,7 +215,9 @@ impl TokenCreationParser {
             freeze_authority: None,
             mint_authority: Some(event.creator.to_string()),
             permanent_delegate: None,
-            minted_at: Some(chrono::DateTime::from_timestamp(event.created_at, 0).unwrap_or_else(|| chrono::Utc::now())),
+            minted_at: Some(
+                chrono::DateTime::from_timestamp(event.created_at, 0).unwrap_or_else(|| chrono::Utc::now()),
+            ),
             extensions: Some(serde_json::json!({
                 "supply": event.supply,
                 "has_whitelist": event.has_whitelist,
@@ -226,7 +235,10 @@ impl TokenCreationParser {
             .map_err(|e| EventListenerError::Persistence(format!("推送代币信息失败: {}", e)))?;
 
         if response.success {
-            info!("✅ 代币创建事件已持久化: {} ({}) - {}", event.symbol, event.mint_address, response.operation);
+            info!(
+                "✅ 代币创建事件已持久化: {} ({}) - {}",
+                event.symbol, event.mint_address, response.operation
+            );
         } else {
             error!("❌ 代币创建事件持久化失败: {} ({})", event.symbol, event.mint_address);
             return Err(EventListenerError::Persistence(response.message));

@@ -47,7 +47,10 @@ impl SolanaController {
             .route("/version", axum::routing::get(static_config_controller::get_version))
             .route("/auto-fee", axum::routing::get(static_config_controller::get_auto_fee))
             .route("/rpcs", axum::routing::get(static_config_controller::get_rpcs))
-            .route("/chain-time", axum::routing::get(static_config_controller::get_chain_time))
+            .route(
+                "/chain-time",
+                axum::routing::get(static_config_controller::get_chain_time),
+            )
             .route("/info", axum::routing::get(static_config_controller::get_info))
             .nest("/clmm-config", clmm_config_controller::ClmmConfigController::routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
@@ -73,7 +76,10 @@ impl SolanaController {
                     .route("/ids", axum::routing::get(clmm_pool_query::get_pools_by_ids)),
             )
             // pools/key路由 - 池子密钥信息
-            .nest("/key", Router::new().route("/ids", axum::routing::get(clmm_pool_query::get_pools_key_by_ids)))
+            .nest(
+                "/key",
+                Router::new().route("/ids", axum::routing::get(clmm_pool_query::get_pools_key_by_ids)),
+            )
             // pools/line路由 - 流动性线图
             .nest("/line", liquidity_line_controller::LiquidityLineController::routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))

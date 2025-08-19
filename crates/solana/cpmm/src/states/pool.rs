@@ -170,25 +170,13 @@ pub mod pool_test {
         fn get_set_status_by_bit() {
             let mut pool_state = PoolState::default();
             pool_state.set_status(4); // 0000100
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                true
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                true
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), true);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), true);
 
             // disable -> disable, nothing to change
             pool_state.set_status_by_bit(PoolStatusBitIndex::Swap, PoolStatusBitFlag::Disable);
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
 
             // disable -> enable
             pool_state.set_status_by_bit(PoolStatusBitIndex::Swap, PoolStatusBitFlag::Enable);
@@ -199,49 +187,22 @@ pub mod pool_test {
             assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), true);
             // enable -> disable
             pool_state.set_status_by_bit(PoolStatusBitIndex::Swap, PoolStatusBitFlag::Disable);
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
 
             pool_state.set_status(5); // 0000101
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                true
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), true);
 
             pool_state.set_status(7); // 0000111
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), false);
 
             pool_state.set_status(3); // 0000011
             assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), true);
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), false);
         }
     }
 }

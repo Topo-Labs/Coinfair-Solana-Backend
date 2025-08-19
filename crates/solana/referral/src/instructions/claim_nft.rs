@@ -185,11 +185,7 @@ pub fn claim_nft(ctx: Context<ClaimReferralNFT>) -> Result<()> {
     // )?;
 
     let binding = ctx.accounts.upper.key();
-    let transfer_authority_seeds = &[
-        b"nft_pool",
-        binding.as_ref(),
-        &[ctx.bumps.nft_pool_authority],
-    ];
+    let transfer_authority_seeds = &[b"nft_pool", binding.as_ref(), &[ctx.bumps.nft_pool_authority]];
     token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),

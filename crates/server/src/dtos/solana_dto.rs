@@ -1,8 +1,8 @@
+use database::clmm_pool::model::ClmmPool;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
-use database::clmm_pool::model::ClmmPool;
 
 /// 交换请求DTO
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
@@ -193,12 +193,12 @@ fn validate_token_type(token: &str) -> Result<(), validator::ValidationError> {
     match token {
         // SOL的native mint地址
         "So11111111111111111111111111111111111111112" => Ok(()),
-        
+
         // USDC mint地址（支持多个常见的USDC地址）
         "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" | // 标准USDC
         "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" | // 配置中的USDC
         "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM" => Ok(()), // 其他USDC变体
-        
+
         _ => {
             let mut error = validator::ValidationError::new("invalid_token");
             error.message = Some("必须使用有效的代币mint地址".into());
@@ -242,7 +242,7 @@ impl ErrorResponse {
 /// API成功响应包装器
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ApiResponse<T> {
-    pub id :String,
+    pub id: String,
     /// 是否成功
     pub success: bool,
 
@@ -277,7 +277,7 @@ pub struct ComputeSwapRequest {
     #[serde(rename = "inputMint")]
     pub input_mint: String,
 
-    /// 输出代币的mint地址  
+    /// 输出代币的mint地址
     #[serde(rename = "outputMint")]
     pub output_mint: String,
 
@@ -302,7 +302,7 @@ pub struct ComputeSwapV2Request {
     #[serde(rename = "inputMint")]
     pub input_mint: String,
 
-    /// 输出代币的mint地址  
+    /// 输出代币的mint地址
     #[serde(rename = "outputMint")]
     pub output_mint: String,
 
@@ -718,37 +718,37 @@ pub struct OpenPositionResponse {
 pub struct OpenPositionAndSendTransactionResponse {
     /// 交易签名
     pub signature: String,
-    
+
     /// 位置NFT mint地址
     pub position_nft_mint: String,
-    
+
     /// 位置键值
     pub position_key: String,
-    
+
     /// 下限tick索引
     pub tick_lower_index: i32,
-    
+
     /// 上限tick索引
     pub tick_upper_index: i32,
-    
+
     /// 流动性数量
     pub liquidity: String, // 使用字符串避免精度丢失
-    
+
     /// 实际消耗的token0数量
     pub amount_0: u64,
-    
+
     /// 实际消耗的token1数量
     pub amount_1: u64,
-    
+
     /// 池子地址
     pub pool_address: String,
-    
+
     /// 交易状态
     pub status: TransactionStatus,
-    
+
     /// Solana Explorer链接
     pub explorer_url: String,
-    
+
     /// 交易时间戳
     pub timestamp: i64,
 }
@@ -1007,7 +1007,7 @@ pub struct CreatePoolRequest {
     /// 第一个代币mint地址
     pub mint0: String,
 
-    /// 第二个代币mint地址  
+    /// 第二个代币mint地址
     pub mint1: String,
 
     /// 池子开放时间（Unix时间戳，0表示立即开放）
@@ -1239,32 +1239,32 @@ pub struct PoolListRequest {
     /// 按池子类型过滤
     #[serde(rename = "poolType")]
     pub pool_type: Option<String>,
-    
+
     /// 排序字段 (default, created_at, price, open_time)
     #[serde(rename = "poolSortField")]
     pub pool_sort_field: Option<String>,
-    
+
     /// 排序方向 (asc, desc)
     #[serde(rename = "sortType")]
     pub sort_type: Option<String>,
-    
+
     /// 页大小 (1-100, 默认20)
     #[serde(rename = "pageSize")]
     #[validate(range(min = 1, max = 100))]
     pub page_size: Option<u64>,
-    
+
     /// 页码 (1-based, 默认1)
     #[validate(range(min = 1))]
     pub page: Option<u64>,
-    
+
     /// 按创建者钱包地址过滤
     #[serde(rename = "creatorWallet")]
     pub creator_wallet: Option<String>,
-    
+
     /// 按代币mint地址过滤
     #[serde(rename = "mintAddress")]
     pub mint_address: Option<String>,
-    
+
     /// 按池子状态过滤
     pub status: Option<String>,
 }
@@ -1289,10 +1289,10 @@ impl Default for PoolListRequest {
 pub struct NewPoolListResponse {
     /// 请求ID
     pub id: String,
-    
+
     /// 请求是否成功
     pub success: bool,
-    
+
     /// 响应数据
     pub data: PoolListData,
 }
@@ -1302,10 +1302,10 @@ pub struct NewPoolListResponse {
 pub struct NewPoolListResponse2 {
     /// 请求ID
     pub id: String,
-    
+
     /// 请求是否成功
     pub success: bool,
-    
+
     /// 响应数据
     // pub data: PoolListData2,
     pub data: Vec<PoolInfo>,
@@ -1316,10 +1316,10 @@ pub struct NewPoolListResponse2 {
 pub struct PoolListData {
     /// 池子总数
     pub count: u64,
-    
+
     /// 池子详细信息列表
     pub data: Vec<PoolInfo>,
-    
+
     /// 是否有下一页
     #[serde(rename = "hasNextPage")]
     pub has_next_page: bool,
@@ -1337,83 +1337,83 @@ pub struct PoolInfo {
     /// 池子类型
     #[serde(rename = "type")]
     pub pool_type: String,
-    
+
     /// 程序ID
     #[serde(rename = "programId")]
     pub program_id: String,
-    
+
     /// 池子ID（地址）
     pub id: String,
-    
+
     /// 代币A信息
     #[serde(rename = "mintA")]
     pub mint_a: ExtendedMintInfo,
-    
+
     /// 代币B信息
     #[serde(rename = "mintB")]
     pub mint_b: ExtendedMintInfo,
-    
+
     /// 默认奖励池信息
     #[serde(rename = "rewardDefaultPoolInfos")]
     pub reward_default_pool_infos: String,
-    
+
     /// 默认奖励信息
     #[serde(rename = "rewardDefaultInfos")]
     pub reward_default_infos: Vec<RewardInfo>,
-    
+
     /// 当前价格
     pub price: f64,
-    
+
     /// 代币A数量
     #[serde(rename = "mintAmountA")]
     pub mint_amount_a: f64,
-    
+
     /// 代币B数量
     #[serde(rename = "mintAmountB")]
     pub mint_amount_b: f64,
-    
+
     /// 手续费率
     #[serde(rename = "feeRate")]
     pub fee_rate: f64,
-    
+
     /// 开放时间
     #[serde(rename = "openTime")]
     pub open_time: String,
-    
+
     /// 总价值锁定
     pub tvl: f64,
-    
+
     /// 日统计
     pub day: Option<PeriodStats>,
-    
+
     /// 周统计
     pub week: Option<PeriodStats>,
-    
+
     /// 月统计
     pub month: Option<PeriodStats>,
-    
+
     /// 池子类型标签
     pub pooltype: Vec<String>,
-    
+
     /// 即将开始的农场数量
     #[serde(rename = "farmUpcomingCount")]
     pub farm_upcoming_count: u32,
-    
+
     /// 进行中的农场数量
     #[serde(rename = "farmOngoingCount")]
     pub farm_ongoing_count: u32,
-    
+
     /// 已结束的农场数量
     #[serde(rename = "farmFinishedCount")]
     pub farm_finished_count: u32,
-    
+
     /// 配置信息
     pub config: Option<PoolConfigInfo>,
-    
+
     /// 燃烧百分比
     #[serde(rename = "burnPercent")]
     pub burn_percent: f64,
-    
+
     /// 启动迁移池
     #[serde(rename = "launchMigratePool")]
     pub launch_migrate_pool: bool,
@@ -1425,30 +1425,30 @@ pub struct ExtendedMintInfo {
     /// 链ID
     #[serde(rename = "chainId")]
     pub chain_id: u32,
-    
+
     /// 代币地址
     pub address: String,
-    
+
     /// 程序ID
     #[serde(rename = "programId")]
     pub program_id: String,
-    
+
     /// Logo URI
     #[serde(rename = "logoURI")]
     pub logo_uri: Option<String>,
-    
+
     /// 代币符号
     pub symbol: Option<String>,
-    
+
     /// 代币名称
     pub name: Option<String>,
-    
+
     /// 精度
     pub decimals: u8,
-    
+
     /// 标签
     pub tags: Vec<String>,
-    
+
     /// 扩展信息
     pub extensions: serde_json::Value,
 }
@@ -1458,15 +1458,15 @@ pub struct ExtendedMintInfo {
 pub struct RewardInfo {
     /// 奖励代币信息
     pub mint: ExtendedMintInfo,
-    
+
     /// 每秒奖励
     #[serde(rename = "perSecond")]
     pub per_second: String,
-    
+
     /// 开始时间
     #[serde(rename = "startTime")]
     pub start_time: String,
-    
+
     /// 结束时间
     #[serde(rename = "endTime")]
     pub end_time: String,
@@ -1477,30 +1477,30 @@ pub struct RewardInfo {
 pub struct PeriodStats {
     /// 交易量
     pub volume: f64,
-    
+
     /// 报价交易量
     #[serde(rename = "volumeQuote")]
     pub volume_quote: f64,
-    
+
     /// 手续费交易量
     #[serde(rename = "volumeFee")]
     pub volume_fee: f64,
-    
+
     /// 年化收益率
     pub apr: f64,
-    
+
     /// 手续费年化收益率
     #[serde(rename = "feeApr")]
     pub fee_apr: f64,
-    
+
     /// 最低价格
     #[serde(rename = "priceMin")]
     pub price_min: f64,
-    
+
     /// 最高价格
     #[serde(rename = "priceMax")]
     pub price_max: f64,
-    
+
     /// 奖励年化收益率
     #[serde(rename = "rewardApr")]
     pub reward_apr: Vec<f64>,
@@ -1511,30 +1511,30 @@ pub struct PeriodStats {
 pub struct PoolConfigInfo {
     /// 配置ID
     pub id: String,
-    
+
     /// 配置索引
     pub index: u32,
-    
+
     /// 协议费率
     #[serde(rename = "protocolFeeRate")]
     pub protocol_fee_rate: u32,
-    
+
     /// 交易费率
     #[serde(rename = "tradeFeeRate")]
     pub trade_fee_rate: u32,
-    
+
     /// Tick间距
     #[serde(rename = "tickSpacing")]
     pub tick_spacing: u32,
-    
+
     /// 基金费率
     #[serde(rename = "fundFeeRate")]
     pub fund_fee_rate: u32,
-    
+
     /// 默认范围
     #[serde(rename = "defaultRange")]
     pub default_range: f64,
-    
+
     /// 默认范围点
     #[serde(rename = "defaultRangePoint")]
     pub default_range_point: Vec<f64>,
@@ -1545,10 +1545,10 @@ pub struct PoolConfigInfo {
 pub struct PoolListResponse {
     /// 池子列表
     pub pools: Vec<ClmmPool>,
-    
+
     /// 分页元数据
     pub pagination: PaginationMeta,
-    
+
     /// 过滤器摘要
     pub filters: FilterSummary,
 }
@@ -1558,19 +1558,19 @@ pub struct PoolListResponse {
 pub struct PaginationMeta {
     /// 当前页码
     pub current_page: u64,
-    
+
     /// 页大小
     pub page_size: u64,
-    
+
     /// 符合条件的总记录数
     pub total_count: u64,
-    
+
     /// 总页数
     pub total_pages: u64,
-    
+
     /// 是否有下一页
     pub has_next: bool,
-    
+
     /// 是否有上一页
     pub has_prev: bool,
 }
@@ -1580,13 +1580,13 @@ pub struct PaginationMeta {
 pub struct FilterSummary {
     /// 应用的池子类型过滤器
     pub pool_type: Option<String>,
-    
+
     /// 应用的排序字段
     pub sort_field: String,
-    
+
     /// 应用的排序方向
     pub sort_direction: String,
-    
+
     /// 按池子类型统计数量
     pub type_counts: Vec<TypeCount>,
 }
@@ -1596,7 +1596,7 @@ pub struct FilterSummary {
 pub struct TypeCount {
     /// 池子类型
     pub pool_type: String,
-    
+
     /// 数量
     pub count: u64,
 }
@@ -1609,24 +1609,24 @@ pub struct DecreaseLiquidityRequest {
     /// 池子地址
     #[validate(length(min = 32, max = 44))]
     pub pool_address: String,
-    
+
     /// 用户钱包地址
     #[validate(length(min = 32, max = 44))]
     pub user_wallet: String,
-    
+
     /// 下限tick索引
     pub tick_lower_index: i32,
-    
-    /// 上限tick索引  
+
+    /// 上限tick索引
     pub tick_upper_index: i32,
-    
+
     /// 要减少的流动性数量（可选，如果为空则减少全部流动性）
     pub liquidity: Option<String>, // 使用字符串避免精度丢失
-    
+
     /// 最大滑点百分比（0-100）
     #[validate(range(min = 0.0, max = 50.0))]
     pub max_slippage_percent: Option<f64>,
-    
+
     /// 是否只模拟交易（不实际发送）
     #[serde(default)]
     pub simulate: bool,
@@ -1637,40 +1637,40 @@ pub struct DecreaseLiquidityRequest {
 pub struct DecreaseLiquidityResponse {
     /// Base64编码的未签名交易数据
     pub transaction: String,
-    
+
     /// 交易消息摘要（用于前端显示）
     pub transaction_message: String,
-    
+
     /// 仓位键值
     pub position_key: String,
-    
+
     /// 减少的流动性数量
     pub liquidity_removed: String, // 使用字符串避免精度丢失
-    
+
     /// 预期获得的token0数量（减去滑点和转账费）
     pub amount_0_min: u64,
-    
+
     /// 预期获得的token1数量（减去滑点和转账费）
     pub amount_1_min: u64,
-    
+
     /// 预期实际获得的token0数量（未减去滑点和转账费）
     pub amount_0_expected: u64,
-    
+
     /// 预期实际获得的token1数量（未减去滑点和转账费）
     pub amount_1_expected: u64,
-    
+
     /// 下限tick索引
     pub tick_lower_index: i32,
-    
+
     /// 上限tick索引
     pub tick_upper_index: i32,
-    
+
     /// 池子地址
     pub pool_address: String,
-    
+
     /// 是否会完全关闭仓位
     pub will_close_position: bool,
-    
+
     /// 时间戳
     pub timestamp: i64,
 }
@@ -1680,37 +1680,37 @@ pub struct DecreaseLiquidityResponse {
 pub struct DecreaseLiquidityAndSendTransactionResponse {
     /// 交易签名
     pub signature: String,
-    
+
     /// 仓位键值
     pub position_key: String,
-    
+
     /// 减少的流动性数量
     pub liquidity_removed: String, // 使用字符串避免精度丢失
-    
+
     /// 实际获得的token0数量
     pub amount_0_actual: u64,
-    
+
     /// 实际获得的token1数量
     pub amount_1_actual: u64,
-    
+
     /// 下限tick索引
     pub tick_lower_index: i32,
-    
-    /// 上限tick索引  
+
+    /// 上限tick索引
     pub tick_upper_index: i32,
-    
+
     /// 池子地址
     pub pool_address: String,
-    
+
     /// 是否已完全关闭仓位
     pub position_closed: bool,
-    
+
     /// 交易状态
     pub status: TransactionStatus,
-    
+
     /// Solana Explorer链接
     pub explorer_url: String,
-    
+
     /// 时间戳
     pub timestamp: i64,
 }
@@ -1944,11 +1944,11 @@ pub struct PoolLiquidityLineRequest {
     /// 池子地址
     #[validate(length(min = 32, max = 44))]
     pub id: String,
-    
+
     /// 查询范围（可选，以当前价格为中心的tick范围）
     #[validate(range(min = 100, max = 10000))]
     pub range: Option<i32>,
-    
+
     /// 最大返回点数（可选，默认100）
     #[validate(range(min = 10, max = 1000))]
     pub max_points: Option<u32>,
@@ -1959,10 +1959,10 @@ pub struct PoolLiquidityLineRequest {
 pub struct LiquidityLinePoint {
     /// 该tick对应的价格
     pub price: f64,
-    
+
     /// 该tick的流动性数量（字符串避免精度丢失）
     pub liquidity: String,
-    
+
     /// tick索引
     pub tick: i32,
 }
@@ -1972,7 +1972,7 @@ pub struct LiquidityLinePoint {
 pub struct PoolLiquidityLineData {
     /// 数据点数量
     pub count: u32,
-    
+
     /// 流动性分布线图数据点列表
     pub line: Vec<LiquidityLinePoint>,
 }
@@ -1982,10 +1982,10 @@ pub struct PoolLiquidityLineData {
 pub struct PoolLiquidityLineResponse {
     /// 请求ID
     pub id: String,
-    
+
     /// 请求是否成功
     pub success: bool,
-    
+
     /// 流动性线图数据
     pub data: PoolLiquidityLineData,
 }
@@ -1995,13 +1995,13 @@ pub struct PoolLiquidityLineResponse {
 pub struct LiquidityLineErrorResponse {
     /// 请求ID
     pub id: String,
-    
+
     /// 请求失败
     pub success: bool,
-    
+
     /// 错误信息
     pub error: String,
-    
+
     /// 错误代码（可选）
     pub error_code: Option<String>,
 }
@@ -2014,7 +2014,7 @@ mod pool_listing_tests {
     #[test]
     fn test_pool_list_request_default() {
         let request = PoolListRequest::default();
-        
+
         assert_eq!(request.pool_type, None);
         assert_eq!(request.pool_sort_field, Some("default".to_string()));
         assert_eq!(request.sort_type, Some("desc".to_string()));
@@ -2050,7 +2050,7 @@ mod pool_listing_tests {
 
         let validation_result = request.validate();
         assert!(validation_result.is_err());
-        
+
         let errors = validation_result.unwrap_err();
         assert!(errors.field_errors().contains_key("pageSize"));
     }
@@ -2064,7 +2064,7 @@ mod pool_listing_tests {
 
         let validation_result = request.validate();
         assert!(validation_result.is_err());
-        
+
         let errors = validation_result.unwrap_err();
         assert!(errors.field_errors().contains_key("pageSize"));
     }
@@ -2078,7 +2078,7 @@ mod pool_listing_tests {
 
         let validation_result = request.validate();
         assert!(validation_result.is_err());
-        
+
         let errors = validation_result.unwrap_err();
         assert!(errors.field_errors().contains_key("page"));
     }
@@ -2129,8 +2129,14 @@ mod pool_listing_tests {
         assert_eq!(request.sort_type, Some("asc".to_string()));
         assert_eq!(request.page_size, Some(50));
         assert_eq!(request.page, Some(2));
-        assert_eq!(request.creator_wallet, Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()));
-        assert_eq!(request.mint_address, Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()));
+        assert_eq!(
+            request.creator_wallet,
+            Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string())
+        );
+        assert_eq!(
+            request.mint_address,
+            Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string())
+        );
         assert_eq!(request.status, Some("Active".to_string()));
     }
 
@@ -2267,10 +2273,10 @@ mod pool_listing_tests {
 pub struct PoolKeyResponse {
     /// 请求ID
     pub id: String,
-    
+
     /// 请求是否成功
     pub success: bool,
-    
+
     /// 池子密钥数据列表
     pub data: Vec<Option<PoolKeyInfo>>,
 }
@@ -2281,40 +2287,40 @@ pub struct PoolKeyInfo {
     /// 程序ID
     #[serde(rename = "programId")]
     pub program_id: String,
-    
+
     /// 池子ID（地址）
     pub id: String,
-    
+
     /// 代币A信息
     #[serde(rename = "mintA")]
     pub mint_a: RaydiumMintInfo,
-    
+
     /// 代币B信息
     #[serde(rename = "mintB")]
     pub mint_b: RaydiumMintInfo,
-    
+
     /// 查找表账户
     #[serde(rename = "lookupTableAccount")]
     pub lookup_table_account: String,
-    
+
     /// 开放时间
     #[serde(rename = "openTime")]
     pub open_time: String,
-    
+
     /// 金库信息
     pub vault: VaultAddresses,
-    
+
     /// 配置信息
     pub config: PoolConfig,
-    
+
     /// 奖励信息列表
     #[serde(rename = "rewardInfos")]
     pub reward_infos: Vec<PoolRewardInfo>,
-    
+
     /// 观察账户ID
     #[serde(rename = "observationId")]
     pub observation_id: String,
-    
+
     /// 扩展位图账户
     #[serde(rename = "exBitmapAccount")]
     pub ex_bitmap_account: String,
@@ -2326,30 +2332,30 @@ pub struct RaydiumMintInfo {
     /// 链ID
     #[serde(rename = "chainId")]
     pub chain_id: u32,
-    
+
     /// 代币地址
     pub address: String,
-    
+
     /// 程序ID
     #[serde(rename = "programId")]
     pub program_id: String,
-    
+
     /// 图标URI
     #[serde(rename = "logoURI")]
     pub logo_uri: String,
-    
+
     /// 代币符号
     pub symbol: String,
-    
+
     /// 代币名称
     pub name: String,
-    
+
     /// 精度
     pub decimals: u8,
-    
+
     /// 标签列表
     pub tags: Vec<String>,
-    
+
     /// 扩展信息
     pub extensions: serde_json::Value,
 }
@@ -2360,7 +2366,7 @@ pub struct VaultAddresses {
     /// 代币A金库
     #[serde(rename = "A")]
     pub vault_a: String,
-    
+
     /// 代币B金库
     #[serde(rename = "B")]
     pub vault_b: String,
@@ -2371,30 +2377,30 @@ pub struct VaultAddresses {
 pub struct PoolConfig {
     /// 配置ID
     pub id: String,
-    
+
     /// 配置索引
     pub index: u32,
-    
+
     /// 协议费率
     #[serde(rename = "protocolFeeRate")]
     pub protocol_fee_rate: u64,
-    
+
     /// 交易费率
     #[serde(rename = "tradeFeeRate")]
     pub trade_fee_rate: u64,
-    
+
     /// Tick间距
     #[serde(rename = "tickSpacing")]
     pub tick_spacing: u32,
-    
+
     /// 基金费率
     #[serde(rename = "fundFeeRate")]
     pub fund_fee_rate: u64,
-    
+
     /// 默认价格范围
     #[serde(rename = "defaultRange")]
     pub default_range: f64,
-    
+
     /// 默认价格范围点位
     #[serde(rename = "defaultRangePoint")]
     pub default_range_point: Vec<f64>,
@@ -2405,16 +2411,16 @@ pub struct PoolConfig {
 pub struct PoolRewardInfo {
     /// 奖励代币mint地址
     pub mint: String,
-    
+
     /// 奖励金库地址
     pub vault: String,
-    
+
     /// 每秒发放量
     pub emissions_per_second: u64,
-    
+
     /// 权限地址
     pub authority: String,
-    
+
     /// 最后更新时间
     pub last_update_time: u64,
 }
@@ -2518,7 +2524,7 @@ pub struct ClaimNftRequest {
     /// 下级用户钱包地址（发起领取的用户）
     #[validate(length(min = 32, max = 44))]
     pub user_wallet: String,
-    
+
     /// 上级用户钱包地址（提供NFT的推荐人）
     #[validate(length(min = 32, max = 44))]
     pub upper: String,
@@ -2529,49 +2535,49 @@ pub struct ClaimNftRequest {
 pub struct ClaimNftResponse {
     /// 交易签名（未签名时为空）
     pub signature: Option<String>,
-    
+
     /// 下级用户钱包地址
     pub user_wallet: String,
-    
+
     /// 上级用户钱包地址
     pub upper: String,
-    
+
     /// NFT mint地址
     pub nft_mint: String,
-    
+
     /// 下级用户推荐账户地址
     pub user_referral: String,
-    
+
     /// 上级用户推荐账户地址
     pub upper_referral: String,
-    
+
     /// 上级用户mint计数器地址
     pub upper_mint_counter: String,
-    
+
     /// NFT池子权限地址
     pub nft_pool_authority: String,
-    
+
     /// NFT池子账户地址
     pub nft_pool_account: String,
-    
+
     /// 下级用户ATA账户地址
     pub user_ata: String,
-    
+
     /// 协议钱包地址
     pub protocol_wallet: String,
-    
+
     /// 推荐配置账户地址
     pub referral_config: String,
-    
+
     /// 交易状态
     pub status: TransactionStatus,
-    
+
     /// 区块链浏览器链接
     pub explorer_url: Option<String>,
-    
+
     /// 时间戳
     pub timestamp: i64,
-    
+
     /// 序列化的交易（base64编码，用于前端签名）
     pub serialized_transaction: Option<String>,
 }
@@ -2581,46 +2587,46 @@ pub struct ClaimNftResponse {
 pub struct ClaimNftAndSendTransactionResponse {
     /// 交易签名
     pub signature: String,
-    
+
     /// 下级用户钱包地址
     pub user_wallet: String,
-    
+
     /// 上级用户钱包地址
     pub upper: String,
-    
+
     /// NFT mint地址
     pub nft_mint: String,
-    
+
     /// 下级用户推荐账户地址
     pub user_referral: String,
-    
+
     /// 上级用户推荐账户地址
     pub upper_referral: String,
-    
+
     /// 上级用户mint计数器地址
     pub upper_mint_counter: String,
-    
+
     /// NFT池子权限地址
     pub nft_pool_authority: String,
-    
+
     /// NFT池子账户地址
     pub nft_pool_account: String,
-    
+
     /// 下级用户ATA账户地址
     pub user_ata: String,
-    
+
     /// 协议钱包地址
     pub protocol_wallet: String,
-    
+
     /// 推荐配置账户地址
     pub referral_config: String,
-    
+
     /// 交易状态
     pub status: TransactionStatus,
-    
+
     /// 区块链浏览器链接
     pub explorer_url: String,
-    
+
     /// 时间戳
     pub timestamp: i64,
 }
@@ -2640,16 +2646,16 @@ pub struct GetUpperRequest {
 pub struct GetUpperResponse {
     /// 用户钱包地址
     pub user_wallet: String,
-    
+
     /// 上级钱包地址（如果存在）
     pub upper: Option<String>,
-    
+
     /// 推荐账户PDA地址
     pub referral_account: String,
-    
+
     /// 查询状态
     pub status: String,
-    
+
     /// 时间戳
     pub timestamp: i64,
 }
@@ -2660,10 +2666,10 @@ pub struct GetUpperAndVerifyResponse {
     /// 基础响应数据
     #[serde(flatten)]
     pub base: GetUpperResponse,
-    
+
     /// 链上账户是否存在
     pub account_exists: bool,
-    
+
     /// 完整的ReferralAccount数据
     pub referral_account_data: Option<ReferralAccountData>,
 }
@@ -2673,16 +2679,16 @@ pub struct GetUpperAndVerifyResponse {
 pub struct ReferralAccountData {
     /// 用户地址
     pub user: String,
-    
+
     /// 上级用户地址
     pub upper: Option<String>,
-    
+
     /// 上上级用户地址
     pub upper_upper: Option<String>,
-    
+
     /// 绑定的NFT mint地址
     pub nft_mint: String,
-    
+
     /// PDA bump
     pub bump: u8,
 }
@@ -2700,19 +2706,19 @@ pub struct GetMintCounterRequest {
 pub struct GetMintCounterResponse {
     /// 用户钱包地址
     pub user_wallet: String,
-    
+
     /// 总mint数量
     pub total_mint: u64,
-    
+
     /// 剩余可claim数量
     pub remain_mint: u64,
-    
+
     /// mint counter账户PDA地址
     pub mint_counter_account: String,
-    
+
     /// 查询状态
     pub status: String,
-    
+
     /// 时间戳
     pub timestamp: i64,
 }
@@ -2723,10 +2729,10 @@ pub struct GetMintCounterAndVerifyResponse {
     /// 基础响应数据
     #[serde(flatten)]
     pub base: GetMintCounterResponse,
-    
+
     /// 链上账户是否存在
     pub account_exists: bool,
-    
+
     /// 完整的MintCounter数据
     pub mint_counter_data: Option<MintCounterData>,
 }
@@ -2736,13 +2742,13 @@ pub struct GetMintCounterAndVerifyResponse {
 pub struct MintCounterData {
     /// 用户地址
     pub minter: String,
-    
+
     /// 总mint数量
     pub total_mint: u64,
-    
+
     /// 剩余可claim数量
     pub remain_mint: u64,
-    
+
     /// PDA bump
     pub bump: u8,
 }
@@ -2756,15 +2762,15 @@ pub struct PaginationParams {
     #[validate(range(min = 1))]
     #[serde(default = "default_page")]
     pub page: u64,
-    
+
     /// 每页条数（最大100）
     #[validate(range(min = 1, max = 100))]
     #[serde(default = "default_page_size")]
     pub page_size: u64,
-    
+
     /// 排序字段
     pub sort_by: Option<String>,
-    
+
     /// 排序方向（asc/desc）
     #[validate(custom = "validate_sort_order")]
     pub sort_order: Option<String>,
@@ -2793,29 +2799,29 @@ pub struct NftClaimEventQuery {
     #[validate(range(min = 1))]
     #[serde(default = "default_page")]
     pub page: u64,
-    
+
     /// 每页条数（最大100）
     #[validate(range(min = 1, max = 100))]
     #[serde(default = "default_page_size")]
     pub page_size: u64,
-    
+
     /// 排序字段
     pub sort_by: Option<String>,
-    
+
     /// 排序方向（asc/desc）
     #[validate(custom = "validate_sort_order")]
     pub sort_order: Option<String>,
-    
+
     /// NFT等级过滤（1-5）
     #[validate(range(min = 1, max = 5))]
     pub tier: Option<u8>,
-    
+
     /// 是否有推荐人
     pub has_referrer: Option<bool>,
-    
+
     /// 开始日期时间戳
     pub start_date: Option<i64>,
-    
+
     /// 结束日期时间戳
     pub end_date: Option<i64>,
 }
@@ -2827,65 +2833,65 @@ pub struct NftClaimAdvancedQuery {
     #[validate(range(min = 1))]
     #[serde(default = "default_page")]
     pub page: u64,
-    
+
     /// 每页条数（最大100）
     #[validate(range(min = 1, max = 100))]
     #[serde(default = "default_page_size")]
     pub page_size: u64,
-    
+
     /// 排序字段
     pub sort_by: Option<String>,
-    
+
     /// 排序方向（asc/desc）
     #[validate(custom = "validate_sort_order")]
     pub sort_order: Option<String>,
-    
+
     /// NFT等级过滤（1-5）
     #[validate(range(min = 1, max = 5))]
     pub tier: Option<u8>,
-    
+
     /// 是否有推荐人
     pub has_referrer: Option<bool>,
-    
+
     /// 开始日期时间戳
     pub start_date: Option<i64>,
-    
+
     /// 结束日期时间戳
     pub end_date: Option<i64>,
-    
+
     /// 推荐人地址过滤
     pub referrer: Option<String>,
-    
+
     /// 领取者地址过滤
     pub claimer: Option<String>,
-    
+
     /// NFT mint地址过滤
     pub nft_mint: Option<String>,
-    
+
     /// 最小奖励金额过滤
     #[validate(range(min = 0))]
     pub claim_amount_min: Option<u64>,
-    
+
     /// 最大奖励金额过滤
     #[validate(range(min = 0))]
     pub claim_amount_max: Option<u64>,
-    
+
     /// 领取类型过滤
     pub claim_type: Option<u8>,
-    
+
     /// 是否为紧急领取
     pub is_emergency_claim: Option<bool>,
-    
+
     /// 池子地址过滤
     pub pool_address: Option<String>,
-    
+
     /// 代币mint地址过滤
     pub token_mint: Option<String>,
-    
+
     /// 最小奖励倍率过滤
     #[validate(range(min = 0))]
     pub reward_multiplier_min: Option<u16>,
-    
+
     /// 最大奖励倍率过滤
     #[validate(range(min = 0))]
     pub reward_multiplier_max: Option<u16>,
@@ -2898,34 +2904,34 @@ pub struct RewardDistributionEventQuery {
     #[validate(range(min = 1))]
     #[serde(default = "default_page")]
     pub page: u64,
-    
+
     /// 每页条数（最大100）
     #[validate(range(min = 1, max = 100))]
     #[serde(default = "default_page_size")]
     pub page_size: u64,
-    
+
     /// 排序字段
     pub sort_by: Option<String>,
-    
+
     /// 排序方向（asc/desc）
     #[validate(custom = "validate_sort_order")]
     pub sort_order: Option<String>,
-    
+
     /// 是否锁定
     pub is_locked: Option<bool>,
-    
+
     /// 奖励类型
     pub reward_type: Option<u8>,
-    
+
     /// 奖励来源
     pub reward_source: Option<u8>,
-    
+
     /// 是否为推荐奖励
     pub is_referral_reward: Option<bool>,
-    
+
     /// 开始日期时间戳
     pub start_date: Option<i64>,
-    
+
     /// 结束日期时间戳
     pub end_date: Option<i64>,
 }
@@ -2937,94 +2943,94 @@ pub struct RewardDistributionAdvancedQuery {
     #[validate(range(min = 1))]
     #[serde(default = "default_page")]
     pub page: u64,
-    
+
     /// 每页条数（最大100）
     #[validate(range(min = 1, max = 100))]
     #[serde(default = "default_page_size")]
     pub page_size: u64,
-    
+
     /// 排序字段
     pub sort_by: Option<String>,
-    
+
     /// 排序方向（asc/desc）
     #[validate(custom = "validate_sort_order")]
     pub sort_order: Option<String>,
-    
+
     /// 是否锁定
     pub is_locked: Option<bool>,
-    
+
     /// 奖励类型
     pub reward_type: Option<u8>,
-    
+
     /// 奖励来源
     pub reward_source: Option<u8>,
-    
+
     /// 是否为推荐奖励
     pub is_referral_reward: Option<bool>,
-    
+
     /// 开始日期时间戳
     pub start_date: Option<i64>,
-    
+
     /// 结束日期时间戳
     pub end_date: Option<i64>,
-    
+
     /// 推荐人地址过滤
     pub referrer: Option<String>,
-    
+
     /// 接收者地址过滤
     pub recipient: Option<String>,
-    
+
     /// 奖励代币mint地址过滤
     pub reward_token_mint: Option<String>,
-    
+
     /// 最小奖励金额过滤
     #[validate(range(min = 0))]
     pub reward_amount_min: Option<u64>,
-    
+
     /// 最大奖励金额过滤
     #[validate(range(min = 0))]
     pub reward_amount_max: Option<u64>,
-    
+
     /// 最小分发ID过滤
     #[validate(range(min = 0))]
     pub distribution_id_min: Option<i64>,
-    
+
     /// 最大分发ID过滤
     #[validate(range(min = 0))]
     pub distribution_id_max: Option<i64>,
-    
+
     /// 奖励池地址过滤
     pub reward_pool: Option<String>,
-    
+
     /// 是否有推荐人
     pub has_referrer: Option<bool>,
-    
+
     /// 是否为高价值奖励
     pub is_high_value_reward: Option<bool>,
-    
+
     /// 最小锁定天数
     #[validate(range(min = 0))]
     pub lock_days_min: Option<u64>,
-    
+
     /// 最大锁定天数
     #[validate(range(min = 0))]
     pub lock_days_max: Option<u64>,
-    
+
     /// 最小奖励倍率（基点）
     #[validate(range(min = 0))]
     pub multiplier_min: Option<u16>,
-    
+
     /// 最大奖励倍率（基点）
     #[validate(range(min = 0))]
     pub multiplier_max: Option<u16>,
-    
+
     /// 相关地址过滤
     pub related_address: Option<String>,
-    
+
     /// 最小预估USD价值
     #[validate(range(min = 0.0))]
     pub estimated_usd_min: Option<f64>,
-    
+
     /// 最大预估USD价值
     #[validate(range(min = 0.0))]
     pub estimated_usd_max: Option<f64>,
@@ -3035,16 +3041,16 @@ pub struct RewardDistributionAdvancedQuery {
 pub struct EventPaginatedResponse<T> {
     /// 数据项列表
     pub items: Vec<T>,
-    
+
     /// 总记录数
     pub total: u64,
-    
+
     /// 当前页码
     pub page: u64,
-    
+
     /// 每页条数
     pub page_size: u64,
-    
+
     /// 总页数
     pub total_pages: u64,
 }
@@ -3054,34 +3060,34 @@ pub struct EventPaginatedResponse<T> {
 pub struct NftClaimEventResponse {
     /// NFT的mint地址
     pub nft_mint: String,
-    
+
     /// 领取者钱包地址
     pub claimer: String,
-    
+
     /// 推荐人地址（可选）
     pub referrer: Option<String>,
-    
+
     /// NFT等级
     pub tier: u8,
-    
+
     /// 等级名称
     pub tier_name: String,
-    
+
     /// 领取的代币数量
     pub claim_amount: u64,
-    
+
     /// 实际奖励金额
     pub bonus_amount: u64,
-    
+
     /// 是否有推荐人
     pub has_referrer: bool,
-    
+
     /// 预估USD价值
     pub estimated_usd_value: f64,
-    
+
     /// 领取时间戳
     pub claimed_at: String,
-    
+
     /// 交易签名
     pub signature: String,
 }
@@ -3091,49 +3097,49 @@ pub struct NftClaimEventResponse {
 pub struct RewardDistributionEventResponse {
     /// 奖励分发ID
     pub distribution_id: i64,
-    
+
     /// 接收者钱包地址
     pub recipient: String,
-    
+
     /// 推荐人地址（可选）
     pub referrer: Option<String>,
-    
+
     /// 奖励代币mint地址
     pub reward_token_mint: String,
-    
+
     /// 奖励代币小数位数
     pub reward_token_decimals: Option<u8>,
-    
+
     /// 奖励代币名称
     pub reward_token_name: Option<String>,
-    
+
     /// 奖励代币符号
     pub reward_token_symbol: Option<String>,
-    
+
     /// 奖励代币Logo URI
     pub reward_token_logo_uri: Option<String>,
-    
+
     /// 奖励数量
     pub reward_amount: u64,
-    
+
     /// 奖励类型名称
     pub reward_type_name: String,
-    
+
     /// 是否已锁定
     pub is_locked: bool,
-    
+
     /// 解锁时间戳
     pub unlock_timestamp: Option<String>,
-    
+
     /// 是否为推荐奖励
     pub is_referral_reward: bool,
-    
+
     /// 预估USD价值
     pub estimated_usd_value: f64,
-    
+
     /// 发放时间戳
     pub distributed_at: String,
-    
+
     /// 交易签名
     pub signature: String,
 }
@@ -3143,10 +3149,10 @@ pub struct RewardDistributionEventResponse {
 pub struct NftClaimStatsResponse {
     /// 总领取次数
     pub total_claims: u64,
-    
+
     /// 今日领取次数
     pub today_claims: u64,
-    
+
     /// 等级分布 (等级, 数量, 总金额)
     pub tier_distribution: Vec<TierDistribution>,
 }
@@ -3156,10 +3162,10 @@ pub struct NftClaimStatsResponse {
 pub struct TierDistribution {
     /// 等级
     pub tier: u8,
-    
+
     /// 该等级的领取数量
     pub count: u64,
-    
+
     /// 该等级的总金额
     pub total_amount: u64,
 }
@@ -3169,13 +3175,13 @@ pub struct TierDistribution {
 pub struct RewardStatsResponse {
     /// 总分发次数
     pub total_distributions: u64,
-    
+
     /// 今日分发次数
     pub today_distributions: u64,
-    
+
     /// 锁定中的奖励数量
     pub locked_rewards: u64,
-    
+
     /// 奖励类型分布
     pub reward_type_distribution: Vec<RewardTypeDistribution>,
 }
@@ -3185,10 +3191,10 @@ pub struct RewardStatsResponse {
 pub struct RewardTypeDistribution {
     /// 奖励类型
     pub reward_type: u8,
-    
+
     /// 该类型的分发数量
     pub count: u64,
-    
+
     /// 该类型的总金额
     pub total_amount: u64,
 }
@@ -3198,22 +3204,22 @@ pub struct RewardTypeDistribution {
 pub struct UserRewardSummaryResponse {
     /// 接收者地址
     pub recipient: String,
-    
+
     /// 总奖励次数
     pub total_rewards: u64,
-    
+
     /// 总奖励金额
     pub total_amount: u64,
-    
+
     /// 锁定金额
     pub locked_amount: u64,
-    
+
     /// 未锁定金额
     pub unlocked_amount: u64,
-    
+
     /// 推荐奖励次数
     pub referral_rewards: u64,
-    
+
     /// 推荐奖励金额
     pub referral_amount: u64,
 }
@@ -3223,19 +3229,19 @@ pub struct UserRewardSummaryResponse {
 pub struct UserNftClaimSummaryResponse {
     /// 领取者地址
     pub claimer: String,
-    
+
     /// 总领取次数
     pub total_claims: u64,
-    
+
     /// 总领取金额
     pub total_claim_amount: u64,
-    
+
     /// 总奖励金额
     pub total_bonus_amount: u64,
-    
+
     /// 有推荐人的领取次数
     pub claims_with_referrer: u64,
-    
+
     /// 等级分布
     pub tier_distribution: Vec<(u8, u32)>,
 }
@@ -3249,7 +3255,7 @@ pub struct ComputeSwapV3Request {
     #[serde(rename = "inputMint")]
     pub input_mint: String,
 
-    /// 输出代币的mint地址  
+    /// 输出代币的mint地址
     #[serde(rename = "outputMint")]
     pub output_mint: String,
 
@@ -3273,7 +3279,6 @@ pub struct ComputeSwapV3Request {
     /// 交易版本（V0或V1）
     #[serde(rename = "txVersion")]
     pub tx_version: String,
-
     // /// 推荐账户地址（可选）
     // #[serde(rename = "referralAccount")]
     // pub referral_account: Option<String>,
@@ -3347,23 +3352,23 @@ pub struct SwapComputeV3Data {
 pub struct ReferralInfo {
     /// 上级地址
     pub upper: Option<String>,
-    
+
     /// 上上级地址
     #[serde(rename = "upperUpper")]
     pub upper_upper: Option<String>,
-    
+
     /// 项目方账户地址
     #[serde(rename = "projectAccount")]
     pub project_account: String,
-    
+
     /// 推荐程序ID
     #[serde(rename = "referralProgram")]
     pub referral_program: String,
-    
+
     /// 推荐账户PDA地址
     #[serde(rename = "payerReferral")]
     pub payer_referral: String,
-    
+
     /// 上级推荐账户PDA地址（可选）
     #[serde(rename = "upperReferral")]
     pub upper_referral: Option<String>,
@@ -3375,19 +3380,19 @@ pub struct RewardDistribution {
     /// 总奖励费用
     #[serde(rename = "totalRewardFee")]
     pub total_reward_fee: u64,
-    
+
     /// 项目方奖励
     #[serde(rename = "projectReward")]
     pub project_reward: u64,
-    
+
     /// 上级奖励
     #[serde(rename = "upperReward")]
     pub upper_reward: u64,
-    
+
     /// 上上级奖励
     #[serde(rename = "upperUpperReward")]
     pub upper_upper_reward: u64,
-    
+
     /// 奖励分配比例说明
     #[serde(rename = "distributionRatios")]
     pub distribution_ratios: RewardDistributionRatios,
@@ -3399,11 +3404,11 @@ pub struct RewardDistributionRatios {
     /// 项目方比例（百分比）
     #[serde(rename = "projectRatio")]
     pub project_ratio: f64,
-    
+
     /// 上级比例（百分比）
     #[serde(rename = "upperRatio")]
     pub upper_ratio: f64,
-    
+
     /// 上上级比例（百分比）
     #[serde(rename = "upperUpperRatio")]
     pub upper_upper_ratio: f64,
@@ -3455,30 +3460,30 @@ pub struct ReferralAccounts {
     /// 推荐账户PDA地址
     #[serde(rename = "payerReferral")]
     pub payer_referral: String,
-    
+
     /// 上级地址（可选）
     pub upper: Option<String>,
-    
+
     /// 上级代币账户地址（可选）
     #[serde(rename = "upperTokenAccount")]
     pub upper_token_account: Option<String>,
-    
+
     /// 上级推荐账户PDA地址（可选）
     #[serde(rename = "upperReferral")]
     pub upper_referral: Option<String>,
-    
+
     /// 上上级地址（可选）
     #[serde(rename = "upperUpper")]
     pub upper_upper: Option<String>,
-    
+
     /// 上上级代币账户地址（可选）
     #[serde(rename = "upperUpperTokenAccount")]
     pub upper_upper_token_account: Option<String>,
-    
+
     /// 项目方代币账户地址
     #[serde(rename = "projectTokenAccount")]
     pub project_token_account: String,
-    
+
     /// 推荐程序ID
     #[serde(rename = "referralProgram")]
     pub referral_program: String,
@@ -3490,7 +3495,7 @@ pub struct SwapV3TransactionData {
     /// 基础交易数据
     #[serde(flatten)]
     pub transaction_data: TransactionData,
-    
+
     /// 推荐系统相关信息
     #[serde(rename = "referralInfo")]
     pub referral_info: Option<ReferralTransactionInfo>,
@@ -3502,11 +3507,11 @@ pub struct ReferralTransactionInfo {
     /// 是否启用推荐奖励
     #[serde(rename = "rewardsEnabled")]
     pub rewards_enabled: bool,
-    
+
     /// 预期奖励分配
     #[serde(rename = "expectedRewards")]
     pub expected_rewards: Option<RewardDistribution>,
-    
+
     /// 推荐系统账户验证状态
     #[serde(rename = "accountValidation")]
     pub account_validation: Vec<ReferralAccountValidation>,
@@ -3518,13 +3523,13 @@ pub struct ReferralAccountValidation {
     /// 账户类型
     #[serde(rename = "accountType")]
     pub account_type: String,
-    
+
     /// 账户地址
     pub address: String,
-    
+
     /// 验证状态
     pub valid: bool,
-    
+
     /// 验证消息
     pub message: Option<String>,
 }
@@ -3538,7 +3543,7 @@ pub struct SwapV3AndSendTransactionResponse {
     pub user_wallet: String,
     /// 输入代币mint地址
     pub input_mint: String,
-    /// 输出代币mint地址  
+    /// 输出代币mint地址
     pub output_mint: String,
     /// 输入金额
     pub input_amount: String,

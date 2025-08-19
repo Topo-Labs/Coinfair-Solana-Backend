@@ -11,7 +11,7 @@ pub enum PoolType {
     /// Concentrated Liquidity Market Maker (CLMM)
     #[serde(rename = "concentrated")]
     Concentrated,
-    /// Constant Product Market Maker (CPMM)  
+    /// Constant Product Market Maker (CPMM)
     #[serde(rename = "standard")]
     Standard,
 }
@@ -22,11 +22,11 @@ pub enum DataSource {
     /// 通过API创建
     #[serde(rename = "api")]
     ApiCreated,
-    
+
     /// 来自链上事件
     #[serde(rename = "chain")]
     ChainEvent,
-    
+
     /// API创建后被链上确认
     #[serde(rename = "api_chain_confirmed")]
     ApiChainConfirmed,
@@ -201,14 +201,19 @@ impl TokenInfo {
         // 检查元数据字段是否为空
         let log_uri_empty = self.log_uri.is_none() || self.log_uri.as_ref().map_or(true, |s| s.is_empty());
         let description_empty = self.description.is_none() || self.description.as_ref().map_or(true, |s| s.is_empty());
-        let external_url_empty = self.external_url.is_none() || self.external_url.as_ref().map_or(true, |s| s.is_empty());
+        let external_url_empty =
+            self.external_url.is_none() || self.external_url.as_ref().map_or(true, |s| s.is_empty());
         let tags_empty = self.tags.is_none() || self.tags.as_ref().map_or(true, |tags| tags.is_empty());
-        let attributes_empty = self.attributes.is_none() || self.attributes.as_ref().map_or(true, |attrs| attrs.is_empty());
+        let attributes_empty =
+            self.attributes.is_none() || self.attributes.as_ref().map_or(true, |attrs| attrs.is_empty());
 
         // 关键信息（owner、decimals、symbol、name）有任何一个为空，就认为需要链上查询
         // 元数据信息为空也认为需要同步，但不是必须的关键信息
-        owner_empty || decimals_empty || symbol_empty || name_empty || 
-        (log_uri_empty && description_empty && external_url_empty && tags_empty && attributes_empty)
+        owner_empty
+            || decimals_empty
+            || symbol_empty
+            || name_empty
+            || (log_uri_empty && description_empty && external_url_empty && tags_empty && attributes_empty)
     }
 }
 

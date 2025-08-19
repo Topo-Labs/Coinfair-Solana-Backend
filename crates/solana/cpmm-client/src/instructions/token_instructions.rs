@@ -35,18 +35,13 @@ pub fn create_and_init_mint_instr(
     } else {
         client.program(spl_token_2022::id())?
     };
-    let extension_types = extension_init_params
-        .iter()
-        .map(|e| e.extension())
-        .collect::<Vec<_>>();
+    let extension_types = extension_init_params.iter().map(|e| e.extension()).collect::<Vec<_>>();
     let space = ExtensionType::try_calculate_account_len::<Mint>(&extension_types)?;
 
     let mut instructions = vec![system_instruction::create_account(
         &program.payer(),
         mint_key,
-        program
-            .rpc()
-            .get_minimum_balance_for_rent_exemption(space)?,
+        program.rpc().get_minimum_balance_for_rent_exemption(space)?,
         space as u64,
         &program.id(),
     )];
@@ -79,9 +74,7 @@ pub fn create_account_rent_exmpt_instr(
         .instruction(system_instruction::create_account(
             &program.payer(),
             &new_account_key,
-            program
-                .rpc()
-                .get_minimum_balance_for_rent_exemption(data_size)?,
+            program.rpc().get_minimum_balance_for_rent_exemption(data_size)?,
             data_size as u64,
             &program.id(),
         ))
@@ -126,17 +119,13 @@ pub fn create_and_init_auxiliary_token(
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let (program, space) = if mint_account.owner == spl_token::id() {
-        (
-            client.program(spl_token::id())?,
-            spl_token::state::Account::LEN,
-        )
+        (client.program(spl_token::id())?, spl_token::state::Account::LEN)
     } else {
         let mut extensions = vec![];
         extensions.push(ExtensionType::ImmutableOwner);
         let mint_state = StateWithExtensionsMut::<Mint>::unpack(mint_account.data_as_mut_slice())?;
         let mint_extension_types = mint_state.get_extension_types()?;
-        let mut required_extensions =
-            ExtensionType::get_required_init_account_extensions(&mint_extension_types);
+        let mut required_extensions = ExtensionType::get_required_init_account_extensions(&mint_extension_types);
         for extension_type in extensions.into_iter() {
             if !required_extensions.contains(&extension_type) {
                 required_extensions.push(extension_type);
@@ -152,9 +141,7 @@ pub fn create_and_init_auxiliary_token(
         .instruction(system_instruction::create_account(
             &program.payer(),
             &mint,
-            program
-                .rpc()
-                .get_minimum_balance_for_rent_exemption(space)?,
+            program.rpc().get_minimum_balance_for_rent_exemption(space)?,
             space as u64,
             &program.id(),
         ))
@@ -261,8 +248,7 @@ pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruct
     let wallet_key = payer.pubkey();
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let wsol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;
-    let wsol_ata_account =
-        spl_associated_token_account::get_associated_token_address(&wallet_key, &wsol_mint);
+    let wsol_ata_account = spl_associated_token_account::get_associated_token_address(&wallet_key, &wsol_mint);
     // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(spl_token::id())?;
@@ -277,15 +263,8 @@ pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruct
                 &program.id(),
             ),
         )
-        .instruction(system_instruction::transfer(
-            &wallet_key,
-            &wsol_ata_account,
-            amount,
-        ))
-        .instruction(spl_token::instruction::sync_native(
-            &program.id(),
-            &wsol_ata_account,
-        )?)
+        .instruction(system_instruction::transfer(&wallet_key, &wsol_ata_account, amount))
+        .instruction(spl_token::instruction::sync_native(&program.id(), &wsol_ata_account)?)
         .instructions()?;
     Ok(instructions)
 }

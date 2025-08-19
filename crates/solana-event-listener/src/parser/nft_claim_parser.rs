@@ -51,7 +51,9 @@ impl NftClaimParser {
             .map_err(|e| EventListenerError::EventParsing(format!("Base64解码失败: {}", e)))?;
 
         if data.len() < 8 {
-            return Err(EventListenerError::EventParsing("数据长度不足，无法包含discriminator".to_string()));
+            return Err(EventListenerError::EventParsing(
+                "数据长度不足，无法包含discriminator".to_string(),
+            ));
         }
 
         // 验证discriminator
@@ -62,7 +64,8 @@ impl NftClaimParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = ClaimNFTEvent::try_from_slice(event_data).map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        let event = ClaimNFTEvent::try_from_slice(event_data)
+            .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
 
         debug!(
             "✅ 成功解析NFT领取事件: NFT={}, 领取者={}, 领取费用={}",

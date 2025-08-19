@@ -1,5 +1,5 @@
 //! Position Utils 性能优化版本
-//! 
+//!
 //! 本文件是 position_utils.rs 的高性能优化版本，实现了以下优化：
 //! 1. 批量RPC调用 - 使用 get_multiple_accounts 替代单独调用
 //! 2. 并发处理 - 同时获取经典Token和Token-2022的NFT
@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{info, warn};
 
-use super::{ConfigManager, PDACalculator};
 use super::position_utils::{ExistingPosition, PersonalPositionState, PositionNftInfo};
+use super::{ConfigManager, PDACalculator};
 
 /// 性能统计 - 优化版本专用
 #[derive(Debug, Default)]
@@ -44,7 +44,7 @@ impl PositionPerformanceStats {
         self.total_rpc_calls.fetch_add(rpc_calls, Ordering::Relaxed);
         self.total_query_time_ms.fetch_add(query_time_ms, Ordering::Relaxed);
         self.nfts_processed.fetch_add(nfts_count, Ordering::Relaxed);
-        
+
         if was_concurrent {
             self.concurrent_queries.fetch_add(1, Ordering::Relaxed);
         }
@@ -104,18 +104,38 @@ impl PositionPerformanceStats {
              - 节省的内存: {:.2}MB",
             total_queries,
             batch_queries,
-            if total_queries > 0 { (batch_queries as f64 / total_queries as f64) * 100.0 } else { 0.0 },
+            if total_queries > 0 {
+                (batch_queries as f64 / total_queries as f64) * 100.0
+            } else {
+                0.0
+            },
             concurrent_queries,
-            if total_queries > 0 { (concurrent_queries as f64 / total_queries as f64) * 100.0 } else { 0.0 },
+            if total_queries > 0 {
+                (concurrent_queries as f64 / total_queries as f64) * 100.0
+            } else {
+                0.0
+            },
             cache_hits,
             cache_hit_rate,
             cache_misses,
             total_rpc_calls,
-            if total_queries > 0 { total_rpc_calls as f64 / total_queries as f64 } else { 0.0 },
+            if total_queries > 0 {
+                total_rpc_calls as f64 / total_queries as f64
+            } else {
+                0.0
+            },
             total_time,
-            if total_queries > 0 { total_time as f64 / total_queries as f64 } else { 0.0 },
+            if total_queries > 0 {
+                total_time as f64 / total_queries as f64
+            } else {
+                0.0
+            },
             total_nfts,
-            if total_queries > 0 { total_nfts as f64 / total_queries as f64 } else { 0.0 },
+            if total_queries > 0 {
+                total_nfts as f64 / total_queries as f64
+            } else {
+                0.0
+            },
             filtered_accounts,
             memory_saved as f64 / 1024.0 / 1024.0
         )
@@ -124,7 +144,7 @@ impl PositionPerformanceStats {
     pub fn get_cache_hit_rate(&self) -> f64 {
         let hits = self.cache_hits.load(Ordering::Relaxed) as f64;
         let total = hits + self.cache_misses.load(Ordering::Relaxed) as f64;
-        
+
         if total > 0.0 {
             hits / total
         } else {
@@ -135,7 +155,7 @@ impl PositionPerformanceStats {
     pub fn get_average_rpc_duration(&self) -> f64 {
         let total_duration = self.total_query_time_ms.load(Ordering::Relaxed) as f64;
         let total_calls = self.total_rpc_calls.load(Ordering::Relaxed) as f64;
-        
+
         if total_calls > 0.0 {
             total_duration / total_calls
         } else {
@@ -148,7 +168,7 @@ impl PositionPerformanceStats {
 #[derive(Debug, Clone, Copy)]
 pub struct CompactPositionNftInfo {
     pub nft_mint: [u8; 32],
-    pub nft_account: [u8; 32], 
+    pub nft_account: [u8; 32],
     pub position_pda: [u8; 32],
     pub token_program_type: TokenProgramType,
 }
@@ -172,7 +192,7 @@ impl CompactPositionNftInfo {
             },
         }
     }
-    
+
     pub fn to_standard(&self) -> PositionNftInfo {
         PositionNftInfo {
             nft_mint: Pubkey::new_from_array(self.nft_mint),
@@ -194,7 +214,7 @@ pub struct PositionUtilsOptimized<'a> {
 
 impl<'a> PositionUtilsOptimized<'a> {
     pub fn new(rpc_client: &'a RpcClient) -> Self {
-        Self { 
+        Self {
             rpc_client,
             stats: Some(Arc::new(PositionPerformanceStats::default())),
         }
@@ -214,26 +234,30 @@ impl<'a> PositionUtilsOptimized<'a> {
     // ============ 核心优化方法 ============
 
     /// 批量获取多个position账户 - 新增优化方法
-    async fn get_positions_batch(&self, position_pdas: Vec<Pubkey>) -> Result<Vec<Option<solana_sdk::account::Account>>> {
+    async fn get_positions_batch(
+        &self,
+        position_pdas: Vec<Pubkey>,
+    ) -> Result<Vec<Option<solana_sdk::account::Account>>> {
         use solana_sdk::commitment_config::CommitmentConfig;
-        
+
         if position_pdas.is_empty() {
             return Ok(Vec::new());
         }
-        
+
         info!("🚀 批量获取 {} 个position账户", position_pdas.len());
-        
+
         // 使用 get_multiple_accounts 批量获取
-        let accounts = self.rpc_client
+        let accounts = self
+            .rpc_client
             .get_multiple_accounts_with_commitment(&position_pdas, CommitmentConfig::confirmed())?
             .value;
-        
+
         info!("✅ 批量获取完成，收到 {} 个账户响应", accounts.len());
-        
+
         if let Some(stats) = &self.stats {
             stats.record_batch_query();
         }
-        
+
         Ok(accounts)
     }
 
@@ -281,22 +305,37 @@ impl<'a> PositionUtilsOptimized<'a> {
     }
 
     /// 根据特定的Token程序获取position NFTs - 优化版本
-    async fn get_position_nfts_by_program_optimized(&self, user_wallet: &Pubkey, token_program: &Pubkey) -> Result<Vec<PositionNftInfo>> {
+    async fn get_position_nfts_by_program_optimized(
+        &self,
+        user_wallet: &Pubkey,
+        token_program: &Pubkey,
+    ) -> Result<Vec<PositionNftInfo>> {
         use solana_sdk::commitment_config::CommitmentConfig;
 
-        info!("🔍 智能过滤获取{}程序的Position NFT", if *token_program == spl_token::id() { "经典Token" } else { "Token-2022" });
+        info!(
+            "🔍 智能过滤获取{}程序的Position NFT",
+            if *token_program == spl_token::id() {
+                "经典Token"
+            } else {
+                "Token-2022"
+            }
+        );
 
         let commitment = CommitmentConfig::confirmed();
         let config = solana_client::rpc_request::TokenAccountsFilter::ProgramId(*token_program);
-        let token_accounts_response = self.rpc_client.get_token_accounts_by_owner_with_commitment(user_wallet, config, commitment)?;
+        let token_accounts_response =
+            self.rpc_client
+                .get_token_accounts_by_owner_with_commitment(user_wallet, config, commitment)?;
 
         let all_token_accounts = token_accounts_response.value;
         info!("  📥 获取到 {} 个Token账户", all_token_accounts.len());
 
         // 使用流式处理和紧凑数据结构
         let processor = self.create_nft_filter_processor();
-        let compact_nfts = self.process_token_accounts_streaming(all_token_accounts.clone(), processor).await?;
-        
+        let compact_nfts = self
+            .process_token_accounts_streaming(all_token_accounts.clone(), processor)
+            .await?;
+
         info!("  🔍 流式过滤得到 {} 个潜在NFT", compact_nfts.len());
 
         // 记录过滤统计
@@ -308,14 +347,14 @@ impl<'a> PositionUtilsOptimized<'a> {
         if compact_nfts.is_empty() {
             return Ok(Vec::new());
         }
-        
+
         let position_pdas: Vec<Pubkey> = compact_nfts
             .iter()
             .map(|nft| Pubkey::new_from_array(nft.position_pda))
             .collect();
-            
+
         let position_accounts = self.get_positions_batch(position_pdas).await?;
-        
+
         // 只保留真实存在的Position，转换回标准格式
         let verified_nfts: Vec<PositionNftInfo> = compact_nfts
             .iter()
@@ -331,7 +370,11 @@ impl<'a> PositionUtilsOptimized<'a> {
 
         info!(
             "  ✅ 从{}程序验证得到 {} 个真实Position NFT",
-            if *token_program == spl_token::id() { "经典Token" } else { "Token-2022" },
+            if *token_program == spl_token::id() {
+                "经典Token"
+            } else {
+                "Token-2022"
+            },
             verified_nfts.len()
         );
 
@@ -339,9 +382,15 @@ impl<'a> PositionUtilsOptimized<'a> {
     }
 
     /// 内部查找方法 - 批量优化版本
-    pub async fn find_existing_position_optimized(&self, user_wallet: &Pubkey, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32) -> Result<Option<ExistingPosition>> {
+    pub async fn find_existing_position_optimized(
+        &self,
+        user_wallet: &Pubkey,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+    ) -> Result<Option<ExistingPosition>> {
         let start_time = Instant::now();
-        
+
         info!("🔍 优化版本：检查是否存在相同范围的仓位");
         info!("  钱包: {}", user_wallet);
         info!("  池子: {}", pool_address);
@@ -356,10 +405,7 @@ impl<'a> PositionUtilsOptimized<'a> {
         }
 
         // 提取所有position PDA
-        let position_pdas: Vec<Pubkey> = position_nfts
-            .iter()
-            .map(|nft| nft.position_pda)
-            .collect();
+        let position_pdas: Vec<Pubkey> = position_nfts.iter().map(|nft| nft.position_pda).collect();
 
         // 批量获取所有position账户
         let position_accounts = self.get_positions_batch(position_pdas).await?;
@@ -370,21 +416,33 @@ impl<'a> PositionUtilsOptimized<'a> {
             .zip(position_accounts.par_iter())
             .enumerate()
             .find_first(|(index, (nft_info, position_account_opt))| {
-                info!("🔍 检查NFT #{}: mint={}, position_pda={}", index + 1, nft_info.nft_mint, nft_info.position_pda);
+                info!(
+                    "🔍 检查NFT #{}: mint={}, position_pda={}",
+                    index + 1,
+                    nft_info.nft_mint,
+                    nft_info.position_pda
+                );
 
                 if let Some(position_account) = position_account_opt {
-                    info!("  ✅ 成功获取position账户数据，大小: {} bytes", position_account.data.len());
+                    info!(
+                        "  ✅ 成功获取position账户数据，大小: {} bytes",
+                        position_account.data.len()
+                    );
 
                     match self.deserialize_position_state(position_account) {
                         Ok(position_state) => {
                             info!("  ✅ 成功反序列化position状态:");
                             info!("    池子ID: {}", position_state.pool_id);
-                            info!("    tick范围: {} - {}", position_state.tick_lower_index, position_state.tick_upper_index);
+                            info!(
+                                "    tick范围: {} - {}",
+                                position_state.tick_lower_index, position_state.tick_upper_index
+                            );
                             info!("    流动性: {}", position_state.liquidity);
 
-                            if position_state.pool_id == *pool_address 
-                                && position_state.tick_lower_index == tick_lower 
-                                && position_state.tick_upper_index == tick_upper {
+                            if position_state.pool_id == *pool_address
+                                && position_state.tick_lower_index == tick_lower
+                                && position_state.tick_upper_index == tick_upper
+                            {
                                 info!("  🎯 找到匹配的仓位！");
                                 return true;
                             } else {
@@ -408,14 +466,14 @@ impl<'a> PositionUtilsOptimized<'a> {
             if let Some(position_account) = position_account_opt {
                 if let Ok(position_state) = self.deserialize_position_state(position_account) {
                     let query_time = start_time.elapsed();
-                    
+
                     // 记录性能统计
                     if let Some(stats) = &self.stats {
                         // 批量查询减少了RPC调用次数：NFT查询 + 批量position查询
                         let rpc_calls = 2;
                         stats.record_query(rpc_calls, query_time.as_millis() as u64, position_nfts.len(), false);
                     }
-                    
+
                     return Ok(Some(ExistingPosition {
                         nft_mint: nft_info.nft_mint,
                         nft_token_account: nft_info.nft_account,
@@ -428,7 +486,7 @@ impl<'a> PositionUtilsOptimized<'a> {
         }
 
         let query_time = start_time.elapsed();
-        
+
         // 记录性能统计
         if let Some(stats) = &self.stats {
             let rpc_calls = 2; // NFT查询 + 批量position查询
@@ -440,9 +498,13 @@ impl<'a> PositionUtilsOptimized<'a> {
     }
 
     /// 带重试机制的并发NFT获取
-    async fn get_user_position_nfts_with_retry(&self, user_wallet: &Pubkey, max_retries: u32) -> Result<Vec<PositionNftInfo>> {
+    async fn get_user_position_nfts_with_retry(
+        &self,
+        user_wallet: &Pubkey,
+        max_retries: u32,
+    ) -> Result<Vec<PositionNftInfo>> {
         let mut attempts = 0;
-        
+
         while attempts <= max_retries {
             match self.get_user_position_nfts_optimized(user_wallet).await {
                 Ok(nfts) => return Ok(nfts),
@@ -451,45 +513,51 @@ impl<'a> PositionUtilsOptimized<'a> {
                     if attempts > max_retries {
                         return Err(anyhow::anyhow!("获取NFT失败，已重试{}次: {:?}", max_retries, e));
                     }
-                    
+
                     warn!("获取NFT失败，第{}次重试: {:?}", attempts, e);
-                    
+
                     // 指数退避
                     let delay = Duration::from_millis(100 * (2_u64.pow(attempts - 1)));
                     time::sleep(delay).await;
                 }
             }
         }
-        
+
         unreachable!()
     }
 
     /// 流式处理大量Token账户
-    async fn process_token_accounts_streaming<F, R>(&self, accounts: Vec<RpcKeyedAccount>, processor: F) -> Result<Vec<R>>
-    where 
+    async fn process_token_accounts_streaming<F, R>(
+        &self,
+        accounts: Vec<RpcKeyedAccount>,
+        processor: F,
+    ) -> Result<Vec<R>>
+    where
         F: Fn(&RpcKeyedAccount) -> Option<R> + Send + Sync,
         R: Send,
     {
         const BATCH_SIZE: usize = 50; // 每批处理50个账户
         let mut results = Vec::new();
-        
+
         for (batch_index, chunk) in accounts.chunks(BATCH_SIZE).enumerate() {
             info!("  📦 处理第{}批，包含{}个账户", batch_index + 1, chunk.len());
-            
-            let batch_results: Vec<R> = chunk
-                .iter()
-                .filter_map(|account| processor(account))
-                .collect();
-                
+
+            let batch_results: Vec<R> = chunk.iter().filter_map(|account| processor(account)).collect();
+
             results.extend(batch_results);
-            
+
             // 让出CPU时间，避免阻塞其他任务
-            if batch_index % 5 == 4 { // 每处理5批后让出一次
+            if batch_index % 5 == 4 {
+                // 每处理5批后让出一次
                 tokio::task::yield_now().await;
             }
         }
-        
-        info!("  ✅ 流式处理完成，总共处理{}个账户，得到{}个结果", accounts.len(), results.len());
+
+        info!(
+            "  ✅ 流式处理完成，总共处理{}个账户，得到{}个结果",
+            accounts.len(),
+            results.len()
+        );
         Ok(results)
     }
 
@@ -499,25 +567,25 @@ impl<'a> PositionUtilsOptimized<'a> {
             if !self.is_potential_position_nft(account_info) {
                 return None;
             }
-            
+
             if let UiAccountData::Json(parsed_account) = &account_info.account.data {
-                if let Ok(TokenAccountType::Account(ui_token_account)) = serde_json::from_value(parsed_account.parsed.clone()) {
+                if let Ok(TokenAccountType::Account(ui_token_account)) =
+                    serde_json::from_value(parsed_account.parsed.clone())
+                {
                     if let (Ok(nft_mint), Ok(nft_account)) = (
                         ui_token_account.mint.parse::<Pubkey>(),
-                        account_info.pubkey.parse::<Pubkey>()
+                        account_info.pubkey.parse::<Pubkey>(),
                     ) {
                         let raydium_program_id = ConfigManager::get_raydium_program_id().ok()?;
-                        let (position_pda, _) = Pubkey::find_program_address(
-                            &[b"position", nft_mint.as_ref()], 
-                            &raydium_program_id
-                        );
-                        
+                        let (position_pda, _) =
+                            Pubkey::find_program_address(&[b"position", nft_mint.as_ref()], &raydium_program_id);
+
                         let token_program_type = if parsed_account.program == "spl-token-2022" {
                             TokenProgramType::Token2022
                         } else {
                             TokenProgramType::Classic
                         };
-                        
+
                         return Some(CompactPositionNftInfo {
                             nft_mint: nft_mint.to_bytes(),
                             nft_account: nft_account.to_bytes(),
@@ -527,7 +595,7 @@ impl<'a> PositionUtilsOptimized<'a> {
                     }
                 }
             }
-            
+
             None
         }
     }
@@ -537,10 +605,11 @@ impl<'a> PositionUtilsOptimized<'a> {
         // 快速预过滤：只检查关键属性
         if let UiAccountData::Json(parsed_account) = &account_info.account.data {
             if parsed_account.program == "spl-token" || parsed_account.program == "spl-token-2022" {
-                if let Ok(TokenAccountType::Account(ui_token_account)) = serde_json::from_value(parsed_account.parsed.clone()) {
+                if let Ok(TokenAccountType::Account(ui_token_account)) =
+                    serde_json::from_value(parsed_account.parsed.clone())
+                {
                     // NFT特征：decimals=0, amount=1
-                    return ui_token_account.token_amount.decimals == 0 
-                        && ui_token_account.token_amount.amount == "1";
+                    return ui_token_account.token_amount.decimals == 0 && ui_token_account.token_amount.amount == "1";
                 }
             }
         }
@@ -550,14 +619,22 @@ impl<'a> PositionUtilsOptimized<'a> {
     /// 反序列化position状态 - 复用原有逻辑
     pub fn deserialize_position_state(&self, account: &solana_sdk::account::Account) -> Result<PersonalPositionState> {
         let mut data: &[u8] = &account.data;
-        anchor_lang::AccountDeserialize::try_deserialize(&mut data).map_err(|e| anyhow::anyhow!("反序列化position状态失败: {:?}", e))
+        anchor_lang::AccountDeserialize::try_deserialize(&mut data)
+            .map_err(|e| anyhow::anyhow!("反序列化position状态失败: {:?}", e))
     }
 
     // ============ 向后兼容的包装方法 ============
 
     /// 向后兼容：检查仓位是否已存在
-    pub async fn find_existing_position(&self, user_wallet: &Pubkey, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32) -> Result<Option<ExistingPosition>> {
-        self.find_existing_position_optimized(user_wallet, pool_address, tick_lower, tick_upper).await
+    pub async fn find_existing_position(
+        &self,
+        user_wallet: &Pubkey,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+    ) -> Result<Option<ExistingPosition>> {
+        self.find_existing_position_optimized(user_wallet, pool_address, tick_lower, tick_upper)
+            .await
     }
 
     /// 向后兼容：获取用户的position NFTs
@@ -593,12 +670,14 @@ impl<'a> PositionUtilsOptimized<'a> {
     /// 根据价格计算tick索引
     pub fn price_to_tick(&self, price: f64, decimals_0: u8, decimals_1: u8) -> Result<i32> {
         let sqrt_price_x64 = self.price_to_sqrt_price_x64(price, decimals_0, decimals_1);
-        raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_x64).map_err(|e| anyhow::anyhow!("价格转tick失败: {:?}", e))
+        raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_x64)
+            .map_err(|e| anyhow::anyhow!("价格转tick失败: {:?}", e))
     }
 
     /// 根据tick计算价格
     pub fn tick_to_price(&self, tick: i32, decimals_0: u8, decimals_1: u8) -> Result<f64> {
-        let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick).map_err(|e| anyhow::anyhow!("tick转价格失败: {:?}", e))?;
+        let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick)
+            .map_err(|e| anyhow::anyhow!("tick转价格失败: {:?}", e))?;
         Ok(self.sqrt_price_x64_to_price(sqrt_price_x64, decimals_0, decimals_1))
     }
 
@@ -622,26 +701,43 @@ impl<'a> PositionUtilsOptimized<'a> {
         is_token_0: bool,
     ) -> Result<u128> {
         if is_token_0 {
-            Ok(raydium_amm_v3::libraries::liquidity_math::get_liquidity_from_single_amount_0(
-                current_sqrt_price_x64,
-                sqrt_price_lower_x64,
-                sqrt_price_upper_x64,
-                amount,
-            ))
+            Ok(
+                raydium_amm_v3::libraries::liquidity_math::get_liquidity_from_single_amount_0(
+                    current_sqrt_price_x64,
+                    sqrt_price_lower_x64,
+                    sqrt_price_upper_x64,
+                    amount,
+                ),
+            )
         } else {
-            Ok(raydium_amm_v3::libraries::liquidity_math::get_liquidity_from_single_amount_1(
-                current_sqrt_price_x64,
-                sqrt_price_lower_x64,
-                sqrt_price_upper_x64,
-                amount,
-            ))
+            Ok(
+                raydium_amm_v3::libraries::liquidity_math::get_liquidity_from_single_amount_1(
+                    current_sqrt_price_x64,
+                    sqrt_price_lower_x64,
+                    sqrt_price_upper_x64,
+                    amount,
+                ),
+            )
         }
     }
 
     /// 根据流动性计算token数量
-    pub fn calculate_amounts_from_liquidity(&self, current_tick: i32, current_sqrt_price_x64: u128, tick_lower: i32, tick_upper: i32, liquidity: u128) -> Result<(u64, u64)> {
-        raydium_amm_v3::libraries::liquidity_math::get_delta_amounts_signed(current_tick, current_sqrt_price_x64, tick_lower, tick_upper, liquidity as i128)
-            .map_err(|e| anyhow::anyhow!("流动性计算金额失败: {:?}", e))
+    pub fn calculate_amounts_from_liquidity(
+        &self,
+        current_tick: i32,
+        current_sqrt_price_x64: u128,
+        tick_lower: i32,
+        tick_upper: i32,
+        liquidity: u128,
+    ) -> Result<(u64, u64)> {
+        raydium_amm_v3::libraries::liquidity_math::get_delta_amounts_signed(
+            current_tick,
+            current_sqrt_price_x64,
+            tick_lower,
+            tick_upper,
+            liquidity as i128,
+        )
+        .map_err(|e| anyhow::anyhow!("流动性计算金额失败: {:?}", e))
     }
 
     /// 应用滑点保护
@@ -661,12 +757,19 @@ impl<'a> PositionUtilsOptimized<'a> {
     }
 
     /// 构建remaining accounts（tick arrays和bitmap）
-    pub async fn build_remaining_accounts(&self, pool_address: &Pubkey, tick_lower: i32, tick_upper: i32, tick_spacing: u16) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
+    pub async fn build_remaining_accounts(
+        &self,
+        pool_address: &Pubkey,
+        tick_lower: i32,
+        tick_upper: i32,
+        tick_spacing: u16,
+    ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let mut remaining_accounts = Vec::new();
 
         // 添加tick array bitmap extension
-        let (bitmap_pda, _) = PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, pool_address);
+        let (bitmap_pda, _) =
+            PDACalculator::calculate_tickarray_bitmap_extension_pda(&raydium_program_id, pool_address);
         remaining_accounts.push(solana_sdk::instruction::AccountMeta::new(bitmap_pda, false));
 
         // 计算需要的tick arrays
@@ -674,12 +777,14 @@ impl<'a> PositionUtilsOptimized<'a> {
         let tick_array_upper_start = self.get_tick_array_start_index(tick_upper, tick_spacing);
 
         // 添加下限tick array
-        let (tick_array_lower_pda, _) = PDACalculator::calculate_tick_array_pda(&raydium_program_id, pool_address, tick_array_lower_start);
+        let (tick_array_lower_pda, _) =
+            PDACalculator::calculate_tick_array_pda(&raydium_program_id, pool_address, tick_array_lower_start);
         remaining_accounts.push(solana_sdk::instruction::AccountMeta::new(tick_array_lower_pda, false));
 
         // 如果上限和下限不在同一个tick array中，添加上限tick array
         if tick_array_lower_start != tick_array_upper_start {
-            let (tick_array_upper_pda, _) = PDACalculator::calculate_tick_array_pda(&raydium_program_id, pool_address, tick_array_upper_start);
+            let (tick_array_upper_pda, _) =
+                PDACalculator::calculate_tick_array_pda(&raydium_program_id, pool_address, tick_array_upper_start);
             remaining_accounts.push(solana_sdk::instruction::AccountMeta::new(tick_array_upper_pda, false));
         }
 
@@ -713,7 +818,7 @@ mod tests {
         // 测试创建优化版本
         let rpc_client = RpcClient::new("https://api.devnet.solana.com".to_string());
         let utils = PositionUtilsOptimized::new(&rpc_client);
-        
+
         // 验证统计对象被正确创建
         assert!(utils.stats.is_some());
         let stats = utils.get_performance_stats().unwrap();
@@ -742,7 +847,7 @@ mod tests {
     #[test]
     fn test_performance_stats() {
         let stats = PositionPerformanceStats::default();
-        
+
         // 测试记录查询
         stats.record_query(5, 1000, 10, false);
         stats.record_batch_query();

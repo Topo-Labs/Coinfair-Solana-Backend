@@ -1,7 +1,7 @@
 //! 端到端测试
-//! 
+//!
 //! 真正连接Solana链上数据，验证完整的事件监听→解析→持久化流程
-//! 
+//!
 //! ⚠️ 注意：这些测试需要：
 //! 1. 网络连接到Solana devnet
 //! 2. MongoDB运行
@@ -9,14 +9,14 @@
 
 use crate::{
     config::EventListenerConfig,
+    metrics::MetricsCollector,
     parser::EventParserRegistry,
     persistence::{BatchWriter, EventStorage},
-    subscriber::SubscriptionManager,
     recovery::CheckpointManager,
-    metrics::MetricsCollector,
+    subscriber::SubscriptionManager,
 };
-use std::sync::Arc;
 use anchor_lang::prelude::Pubkey;
+use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tracing::{info, warn};
 
@@ -70,18 +70,12 @@ async fn test_e2e_websocket_connection() {
     let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-    let manager = SubscriptionManager::new(
-        &config,
-        parser_registry,
-        batch_writer,
-        checkpoint_manager,
-        metrics,
-    ).await;
+    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics).await;
 
     match manager {
         Ok(subscription_manager) => {
             info!("✅ SubscriptionManager创建成功");
-            
+
             // 测试获取当前slot
             match timeout(Duration::from_secs(15), subscription_manager.get_current_slot()).await {
                 Ok(Ok(slot)) => {
@@ -119,16 +113,15 @@ async fn test_e2e_real_event_listening() {
         batch_writer,
         checkpoint_manager,
         metrics.clone(),
-    ).await;
+    )
+    .await;
 
     match manager {
         Ok(subscription_manager) => {
             info!("🚀 开始真实事件监听测试（30秒）");
-            
+
             // 启动监听
-            let listen_handle = tokio::spawn(async move {
-                subscription_manager.start().await
-            });
+            let listen_handle = tokio::spawn(async move { subscription_manager.start().await });
 
             // 启动指标收集
             metrics.start_collection().await.unwrap();
@@ -171,36 +164,34 @@ async fn test_e2e_real_event_listening() {
 }
 
 /// E2E测试3：数据库持久化验证
-#[tokio::test] 
+#[tokio::test]
 #[ignore] // 默认忽略，需要手动运行
 async fn test_e2e_database_persistence() {
     let config = create_e2e_test_config();
 
     // 创建EventStorage
     let storage = EventStorage::new(&config).await;
-    
+
     match storage {
         Ok(event_storage) => {
             info!("✅ EventStorage创建成功");
 
             // 创建测试事件
             let test_events = vec![
-                crate::parser::ParsedEvent::TokenCreation(
-                    crate::parser::event_parser::TokenCreationEventData {
-                        mint_address: Pubkey::new_unique().to_string(),
-                        name: "E2E Test Token".to_string(),
-                        symbol: "E2E".to_string(),
-                        uri: "https://e2e-test.example.com/metadata.json".to_string(),
-                        decimals: 9,
-                        supply: 1000000,
-                        creator: Pubkey::new_unique().to_string(),
-                        has_whitelist: false,
-                        whitelist_deadline: 0,
-                        created_at: chrono::Utc::now().timestamp(),
-                        signature: format!("e2e_test_signature_{}", chrono::Utc::now().timestamp_millis()),
-                        slot: 999999,
-                    }
-                ),
+                crate::parser::ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+                    mint_address: Pubkey::new_unique().to_string(),
+                    name: "E2E Test Token".to_string(),
+                    symbol: "E2E".to_string(),
+                    uri: "https://e2e-test.example.com/metadata.json".to_string(),
+                    decimals: 9,
+                    supply: 1000000,
+                    creator: Pubkey::new_unique().to_string(),
+                    has_whitelist: false,
+                    whitelist_deadline: 0,
+                    created_at: chrono::Utc::now().timestamp(),
+                    signature: format!("e2e_test_signature_{}", chrono::Utc::now().timestamp_millis()),
+                    slot: 999999,
+                }),
                 crate::parser::ParsedEvent::PoolCreation(create_test_pool_event()),
                 crate::parser::ParsedEvent::NftClaim(create_test_nft_event()),
                 crate::parser::ParsedEvent::RewardDistribution(create_test_reward_event()),
@@ -211,11 +202,11 @@ async fn test_e2e_database_persistence() {
                 Ok(written_count) => {
                     info!("✅ 成功写入 {} 个事件到数据库", written_count);
                     assert!(written_count > 0, "应该写入至少1个事件");
-                    
+
                     // 验证健康状态
                     let is_healthy = event_storage.health_check().await.unwrap();
                     assert!(is_healthy, "EventStorage应该健康");
-                    
+
                     // 获取统计信息
                     if let Ok(stats) = event_storage.get_storage_stats().await {
                         info!("📊 存储统计:");
@@ -332,10 +323,10 @@ fn create_test_reward_event() -> crate::parser::event_parser::RewardDistribution
 #[tokio::test]
 async fn test_quick_connection_check() {
     let config = create_e2e_test_config();
-    
+
     // 测试RPC连接
     let rpc_client = solana_client::nonblocking::rpc_client::RpcClient::new(config.solana.rpc_url.clone());
-    
+
     match timeout(Duration::from_secs(10), rpc_client.get_slot()).await {
         Ok(Ok(slot)) => {
             println!("✅ RPC连接成功，当前slot: {}", slot);
@@ -351,7 +342,9 @@ async fn test_quick_connection_check() {
     // 测试WebSocket连接
     match timeout(Duration::from_secs(10), async {
         solana_client::nonblocking::pubsub_client::PubsubClient::new(&config.solana.ws_url).await
-    }).await {
+    })
+    .await
+    {
         Ok(Ok(_)) => {
             println!("✅ WebSocket连接成功");
         }

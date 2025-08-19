@@ -15,7 +15,9 @@ pub use raydium::{RaydiumPoolInfo, RaydiumSwap, SwapEstimateResult};
 pub use raydium_api::{calculate_swap_output_with_api, RaydiumApiClient};
 pub use swap::SolanaSwap;
 pub use swap_v2_builder::{SwapV2BuildParams, SwapV2InstructionBuilder, SwapV2InstructionResult};
-pub use swap_v2_service::{SwapV2AccountsInfo, SwapV2Service, TokenAccountInfo, TransferFeeResult, UserTokenAccountInfo};
+pub use swap_v2_service::{
+    SwapV2AccountsInfo, SwapV2Service, TokenAccountInfo, TransferFeeResult, UserTokenAccountInfo,
+};
 
 #[cfg(test)]
 mod tests {
@@ -58,7 +60,10 @@ mod tests {
             Ok(result) => {
                 println!("✅ 计算成功!");
                 println!("  预估输出: {} USDC", result.estimated_output as f64 / 1_000_000.0);
-                println!("  滑点保护: {} USDC", result.min_output_with_slippage as f64 / 1_000_000.0);
+                println!(
+                    "  滑点保护: {} USDC",
+                    result.min_output_with_slippage as f64 / 1_000_000.0
+                );
                 println!("  价格影响: {:.4}%", result.price_impact * 100.0);
 
                 // 验证结果是合理的
@@ -68,7 +73,10 @@ mod tests {
                     result.min_output_with_slippage <= result.estimated_output,
                     "滑点保护后的输出应该小于等于预估输出"
                 );
-                assert!(result.price_impact >= 0.0 && result.price_impact <= 1.0, "价格影响应该在0-100%之间");
+                assert!(
+                    result.price_impact >= 0.0 && result.price_impact <= 1.0,
+                    "价格影响应该在0-100%之间"
+                );
             }
             Err(e) => {
                 println!("❌ 计算失败: {}", e);

@@ -186,10 +186,10 @@ impl DataTransformService {
         if let Ok(Some(chain_config)) = self.load_amm_config_from_chain(config_address).await {
             // 异步写入数据库（不阻塞主流程）
             self.async_save_config_to_database(config_address, &chain_config).await;
-            
+
             // 更新内存缓存
             self.update_memory_cache(config_address, &chain_config)?;
-            
+
             return Ok(Some(chain_config));
         }
 
@@ -202,7 +202,7 @@ impl DataTransformService {
             .amm_config_cache
             .lock()
             .map_err(|e| anyhow::anyhow!("缓存锁获取失败: {}", e))?;
-        
+
         if let Some(cached_config) = cache.get(config_address) {
             let current_time = chrono::Utc::now().timestamp() as u64;
             // 缓存有效期为5分钟
@@ -212,7 +212,7 @@ impl DataTransformService {
                 debug!("⏰ 缓存已过期: {}", config_address);
             }
         }
-        
+
         Ok(None)
     }
 
@@ -233,15 +233,13 @@ impl DataTransformService {
         config_address: &str,
     ) -> Result<Option<AmmConfigCache>> {
         match config_service.get_config_by_address(config_address).await {
-            Ok(Some(config)) => {
-                Ok(Some(AmmConfigCache {
-                    protocol_fee_rate: config.protocol_fee_rate as u32,
-                    trade_fee_rate: config.trade_fee_rate as u32,
-                    tick_spacing: config.tick_spacing as u16,
-                    fund_fee_rate: config.fund_fee_rate as u32,
-                    timestamp: chrono::Utc::now().timestamp() as u64,
-                }))
-            }
+            Ok(Some(config)) => Ok(Some(AmmConfigCache {
+                protocol_fee_rate: config.protocol_fee_rate as u32,
+                trade_fee_rate: config.trade_fee_rate as u32,
+                tick_spacing: config.tick_spacing as u16,
+                fund_fee_rate: config.fund_fee_rate as u32,
+                timestamp: chrono::Utc::now().timestamp() as u64,
+            })),
             Ok(None) => Ok(None),
             Err(e) => {
                 warn!("⚠️ 数据库查询配置失败: {}", e);
@@ -256,7 +254,7 @@ impl DataTransformService {
             let config_service_clone = config_service.clone();
             let address = config_address.to_string();
             let config_clone = config.clone();
-            
+
             tokio::spawn(async move {
                 // 需要从 config_address 推导出 config_index
                 if let Ok(config_index) = Self::derive_config_index_from_address(&address) {
@@ -266,10 +264,10 @@ impl DataTransformService {
                         trade_fee_rate: config_clone.trade_fee_rate as u64,
                         tick_spacing: config_clone.tick_spacing as u32,
                         fund_fee_rate: config_clone.fund_fee_rate as u64,
-                        default_range: 0.1, // 使用默认值
+                        default_range: 0.1,                                   // 使用默认值
                         default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5], // 使用默认值
                     };
-                    
+
                     match config_service_clone.save_clmm_config_from_request(save_request).await {
                         Ok(_) => {
                             tracing::info!("✅ 成功异步保存配置到数据库: {}", address);
@@ -302,9 +300,10 @@ impl DataTransformService {
     fn calculate_config_pda_static(index: u16) -> Result<String> {
         let raydium_program_id = utils::solana::ConfigManager::get_raydium_program_id()
             .map_err(|e| anyhow::anyhow!("获取Raydium程序ID失败: {}", e))?;
-        
-        let (config_pda, _bump) = utils::solana::calculators::PDACalculator::calculate_amm_config_pda(&raydium_program_id, index);
-        
+
+        let (config_pda, _bump) =
+            utils::solana::calculators::PDACalculator::calculate_amm_config_pda(&raydium_program_id, index);
+
         Ok(config_pda.to_string())
     }
 
@@ -466,10 +465,13 @@ impl DataTransformService {
     }
 
     /// 批量加载多个AMM配置（优化版本：内存缓存 → 数据库 → 链上查询）
-    pub async fn load_multiple_amm_configs(&self, config_addresses: &[String]) -> Result<HashMap<String, AmmConfigCache>> {
+    pub async fn load_multiple_amm_configs(
+        &self,
+        config_addresses: &[String],
+    ) -> Result<HashMap<String, AmmConfigCache>> {
         let mut results = HashMap::new();
         let mut need_db_query = Vec::new();
-        
+
         info!("🔍 开始批量加载{}个AMM配置", config_addresses.len());
 
         // 1. 批量检查内存缓存
@@ -504,7 +506,7 @@ impl DataTransformService {
         let mut need_chain_query = need_db_query.clone();
         if let Some(config_service) = &self.clmm_config_service {
             info!("🗄️ 从数据库查询{}个配置", need_db_query.len());
-            
+
             match config_service.get_configs_by_addresses(&need_db_query).await {
                 Ok(db_configs) => {
                     for config in db_configs {
@@ -515,18 +517,21 @@ impl DataTransformService {
                             fund_fee_rate: config.fund_fee_rate as u32,
                             timestamp: chrono::Utc::now().timestamp() as u64,
                         };
-                        
+
                         results.insert(config.id.clone(), cache_config.clone());
-                        
+
                         // 更新内存缓存
                         if let Ok(()) = self.update_memory_cache(&config.id, &cache_config) {
                             debug!("🗄️ 从数据库获取并缓存配置: {}", config.id);
                         }
-                        
+
                         // 从链上查询列表中移除
                         need_chain_query.retain(|addr| addr != &config.id);
                     }
-                    info!("✅ 从数据库获取{}个配置", results.len() - (config_addresses.len() - need_db_query.len()));
+                    info!(
+                        "✅ 从数据库获取{}个配置",
+                        results.len() - (config_addresses.len() - need_db_query.len())
+                    );
                 }
                 Err(e) => {
                     warn!("⚠️ 批量数据库查询失败: {}", e);
@@ -595,7 +600,7 @@ impl DataTransformService {
 
                                 results.insert(config_address.clone(), cache_item.clone());
                                 chain_configs.insert(config_address.clone(), cache_item.clone());
-                                
+
                                 // 更新内存缓存
                                 if let Ok(()) = self.update_memory_cache(config_address, &cache_item) {
                                     debug!("🔗 从链上获取并缓存配置: {}", config_address);
@@ -619,7 +624,7 @@ impl DataTransformService {
         if !chain_configs.is_empty() && self.clmm_config_service.is_some() {
             let config_service_clone = self.clmm_config_service.clone();
             let configs_to_save = chain_configs.clone();
-            
+
             tokio::spawn(async move {
                 if let Some(config_service) = config_service_clone {
                     for (address, config) in configs_to_save {
@@ -634,7 +639,7 @@ impl DataTransformService {
                                 default_range: 0.1,
                                 default_range_point: vec![0.01, 0.05, 0.1, 0.2, 0.5],
                             };
-                            
+
                             match config_service.save_clmm_config_from_request(save_request).await {
                                 Ok(_) => {
                                     tracing::info!("✅ 批量异步保存配置成功: {}", address);
@@ -647,12 +652,13 @@ impl DataTransformService {
                     }
                 }
             });
-            
+
             info!("🔄 启动异步保存{}个新配置到数据库", chain_configs.len());
         }
 
-        info!("✅ 批量加载完成，共{}个配置（内存: {}, 数据库: {}, 链上: {}）", 
-            results.len(), 
+        info!(
+            "✅ 批量加载完成，共{}个配置（内存: {}, 数据库: {}, 链上: {}）",
+            results.len(),
             config_addresses.len() - need_db_query.len(),
             need_db_query.len() - need_chain_query.len(),
             chain_configs.len()
@@ -1169,7 +1175,10 @@ impl DataTransformService {
             }
             None => {
                 // 如果优化查询失败，抛出错误，让调用方使用fallback
-                Err(anyhow::anyhow!("无法从缓存、数据库或链上加载AMM配置: {}", config_address))
+                Err(anyhow::anyhow!(
+                    "无法从缓存、数据库或链上加载AMM配置: {}",
+                    config_address
+                ))
             }
         }
     }

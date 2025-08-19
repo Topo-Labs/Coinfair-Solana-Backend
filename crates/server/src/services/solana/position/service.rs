@@ -1,10 +1,11 @@
 // PositionService handles all position management operations
 
 use crate::dtos::solana_dto::{
-    CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, 
-    DecreaseLiquidityResponse, GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse,
-    IncreaseLiquidityRequest, IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
-    PositionInfo, TransactionStatus, UserPositionsResponse,
+    CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse,
+    DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest,
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, TransactionStatus,
+    UserPositionsResponse,
 };
 
 use super::super::liquidity::LiquidityService;
@@ -16,7 +17,9 @@ use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtilsOp
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use solana_sdk::{instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer, transaction::Transaction};
+use solana_sdk::{
+    instruction::AccountMeta, pubkey::Pubkey, signature::Keypair, signer::Signer, transaction::Transaction,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
@@ -35,14 +38,22 @@ impl PositionService {
         // TODO: 这里需要传入数据库实例，暂时使用占位符
         // 实际使用时需要在创建 PositionService 时传入数据库
         let position_storage_service = PositionStorageService::placeholder();
-        Self { shared, liquidity_service, position_storage_service }
+        Self {
+            shared,
+            liquidity_service,
+            position_storage_service,
+        }
     }
-    
+
     /// Create a new PositionService with database
     pub fn with_database(shared: Arc<SharedContext>, db: Arc<database::Database>) -> Self {
         let liquidity_service = LiquidityService::with_database(shared.clone(), db.clone());
         let position_storage_service = PositionStorageService::new(db);
-        Self { shared, liquidity_service, position_storage_service }
+        Self {
+            shared,
+            liquidity_service,
+            position_storage_service,
+        }
     }
 
     /// Position management operations
@@ -50,7 +61,10 @@ impl PositionService {
         info!("🎯 开始构建开仓交易");
         info!("  池子地址: {}", request.pool_address);
         info!("  用户钱包: {}", request.user_wallet);
-        info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!(
+            "  价格范围: {} - {}",
+            request.tick_lower_price, request.tick_upper_price
+        );
         info!("  输入金额: {}", request.input_amount);
 
         // 1. 验证请求参数
@@ -69,12 +83,26 @@ impl PositionService {
 
         // 价格转换为tick（与CLI版本完全一致的流程）
         // 步骤1: 价格转sqrt_price
-        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
-        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(
+            request.tick_lower_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
+        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(
+            request.tick_upper_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
 
         info!("  价格转换详情:");
-        info!("    下限价格: {} -> sqrt_price_x64: {}", request.tick_lower_price, sqrt_price_lower);
-        info!("    上限价格: {} -> sqrt_price_x64: {}", request.tick_upper_price, sqrt_price_upper);
+        info!(
+            "    下限价格: {} -> sqrt_price_x64: {}",
+            request.tick_lower_price, sqrt_price_lower
+        );
+        info!(
+            "    上限价格: {} -> sqrt_price_x64: {}",
+            request.tick_upper_price, sqrt_price_upper
+        );
 
         // 步骤2: sqrt_price转tick
         let tick_lower_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_lower)?;
@@ -93,15 +121,28 @@ impl PositionService {
         info!("    tick_upper: {} -> {}", tick_upper_raw, tick_upper_adjusted);
 
         // 步骤4: 重新计算调整后的sqrt_price（关键步骤！）
-        let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
-        let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+        let sqrt_price_lower_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
         // 反向验证：从调整后的tick计算回实际价格
-        let actual_lower_price = position_utils.sqrt_price_x64_to_price(sqrt_price_lower_adjusted, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
-        let actual_upper_price = position_utils.sqrt_price_x64_to_price(sqrt_price_upper_adjusted, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let actual_lower_price = position_utils.sqrt_price_x64_to_price(
+            sqrt_price_lower_adjusted,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
+        let actual_upper_price = position_utils.sqrt_price_x64_to_price(
+            sqrt_price_upper_adjusted,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
 
         info!("  最终价格验证:");
-        info!("    请求价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!(
+            "    请求价格范围: {} - {}",
+            request.tick_lower_price, request.tick_upper_price
+        );
         info!("    实际价格范围: {} - {}", actual_lower_price, actual_upper_price);
         info!("    最终tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
 
@@ -148,8 +189,14 @@ impl PositionService {
             amount_1_with_slippage,
         )?;
 
-        info!("  转账费用 - Token0: {}, Token1: {}", transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee);
-        info!("  Token Program - Token0: {}, Token1: {}", transfer_fee_0.owner, transfer_fee_1.owner);
+        info!(
+            "  转账费用 - Token0: {}, Token1: {}",
+            transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee
+        );
+        info!(
+            "  Token Program - Token0: {}, Token1: {}",
+            transfer_fee_0.owner, transfer_fee_1.owner
+        );
 
         // 8. 计算包含转账费的最大金额
         let amount_0_max = amount_0_with_slippage
@@ -169,12 +216,17 @@ impl PositionService {
         // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
+        let tick_array_lower_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
+        let tick_array_upper_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
 
         // 12. 获取用户的代币账户（使用transfer_fee的owner作为token program ID）
         let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -251,7 +303,10 @@ impl PositionService {
         let request_clone = request.clone();
         let response_clone = response.clone();
         tokio::spawn(async move {
-            if let Err(e) = storage_service.save_open_position(&request_clone, &response_clone, None).await {
+            if let Err(e) = storage_service
+                .save_open_position(&request_clone, &response_clone, None)
+                .await
+            {
                 tracing::warn!("保存开仓信息到数据库失败: {}", e);
             }
         });
@@ -259,10 +314,16 @@ impl PositionService {
         Ok(response)
     }
 
-    pub async fn open_position_and_send_transaction(&self, request: OpenPositionRequest) -> Result<OpenPositionAndSendTransactionResponse> {
+    pub async fn open_position_and_send_transaction(
+        &self,
+        request: OpenPositionRequest,
+    ) -> Result<OpenPositionAndSendTransactionResponse> {
         info!("🎯 开始开仓操作");
         info!("  池子地址: {}", request.pool_address);
-        info!("  价格范围: {} - {}", request.tick_lower_price, request.tick_upper_price);
+        info!(
+            "  价格范围: {} - {}",
+            request.tick_lower_price, request.tick_upper_price
+        );
         info!("  输入金额: {}", request.input_amount);
 
         // 1. 验证请求参数
@@ -292,8 +353,16 @@ impl PositionService {
 
         // 价格转换为tick（与CLI版本完全一致的流程）
         // 步骤1: 价格转sqrt_price
-        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
-        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let sqrt_price_lower = position_utils.price_to_sqrt_price_x64(
+            request.tick_lower_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
+        let sqrt_price_upper = position_utils.price_to_sqrt_price_x64(
+            request.tick_upper_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
 
         // 步骤2: sqrt_price转tick
         let tick_lower_raw = raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_lower)?;
@@ -306,8 +375,10 @@ impl PositionService {
         info!("  计算的tick范围: {} - {}", tick_lower_adjusted, tick_upper_adjusted);
 
         // 步骤4: 重新计算调整后的sqrt_price（关键步骤！）
-        let sqrt_price_lower_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
-        let sqrt_price_upper_adjusted = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
+        let sqrt_price_lower_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_lower_adjusted)?;
+        let sqrt_price_upper_adjusted =
+            raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
         // 4. 检查是否已存在相同位置
         if let Some(_existing) = position_utils
@@ -352,8 +423,14 @@ impl PositionService {
             amount_1_with_slippage,
         )?;
 
-        info!("  转账费用 - Token0: {}, Token1: {}", transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee);
-        info!("  Token Program - Token0: {}, Token1: {}", transfer_fee_0.owner, transfer_fee_1.owner);
+        info!(
+            "  转账费用 - Token0: {}, Token1: {}",
+            transfer_fee_0.transfer_fee, transfer_fee_1.transfer_fee
+        );
+        info!(
+            "  Token Program - Token0: {}, Token1: {}",
+            transfer_fee_0.owner, transfer_fee_1.owner
+        );
 
         // 8. 计算包含转账费的最大金额
         let amount_0_max = amount_0_with_slippage
@@ -373,12 +450,17 @@ impl PositionService {
         // 10. 构建remaining accounts - 只包含tickarray_bitmap_extension
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
 
         // 11. 计算tick array索引
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
+        let tick_array_lower_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower_adjusted, pool_state.tick_spacing);
+        let tick_array_upper_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper_adjusted, pool_state.tick_spacing);
 
         // 12. 获取用户的代币账户（使用transfer_fee的owner作为token program ID）
         let user_token_account_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -413,7 +495,12 @@ impl PositionService {
 
         // 14. 构建交易
         let recent_blockhash = self.shared.rpc_client.get_latest_blockhash()?;
-        let transaction = Transaction::new_signed_with_payer(&instructions, Some(&user_wallet), &[&user_keypair, &nft_mint], recent_blockhash);
+        let transaction = Transaction::new_signed_with_payer(
+            &instructions,
+            Some(&user_wallet),
+            &[&user_keypair, &nft_mint],
+            recent_blockhash,
+        );
 
         // 15. 发送交易
         let signature = self.shared.rpc_client.send_and_confirm_transaction(&transaction)?;
@@ -447,7 +534,10 @@ impl PositionService {
         let request_clone = request.clone();
         let response_clone = response.clone();
         tokio::spawn(async move {
-            if let Err(e) = storage_service.save_open_position_with_transaction(&request_clone, &response_clone).await {
+            if let Err(e) = storage_service
+                .save_open_position_with_transaction(&request_clone, &response_clone)
+                .await
+            {
                 tracing::warn!("保存开仓交易信息到数据库失败: {}", e);
             }
         });
@@ -469,8 +559,16 @@ impl PositionService {
         let position_utils = PositionUtilsOptimized::new(&self.shared.rpc_client);
 
         // 价格转换为tick
-        let tick_lower_index = position_utils.price_to_tick(request.tick_lower_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-        let tick_upper_index = position_utils.price_to_tick(request.tick_upper_price, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+        let tick_lower_index = position_utils.price_to_tick(
+            request.tick_lower_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        )?;
+        let tick_upper_index = position_utils.price_to_tick(
+            request.tick_upper_price,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        )?;
 
         // 调整tick spacing
         let tick_lower_adjusted = position_utils.tick_with_spacing(tick_lower_index, pool_state.tick_spacing as i32);
@@ -498,9 +596,17 @@ impl PositionService {
         )?;
 
         // 计算当前价格和利用率
-        let current_price = position_utils.sqrt_price_x64_to_price(pool_state.sqrt_price_x64, pool_state.mint_decimals_0, pool_state.mint_decimals_1);
+        let current_price = position_utils.sqrt_price_x64_to_price(
+            pool_state.sqrt_price_x64,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        );
 
-        let price_range_utilization = position_utils.calculate_price_range_utilization(current_price, request.tick_lower_price, request.tick_upper_price);
+        let price_range_utilization = position_utils.calculate_price_range_utilization(
+            current_price,
+            request.tick_lower_price,
+            request.tick_upper_price,
+        );
 
         Ok(CalculateLiquidityResponse {
             liquidity: liquidity.to_string(),
@@ -530,15 +636,15 @@ impl PositionService {
         // 3. 批量加载position状态（优化性能）
         info!("🚀 开始批量获取 {} 个position账户", position_nfts.len());
         let position_addresses: Vec<Pubkey> = position_nfts.iter().map(|nft| nft.position_pda).collect();
-        
+
         // 批量获取所有position账户
         let position_accounts = self.shared.rpc_client.get_multiple_accounts(&position_addresses)?;
         info!("✅ 批量获取position账户完成，收到 {} 个响应", position_accounts.len());
-        
+
         // 解析position状态并收集需要的pool地址
         let mut position_states = Vec::new();
         let mut pool_addresses = std::collections::HashSet::new();
-        
+
         for (i, account_option) in position_accounts.iter().enumerate() {
             if let Some(account) = account_option {
                 if let Ok(position_state) = position_utils_optimized.deserialize_position_state(account) {
@@ -549,37 +655,45 @@ impl PositionService {
                             continue;
                         }
                     }
-                    
+
                     pool_addresses.insert(position_state.pool_id);
                     position_states.push((i, position_state));
                 }
             }
         }
-        
+
         // 批量获取池子状态（去重）
         info!("🚀 开始批量获取 {} 个去重的pool账户", pool_addresses.len());
         let pool_addresses_vec: Vec<Pubkey> = pool_addresses.into_iter().collect();
         let pool_accounts = self.shared.rpc_client.get_multiple_accounts(&pool_addresses_vec)?;
         info!("✅ 批量获取pool账户完成，收到 {} 个响应", pool_accounts.len());
-        
+
         // 构建pool状态缓存
         let mut pool_states_cache = std::collections::HashMap::new();
         for (i, account_option) in pool_accounts.iter().enumerate() {
             if let Some(account) = account_option {
-                if let Ok(pool_state) = SolanaUtils::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(account) {
+                if let Ok(pool_state) =
+                    SolanaUtils::deserialize_anchor_account::<raydium_amm_v3::states::PoolState>(account)
+                {
                     pool_states_cache.insert(pool_addresses_vec[i], pool_state);
                 }
             }
         }
-        
+
         // 构建最终的position信息
         let mut positions = Vec::new();
         for (nft_index, position_state) in position_states {
             if let Some(pool_state) = pool_states_cache.get(&position_state.pool_id) {
-                let tick_lower_price =
-                    position_utils_optimized.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-                let tick_upper_price =
-                    position_utils_optimized.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+                let tick_lower_price = position_utils_optimized.tick_to_price(
+                    position_state.tick_lower_index,
+                    pool_state.mint_decimals_0,
+                    pool_state.mint_decimals_1,
+                )?;
+                let tick_upper_price = position_utils_optimized.tick_to_price(
+                    position_state.tick_upper_index,
+                    pool_state.mint_decimals_0,
+                    pool_state.mint_decimals_1,
+                )?;
 
                 positions.push(PositionInfo {
                     position_key: position_nfts[nft_index].position_pda.to_string(),
@@ -623,8 +737,16 @@ impl PositionService {
         let pool_account = self.shared.rpc_client.get_account(&position_state.pool_id)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
 
-        let tick_lower_price = position_utils.tick_to_price(position_state.tick_lower_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
-        let tick_upper_price = position_utils.tick_to_price(position_state.tick_upper_index, pool_state.mint_decimals_0, pool_state.mint_decimals_1)?;
+        let tick_lower_price = position_utils.tick_to_price(
+            position_state.tick_lower_index,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        )?;
+        let tick_upper_price = position_utils.tick_to_price(
+            position_state.tick_upper_index,
+            pool_state.mint_decimals_0,
+            pool_state.mint_decimals_1,
+        )?;
 
         Ok(PositionInfo {
             position_key,
@@ -704,7 +826,10 @@ impl PositionService {
     fn _build_remaining_accounts(&self, pool_address: &Pubkey) -> Result<Vec<AccountMeta>> {
         let mut remaining_accounts = Vec::new();
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(&[b"pool_tick_array_bitmap_extension", pool_address.as_ref()], &raydium_program_id);
+        let (tickarray_bitmap_extension, _) = Pubkey::find_program_address(
+            &[b"pool_tick_array_bitmap_extension", pool_address.as_ref()],
+            &raydium_program_id,
+        );
         remaining_accounts.push(AccountMeta::new(tickarray_bitmap_extension, false));
         Ok(remaining_accounts)
     }
@@ -721,8 +846,10 @@ impl PositionService {
 
     /// Calculate tick array indices for position
     fn _calculate_tick_array_indices(&self, tick_lower: i32, tick_upper: i32, tick_spacing: u16) -> (i32, i32) {
-        let tick_array_lower_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower, tick_spacing);
-        let tick_array_upper_start_index = raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper, tick_spacing);
+        let tick_array_lower_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_lower, tick_spacing);
+        let tick_array_upper_start_index =
+            raydium_amm_v3::states::TickArrayState::get_array_start_index(tick_upper, tick_spacing);
         (tick_array_lower_start_index, tick_array_upper_start_index)
     }
 
@@ -734,8 +861,13 @@ impl PositionService {
     }
 
     /// 增加流动性并发送交易 - 委托给LiquidityService
-    pub async fn increase_liquidity_and_send_transaction(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
-        self.liquidity_service.increase_liquidity_and_send_transaction(request).await
+    pub async fn increase_liquidity_and_send_transaction(
+        &self,
+        request: IncreaseLiquidityRequest,
+    ) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
+        self.liquidity_service
+            .increase_liquidity_and_send_transaction(request)
+            .await
     }
 
     // ============ DecreaseLiquidity Methods (Delegated to LiquidityService) ============
@@ -746,7 +878,12 @@ impl PositionService {
     }
 
     /// 减少流动性并发送交易 - 委托给LiquidityService
-    pub async fn decrease_liquidity_and_send_transaction(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
-        self.liquidity_service.decrease_liquidity_and_send_transaction(request).await
+    pub async fn decrease_liquidity_and_send_transaction(
+        &self,
+        request: DecreaseLiquidityRequest,
+    ) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
+        self.liquidity_service
+            .decrease_liquidity_and_send_transaction(request)
+            .await
     }
 }

@@ -1,6 +1,7 @@
 use crate::dtos::solana_dto::{
-    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest,
-    IncreaseLiquidityResponse, OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
 };
 
 use database::{
@@ -34,7 +35,10 @@ impl PositionStorageService {
 
     /// 创建占位符实例（用于没有数据库的场景）
     pub fn placeholder() -> Self {
-        Self { db: None, position_repo: None }
+        Self {
+            db: None,
+            position_repo: None,
+        }
     }
 
     /// 检查是否有数据库连接
@@ -48,7 +52,12 @@ impl PositionStorageService {
     // ============ 开仓相关操作 ============
 
     /// 保存开仓信息到数据库
-    pub async fn save_open_position(&self, request: &OpenPositionRequest, response: &OpenPositionResponse, transaction_signature: Option<String>) -> Result<()> {
+    pub async fn save_open_position(
+        &self,
+        request: &OpenPositionRequest,
+        response: &OpenPositionResponse,
+        transaction_signature: Option<String>,
+    ) -> Result<()> {
         self.ensure_database()?;
         let position_repo = self.position_repo.as_ref().unwrap();
 
@@ -95,7 +104,11 @@ impl PositionStorageService {
     }
 
     /// 保存开仓并发送交易的信息
-    pub async fn save_open_position_with_transaction(&self, request: &OpenPositionRequest, response: &OpenPositionAndSendTransactionResponse) -> Result<()> {
+    pub async fn save_open_position_with_transaction(
+        &self,
+        request: &OpenPositionRequest,
+        response: &OpenPositionAndSendTransactionResponse,
+    ) -> Result<()> {
         info!("💾 保存开仓交易信息到数据库");
         info!("  Position Key: {}", response.position_key);
         info!("  Transaction Signature: {}", response.signature);
@@ -141,7 +154,12 @@ impl PositionStorageService {
     // ============ 增加流动性相关操作 ============
 
     /// 更新增加流动性后的仓位信息
-    pub async fn update_increase_liquidity(&self, request: &IncreaseLiquidityRequest, response: &IncreaseLiquidityResponse, _transaction_signature: Option<String>) -> Result<()> {
+    pub async fn update_increase_liquidity(
+        &self,
+        request: &IncreaseLiquidityRequest,
+        response: &IncreaseLiquidityResponse,
+        _transaction_signature: Option<String>,
+    ) -> Result<()> {
         self.ensure_database()?;
         let position_repo = self.position_repo.as_ref().unwrap();
 
@@ -151,7 +169,12 @@ impl PositionStorageService {
 
         // 查找现有仓位
         let existing_position = position_repo
-            .find_user_position_in_range(&request.user_wallet, &request.pool_address, response.tick_lower_index, response.tick_upper_index)
+            .find_user_position_in_range(
+                &request.user_wallet,
+                &request.pool_address,
+                response.tick_lower_index,
+                response.tick_upper_index,
+            )
             .await?;
 
         if let Some(position) = existing_position {
@@ -189,7 +212,11 @@ impl PositionStorageService {
     }
 
     /// 更新增加流动性并发送交易后的仓位信息
-    pub async fn update_increase_liquidity_with_transaction(&self, request: &IncreaseLiquidityRequest, response: &IncreaseLiquidityAndSendTransactionResponse) -> Result<()> {
+    pub async fn update_increase_liquidity_with_transaction(
+        &self,
+        request: &IncreaseLiquidityRequest,
+        response: &IncreaseLiquidityAndSendTransactionResponse,
+    ) -> Result<()> {
         self.ensure_database()?;
         let position_repo = self.position_repo.as_ref().unwrap();
 
@@ -198,7 +225,12 @@ impl PositionStorageService {
         info!("  Transaction Signature: {}", response.signature);
 
         let existing_position = position_repo
-            .find_user_position_in_range(&request.user_wallet, &request.pool_address, response.tick_lower_index, response.tick_upper_index)
+            .find_user_position_in_range(
+                &request.user_wallet,
+                &request.pool_address,
+                response.tick_lower_index,
+                response.tick_upper_index,
+            )
             .await?;
 
         if let Some(position) = existing_position {
@@ -236,7 +268,12 @@ impl PositionStorageService {
     // ============ 减少流动性相关操作 ============
 
     /// 更新减少流动性后的仓位信息
-    pub async fn update_decrease_liquidity(&self, _request: &DecreaseLiquidityRequest, response: &DecreaseLiquidityResponse, _transaction_signature: Option<String>) -> Result<()> {
+    pub async fn update_decrease_liquidity(
+        &self,
+        _request: &DecreaseLiquidityRequest,
+        response: &DecreaseLiquidityResponse,
+        _transaction_signature: Option<String>,
+    ) -> Result<()> {
         self.ensure_database()?;
         let position_repo = self.position_repo.as_ref().unwrap();
 
@@ -251,7 +288,11 @@ impl PositionStorageService {
             let removed_liquidity = response.liquidity_removed.parse::<u128>().unwrap_or(0);
             let new_total_liquidity = current_liquidity.saturating_sub(removed_liquidity);
 
-            let operation_type = if response.will_close_position { "close_position" } else { "decrease_liquidity" };
+            let operation_type = if response.will_close_position {
+                "close_position"
+            } else {
+                "decrease_liquidity"
+            };
 
             match position_repo
                 .update_liquidity(
@@ -290,7 +331,11 @@ impl PositionStorageService {
     }
 
     /// 更新减少流动性并发送交易后的仓位信息
-    pub async fn update_decrease_liquidity_with_transaction(&self, _request: &DecreaseLiquidityRequest, response: &DecreaseLiquidityAndSendTransactionResponse) -> Result<()> {
+    pub async fn update_decrease_liquidity_with_transaction(
+        &self,
+        _request: &DecreaseLiquidityRequest,
+        response: &DecreaseLiquidityAndSendTransactionResponse,
+    ) -> Result<()> {
         self.ensure_database()?;
         let position_repo = self.position_repo.as_ref().unwrap();
 
@@ -305,7 +350,11 @@ impl PositionStorageService {
             let removed_liquidity = response.liquidity_removed.parse::<u128>().unwrap_or(0);
             let new_total_liquidity = current_liquidity.saturating_sub(removed_liquidity);
 
-            let operation_type = if response.position_closed { "close_position_tx" } else { "decrease_liquidity_tx" };
+            let operation_type = if response.position_closed {
+                "close_position_tx"
+            } else {
+                "decrease_liquidity_tx"
+            };
 
             match position_repo
                 .update_liquidity(
@@ -414,7 +463,10 @@ impl PositionStorageService {
 
         match position_repo.get_user_position_stats(user_wallet).await {
             Ok(stats) => {
-                info!("✅ 用户统计: {} 个总仓位，{} 个活跃仓位", stats.total_positions, stats.active_positions);
+                info!(
+                    "✅ 用户统计: {} 个总仓位，{} 个活跃仓位",
+                    stats.total_positions, stats.active_positions
+                );
                 Ok(stats)
             }
             Err(e) => {
@@ -433,7 +485,10 @@ impl PositionStorageService {
 
         match position_repo.get_pool_position_stats(pool_address).await {
             Ok(stats) => {
-                info!("✅ 池子统计: {} 个总仓位，{} 个唯一用户", stats.total_positions, stats.unique_users);
+                info!(
+                    "✅ 池子统计: {} 个总仓位，{} 个唯一用户",
+                    stats.total_positions, stats.unique_users
+                );
                 Ok(stats)
             }
             Err(e) => {
