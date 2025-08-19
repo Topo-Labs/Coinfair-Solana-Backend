@@ -276,14 +276,24 @@ jobs:
           cargo test --package server test_performance -- --nocapture || true
           echo "✅ 性能测试完成"
 
-# 📧 通知配置
-notifications:
-  slack:
-    if: always()
-    webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-    status: ${{ job.status }}
-    message: |
-      🚀 Coinfair CI/CD 状态: ${{ job.status }}
-      📋 分支: ${{ github.ref_name }}  
-      👤 提交者: ${{ github.actor }}
-      🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  # 📧 CI状态通知
+  notify-ci-status:
+    name: 📧 CI状态通知
+    runs-on: ubuntu-latest
+    needs: [quality-check, test-matrix, build-release, benchmark]
+    if: always() && !cancelled()
+    
+    steps:
+      - name: 📧 发送成功通知
+        if: contains(needs.*.result, 'success') && !contains(needs.*.result, 'failure')
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"✅ Coinfair CI/CD 流水线成功!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }} || true
+
+      - name: 🚨 发送失败通知
+        if: contains(needs.*.result, 'failure')
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"❌ Coinfair CI/CD 流水线失败!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }} || true
