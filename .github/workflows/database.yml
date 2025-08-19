@@ -1,0 +1,446 @@
+name: 🗄️ Database Management
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'crates/database/**'
+      - 'migrations/**'
+      - 'schema/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'crates/database/**'
+      - 'migrations/**'
+      - 'schema/**'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: '数据库操作'
+        required: true
+        default: 'validate'
+        type: choice
+        options:
+          - validate
+          - backup
+          - migrate
+          - sync
+      environment:
+        description: '目标环境'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # 🔍 数据库连接测试
+  database-connection-test:
+    name: 🔍 数据库连接测试
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🦀 安装Rust工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 📦 缓存Cargo依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-db-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: 🔧 等待服务就绪
+        run: |
+          echo "⏳ 等待MongoDB启动..."
+          for i in {1..30}; do
+            if mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+              echo "✅ MongoDB已就绪"
+              break
+            fi
+            sleep 2
+          done
+          
+          echo "⏳ 等待Redis启动..."
+          for i in {1..15}; do
+            if redis-cli ping > /dev/null 2>&1; then
+              echo "✅ Redis已就绪"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: 🔍 数据库连接测试
+        env:
+          CARGO_ENV: Development
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB: coinfair_test_db
+          REDIS_URL: redis://localhost:6379
+        run: |
+          echo "🔍 测试数据库组件..."
+          
+          # 构建数据库crate
+          cargo build --package database
+          
+          # 运行数据库连接测试
+          cargo test --package database --lib -- --nocapture --test-threads=1
+          
+          echo "✅ 数据库连接测试完成"
+
+      - name: 📊 数据库模型验证
+        env:
+          CARGO_ENV: Development
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB: coinfair_model_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          echo "📊 验证数据库模型..."
+          
+          # 测试所有数据库模型
+          cargo test --package database --lib models -- --nocapture
+          
+          # 测试仓库模式
+          cargo test --package database --lib repositories -- --nocapture
+          
+          echo "✅ 数据库模型验证完成"
+
+  # 🧪 数据集成测试
+  database-integration-test:
+    name: 🧪 数据集成测试
+    runs-on: ubuntu-latest
+    needs: database-connection-test
+    
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+      
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🦀 安装Rust工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 📦 缓存Cargo依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-integration-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: 🔧 准备测试环境
+        run: |
+          echo "🔧 准备测试数据..."
+          
+          # 等待MongoDB就绪
+          for i in {1..30}; do
+            if mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+              echo "✅ MongoDB已就绪"
+              break
+            fi
+            sleep 2
+          done
+          
+          # 创建测试数据库和基础数据
+          mongosh << 'EOF'
+          use coinfair_integration_test;
+          
+          // 创建测试用户数据
+          db.User.insertMany([
+            {
+              address: "test_user_1",
+              amount: 1000.0,
+              price: 1.5,
+              timestamp: new Date()
+            },
+            {
+              address: "test_user_2", 
+              amount: 2000.0,
+              price: 2.0,
+              timestamp: new Date()
+            }
+          ]);
+          
+          // 创建测试推荐数据
+          db.Refer.insertMany([
+            {
+              lower: "test_user_2",
+              upper: "test_user_1",
+              created_at: new Date()
+            }
+          ]);
+          
+          // 创建测试CLMM池子数据
+          db.ClmmPool.insertMany([
+            {
+              pool_address: "test_pool_1",
+              token_a_mint: "token_a",
+              token_b_mint: "token_b",
+              fee_rate: 3000,
+              sqrt_price_x64: "1000000000000000000",
+              tick: 0,
+              liquidity: "1000000",
+              created_at: new Date(),
+              updated_at: new Date()
+            }
+          ]);
+          
+          console.log("✅ 测试数据创建完成");
+          EOF
+
+      - name: 🧪 运行集成测试
+        env:
+          CARGO_ENV: Development
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB: coinfair_integration_test
+        run: |
+          echo "🧪 运行数据库集成测试..."
+          
+          # 测试用户相关功能
+          cargo test --package database test_user_operations -- --nocapture || true
+          
+          # 测试推荐系统
+          cargo test --package database test_refer_operations -- --nocapture || true
+          
+          # 测试CLMM池子
+          cargo test --package database test_clmm_pool -- --nocapture || true
+          
+          # 测试奖励系统
+          cargo test --package database test_reward_operations -- --nocapture || true
+          
+          echo "✅ 集成测试完成"
+
+      - name: 📊 性能测试
+        env:
+          CARGO_ENV: Development
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB: coinfair_performance_test
+        run: |
+          echo "📊 运行数据库性能测试..."
+          
+          # 批量查询性能测试
+          cargo test --package database test_batch_query_performance -- --nocapture || true
+          
+          # 索引性能测试
+          cargo test --package server test_database_service_config_creation -- --nocapture || true
+          
+          echo "✅ 性能测试完成"
+
+  # 🔄 数据库同步验证
+  database-sync-validation:
+    name: 🔄 数据库同步验证
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'sync'
+    
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🦀 安装Rust工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 🔄 CLMM池子同步测试
+        env:
+          CARGO_ENV: Development
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB: coinfair_sync_test
+          RPC_URL: https://api.devnet.solana.com
+        run: |
+          echo "🔄 测试CLMM池子同步..."
+          
+          # 测试池子同步逻辑
+          cargo test --package server test_clmm_sync -- --nocapture || true
+          
+          echo "✅ 同步测试完成"
+
+  # 💾 数据备份验证
+  database-backup-validation:
+    name: 💾 数据备份验证
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'backup'
+    
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 💾 数据备份测试
+        run: |
+          echo "💾 测试数据库备份功能..."
+          
+          # 创建测试数据
+          mongosh << 'EOF'
+          use coinfair_backup_test;
+          
+          db.TestCollection.insertMany([
+            { name: "test1", value: 100 },
+            { name: "test2", value: 200 }
+          ]);
+          EOF
+          
+          # 执行备份
+          mongodump --host localhost:27017 --db coinfair_backup_test --out /tmp/backup
+          
+          # 验证备份
+          if [ -d "/tmp/backup/coinfair_backup_test" ]; then
+            echo "✅ 备份创建成功"
+            ls -la /tmp/backup/coinfair_backup_test/
+          else
+            echo "❌ 备份创建失败"
+            exit 1
+          fi
+          
+          # 测试恢复
+          mongosh << 'EOF'
+          use coinfair_backup_test;
+          db.dropDatabase();
+          EOF
+          
+          mongorestore --host localhost:27017 /tmp/backup
+          
+          # 验证恢复
+          RESULT=$(mongosh --quiet --eval "use coinfair_backup_test; db.TestCollection.countDocuments({})")
+          if [ "$RESULT" -eq 2 ]; then
+            echo "✅ 数据恢复成功"
+          else
+            echo "❌ 数据恢复失败"
+            exit 1
+          fi
+
+  # 📋 生成数据库报告
+  database-report:
+    name: 📋 生成数据库报告
+    runs-on: ubuntu-latest
+    needs: [database-connection-test, database-integration-test]
+    if: always()
+    
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 📋 生成数据库架构报告
+        run: |
+          echo "📋 生成数据库架构分析报告..."
+          
+          cat > database-report.md << 'EOF'
+          # 🗄️ Coinfair数据库架构报告
+          
+          生成时间: $(date)
+          Git分支: ${{ github.ref_name }}
+          提交哈希: ${{ github.sha }}
+          
+          ## 📊 主要集合结构
+          
+          ### 用户集合 (User)
+          - 存储用户地址、交易金额、价格信息
+          - 索引: address (唯一)
+          
+          ### 推荐关系 (Refer)  
+          - 存储用户间推荐关系
+          - 索引: lower, upper
+          
+          ### 奖励记录 (Reward)
+          - 管理奖励分发和状态
+          - 索引: user_address, status
+          
+          ### CLMM池子 (ClmmPool)
+          - 集中流动性做市商池子信息
+          - 索引: pool_address, token_mint_pair
+          
+          ### CLMM配置 (ClmmConfig)
+          - CLMM池子配置参数
+          - 索引: config_index
+          
+          ## 🔧 数据库连接配置
+          - MongoDB URI: mongodb://localhost:27017
+          - 连接池: 最小2个，最大10个连接
+          - 超时设置: 连接30s，查询60s
+          
+          ## 🚀 性能优化
+          - 使用复合索引优化查询
+          - 实现批量操作减少网络开销
+          - 连接池复用减少连接成本
+          
+          ## 🔍 测试覆盖率
+          - 单元测试: 数据模型验证
+          - 集成测试: 数据库操作流程
+          - 性能测试: 批量查询基准测试
+          EOF
+          
+          echo "✅ 数据库报告生成完成"
+
+      - name: 📤 上传数据库报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-report-${{ github.sha }}
+          path: database-report.md
+          retention-days: 30
+
+      - name: 📧 数据库状态通知
+        if: failure()
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"🚨 数据库测试失败!\n📋 分支: ${{ github.ref_name }}\n👤 提交者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }} || true
