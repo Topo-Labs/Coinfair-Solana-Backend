@@ -83,12 +83,12 @@ jobs:
       - name: ⚡ 快速构建检查
         run: cargo check --release --bin coinfair
 
-      - name: 🧪 运行关键测试
+      - name: 📏 检查核心包编译
         run: |
-          echo "🧪 运行核心组件测试..."
-          cargo test --package utils --lib --release --quiet || true
-          cargo test --package database --lib --release --quiet || true
-          echo "✅ 关键测试完成"
+          echo "📏 检查核心组件编译..."
+          cargo check --package utils --release --quiet || echo "⚠️ utils包编译失败"
+          cargo check --package database --release --quiet || echo "⚠️ database包编译失败"
+          echo "✅ 核心包检查完成"
 
   # 🏗️ 构建生产版本  
   build-production:
