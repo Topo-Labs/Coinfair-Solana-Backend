@@ -1,22 +1,29 @@
-name: Rust (No Tests - Accelerated)
+name: Rust (Disabled - Replaced by CI.yml)
 
+# ⚠️ 此workflow已禁用以避免与ci.yml重复
+# ci.yml 已包含相同功能且更完整
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      notice:
+        description: '⚠️ 此workflow已禁用，请使用ci.yml进行代码检查'
+        required: false
+        default: 'workflow_disabled'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  disabled-notice:
     runs-on: ubuntu-latest
-
+    if: github.event.inputs.notice != ''
+    
     steps:
-    - uses: actions/checkout@v4
-    - name: 🚀 Fast Build Check Only
-      run: |
-        echo "🚀 执行快速构建检查（完全跳过测试）..."
-        cargo check --bin coinfair --release
-        echo "✅ 快速检查完成，已跳过所有测试以加速流程"
+      - name: 🚨 Workflow已禁用通知
+        run: |
+          echo "⚠️  Rust workflow已禁用"
+          echo "🔄 请使用ci.yml进行代码检查和构建"
+          echo "🎯 原因: 避免与ci.yml的重复编译"
+          echo "✅ ci.yml包含相同功能且更完整"
+          echo "⏱️  节省时间: ~4-5分钟的重复编译"
+          exit 0

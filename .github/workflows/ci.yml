@@ -54,63 +54,11 @@ jobs:
           cargo check --bin coinfair --release || echo "⚠️ 主程序编译有问题"
           echo "✅ 快速检查完成（已跳过所有测试）"
 
-  # 🏗️ 构建发布版本
-  build-release:
-    name: 🏗️ 构建发布版本
-    runs-on: ubuntu-latest
-    needs: [quality-check]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-    
-    steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-
-      - name: 🦀 安装Rust工具链
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 📦 缓存Cargo依赖  
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-release-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: 🚀 构建发布版本（纯净构建）
-        env:
-          CARGO_BUILD_JOBS: 1
-        run: |
-          echo "🚀 开始发布构建（纯净构建模式）..."
-          # 只构建主要的二进制文件，设置环境变量避免测试
-          RUST_TEST_THREADS=0 cargo build --release --bin coinfair || echo "⚠️ 发布构建失败，这可能是由于Solana合约依赖问题"
-          
-          if [ -f target/release/coinfair ]; then
-            echo "📊 构建产物信息:"
-            ls -la target/release/
-            file target/release/coinfair
-            du -h target/release/coinfair
-          else
-            echo "⚠️ 发布版本构建未完成，但CI将继续进行"
-          fi
-
-      - name: 📦 上传构建产物
-        uses: actions/upload-artifact@v4
-        if: success() && hashFiles('target/release/coinfair') != ''
-        with:
-          name: coinfair-binary-${{ github.sha }}
-          path: target/release/coinfair
-          retention-days: 30
-
   # 📧 CI状态通知
   notify-ci-status:
     name: 📧 CI状态通知
     runs-on: ubuntu-latest
-    needs: [quality-check, build-release]
+    needs: [quality-check]
     if: always() && !cancelled()
     
     steps:
