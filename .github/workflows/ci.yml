@@ -47,12 +47,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: ⚡ 快速编译检查
+      - name: ⚡ 快速编译检查（无测试）
         run: |
-          echo "⚡ 快速编译检查..."
-          # 只检查主要二进制文件
-          cargo check --bin coinfair || echo "⚠️ 主程序编译有问题"
-          echo "✅ 快速检查完成"
+          echo "⚡ 快速编译检查（跳过测试）..."
+          # 只检查主要二进制文件，明确排除测试
+          cargo check --bin coinfair --release || echo "⚠️ 主程序编译有问题"
+          echo "✅ 快速检查完成（已跳过所有测试）"
 
   # 🏗️ 构建发布版本
   build-release:
@@ -81,11 +81,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: 🚀 构建发布版本
+      - name: 🚀 构建发布版本（纯净构建）
+        env:
+          CARGO_BUILD_JOBS: 1
         run: |
-          echo "🚀 开始发布构建..."
-          # 只构建主要的二进制文件
-          cargo build --release --bin coinfair || echo "⚠️ 发布构建失败，这可能是由于Solana合约依赖问题"
+          echo "🚀 开始发布构建（纯净构建模式）..."
+          # 只构建主要的二进制文件，设置环境变量避免测试
+          RUST_TEST_THREADS=0 cargo build --release --bin coinfair || echo "⚠️ 发布构建失败，这可能是由于Solana合约依赖问题"
           
           if [ -f target/release/coinfair ]; then
             echo "📊 构建产物信息:"

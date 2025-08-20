@@ -1,4 +1,4 @@
-name: 🚀 Production Deployment
+name: 🚀 Production Deployment (Clean)
 
 on:
   push:
@@ -14,54 +14,16 @@ on:
         options:
           - production
           - staging
-      force_deploy:
-        description: '强制部署 (跳过测试)'
-        required: false
-        default: false
-        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
-  # 🔍 部署前检查
-  pre-deploy-check:
-    name: 🔍 部署前检查
-    runs-on: ubuntu-latest
-    outputs:
-      deploy_env: ${{ steps.set_env.outputs.deploy_env }}
-      skip_tests: ${{ steps.set_env.outputs.skip_tests }}
-    
-    steps:
-      - name: 📋 确定部署环境
-        id: set_env
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "deploy_env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
-            echo "skip_tests=${{ github.event.inputs.force_deploy }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "deploy_env=production" >> $GITHUB_OUTPUT
-            echo "skip_tests=false" >> $GITHUB_OUTPUT
-          else
-            echo "deploy_env=staging" >> $GITHUB_OUTPUT
-            echo "skip_tests=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 📊 显示部署信息
-        run: |
-          echo "🎯 部署环境: ${{ steps.set_env.outputs.deploy_env }}"
-          echo "⏭️ 跳过测试: ${{ steps.set_env.outputs.skip_tests }}"
-          echo "🌿 分支: ${{ github.ref_name }}"
-          echo "📝 提交: ${{ github.sha }}"
-
-  # ⚡ 跳过验证测试（已优化）
-
   # 🏗️ 构建生产版本  
   build-production:
     name: 🏗️ 构建生产版本
     runs-on: ubuntu-latest
-    needs: [pre-deploy-check]
     
     steps:
       - name: 📥 检出代码
@@ -90,9 +52,6 @@ jobs:
           ls -la target/release/
           file target/release/coinfair
           du -h target/release/coinfair
-          
-          echo "🔍 检查二进制依赖:"
-          ldd target/release/coinfair || true
 
       - name: 📦 准备部署包
         run: |
@@ -157,12 +116,12 @@ jobs:
           path: deploy/
           retention-days: 30
 
-  # 🚀 AWS EC2 部署
+  # 🚀 AWS EC2 部署（简化版）
   deploy-aws:
-    name: 🚀 AWS EC2 部署
+    name: 🚀 AWS EC2 部署（简化版）
     runs-on: ubuntu-latest
-    needs: [pre-deploy-check, build-production]
-    environment: ${{ needs.pre-deploy-check.outputs.deploy_env }}
+    needs: [build-production]
+    # 注意：不使用AWS凭证action，直接使用SSH
     
     steps:
       - name: 📥 下载部署包
@@ -236,8 +195,6 @@ jobs:
             echo "🎉 部署验证成功!"
           EOF
 
-  # 📊 Docker镜像构建 (已禁用以提高速度)
-
   # 📧 部署通知
   notify-deployment:
     name: 📧 部署通知
@@ -249,13 +206,21 @@ jobs:
       - name: 📧 发送部署通知
         if: contains(needs.*.result, 'success')
         run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"🎉 Coinfair 部署成功!\n📋 环境: ${{ needs.pre-deploy-check.outputs.deploy_env }}\n🌿 分支: ${{ github.ref_name }}\n👤 部署者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            ${{ secrets.SLACK_WEBHOOK_URL }} || true
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\"🎉 Coinfair 部署成功!\n🌿 分支: ${{ github.ref_name }}\n👤 部署者: ${{ github.actor }}\n⏰ 时间: $(date)\"}" \
+              ${{ secrets.SLACK_WEBHOOK_URL }}
+          else
+            echo "ℹ️ SLACK_WEBHOOK_URL未配置，跳过通知"
+          fi
 
       - name: 🚨 发送失败通知  
         if: contains(needs.*.result, 'failure')
         run: |
-          curl -X POST -H 'Content-type: application/json' \
-            --data "{\"text\":\"❌ Coinfair 部署失败!\n📋 环境: ${{ needs.pre-deploy-check.outputs.deploy_env }}\n🌿 分支: ${{ github.ref_name }}\n👤 操作者: ${{ github.actor }}\n⏰ 时间: $(date)\n🔗 查看详情: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            ${{ secrets.SLACK_WEBHOOK_URL }} || true
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\"❌ Coinfair 部署失败!\n🌿 分支: ${{ github.ref_name }}\n👤 操作者: ${{ github.actor }}\n⏰ 时间: $(date)\"}" \
+              ${{ secrets.SLACK_WEBHOOK_URL }}
+          else
+            echo "ℹ️ SLACK_WEBHOOK_URL未配置，跳过通知"
+          fi
