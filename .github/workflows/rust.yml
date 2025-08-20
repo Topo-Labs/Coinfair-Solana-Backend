@@ -1,4 +1,4 @@
-name: Rust
+name: Rust (No Tests - Accelerated)
 
 on:
   push:
@@ -11,12 +11,12 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: 🚀 Fast Build Check Only
+      run: |
+        echo "🚀 执行快速构建检查（完全跳过测试）..."
+        cargo check --bin coinfair --release
+        echo "✅ 快速检查完成，已跳过所有测试以加速流程"

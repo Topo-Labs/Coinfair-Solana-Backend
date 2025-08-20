@@ -1,14 +1,29 @@
-# 完全禁用测试构建
+# 🚀 加速构建配置 - 完全禁用测试编译
+[build]
+# 排除测试目标，只构建二进制文件
+target-dir = "target"
+
 [profile.dev]
 panic = "abort"
+# 禁用调试信息以加速编译
+debug = false
+opt-level = 0
 
 [profile.release]  
 panic = "abort"
 lto = true
 codegen-units = 1
+# 最大优化二进制文件大小和性能
+opt-level = 3
 
-# 禁用所有测试相关的构建
+# 完全禁用测试profile，避免意外的测试编译
 [profile.test]
 opt-level = 0
 debug = false
 split-debuginfo = "off"
+panic = "abort"
+
+# 禁用基准测试profile
+[profile.bench]
+opt-level = 0
+debug = false
