@@ -4,6 +4,13 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+    # 添加路径过滤，避免文档更改触发部署
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'screenshots/**'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
     inputs:
       environment:
@@ -14,59 +21,61 @@ on:
         options:
           - production
           - staging
+      force_rebuild:
+        description: '强制重新构建（忽略CI缓存）'
+        required: false
+        default: false
+        type: boolean
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
-  # 🏗️ 构建生产版本  
-  build-production:
-    name: 🏗️ 构建生产版本
+  # 🔄 复用CI构建产物（避免重复构建）
+  reuse-ci-build:
+    name: 🔄 复用CI构建产物
     runs-on: ubuntu-latest
+    if: github.event.inputs.force_rebuild != 'true'
     
     steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-
-      - name: 🦀 安装Rust工具链
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 📦 缓存Cargo依赖
-        uses: actions/cache@v4
+      - name: 📥 下载CI构建产物
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-production-cargo-${{ hashFiles('**/Cargo.lock') }}
+          name: coinfair-binary-${{ github.sha }}
+          path: ./
+        continue-on-error: true
 
-      - name: 🚀 构建生产版本
+      - name: 🔍 检查CI构建产物
+        id: check-ci-build
         run: |
-          echo "🚀 开始生产构建..."
-          CARGO_ENV=Production cargo build --release --bin coinfair
-          
-          echo "📊 构建产物信息:"
-          ls -la target/release/
-          file target/release/coinfair
-          du -h target/release/coinfair
+          if [ -f "coinfair" ]; then
+            echo "✅ 找到CI构建产物，跳过重新构建"
+            echo "has_ci_build=true" >> $GITHUB_OUTPUT
+            chmod +x coinfair
+            ls -la coinfair
+            file coinfair
+            du -h coinfair
+          else
+            echo "⚠️ 未找到CI构建产物，将执行备用构建"
+            echo "has_ci_build=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: 📦 准备部署包
+      - name: 📦 准备部署包（复用构建）
+        if: steps.check-ci-build.outputs.has_ci_build == 'true'
         run: |
-          echo "📦 创建部署包..."
+          echo "📦 创建部署包（使用CI构建产物）..."
           mkdir -p deploy
-          cp target/release/coinfair deploy/
-          cp .env.production deploy/.env
-          cp docker-compose.yaml deploy/
+          cp coinfair deploy/
+          cp .env.production deploy/.env || echo "⚠️ .env.production不存在，跳过"
+          cp docker-compose.yaml deploy/ || echo "⚠️ docker-compose.yaml不存在，跳过"
           
           # 创建部署脚本
           cat > deploy/deploy.sh << 'EOF'
           #!/bin/bash
           set -e
           
-          echo "🚀 开始部署Coinfair..."
+          echo "🚀 开始部署Coinfair（使用CI预构建版本）..."
           
           # 备份当前版本
           if [ -f coinfair ]; then
@@ -80,10 +89,10 @@ jobs:
           
           # 部署新版本
           chmod +x coinfair
-          echo "✅ 新版本部署完成"
+          echo "✅ 新版本部署完成（CI预构建）"
           
           # 启动数据库
-          docker-compose up -d
+          docker-compose up -d || echo "⚠️ Docker compose失败，继续..."
           sleep 5
           
           # 启动服务
@@ -106,21 +115,121 @@ jobs:
           
           chmod +x deploy/deploy.sh
           
-          echo "📊 部署包内容:"
+          echo "📊 部署包内容（CI预构建版本）:"
           ls -la deploy/
 
-      - name: 📦 上传部署包
+      - name: 📦 上传部署包（复用版本）
+        if: steps.check-ci-build.outputs.has_ci_build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coinfair-deployment-${{ github.sha }}
           path: deploy/
           retention-days: 30
 
-  # 🚀 AWS EC2 部署（简化版）
+  # 🏗️ 备用构建（仅在CI构建不可用时使用）  
+  fallback-build:
+    name: 🏗️ 备用构建
+    runs-on: ubuntu-latest
+    needs: [reuse-ci-build]
+    if: always() && (failure() || github.event.inputs.force_rebuild == 'true') # 失败时或强制重建时运行
+    
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🦀 安装Rust工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 📦 缓存Cargo依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-fallback-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: 🚀 备用构建
+        run: |
+          echo "🚀 执行备用构建（CI构建不可用）..."
+          CARGO_ENV=Production cargo build --release --bin coinfair
+          
+          echo "📊 构建产物信息:"
+          ls -la target/release/
+          file target/release/coinfair
+          du -h target/release/coinfair
+
+      - name: 📦 准备部署包（备用构建）
+        run: |
+          echo "📦 创建部署包（备用构建版本）..."
+          mkdir -p deploy
+          cp target/release/coinfair deploy/
+          cp .env.production deploy/.env || echo "⚠️ .env.production不存在，跳过"
+          cp docker-compose.yaml deploy/ || echo "⚠️ docker-compose.yaml不存在，跳过"
+          
+          # 创建部署脚本（备用版本）
+          cat > deploy/deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🚀 开始部署Coinfair（备用构建版本）..."
+          
+          # 备份当前版本
+          if [ -f coinfair ]; then
+            cp coinfair coinfair.backup.$(date +%Y%m%d_%H%M%S)
+            echo "✅ 已备份当前版本"
+          fi
+          
+          # 停止现有服务
+          pkill -f coinfair || true
+          sleep 2
+          
+          # 部署新版本
+          chmod +x coinfair
+          echo "✅ 新版本部署完成（备用构建）"
+          
+          # 启动数据库
+          docker-compose up -d || echo "⚠️ Docker compose失败，继续..."
+          sleep 5
+          
+          # 启动服务
+          nohup ./coinfair > coinfair.log 2>&1 &
+          sleep 3
+          
+          # 健康检查
+          for i in {1..30}; do
+            if curl -f http://localhost:8000/api/v1/health > /dev/null 2>&1; then
+              echo "✅ 服务启动成功"
+              exit 0
+            fi
+            echo "⏳ 等待服务启动... ($i/30)"
+            sleep 2
+          done
+          
+          echo "❌ 服务启动超时"
+          exit 1
+          EOF
+          
+          chmod +x deploy/deploy.sh
+          
+          echo "📊 部署包内容（备用构建）:"
+          ls -la deploy/
+
+      - name: 📦 上传部署包（备用版本）
+        uses: actions/upload-artifact@v4
+        with:
+          name: coinfair-deployment-${{ github.sha }}
+          path: deploy/
+          retention-days: 30
+
+  # 🚀 AWS EC2 部署（使用复用构建）
   deploy-aws:
     name: 🚀 AWS EC2 部署（简化版）
     runs-on: ubuntu-latest
-    needs: [build-production]
+    needs: [reuse-ci-build, fallback-build]
+    if: always() && (success() || contains(needs.*.result, 'success'))
     # 注意：不使用AWS凭证action，直接使用SSH
     
     steps:
