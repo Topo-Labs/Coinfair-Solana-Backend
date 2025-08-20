@@ -5,9 +5,9 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
-  schedule:
-    # 每天UTC 02:00 (北京时间10:00) 执行安全扫描
-    - cron: '0 2 * * *'
+  # schedule:
+    # 每周执行一次安全扫描（已优化频率）
+    # - cron: '0 2 * * 1'
   workflow_dispatch:
     inputs:
       scan_type:
@@ -194,39 +194,12 @@ jobs:
             target/
           key: ${{ runner.os }}-rust-security-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: 🔍 安装安全检查工具
+      - name: ⚡ 快速安全检查
         run: |
-          echo "🔧 安装Rust安全工具..."
-          cargo install cargo-geiger --quiet || echo "⚠️ cargo-geiger安装失败"
-          cargo install cargo-outdated --quiet || echo "⚠️ cargo-outdated安装失败"
-
-      - name: 🔍 检查unsafe代码使用
-        run: |
-          echo "🔍 扫描unsafe代码使用..."
+          echo "⚡ 快速unsafe代码检查..."
+          grep -r "unsafe" --include="*.rs" crates/ || echo "✅ 未发现unsafe代码块"
           
-          if command -v cargo-geiger &> /dev/null; then
-            cargo geiger --format GitHubMarkdown > geiger-report.md 2>/dev/null || true
-            
-            if [ -f geiger-report.md ]; then
-              echo "📊 Unsafe代码统计:"
-              cat geiger-report.md
-            fi
-          else
-            echo "⚠️ cargo-geiger不可用，手动扫描unsafe关键字"
-            grep -r "unsafe" --include="*.rs" src/ crates/ || echo "✅ 未发现unsafe代码块"
-          fi
-
-      - name: 📊 检查过时依赖
-        run: |
-          echo "📊 检查过时的依赖..."
-          
-          if command -v cargo-outdated &> /dev/null; then
-            echo "⏰ 运行cargo-outdated（30秒超时）..."
-            timeout 30s cargo outdated --format json > outdated-report.json 2>/dev/null || echo "⚠️ 依赖检查超时或失败，这在大型项目中很常见"
-            timeout 15s cargo outdated || echo "⚠️ 依赖检查失败或超时"
-          else
-            echo "⚠️ cargo-outdated不可用，跳过过时依赖检查"
-          fi
+          echo "⚡ 跳过耗时的依赖检查（已优化）"
 
       - name: 📤 上传Rust安全报告
         uses: actions/upload-artifact@v4

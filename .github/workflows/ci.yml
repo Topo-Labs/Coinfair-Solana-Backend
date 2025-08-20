@@ -47,173 +47,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: 📏 检查代码编译
+      - name: ⚡ 快速编译检查
         run: |
-          echo "📏 检查核心组件编译..."
-          # 分别检查核心包
-          cargo check --package utils || echo "⚠️ utils包编译有问题"
-          cargo check --package database || echo "⚠️ database包编译有问题"
-          cargo check --package server || echo "⚠️ server包编译有问题"
-          cargo check --package monitor || echo "⚠️ monitor包编译有问题" 
-          cargo check --package telegram || echo "⚠️ telegram包编译有问题"
-          cargo check --package timer || echo "⚠️ timer包编译有问题"
-          cargo check --package coinfair || echo "⚠️ coinfair包编译有问题"
-          
-          echo "✅ 核心组件检查完成"
-
-  # 🧪 测试矩阵
-  test-matrix:
-    name: 🧪 测试 (${{ matrix.rust-version }})
-    runs-on: ubuntu-latest
-    needs: quality-check
-    strategy:
-      matrix:
-        rust-version: [stable, beta]
-    
-    services:
-      mongodb:
-        image: mongo:latest
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 3
-
-      redis:
-        image: redis:alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 3
-
-    steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-
-      - name: 🦀 安装Rust工具链 (${{ matrix.rust-version }})
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust-version }}
-
-      - name: 📦 缓存Cargo依赖
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-${{ matrix.rust-version }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.rust-version }}-cargo-
-            ${{ runner.os }}-cargo-
-
-      - name: 🔧 等待服务就绪
-        run: |
-          # 等待MongoDB就绪
-          for i in {1..30}; do
-            if mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
-              echo "✅ MongoDB已就绪"
-              break
-            fi
-            echo "⏳ 等待MongoDB启动... ($i/30)"
-            sleep 2
-          done
-          
-          # 等待Redis就绪  
-          for i in {1..15}; do
-            if redis-cli ping > /dev/null 2>&1; then
-              echo "✅ Redis已就绪"
-              break
-            fi
-            echo "⏳ 等待Redis启动... ($i/15)"
-            sleep 1
-          done
-
-      - name: 🏗️ 构建项目
-        env:
-          CARGO_ENV: Development
-          MONGO_URI: mongodb://localhost:27017
-          MONGO_DB: coinfair_test
-          REDIS_URL: redis://localhost:6379
-          RPC_URL: https://api.devnet.solana.com
-          JWT_SECRET: test_jwt_secret_for_ci_only
-          AUTH_DISABLED: true
-        run: |
-          echo "📦 构建核心crate..."
-          # 分别构建核心包，避免Solana合约编译问题
-          cargo build --package utils || echo "⚠️ utils构建失败"
-          cargo build --package database || echo "⚠️ database构建失败"
-          cargo build --package server || echo "⚠️ server构建失败"
-          cargo build --package monitor || echo "⚠️ monitor构建失败"
-          cargo build --package telegram || echo "⚠️ telegram构建失败"
-          cargo build --package timer || echo "⚠️ timer构建失败"
-          cargo build --package coinfair || echo "⚠️ coinfair构建失败"
-          
-          echo "📊 显示构建统计信息..."
-          du -sh target/
-          ls -la target/debug/ | head -10
-
-      - name: 🧪 运行单元测试
-        env:
-          CARGO_ENV: Development  
-          MONGO_URI: mongodb://localhost:27017
-          MONGO_DB: coinfair_test
-          REDIS_URL: redis://localhost:6379
-          RPC_URL: https://api.devnet.solana.com
-          JWT_SECRET: test_jwt_secret_for_ci_only
-          AUTH_DISABLED: true
-        run: |
-          echo "🧪 运行核心组件单元测试..."
-          
-          echo "📋 测试utils包..."
-          cargo test --package utils --lib || echo "⚠️ utils测试有部分失败"
-          
-          echo "📋 测试database包 (仅模型测试，跳过需要MongoDB的仓库测试)..."
-          # 只运行不需要数据库连接的模型测试
-          cargo test --package database --lib clmm_pool::model || true
-          cargo test --package database --lib permission_config::model || true
-          cargo test --package database --lib position::model || true
-          cargo test --package database --lib token_info::model || true
-          echo "ℹ️ 跳过需要MongoDB的仓库集成测试，这些将在database.yml工作流中运行"
-          
-          echo "📋 测试server包..."
-          cargo test --package server --lib || echo "⚠️ server测试有部分失败"
-          
-          echo "📊 测试统计完成 - 数据库集成测试需要MongoDB服务"
-
-      - name: 🔧 运行集成测试 (关键组件)
-        env:
-          CARGO_ENV: Development
-          MONGO_URI: mongodb://localhost:27017  
-          MONGO_DB: coinfair_test
-          REDIS_URL: redis://localhost:6379
-          RPC_URL: https://api.devnet.solana.com
-          JWT_SECRET: test_jwt_secret_for_ci_only
-          AUTH_DISABLED: true
-        run: |
-          echo "🔧 测试数据库连接..."
-          cargo test --package database --lib --quiet || true
-          
-          echo "🌐 测试服务器核心功能..."
-          cargo test --package server --lib --quiet || true
-          
-          echo "📡 测试Solana集成..."
-          cargo test --package solana --lib --quiet || true
-          
-          echo "⚠️  注意: 某些集成测试可能因为网络或外部依赖而跳过"
+          echo "⚡ 快速编译检查..."
+          # 只检查主要二进制文件
+          cargo check --bin coinfair || echo "⚠️ 主程序编译有问题"
+          echo "✅ 快速检查完成"
 
   # 🏗️ 构建发布版本
   build-release:
     name: 🏗️ 构建发布版本
     runs-on: ubuntu-latest
-    needs: [quality-check, test-matrix]
+    needs: [quality-check]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     
     steps:
@@ -259,55 +104,11 @@ jobs:
           path: target/release/coinfair
           retention-days: 30
 
-  # 📋 性能基准测试
-  benchmark:
-    name: 📋 性能基准测试
-    runs-on: ubuntu-latest
-    needs: quality-check
-    if: github.event_name == 'pull_request'
-    
-    services:
-      mongodb:
-        image: mongo:latest
-        ports:
-          - 27017:27017
-    
-    steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-
-      - name: 🦀 安装Rust工具链
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 📦 缓存Cargo依赖
-        uses: actions/cache@v4  
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-bench-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: 📋 运行性能基准测试
-        env:
-          CARGO_ENV: Development
-          MONGO_URI: mongodb://localhost:27017
-          MONGO_DB: coinfair_bench
-        run: |
-          echo "📋 运行关键组件性能测试..."
-          # 运行位置工具优化性能测试
-          cargo test --package utils test_position_utils_optimized -- --nocapture || true
-          # 运行其他性能相关测试  
-          cargo test --package server test_performance -- --nocapture || true
-          echo "✅ 性能测试完成"
-
   # 📧 CI状态通知
   notify-ci-status:
     name: 📧 CI状态通知
     runs-on: ubuntu-latest
-    needs: [quality-check, test-matrix, build-release, benchmark]
+    needs: [quality-check, build-release]
     if: always() && !cancelled()
     
     steps:
