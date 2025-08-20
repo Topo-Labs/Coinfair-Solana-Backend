@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use anchor_client::{Client, Cluster};
+use anchor_client::{Client, ClientError, Cluster};
 use anchor_lang::prelude::AccountMeta;
 use anyhow::{format_err, Result};
 use arrayref::array_ref;
@@ -1803,6 +1803,7 @@ fn main() -> Result<()> {
             let mut upper_referral: Option<Pubkey> = None;
             let mut upper_upper: Option<Pubkey> = None;
             let mut upper_upper_token_account: Option<Pubkey> = None;
+            let mut payer_referral: Option<Pubkey> = None;
 
             // 根据amm_config_index查询AmmConfig账户地址
             let (amm_config_key, __bump) = Pubkey::find_program_address(
@@ -1819,37 +1820,42 @@ fn main() -> Result<()> {
 
             let referral = pool_config.referral_program.clone();
 
-            let (payer_referral, _) =
+            let (payer_referral_pda, _) =
                 Pubkey::find_program_address(&[b"referral", &payer_key.to_bytes()], &referral_program.id());
 
-            let payer_referral_account: ReferralAccount = referral_program.account(payer_referral)?;
+            let payer_referral_account_data: Result<ReferralAccount, ClientError> =
+                referral_program.account(payer_referral_pda);
 
-            match payer_referral_account.upper {
-                Some(upper_key) => {
-                    upper = Some(upper_key);
-                    upper_token_account = Some(get_associated_token_address_with_program_id(
-                        &upper_key,
-                        &input,
-                        &token_program_id,
-                    ));
-                    let (upper_referral_pda, _) =
-                        Pubkey::find_program_address(&[b"referral", &upper_key.to_bytes()], &referral_program.id());
-                    upper_referral = Some(upper_referral_pda);
-                    let upper_referral_account: ReferralAccount = referral_program.account(upper_referral_pda)?;
+            match payer_referral_account_data {
+                Ok(account_data) => match account_data.upper {
+                    Some(upper_key) => {
+                        payer_referral = Some(payer_referral_pda);
+                        upper = Some(upper_key);
+                        upper_token_account = Some(get_associated_token_address_with_program_id(
+                            &upper_key,
+                            &input,
+                            &token_program_id,
+                        ));
+                        let (upper_referral_pda, _) =
+                            Pubkey::find_program_address(&[b"referral", &upper_key.to_bytes()], &referral_program.id());
+                        upper_referral = Some(upper_referral_pda);
+                        let upper_referral_account: ReferralAccount = referral_program.account(upper_referral_pda)?;
 
-                    match upper_referral_account.upper {
-                        Some(upper_upper_key) => {
-                            upper_upper = Some(upper_upper_key);
-                            upper_upper_token_account = Some(get_associated_token_address_with_program_id(
-                                &upper_upper_key,
-                                &input,
-                                &token_program_id,
-                            ));
+                        match upper_referral_account.upper {
+                            Some(upper_upper_key) => {
+                                upper_upper = Some(upper_upper_key);
+                                upper_upper_token_account = Some(get_associated_token_address_with_program_id(
+                                    &upper_upper_key,
+                                    &input,
+                                    &token_program_id,
+                                ));
+                            }
+                            None => {}
                         }
-                        None => {}
                     }
-                }
-                None => {}
+                    None => {}
+                },
+                Err(_) => {}
             }
 
             // load mult account

@@ -290,7 +290,7 @@ impl SwapV3InstructionBuilder {
         is_base_input: bool,
         // 推荐系统相关参数
         input_mint: &Pubkey,
-        payer_referral: &Pubkey,
+        payer_referral: Option<&Pubkey>,
         upper: Option<&Pubkey>,
         upper_token_account: Option<&Pubkey>,
         upper_referral: Option<&Pubkey>,
@@ -326,10 +326,16 @@ impl SwapV3InstructionBuilder {
 
         // 构建账户列表 - 按照SwapV3合约要求的顺序
         let mut accounts = vec![
-            AccountMetaBuilder::signer(*payer),                   // payer
-            AccountMetaBuilder::readonly(*input_mint, false),     // input_mint
-            AccountMetaBuilder::readonly(*payer_referral, false), // payer_referral
+            AccountMetaBuilder::signer(*payer),               // payer
+            AccountMetaBuilder::readonly(*input_mint, false), // input_mint
         ];
+
+        // 添加可选的payer_referral账户
+        if let Some(payer_referral_pubkey) = payer_referral {
+            accounts.push(AccountMetaBuilder::readonly(*payer_referral_pubkey, false));
+        } else {
+            accounts.push(AccountMetaBuilder::readonly(*program_id, false)); // 占位符
+        }
 
         // 添加可选的upper账户
         if let Some(upper_pubkey) = upper {

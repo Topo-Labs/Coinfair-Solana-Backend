@@ -426,6 +426,7 @@ impl<'a> ServiceHelpers<'a> {
 }
 
 /// SwapV3服务辅助工具 - 专门处理SwapV3推荐系统相关逻辑
+#[allow(dead_code)]
 pub struct SwapV3ServiceHelper<'a> {
     rpc_client: &'a RpcClient,
     service_helper: ServiceHelpers<'a>,
@@ -589,147 +590,150 @@ impl<'a> SwapV3ServiceHelper<'a> {
         }))
     }
 
-    /// 构建SwapV3指令
-    pub async fn build_swap_v3_instruction(
-        &self,
-        user_wallet: &Pubkey,
-        input_mint: &str,
-        output_mint: &str,
-        amount: u64,
-        other_amount_threshold: u64,
-        sqrt_price_limit_x64: Option<u128>,
-        is_base_input: bool,
-        referral_accounts: Option<SwapV3ReferralAccounts>,
-    ) -> Result<solana_sdk::instruction::Instruction> {
-        LogUtils::log_operation_start("构建SwapV3指令", &format!("用户: {}", user_wallet));
+    // /// 构建SwapV3指令
+    // pub async fn build_swap_v3_instruction(
+    //     &self,
+    //     user_wallet: &Pubkey,
+    //     input_mint: &str,
+    //     output_mint: &str,
+    //     amount: u64,
+    //     other_amount_threshold: u64,
+    //     sqrt_price_limit_x64: Option<u128>,
+    //     is_base_input: bool,
+    //     referral_accounts: Option<SwapV3ReferralAccounts>,
+    // ) -> Result<solana_sdk::instruction::Instruction> {
+    //     LogUtils::log_operation_start("构建SwapV3指令", &format!("用户: {}", user_wallet));
 
-        let pool_address = self
-            .service_helper
-            .calculate_pool_address_pda(input_mint, output_mint)?;
-        let pool_pubkey = Pubkey::from_str(&pool_address)?;
-        let input_mint_pubkey = Pubkey::from_str(input_mint)?;
-        let output_mint_pubkey = Pubkey::from_str(output_mint)?;
+    //     let pool_address = self
+    //         .service_helper
+    //         .calculate_pool_address_pda(input_mint, output_mint)?;
+    //     let pool_pubkey = Pubkey::from_str(&pool_address)?;
+    //     let input_mint_pubkey = Pubkey::from_str(input_mint)?;
+    //     let output_mint_pubkey = Pubkey::from_str(output_mint)?;
 
-        // 获取必要的程序ID和配置
-        let raydium_program_id = ConfigManager::get_raydium_program_id()?;
-        let referral_program_id = ConfigManager::get_referral_program_id()?;
-        let amm_config_index = ConfigManager::get_amm_config_index();
+    //     // 获取必要的程序ID和配置
+    //     let raydium_program_id = ConfigManager::get_raydium_program_id()?;
+    //     let referral_program_id = ConfigManager::get_referral_program_id()?;
+    //     let amm_config_index = ConfigManager::get_amm_config_index();
 
-        // 计算各种PDA地址
-        let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
-        let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_pubkey);
+    //     // 计算各种PDA地址
+    //     let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
+    //     let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_pubkey);
 
-        // 获取用户代币账户
-        let input_token_account =
-            spl_associated_token_account::get_associated_token_address(user_wallet, &input_mint_pubkey);
-        let output_token_account =
-            spl_associated_token_account::get_associated_token_address(user_wallet, &output_mint_pubkey);
+    //     // 获取用户代币账户
+    //     let input_token_account =
+    //         spl_associated_token_account::get_associated_token_address(user_wallet, &input_mint_pubkey);
+    //     let output_token_account =
+    //         spl_associated_token_account::get_associated_token_address(user_wallet, &output_mint_pubkey);
+    //     info!("input_token_account: {}", input_token_account);
+    //     info!("output_token_account: {}", output_token_account);
+    //     // 获取池子状态来确定vault地址
+    //     let pool_account = self.rpc_client.get_account(&pool_pubkey)?;
+    //     let pool_state: raydium_amm_v3::states::PoolState =
+    //         self.service_helper.deserialize_anchor_account(&pool_account)?;
 
-        // 获取池子状态来确定vault地址
-        let pool_account = self.rpc_client.get_account(&pool_pubkey)?;
-        let pool_state: raydium_amm_v3::states::PoolState =
-            self.service_helper.deserialize_anchor_account(&pool_account)?;
+    //     let (input_vault, output_vault, input_vault_mint, output_vault_mint) =
+    //         self.service_helper.build_vault_info(&pool_state, &input_mint_pubkey);
 
-        let (input_vault, output_vault, input_vault_mint, output_vault_mint) =
-            self.service_helper.build_vault_info(&pool_state, &input_mint_pubkey);
+    //     // 计算推荐系统相关地址
+    //     let (payer_referral, _) = super::ReferralManager::calculate_referral_pda(&referral_program_id, user_wallet)?;
+    //     info!("payer_referral: {}", payer_referral);
+    //     info!("referral_accounts: {:?}", referral_accounts);
+    //     // 处理推荐账户
+    //     let (upper, upper_token_account, upper_referral, upper_upper, upper_upper_token_account, project_token_account) =
+    //         if let Some(ref accounts) = referral_accounts {
+    //             let upper = accounts.upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+    //             let upper_token_account = accounts
+    //                 .upper_token_account
+    //                 .as_ref()
+    //                 .map(|s| Pubkey::from_str(s))
+    //                 .transpose()?;
+    //             let upper_referral = accounts
+    //                 .upper_referral
+    //                 .as_ref()
+    //                 .map(|s| Pubkey::from_str(s))
+    //                 .transpose()?;
+    //             let upper_upper = accounts.upper_upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
+    //             let upper_upper_token_account = accounts
+    //                 .upper_upper_token_account
+    //                 .as_ref()
+    //                 .map(|s| Pubkey::from_str(s))
+    //                 .transpose()?;
+    //             let project_token_account = Pubkey::from_str(&accounts.project_token_account)?;
 
-        // 计算推荐系统相关地址
-        let (payer_referral, _) = super::ReferralManager::calculate_referral_pda(&referral_program_id, user_wallet)?;
+    //             (
+    //                 upper,
+    //                 upper_token_account,
+    //                 upper_referral,
+    //                 upper_upper,
+    //                 upper_upper_token_account,
+    //                 project_token_account,
+    //             )
+    //         } else {
+    //             // 默认项目方账户
+    //             let project_wallet = ConfigManager::get_project_wallet()?;
+    //             let project_token_account =
+    //                 super::ReferralManager::get_project_token_account(&project_wallet, &input_mint_pubkey)?;
+    //             (None, None, None, None, None, project_token_account)
+    //         };
 
-        // 处理推荐账户
-        let (upper, upper_token_account, upper_referral, upper_upper, upper_upper_token_account, project_token_account) =
-            if let Some(ref accounts) = referral_accounts {
-                let upper = accounts.upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
-                let upper_token_account = accounts
-                    .upper_token_account
-                    .as_ref()
-                    .map(|s| Pubkey::from_str(s))
-                    .transpose()?;
-                let upper_referral = accounts
-                    .upper_referral
-                    .as_ref()
-                    .map(|s| Pubkey::from_str(s))
-                    .transpose()?;
-                let upper_upper = accounts.upper_upper.as_ref().map(|s| Pubkey::from_str(s)).transpose()?;
-                let upper_upper_token_account = accounts
-                    .upper_upper_token_account
-                    .as_ref()
-                    .map(|s| Pubkey::from_str(s))
-                    .transpose()?;
-                let project_token_account = Pubkey::from_str(&accounts.project_token_account)?;
+    //     // 获取remaining accounts
+    //     let remaining_accounts = self
+    //         .get_remaining_accounts_for_swap_v3(&pool_address, input_mint, output_mint, amount)
+    //         .await?;
 
-                (
-                    upper,
-                    upper_token_account,
-                    upper_referral,
-                    upper_upper,
-                    upper_upper_token_account,
-                    project_token_account,
-                )
-            } else {
-                // 默认项目方账户
-                let project_wallet = ConfigManager::get_project_wallet()?;
-                let project_token_account =
-                    super::ReferralManager::get_project_token_account(&project_wallet, &input_mint_pubkey)?;
-                (None, None, None, None, None, project_token_account)
-            };
+    //     // 使用SwapV3指令构建器
+    //     let instruction = super::SwapV3InstructionBuilder::build_swap_v3_instruction(
+    //         &raydium_program_id,
+    //         &raydium_program_id,
+    //         &referral_program_id,
+    //         &amm_config_key,
+    //         &pool_pubkey,
+    //         user_wallet,
+    //         &input_token_account,
+    //         &output_token_account,
+    //         &input_vault,
+    //         &output_vault,
+    //         &input_vault_mint,
+    //         &output_vault_mint,
+    //         &observation_key,
+    //         remaining_accounts,
+    //         amount,
+    //         other_amount_threshold,
+    //         sqrt_price_limit_x64,
+    //         is_base_input,
+    //         &input_mint_pubkey,
+    //         &payer_referral,
+    //         upper.as_ref(),
+    //         upper_token_account.as_ref(),
+    //         upper_referral.as_ref(),
+    //         upper_upper.as_ref(),
+    //         upper_upper_token_account.as_ref(),
+    //         &project_token_account,
+    //     )?;
 
-        // 获取remaining accounts
-        let remaining_accounts = self
-            .get_remaining_accounts_for_swap_v3(&pool_address, input_mint, output_mint, amount)
-            .await?;
+    //     LogUtils::log_operation_success("构建SwapV3指令", "指令构建完成");
+    //     Ok(instruction)
+    // }
 
-        // 使用SwapV3指令构建器
-        let instruction = super::SwapV3InstructionBuilder::build_swap_v3_instruction(
-            &raydium_program_id,
-            &raydium_program_id,
-            &referral_program_id,
-            &amm_config_key,
-            &pool_pubkey,
-            user_wallet,
-            &input_token_account,
-            &output_token_account,
-            &input_vault,
-            &output_vault,
-            &input_vault_mint,
-            &output_vault_mint,
-            &observation_key,
-            remaining_accounts,
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64,
-            is_base_input,
-            &input_mint_pubkey,
-            &payer_referral,
-            upper.as_ref(),
-            upper_token_account.as_ref(),
-            upper_referral.as_ref(),
-            upper_upper.as_ref(),
-            upper_upper_token_account.as_ref(),
-            &project_token_account,
-        )?;
+    //     /// 获取SwapV3的remaining accounts
+    //     #[allow(dead_code)]
+    //     async fn get_remaining_accounts_for_swap_v3(
+    //         &self,
+    //         pool_address: &str,
+    //         input_mint: &str,
+    //         output_mint: &str,
+    //         amount: u64,
+    //     ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
+    //         let (remaining_account_addresses, _) = self
+    //             .service_helper
+    //             .get_remaining_accounts_and_pool_price(pool_address, input_mint, output_mint, amount)
+    //             .await?;
 
-        LogUtils::log_operation_success("构建SwapV3指令", "指令构建完成");
-        Ok(instruction)
-    }
-
-    /// 获取SwapV3的remaining accounts
-    async fn get_remaining_accounts_for_swap_v3(
-        &self,
-        pool_address: &str,
-        input_mint: &str,
-        output_mint: &str,
-        amount: u64,
-    ) -> Result<Vec<solana_sdk::instruction::AccountMeta>> {
-        let (remaining_account_addresses, _) = self
-            .service_helper
-            .get_remaining_accounts_and_pool_price(pool_address, input_mint, output_mint, amount)
-            .await?;
-
-        let remaining_accounts =
-            super::AccountMetaBuilder::create_remaining_accounts(&remaining_account_addresses, true)?;
-        Ok(remaining_accounts)
-    }
+    //         let remaining_accounts =
+    //             super::AccountMetaBuilder::create_remaining_accounts(&remaining_account_addresses, true)?;
+    //         Ok(remaining_accounts)
+    //     }
 }
 
 /// SwapV3推荐账户信息（内部使用）
