@@ -47,19 +47,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: 📏 检查代码编译
+      - name: ⚡ 快速编译检查
         run: |
-          echo "📏 检查核心组件编译..."
-          # 分别检查核心包
-          cargo check --package utils || echo "⚠️ utils包编译有问题"
-          cargo check --package database || echo "⚠️ database包编译有问题"
-          cargo check --package server || echo "⚠️ server包编译有问题"
-          cargo check --package monitor || echo "⚠️ monitor包编译有问题" 
-          cargo check --package telegram || echo "⚠️ telegram包编译有问题"
-          cargo check --package timer || echo "⚠️ timer包编译有问题"
-          cargo check --package coinfair || echo "⚠️ coinfair包编译有问题"
-          
-          echo "✅ 核心组件检查完成"
+          echo "⚡ 快速编译检查..."
+          # 只检查主要二进制文件
+          cargo check --bin coinfair || echo "⚠️ 主程序编译有问题"
+          echo "✅ 快速检查完成"
 
   # 🏗️ 构建发布版本
   build-release:

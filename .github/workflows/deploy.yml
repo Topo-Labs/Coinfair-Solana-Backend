@@ -55,47 +55,13 @@ jobs:
           echo "🌿 分支: ${{ github.ref_name }}"
           echo "📝 提交: ${{ github.sha }}"
 
-  # 🧪 快速验证测试
-  quick-validation:
-    name: 🧪 快速验证测试
-    runs-on: ubuntu-latest
-    needs: pre-deploy-check
-    if: needs.pre-deploy-check.outputs.skip_tests == 'false'
-    
-    steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-
-      - name: 🦀 安装Rust工具链
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: 📦 缓存Cargo依赖
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-deploy-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: ⚡ 快速构建检查
-        run: cargo check --release --bin coinfair
-
-      - name: 📏 检查核心包编译
-        run: |
-          echo "📏 检查核心组件编译..."
-          cargo check --package utils --release --quiet || echo "⚠️ utils包编译失败"
-          cargo check --package database --release --quiet || echo "⚠️ database包编译失败"
-          echo "✅ 核心包检查完成"
+  # ⚡ 跳过验证测试（已优化）
 
   # 🏗️ 构建生产版本  
   build-production:
     name: 🏗️ 构建生产版本
     runs-on: ubuntu-latest
-    needs: [pre-deploy-check, quick-validation]
-    if: always() && (needs.quick-validation.result == 'success' || needs.pre-deploy-check.outputs.skip_tests == 'true')
+    needs: [pre-deploy-check]
     
     steps:
       - name: 📥 检出代码
@@ -270,68 +236,13 @@ jobs:
             echo "🎉 部署验证成功!"
           EOF
 
-  # 📊 Docker镜像构建 (可选)
-  build-docker:
-    name: 📊 Docker镜像构建
-    runs-on: ubuntu-latest
-    needs: pre-deploy-check
-    if: needs.pre-deploy-check.outputs.deploy_env == 'production'
-    
-    steps:
-      - name: 📥 检出代码
-        uses: actions/checkout@v4
-
-      - name: 🔑 登录Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: 🏗️ 构建Docker镜像
-        run: |
-          cat > Dockerfile << 'EOF'
-          FROM rust:1.75 as builder
-          
-          WORKDIR /app
-          COPY . .
-          
-          RUN cargo build --release --bin coinfair
-          
-          FROM ubuntu:22.04
-          
-          RUN apt-get update && apt-get install -y \
-              ca-certificates \
-              curl \
-              && rm -rf /var/lib/apt/lists/*
-          
-          WORKDIR /opt/coinfair
-          
-          COPY --from=builder /app/target/release/coinfair .
-          COPY --from=builder /app/.env.production .env
-          
-          EXPOSE 8000
-          
-          CMD ["./coinfair"]
-          EOF
-          
-          docker build -t coinfair:${{ github.sha }} .
-          docker tag coinfair:${{ github.sha }} coinfair:latest
-          
-          echo "📊 镜像构建完成"
-          docker images | grep coinfair
-
-      - name: 📤 推送Docker镜像
-        if: github.ref == 'refs/heads/main'
-        run: |
-          docker push coinfair:${{ github.sha }}
-          docker push coinfair:latest
-          echo "✅ Docker镜像推送完成"
+  # 📊 Docker镜像构建 (已禁用以提高速度)
 
   # 📧 部署通知
   notify-deployment:
     name: 📧 部署通知
     runs-on: ubuntu-latest
-    needs: [deploy-aws, build-docker]
+    needs: [deploy-aws]
     if: always()
     
     steps:

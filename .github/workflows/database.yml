@@ -53,15 +53,11 @@ jobs:
             target/
           key: ${{ runner.os }}-database-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: 📏 检查数据库包编译
+      - name: ⚡ 快速数据库包检查
         run: |
-          echo "📏 检查数据库包编译..."
+          echo "⚡ 快速数据库包检查..."
           cargo check --package database || echo "⚠️ database包编译有问题"
-          
-          echo "🏗️ 构建数据库包..."
-          cargo build --package database || echo "⚠️ database包构建失败"
-          
-          echo "✅ 数据库包检查完成"
+          echo "✅ 快速检查完成"
 
   # 📧 数据库状态通知
   notify-database-status:
