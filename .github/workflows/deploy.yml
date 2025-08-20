@@ -128,7 +128,7 @@ jobs:
       - name: 📤 上传到服务器
         run: |
           echo "📤 上传部署包到服务器..."
-          scp -r deploy/* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/opt/coinfair/
+          scp -r deploy/* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/home/ubuntu/Topo/Coinfair-Solana-Backend/
           
           echo "✅ 文件上传完成"
 
@@ -136,7 +136,7 @@ jobs:
         run: |
           echo "🚀 在服务器上执行部署..."
           ssh ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
-            cd /opt/coinfair
+            cd /home/ubuntu/Topo/Coinfair-Solana-Backend
             
             echo "📋 当前目录内容:"
             ls -la
