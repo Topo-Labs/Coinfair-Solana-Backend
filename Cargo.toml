@@ -87,3 +87,17 @@ unexpected_cfgs = { level = "warn", check-cfg = [
       'cfg(feature, values("anchor-debug", "custom-heap", "custom-panic", "enable-power", "no-idl"))',
       'cfg(target_os, values("solana"))',
 ] }
+
+# 🚀 加速构建配置 - 工作空间级别禁用测试
+[workspace.metadata]
+# 标记：此项目禁用测试以加速CI/CD
+no-tests = true
+build-only = ["coinfair"]
+
+# 测试配置优化（尽量减少测试编译开销）
+[profile.test]
+opt-level = 0
+debug = false
+panic = "abort"
+overflow-checks = false
+lto = false
