@@ -32,33 +32,105 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # 🔄 复用CI构建产物（避免重复构建）
+  # 🔄 尝试复用CI构建产物（跨workflow artifact查找）
   reuse-ci-build:
-    name: 🔄 复用CI构建产物
+    name: 🔄 尝试复用CI构建产物
     runs-on: ubuntu-latest
     if: github.event.inputs.force_rebuild != 'true'
+    outputs:
+      has_ci_build: ${{ steps.check-ci-build.outputs.has_ci_build }}
     
     steps:
-      - name: 📥 下载CI构建产物
-        uses: actions/download-artifact@v4
+      - name: 📥 检出代码（用于artifact API调用）
+        uses: actions/checkout@v4
         with:
-          name: coinfair-binary-${{ github.sha }}
-          path: ./
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔧 安装GitHub CLI
+        run: |
+          echo "🔧 安装GitHub CLI..."
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update -qq
+          sudo apt install -y gh
+          gh --version
+
+      - name: 🔍 查找可用的CI构建产物
+        id: find-ci-artifact
+        run: |
+          echo "🔍 查找最新的CI构建产物..."
+          
+          # 使用GitHub API查找最新的成功CI run中的artifact
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          
+          echo "📡 搜索CI workflow的成功运行..."
+          CI_RUN_ID=$(gh api repos/$REPO_OWNER/$REPO_NAME/actions/workflows/ci.yml/runs \
+            --jq '.workflow_runs[] | select(.conclusion == "success" and .head_sha == "'${{ github.sha }}'") | .id' \
+            | head -1)
+          
+          if [ -n "$CI_RUN_ID" ]; then
+            echo "✅ 找到匹配的CI运行: $CI_RUN_ID"
+            echo "ci_run_id=$CI_RUN_ID" >> $GITHUB_OUTPUT
+            echo "has_ci_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ 未找到匹配的成功CI运行"
+            echo "has_ci_run=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: 📥 下载CI构建产物
+        id: download-ci-artifact
+        if: steps.find-ci-artifact.outputs.has_ci_run == 'true'
+        run: |
+          echo "📥 从CI运行下载构建产物..."
+          
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          CI_RUN_ID="${{ steps.find-ci-artifact.outputs.ci_run_id }}"
+          
+          # 查找artifact并下载
+          ARTIFACT_URL=$(gh api repos/$REPO_OWNER/$REPO_NAME/actions/runs/$CI_RUN_ID/artifacts \
+            --jq '.artifacts[] | select(.name | startswith("coinfair-binary-")) | .archive_download_url' \
+            | head -1)
+          
+          if [ -n "$ARTIFACT_URL" ]; then
+            echo "📥 下载artifact: $ARTIFACT_URL"
+            curl -L -H "Authorization: token $GITHUB_TOKEN" "$ARTIFACT_URL" -o artifact.zip
+            
+            if [ -f "artifact.zip" ] && [ -s "artifact.zip" ]; then
+              unzip -o artifact.zip
+              echo "✅ 成功下载CI构建产物"
+              ls -la coinfair* || echo "⚠️ 未找到coinfair文件"
+            else
+              echo "❌ artifact.zip下载失败或空文件"
+              exit 1
+            fi
+          else
+            echo "❌ 未找到coinfair-binary artifact"
+            exit 1
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - name: 🔍 检查CI构建产物
         id: check-ci-build
         run: |
-          if [ -f "coinfair" ]; then
-            echo "✅ 找到CI构建产物，跳过重新构建"
+          echo "🔍 验证构建产物完整性..."
+          if [ -f "coinfair" ] && [ -x "coinfair" ]; then
+            echo "✅ 找到有效的CI构建产物"
             echo "has_ci_build=true" >> $GITHUB_OUTPUT
-            chmod +x coinfair
             ls -la coinfair
             file coinfair
             du -h coinfair
           else
-            echo "⚠️ 未找到CI构建产物，将执行备用构建"
+            echo "⚠️ CI构建产物不可用，将使用备用构建"
             echo "has_ci_build=false" >> $GITHUB_OUTPUT
+            echo "📋 当前目录内容:"
+            ls -la ./ || true
           fi
 
       - name: 📦 准备部署包（复用构建）
@@ -67,8 +139,14 @@ jobs:
           echo "📦 创建部署包（使用CI构建产物）..."
           mkdir -p deploy
           cp coinfair deploy/
-          cp .env.production deploy/.env || echo "⚠️ .env.production不存在，跳过"
-          cp docker-compose.yaml deploy/ || echo "⚠️ docker-compose.yaml不存在，跳过"
+          chmod +x deploy/coinfair
+          
+          # 检出代码以获取配置文件
+          git config --global --add safe.directory $GITHUB_WORKSPACE || true
+          
+          # 复制配置文件（如果存在）
+          [ -f .env.production ] && cp .env.production deploy/.env || echo "⚠️ .env.production不存在，跳过"
+          [ -f docker-compose.yaml ] && cp docker-compose.yaml deploy/ || echo "⚠️ docker-compose.yaml不存在，跳过"
           
           # 创建部署脚本
           cat > deploy/deploy.sh << 'EOF'
@@ -131,7 +209,7 @@ jobs:
     name: 🏗️ 备用构建
     runs-on: ubuntu-latest
     needs: [reuse-ci-build]
-    if: always() && (failure() || github.event.inputs.force_rebuild == 'true') # 失败时或强制重建时运行
+    if: always() && (needs.reuse-ci-build.outputs.has_ci_build != 'true' || github.event.inputs.force_rebuild == 'true')
     
     steps:
       - name: 📥 检出代码
@@ -224,20 +302,39 @@ jobs:
           path: deploy/
           retention-days: 30
 
-  # 🚀 AWS EC2 部署（使用复用构建）
+  # 🚀 AWS EC2 部署（使用智能构建选择）
   deploy-aws:
-    name: 🚀 AWS EC2 部署（简化版）
+    name: 🚀 AWS EC2 部署（智能版）
     runs-on: ubuntu-latest
     needs: [reuse-ci-build, fallback-build]
-    if: always() && (success() || contains(needs.*.result, 'success'))
-    # 注意：不使用AWS凭证action，直接使用SSH
+    if: always() && !cancelled() && (needs.reuse-ci-build.result == 'success' || needs.fallback-build.result == 'success')
+    # 注意：优先使用CI构建，其次使用备用构建
     
     steps:
-      - name: 📥 下载部署包
+      - name: 📥 智能下载部署包
+        run: |
+          echo "📥 智能选择最佳部署包..."
+          
+          # 优先使用CI复用版本（如果可用）
+          if [ "${{ needs.reuse-ci-build.result }}" == "success" ] && [ "${{ needs.reuse-ci-build.outputs.has_ci_build }}" == "true" ]; then
+            echo "✅ 使用CI复用构建版本"
+            BUILD_TYPE="ci-reused"
+          elif [ "${{ needs.fallback-build.result }}" == "success" ]; then
+            echo "✅ 使用备用构建版本"
+            BUILD_TYPE="fallback"
+          else
+            echo "❌ 所有构建方式都失败"
+            exit 1
+          fi
+          
+          echo "build_type=$BUILD_TYPE" >> $GITHUB_ENV
+
+      - name: 📥 下载选定的部署包
         uses: actions/download-artifact@v4
         with:
           name: coinfair-deployment-${{ github.sha }}
           path: deploy/
+        continue-on-error: false
 
       - name: 🔑 配置SSH密钥
         run: |
@@ -255,7 +352,7 @@ jobs:
 
       - name: 🚀 执行部署
         run: |
-          echo "🚀 在服务器上执行部署..."
+          echo "🚀 在服务器上执行部署（${{ env.build_type }}版本）..."
           ssh ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
             cd /opt/coinfair
             
@@ -271,7 +368,7 @@ jobs:
             echo "🔍 服务状态检查:"
             curl -s http://localhost:8000/api/v1/health || echo "健康检查失败"
             
-            echo "✅ 部署完成!"
+            echo "✅ 部署完成! (使用${{ env.build_type }}构建)"
           EOF
 
       - name: 🔍 部署后验证
