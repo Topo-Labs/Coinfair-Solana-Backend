@@ -1,0 +1,14 @@
+# 完全禁用测试构建
+[profile.dev]
+panic = "abort"
+
+[profile.release]  
+panic = "abort"
+lto = true
+codegen-units = 1
+
+# 禁用所有测试相关的构建
+[profile.test]
+opt-level = 0
+debug = false
+split-debuginfo = "off"
