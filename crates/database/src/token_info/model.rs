@@ -448,7 +448,7 @@ impl TokenInfo {
             mint_authority: request.mint_authority,
             permanent_delegate: request.permanent_delegate,
             minted_at: request.minted_at,
-            extensions: request.extensions.unwrap_or_else(|| serde_json::Value::Null),
+            extensions: request.extensions.unwrap_or_else(|| serde_json::json!({})),
             push_time: now,
             updated_at: now,
             status: TokenStatus::default(),

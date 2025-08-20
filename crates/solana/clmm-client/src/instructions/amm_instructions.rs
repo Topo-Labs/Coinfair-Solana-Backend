@@ -701,7 +701,7 @@ pub fn swap_v3_instr(
     is_base_input: bool,
     // Add referral
     input_mint: Pubkey,
-    payer_referral: Pubkey,
+    payer_referral: Option<Pubkey>,
     upper: Option<Pubkey>,
     upper_token_account: Option<Pubkey>,
     upper_referral: Option<Pubkey>,

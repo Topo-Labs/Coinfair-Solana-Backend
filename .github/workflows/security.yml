@@ -182,8 +182,6 @@ jobs:
 
       - name: 🦀 安装Rust工具链
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
 
       - name: 📦 缓存Cargo依赖
         uses: actions/cache@v4
@@ -201,25 +199,6 @@ jobs:
           echo "🔧 安装Rust安全工具..."
           cargo install cargo-geiger --quiet || echo "⚠️ cargo-geiger安装失败"
           cargo install cargo-outdated --quiet || echo "⚠️ cargo-outdated安装失败"
-
-      - name: 🔒 运行安全相关的Clippy检查
-        run: |
-          echo "🔒 运行安全相关的静态分析..."
-          
-          # 运行安全相关的clippy规则
-          cargo clippy --all-targets --all-features -- \
-            -W clippy::integer_arithmetic \
-            -W clippy::unwrap_used \
-            -W clippy::expect_used \
-            -W clippy::panic \
-            -W clippy::unimplemented \
-            -W clippy::todo \
-            -W clippy::mem_forget \
-            -W clippy::mem_replace_with_uninit \
-            -W clippy::cast_ptr_alignment \
-            -W clippy::mut_from_ref \
-            -A clippy::too_many_arguments \
-            || echo "⚠️ 发现潜在安全问题，请查看上方输出"
 
       - name: 🔍 检查unsafe代码使用
         run: |

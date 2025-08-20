@@ -78,3 +78,4 @@ upper-upper-wallet.json
 /references
 script/*
 mongodb-query/*
+new-wallet*.json

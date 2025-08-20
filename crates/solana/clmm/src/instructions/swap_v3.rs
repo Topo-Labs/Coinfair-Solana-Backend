@@ -32,11 +32,11 @@ pub struct SwapSingleV3<'info> {
         bump,
         seeds::program = referral.key()
     )]
-    pub payer_referral: Account<'info, ReferralAccount>,
+    pub payer_referral: Option<Account<'info, ReferralAccount>>,
 
     /// CHECK: 仅用于与 payer_referral.upper 对比，不读取数据
     #[account(
-        constraint = payer_referral.upper.is_none() || upper.key() == payer_referral.upper.unwrap()
+        constraint = payer_referral.as_ref().unwrap().upper.is_none() || upper.key() == payer_referral.as_ref().unwrap().upper.unwrap()
         @ ErrorCode::UpperAccountMismatch
     )]
     pub upper: Option<UncheckedAccount<'info>>,
@@ -44,7 +44,7 @@ pub struct SwapSingleV3<'info> {
     /// upper接收分佣的 ATA（用于收手续费奖励）(该账户 owner 应为 `upper`，mint 应为 swap 所涉及的 token)
     #[account(
         mut,
-        constraint = payer_referral.upper.is_none() || (
+        constraint = payer_referral.as_ref().unwrap().upper.is_none() || (
             upper_token_account.owner == upper.as_ref().unwrap().key() &&
             upper_token_account.mint == input_mint.key() //Token_Mint
         )
@@ -64,7 +64,7 @@ pub struct SwapSingleV3<'info> {
         seeds = [b"referral", upper.as_ref().unwrap().key().as_ref()],
         bump,
         seeds::program = referral.key(),
-        constraint = payer_referral.upper.is_some()
+        constraint = payer_referral.as_ref().unwrap().upper.is_some()
     )]
     pub upper_referral: Option<Account<'info, ReferralAccount>>,
 

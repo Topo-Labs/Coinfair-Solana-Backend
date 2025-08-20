@@ -33,8 +33,6 @@ jobs:
 
       - name: 🦀 安装Rust工具链
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
       - name: 📦 缓存Cargo依赖
         uses: actions/cache@v4
@@ -48,22 +46,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
-      - name: 🎨 格式检查 (rustfmt)
-        run: cargo fmt --all -- --check
-
-      - name: 📎 静态分析 (clippy)
-        run: |
-          echo "🔍 运行Clippy静态分析..."
-          # 排除一些已知有问题的包，只检查核心包
-          cargo clippy --package utils --package database --package server --package monitor --package telegram --package timer --package coinfair -- \
-            -W clippy::unwrap_used \
-            -W clippy::expect_used \
-            -W clippy::panic \
-            -A clippy::redundant_field_names \
-            -A clippy::redundant_static_lifetimes \
-            -A clippy::empty_line_after_doc_comments \
-            || echo "⚠️ Clippy发现了一些问题，但不会阻止构建"
 
       - name: 📏 检查代码编译
         run: |

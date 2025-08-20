@@ -234,11 +234,11 @@ mod tests {
         );
 
         let old_updated_at = config.updated_at;
-        
+
         // 手动设置一个更早的时间戳来确保测试能够通过
         config.updated_at = old_updated_at.saturating_sub(1);
         let very_old_updated_at = config.updated_at;
-        
+
         config.update();
 
         // 现在应该有明确的时间差异
