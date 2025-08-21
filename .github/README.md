@@ -93,7 +93,7 @@ docker-compose up -d
 
 #### 2.1 创建Slack Webhook
 
-1. 访问 https://api.slack.com/apps
+1. 访问 <https://api.slack.com/apps>
 2. 创建新应用或选择现有应用
 3. 进入 `Incoming Webhooks`
 4. 创建新的Webhook URL
@@ -148,23 +148,27 @@ DATABASE_URL: mongodb://staging-db:27017/coinfair_staging
 ## 🚀 工作流触发条件
 
 ### CI Pipeline (`ci.yml`)
-- **触发时机**: 
+
+- **触发时机**:
   - Push到 `main`, `develop`, `dev_*` 分支
   - Pull Request到 `main`, `develop` 分支
 - **忽略文件**: Markdown文档、docs目录
 
 ### Production Deployment (`deploy.yml`)
+
 - **触发时机**:
   - Push到 `main` 分支（自动部署生产环境）
   - 创建版本标签 `v*`（自动部署）
   - 手动触发（workflow_dispatch）
 
 ### Database Management (`database.yml`)
+
 - **触发时机**:
   - 数据库相关文件变更
   - 手动触发数据库操作
 
 ### Security Scan (`security.yml`)
+
 - **触发时机**:
   - 代码Push（自动扫描）
   - 每日定时扫描（UTC 02:00）
@@ -181,6 +185,7 @@ DATABASE_URL: mongodb://staging-db:27017/coinfair_staging
 ### 常见问题排查
 
 #### 部署失败
+
 ```bash
 # 检查服务器连接
 ssh -i ~/.ssh/coinfair-deploy ubuntu@your-server-ip
@@ -193,11 +198,13 @@ ps aux | grep coinfair
 ```
 
 #### 构建失败
+
 - 检查Rust版本兼容性
 - 验证依赖项是否正确
 - 查看Cargo.lock文件是否需要更新
 
 #### 安全扫描报警
+
 - 查看具体的安全报告artifact
 - 更新有漏洞的依赖项
 - 检查是否有敏感信息泄露
@@ -221,16 +228,19 @@ ps aux | grep coinfair
 ## 🔒 安全最佳实践
 
 ### Secrets管理
+
 - 使用GitHub Secrets存储敏感信息
 - 定期轮换密钥和token
 - 遵循最小权限原则
 
 ### 代码审查
+
 - 配置了 `CODEOWNERS` 文件
 - 要求相关专家审查敏感代码变更
 - 自动安全扫描集成
 
 ### 部署安全
+
 - SSH密钥认证，禁用密码登录
 - 生产环境需要手动确认或特定分支触发
 - 部署前自动运行安全检查
@@ -238,11 +248,13 @@ ps aux | grep coinfair
 ## 📞 支持和维护
 
 ### 团队联系
+
 - **DevOps团队**: 负责CI/CD流水线维护
 - **安全团队**: 负责安全扫描和漏洞修复
 - **技术负责人**: 负责架构决策和关键变更审查
 
 ### 定期维护
+
 - **周**: 检查工作流执行状态
 - **月**: 更新依赖项和安全补丁  
 - **季**: 评估和优化CI/CD性能
