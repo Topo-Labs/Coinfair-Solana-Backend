@@ -139,28 +139,95 @@ jobs:
               "echo '✅ SSH连接成功'; hostname; whoami; pwd" 2>&1 || \
               { echo "❌ SSH连接失败"; exit 1; }
 
-      - name: 📤 上传到服务器
+      - name: 📤 停止旧服务
         run: |
-          echo "📤 停止旧服务以释放文件..."
+          echo "📤 尝试停止旧服务以释放文件..."
+          if ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                 ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} \
+                 "pkill -f coinfair || true" 2>/dev/null; then
+            echo "✅ 成功连接服务器并停止旧服务"
+          else
+            echo "⚠️ 无法连接服务器停止服务，但继续部署..."
+            echo "🔍 可能的原因："
+            echo "  - 服务器未运行"
+            echo "  - SSH连接问题"
+            echo "  - 服务已经停止"
+          fi
+          sleep 2
+
+      - name: 📤 上传部署文件
+        run: |
+          echo "📤 上传部署包到服务器..."
+          
+          # 获取用户home目录
+          USER_HOME=$(ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                          ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} \
+                          "echo \$HOME" 2>/dev/null)
+          
+          if [ -z "$USER_HOME" ]; then
+            echo "❌ 无法获取用户home目录，使用默认路径"
+            USER_HOME="/home/${{ secrets.AWS_USER }}"
+          fi
+          
+          DEPLOY_PATH="$USER_HOME/Topo/Coinfair-Solana-Backend"
+          echo "🎯 目标部署路径: $DEPLOY_PATH"
+          
+          # 确保目标目录存在
           ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
               ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} \
-              "pkill -f coinfair || true" || \
-              { echo "❌ 停止服务命令失败"; exit 1; }
-          sleep 2
+              "mkdir -p $DEPLOY_PATH" 2>/dev/null || echo "⚠️ 无法创建目录，可能已存在"
           
-          echo "📤 上传部署包到服务器..."
-          scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
-              -r deploy/* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/home/ubuntu/Topo/Coinfair-Solana-Backend/ || \
-              { echo "❌ 文件上传失败"; exit 1; }
+          # 多次尝试上传，增加成功率
+          max_attempts=3
+          attempt=1
           
-          echo "✅ 文件上传完成"
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔄 尝试上传 (第${attempt}/${max_attempts}次)..."
+            
+            if scp -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                   -r deploy/* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:$DEPLOY_PATH/ 2>/dev/null; then
+              echo "✅ 文件上传成功到: $DEPLOY_PATH"
+              break
+            else
+              echo "❌ 第${attempt}次上传失败"
+              if [ $attempt -eq $max_attempts ]; then
+                echo "💡 SSH连接诊断信息："
+                echo "🔍 测试网络连接..."
+                ping -c 2 ${{ secrets.AWS_HOST }} || echo "  - ping失败"
+                nc -zv ${{ secrets.AWS_HOST }} 22 2>&1 || echo "  - SSH端口不可达"
+                
+                echo "🔍 测试目标目录..."
+                ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                    ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} \
+                    "ls -la $DEPLOY_PATH" 2>/dev/null || echo "  - 目标目录不存在"
+                
+                echo "❌ 所有上传尝试都失败了"
+                exit 1
+              fi
+              attempt=$((attempt + 1))
+              sleep 5
+            fi
+          done
 
       - name: 🚀 执行部署
         run: |
           echo "🚀 在服务器上执行部署..."
+          
+          # 获取用户home目录和部署路径
+          USER_HOME=$(ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                          ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} \
+                          "echo \$HOME" 2>/dev/null)
+          
+          if [ -z "$USER_HOME" ]; then
+            USER_HOME="/home/${{ secrets.AWS_USER }}"
+          fi
+          
+          DEPLOY_PATH="$USER_HOME/Topo/Coinfair-Solana-Backend"
+          echo "🎯 部署路径: $DEPLOY_PATH"
+          
           ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
-              ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
-            cd /home/ubuntu/Topo/Coinfair-Solana-Backend
+              ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << EOF
+            cd $DEPLOY_PATH
             
             echo "📋 当前目录内容:"
             ls -la
@@ -184,9 +251,22 @@ jobs:
           # 等待服务稳定
           sleep 10
           
+          # 获取用户home目录和部署路径
+          USER_HOME=$(ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
+                          ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} \
+                          "echo \$HOME" 2>/dev/null)
+          
+          if [ -z "$USER_HOME" ]; then
+            USER_HOME="/home/${{ secrets.AWS_USER }}"
+          fi
+          
+          DEPLOY_PATH="$USER_HOME/Topo/Coinfair-Solana-Backend"
+          
           # 健康检查
           ssh -o ConnectTimeout=30 -o StrictHostKeyChecking=no \
-              ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
+              ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << EOF
+            cd $DEPLOY_PATH
+            
             # 检查进程
             if pgrep -f coinfair > /dev/null; then
               echo "✅ Coinfair进程正在运行"
