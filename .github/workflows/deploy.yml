@@ -77,6 +77,16 @@ jobs:
           
           echo "🚀 开始部署Coinfair..."
           
+          # 设置必要的环境变量
+          export CARGO_ENV=development
+          export MONGO_DB=coinfair_development
+          export RUST_LOG=info
+          
+          echo "🔧 环境变量配置:"
+          echo "  CARGO_ENV=$CARGO_ENV"
+          echo "  MONGO_DB=$MONGO_DB"
+          echo "  RUST_LOG=$RUST_LOG"
+          
           # 备份当前版本
           if [ -f coinfair ]; then
             cp coinfair coinfair.backup.$(date +%Y%m%d_%H%M%S)
@@ -91,8 +101,8 @@ jobs:
           docker compose up -d || echo "⚠️ Docker compose失败，继续..."
           sleep 5
           
-          # 启动服务
-          nohup ./coinfair > coinfair.log 2>&1 &
+          # 启动服务（带环境变量）
+          nohup env CARGO_ENV=$CARGO_ENV MONGO_DB=$MONGO_DB RUST_LOG=$RUST_LOG ./coinfair > coinfair.log 2>&1 &
           sleep 3
           
           # 健康检查
@@ -106,6 +116,8 @@ jobs:
           done
           
           echo "❌ 服务启动超时"
+          echo "📋 查看服务日志:"
+          tail -20 coinfair.log
           exit 1
           EOF
           
