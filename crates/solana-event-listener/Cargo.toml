@@ -25,7 +25,7 @@ bincode = { workspace = true }
 borsh = { workspace = true }
 spl-token = { workspace = true }
 spl-token-2022 = { workspace = true }
-raydium-amm-v3 = { workspace = true }
+raydium-amm-v3 = { path = "../solana/clmm", package = "coinfair-raydium-amm-v3", features = ["no-entrypoint", "client"] }
 
 # Additional dependencies for event listening
 futures = "0.3"

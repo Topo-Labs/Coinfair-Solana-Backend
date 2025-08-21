@@ -4,13 +4,11 @@
 target-dir = "target"
 
 [profile.dev]
-panic = "abort"
 # 禁用调试信息以加速编译
 debug = false
 opt-level = 0
 
-[profile.release]  
-panic = "abort"
+[profile.release]
 lto = true
 codegen-units = 1
 # 最大优化二进制文件大小和性能
@@ -21,7 +19,6 @@ opt-level = 3
 opt-level = 0
 debug = false
 split-debuginfo = "off"
-panic = "abort"
 
 # 禁用基准测试profile
 [profile.bench]

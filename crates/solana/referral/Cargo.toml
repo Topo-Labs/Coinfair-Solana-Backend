@@ -1,10 +1,10 @@
 [package]
-name = "referral"
+name = "coinfair-referral"  # 改为唯一的package名称
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "referral"
+name = "coinfair_referral"  # 使用唯一名称
 crate-type = ["cdylib", "lib"]
 
 [dependencies]

@@ -5,11 +5,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anchor-client = "0.31.0"
-anchor-lang = "0.31.0"
-raydium-cp-swap = { path = "../cpmm", features = ["no-entrypoint", "client"] }
-solana-sdk = "=2.1.0"
-solana-client = "=2.1.0"
+anchor-client = "0.31.1"
+anchor-lang = "0.31.1"
+raydium-cp-swap = { path = "../cpmm", package = "coinfair-raydium-cp-swap", features = ["no-entrypoint", "client"] }
+solana-sdk = { workspace = true }
+solana-client = { workspace = true }
 #solana-account-decoder = "=2.1.0"
 solana-transaction-status = "=2.1.0"
 spl-token = { version = "7.0.0", features = ["no-entrypoint"] }

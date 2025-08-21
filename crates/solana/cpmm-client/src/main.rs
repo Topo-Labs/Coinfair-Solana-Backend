@@ -14,7 +14,6 @@ use solana_sdk::{
 use solana_transaction_status::UiTransactionEncoding;
 use std::rc::Rc;
 use std::str::FromStr;
-
 mod instructions;
 use instructions::amm_instructions::*;
 use instructions::events_instructions_parse::*;
