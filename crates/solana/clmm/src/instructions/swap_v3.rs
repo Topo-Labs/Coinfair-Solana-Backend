@@ -10,10 +10,7 @@ use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::memo::spl_memo;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use referral::program::Referral;
-use referral::states::ReferralAccount;
-
-// use referral::{program::Referral, states::ReferralAccount};
+use coinfair_referral::{program::Referral, ReferralAccount};
 
 /// Memo msg for swap
 // pub const SWAP_MEMO_MSG: &'static [u8] = b"coinfair_swap";
@@ -30,7 +27,7 @@ pub struct SwapSingleV3<'info> {
     #[account(
         seeds = [b"referral", payer.key().as_ref()],
         bump,
-        seeds::program = referral.key()
+        seeds::program = coinfair_referral::id()
     )]
     pub payer_referral: Option<Account<'info, ReferralAccount>>,
 
@@ -63,7 +60,7 @@ pub struct SwapSingleV3<'info> {
     #[account(
         seeds = [b"referral", upper.as_ref().unwrap().key().as_ref()],
         bump,
-        seeds::program = referral.key(),
+        seeds::program = coinfair_referral::id(),
         constraint = payer_referral.as_ref().unwrap().upper.is_some()
     )]
     pub upper_referral: Option<Account<'info, ReferralAccount>>,
@@ -140,7 +137,7 @@ pub struct SwapSingleV3<'info> {
 
     pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
 
-    #[account(address = referral::id())]
+    #[account(address = coinfair_referral::id())]
     pub referral: Program<'info, Referral>,
 
     /// The mint of token vault 0

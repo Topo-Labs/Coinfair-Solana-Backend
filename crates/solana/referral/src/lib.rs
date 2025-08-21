@@ -4,6 +4,9 @@ pub mod instructions;
 pub mod states;
 pub mod utils;
 
+// Re-export commonly used types
+pub use states::*;
+
 use anchor_lang::prelude::*;
 use instructions::*;
 

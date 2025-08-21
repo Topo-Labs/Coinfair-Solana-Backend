@@ -83,11 +83,7 @@ jobs:
             echo "✅ 已备份当前版本"
           fi
           
-          # 停止现有服务
-          pkill -f coinfair || true
-          sleep 2
-          
-          # 部署新版本
+          # 部署新版本（服务已在上传前停止）
           chmod +x coinfair
           echo "✅ 新版本部署完成"
           
@@ -127,6 +123,10 @@ jobs:
 
       - name: 📤 上传到服务器
         run: |
+          echo "📤 停止旧服务以释放文件..."
+          ssh ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} "pkill -f coinfair || true"
+          sleep 2
+          
           echo "📤 上传部署包到服务器..."
           scp -r deploy/* ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/home/ubuntu/Topo/Coinfair-Solana-Backend/
           
