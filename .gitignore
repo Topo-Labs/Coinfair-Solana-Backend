@@ -3,6 +3,7 @@
 **/*.rs.bk
 *.pdb
 *.kiro/
+.cursor/
 
 # Cargo
 Cargo.lock
@@ -79,3 +80,4 @@ upper-upper-wallet.json
 script/*
 mongodb-query/*
 new-wallet*.json
+.github/*.md
