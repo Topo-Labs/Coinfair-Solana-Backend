@@ -94,13 +94,25 @@ pub struct RpcNode {
 
 impl Default for RpcConfig {
     fn default() -> Self {
+        // 尝试从环境变量读取RPC URL，如果失败则使用默认值
+        let rpc_url = std::env::var("RPC_URL")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        
+        let (name, weight) = if rpc_url.contains("devnet") {
+            ("Devnet".to_string(), 100)
+        } else if rpc_url.contains("mainnet") {
+            ("Mainnet".to_string(), 100)
+        } else {
+            ("Custom".to_string(), 100)
+        };
+
         Self {
             strategy: "weight".to_string(),
             rpcs: vec![RpcNode {
-                url: "https://api.devnet.solana.com".to_string(),
+                url: rpc_url,
                 batch: true,
-                name: "Devnet".to_string(),
-                weight: 100,
+                name,
+                weight,
             }],
         }
     }
