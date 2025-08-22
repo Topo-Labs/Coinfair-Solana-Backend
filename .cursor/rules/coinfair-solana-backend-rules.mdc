@@ -1,5 +1,0 @@
----
-description: when need to start a server to test some functions
-globs: 启动服务测试接口时应该用这种方式来做：CARGO_ENV=development RUST_LOG=debug cargo run --bin coinfair &> logs/server_test.log & sleep 8 && curl -s "<http://localhost:8000/api/v1/solana/pools/line/id?id=xxx>"，不然你会杀掉服务，再测试接口，就会没响应。
-alwaysApply: true
----
