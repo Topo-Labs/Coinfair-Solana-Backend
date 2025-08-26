@@ -1,10 +1,12 @@
 // Shared helper functions for Solana services
 use super::SharedContext;
-use crate::dtos::solana_dto::{BalanceResponse, RoutePlan, SwapComputeV2Data, TransferFeeInfo, WalletInfo};
 use anchor_lang::AccountDeserialize;
 use anyhow::Result;
 use solana_sdk::account::Account;
 use tracing::info;
+use crate::dtos::solana::common::{RoutePlan, TransferFeeInfo, WalletInfo};
+use crate::dtos::solana::swap::basic::BalanceResponse;
+use crate::dtos::solana::swap::raydium::SwapComputeV2Data;
 
 /// 响应数据构建器 - 统一管理响应数据创建
 pub struct ResponseBuilder;

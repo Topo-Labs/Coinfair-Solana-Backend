@@ -1,13 +1,11 @@
 use crate::{
-    dtos::solana_dto::{
-        ApiResponse, CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest,
-        CreateClassicAmmPoolResponse, ErrorResponse,
-    },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
 };
 use axum::{extract::Extension, http::StatusCode, response::Json, routing::post, Router};
 use tracing::{error, info, warn};
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
+use crate::dtos::solana::pool::creation::{CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse};
 
 pub struct CpmmPoolCreateController;
 

@@ -1,7 +1,7 @@
-use crate::{
-    dtos::solana_dto::{LiquidityLineErrorResponse, PoolLiquidityLineRequest, PoolLiquidityLineResponse},
-    services::Services,
+use crate::dtos::solana::pool::liquidity_line::{
+    LiquidityLineErrorResponse, PoolLiquidityLineRequest, PoolLiquidityLineResponse,
 };
+use crate::services::Services;
 use axum::{
     extract::{Extension, Query},
     http::StatusCode,
@@ -146,7 +146,7 @@ pub async fn get_pool_liquidity_line(
 
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana_dto::PoolLiquidityLineRequest;
+    use crate::dtos::solana::pool::liquidity_line::PoolLiquidityLineRequest;
     use validator::Validate;
 
     #[test]

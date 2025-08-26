@@ -1,10 +1,6 @@
-use crate::{
-    dtos::solana_dto::{
-        ApiResponse, CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse, ErrorResponse,
-    },
-    extractors::validation_extractor::ValidationExtractor,
-    services::Services,
-};
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
+use crate::dtos::solana::pool::creation::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
+use crate::{extractors::validation_extractor::ValidationExtractor, services::Services};
 use axum::{extract::Extension, http::StatusCode, response::Json, routing::post, Router};
 use tracing::{error, info, warn};
 

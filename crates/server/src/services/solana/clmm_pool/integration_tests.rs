@@ -4,7 +4,6 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::dtos::solana_dto::CreatePoolRequest;
     use crate::services::solana::clmm_pool::service::ClmmPoolService;
     use crate::services::solana::clmm_pool::storage::ClmmPoolStorageService;
     use crate::services::solana::config::ClmmConfigService;
@@ -13,6 +12,7 @@ mod integration_tests {
         ClmmPool, ExtensionInfo, PoolQueryParams, PoolStatus, PriceInfo, SyncStatus, TokenInfo, VaultInfo,
     };
     use std::sync::Arc;
+    use crate::dtos::solana::pool::creation::CreatePoolRequest;
 
     /// 集成测试辅助结构
     #[allow(dead_code)]

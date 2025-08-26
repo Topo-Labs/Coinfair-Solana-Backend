@@ -1,10 +1,9 @@
-use crate::dtos::solana_dto::{
-    ApiResponse, ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse, ErrorResponse,
-    MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse,
-};
 use crate::extractors::validation_extractor::ValidationExtractor;
 use crate::services::Services;
 
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
+use crate::dtos::solana::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
+use crate::dtos::solana::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
 use axum::{extract::Extension, http::StatusCode, response::Json, routing::post, Router};
 use tracing::{error, info};
 

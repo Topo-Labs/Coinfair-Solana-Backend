@@ -1,9 +1,8 @@
 // LiquidityService handles all liquidity management operations
 
-use crate::dtos::solana_dto::{
+use crate::dtos::solana::position::liquidity::{
     DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
     IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
-    TransactionStatus,
 };
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
@@ -19,6 +18,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{info, warn};
 use utils::TokenUtils;
+use crate::dtos::solana::common::TransactionStatus;
 
 /// 批量操作的共享数据
 #[derive(Debug)]

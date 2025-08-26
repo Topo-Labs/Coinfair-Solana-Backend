@@ -1,12 +1,15 @@
-use crate::dtos::solana_dto::{
-    ApiResponse, ErrorResponse, EventPaginatedResponse, NftClaimAdvancedQuery, NftClaimEventQuery,
-    NftClaimEventResponse, NftClaimStatsResponse, PaginationParams, RewardDistributionAdvancedQuery,
-    RewardDistributionEventQuery, RewardDistributionEventResponse, RewardStatsResponse, RewardTypeDistribution,
-    TierDistribution, UserNftClaimSummaryResponse, UserRewardSummaryResponse,
-};
 use crate::services::solana::event::EventService;
 use crate::services::Services;
 
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse, PaginationParams};
+use crate::dtos::solana::events::nft_claim::{
+    NftClaimAdvancedQuery, NftClaimEventQuery, NftClaimEventResponse, NftClaimStatsResponse, TierDistribution,
+    UserNftClaimSummaryResponse,
+};
+use crate::dtos::solana::events::reward_distribution::{
+    EventPaginatedResponse, RewardDistributionAdvancedQuery, RewardDistributionEventQuery,
+    RewardDistributionEventResponse, RewardStatsResponse, RewardTypeDistribution, UserRewardSummaryResponse,
+};
 use axum::{
     extract::{Extension, Path, Query},
     http::StatusCode,

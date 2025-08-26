@@ -1,10 +1,8 @@
 // PositionService handles all position management operations
 
-use crate::dtos::solana_dto::{
-    CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse,
-    DecreaseLiquidityRequest, DecreaseLiquidityResponse, GetUserPositionsRequest,
-    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
-    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo, TransactionStatus,
+use crate::dtos::solana::position::open_position::{
+    CalculateLiquidityRequest, CalculateLiquidityResponse, GetUserPositionsRequest,
+    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
     UserPositionsResponse,
 };
 
@@ -14,6 +12,11 @@ use crate::services::position_storage::PositionStorageService;
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
 use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtilsOptimized};
 
+use crate::dtos::solana::common::TransactionStatus;
+use crate::dtos::solana::position::liquidity::{
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+};
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;

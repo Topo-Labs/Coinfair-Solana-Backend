@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use crate::{
-    dtos::solana_dto::{ApiResponse, ErrorResponse},
     services::Services,
 };
 use axum::{
@@ -13,6 +12,7 @@ use axum::{
 };
 use database::clmm_pool::model::PoolListRequest;
 use tracing::{error, info};
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
 
 pub struct ClmmPoolQueryController;
 
@@ -447,9 +447,9 @@ pub async fn get_pool_statistics(
         ("limit" = Option<u32>, Query, description = "每页数量")
     ),
     responses(
-        (status = 200, description = "查询成功", body = crate::dtos::solana_dto::NewPoolListResponse),
-        (status = 400, description = "参数错误", body = crate::dtos::solana_dto::NewPoolListResponse),
-        (status = 500, description = "查询失败", body = crate::dtos::solana_dto::NewPoolListResponse)
+        (status = 200, description = "查询成功", body = crate::dtos::solana::pool::listing::NewPoolListResponse),
+        (status = 400, description = "参数错误", body = crate::dtos::solana::pool::listing::NewPoolListResponse),
+        (status = 500, description = "查询失败", body = crate::dtos::solana::pool::listing::NewPoolListResponse)
     ),
     tag = "CLMM池子查询"
 )]
@@ -457,8 +457,8 @@ pub async fn get_pool_list(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
 ) -> Result<
-    Json<crate::dtos::solana_dto::NewPoolListResponse>,
-    (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>),
+    Json<crate::dtos::solana::pool::listing::NewPoolListResponse>,
+    (StatusCode, Json<crate::dtos::solana::pool::listing::NewPoolListResponse>),
 > {
     info!("🔍 接收到获取池子列表请求");
     if let Some(ref mint_address) = params.mint_address {
@@ -480,10 +480,10 @@ pub async fn get_pool_list(
         }
         Err(e) => {
             error!("❌ 池子列表查询失败: {:?}", e);
-            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
                 id: uuid::Uuid::new_v4().to_string(),
                 success: false,
-                data: crate::dtos::solana_dto::PoolListData {
+                data: crate::dtos::solana::pool::listing::PoolListData {
                     count: 0,
                     data: vec![],
                     has_next_page: false,
@@ -540,9 +540,9 @@ pub async fn get_pool_list(
         ("limit" = Option<u32>, Query, description = "每页数量")
     ),
     responses(
-        (status = 200, description = "查询成功", body = crate::dtos::solana_dto::NewPoolListResponse),
-        (status = 400, description = "参数错误", body = crate::dtos::solana_dto::NewPoolListResponse),
-        (status = 500, description = "查询失败", body = crate::dtos::solana_dto::NewPoolListResponse)
+        (status = 200, description = "查询成功", body = crate::dtos::solana::pool::listing::NewPoolListResponse),
+        (status = 400, description = "参数错误", body = crate::dtos::solana::pool::listing::NewPoolListResponse),
+        (status = 500, description = "查询失败", body = crate::dtos::solana::pool::listing::NewPoolListResponse)
     ),
     tag = "CLMM池子查询"
 )]
@@ -550,8 +550,8 @@ pub async fn get_pools_by_ids(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
 ) -> Result<
-    Json<crate::dtos::solana_dto::NewPoolListResponse2>,
-    (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse2>),
+    Json<crate::dtos::solana::pool::listing::NewPoolListResponse2>,
+    (StatusCode, Json<crate::dtos::solana::pool::listing::NewPoolListResponse2>),
 > {
     info!("🔍 接收到根据IDs查询池子列表请求");
     if let Some(ref ids) = params.ids {
@@ -570,7 +570,7 @@ pub async fn get_pools_by_ids(
 
     // 验证必需参数
     let ids = params.ids.clone().ok_or_else(|| {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse2 {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -580,7 +580,7 @@ pub async fn get_pools_by_ids(
 
     // 验证 ids 参数格式
     if ids.trim().is_empty() {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse2 {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -592,7 +592,7 @@ pub async fn get_pools_by_ids(
     let pool_addresses: Vec<&str> = ids.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
 
     if pool_addresses.is_empty() {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse2 {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -602,7 +602,7 @@ pub async fn get_pools_by_ids(
 
     // 限制一次查询的池子数量，防止过大查询
     if pool_addresses.len() > 100 {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse2 {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -613,7 +613,7 @@ pub async fn get_pools_by_ids(
     // 验证每个地址的格式（基本长度检查）
     for addr in &pool_addresses {
         if addr.len() < 32 || addr.len() > 44 {
-            let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+            let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse2 {
                 id: uuid::Uuid::new_v4().to_string(),
                 success: false,
                 data: vec![],
@@ -629,7 +629,7 @@ pub async fn get_pools_by_ids(
         }
         Err(e) => {
             error!("❌ 根据IDs查询池子失败: {:?}", e);
-            let error_response = crate::dtos::solana_dto::NewPoolListResponse2 {
+            let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse2 {
                 id: uuid::Uuid::new_v4().to_string(),
                 success: false,
                 data: vec![],
@@ -695,9 +695,9 @@ pub async fn get_pools_by_ids(
         ("limit" = Option<u32>, Query, description = "每页数量")
     ),
     responses(
-        (status = 200, description = "查询成功", body = crate::dtos::solana_dto::NewPoolListResponse),
-        (status = 400, description = "参数错误", body = crate::dtos::solana_dto::NewPoolListResponse),
-        (status = 500, description = "查询失败", body = crate::dtos::solana_dto::NewPoolListResponse)
+        (status = 200, description = "查询成功", body = crate::dtos::solana::pool::listing::NewPoolListResponse),
+        (status = 400, description = "参数错误", body = crate::dtos::solana::pool::listing::NewPoolListResponse),
+        (status = 500, description = "查询失败", body = crate::dtos::solana::pool::listing::NewPoolListResponse)
     ),
     tag = "CLMM池子查询"
 )]
@@ -705,8 +705,8 @@ pub async fn get_pools_by_mint_pair(
     Extension(services): Extension<Services>,
     Query(params): Query<PoolListRequest>,
 ) -> Result<
-    Json<crate::dtos::solana_dto::NewPoolListResponse>,
-    (StatusCode, Json<crate::dtos::solana_dto::NewPoolListResponse>),
+    Json<crate::dtos::solana::pool::listing::NewPoolListResponse>,
+    (StatusCode, Json<crate::dtos::solana::pool::listing::NewPoolListResponse>),
 > {
     info!("🔍 接收到代币对池子查询请求");
     info!("  Mint1: {:?}", params.mint1);
@@ -722,10 +722,10 @@ pub async fn get_pools_by_mint_pair(
 
     // 验证必需参数
     let mint1 = params.mint1.clone().ok_or_else(|| {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
-            data: crate::dtos::solana_dto::PoolListData {
+            data: crate::dtos::solana::pool::listing::PoolListData {
                 count: 0,
                 data: vec![],
                 has_next_page: false,
@@ -735,10 +735,10 @@ pub async fn get_pools_by_mint_pair(
     })?;
 
     let mint2 = params.mint2.clone().ok_or_else(|| {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
-            data: crate::dtos::solana_dto::PoolListData {
+            data: crate::dtos::solana::pool::listing::PoolListData {
                 count: 0,
                 data: vec![],
                 has_next_page: false,
@@ -749,10 +749,10 @@ pub async fn get_pools_by_mint_pair(
 
     // 验证mint地址格式
     if mint1.len() < 32 || mint1.len() > 44 {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
-            data: crate::dtos::solana_dto::PoolListData {
+            data: crate::dtos::solana::pool::listing::PoolListData {
                 count: 0,
                 data: vec![],
                 has_next_page: false,
@@ -762,10 +762,10 @@ pub async fn get_pools_by_mint_pair(
     }
 
     if mint2.len() < 32 || mint2.len() > 44 {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
-            data: crate::dtos::solana_dto::PoolListData {
+            data: crate::dtos::solana::pool::listing::PoolListData {
                 count: 0,
                 data: vec![],
                 has_next_page: false,
@@ -776,10 +776,10 @@ pub async fn get_pools_by_mint_pair(
 
     // 验证两个mint不能相同
     if mint1 == mint2 {
-        let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+        let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
-            data: crate::dtos::solana_dto::PoolListData {
+            data: crate::dtos::solana::pool::listing::PoolListData {
                 count: 0,
                 data: vec![],
                 has_next_page: false,
@@ -795,10 +795,10 @@ pub async fn get_pools_by_mint_pair(
         }
         Err(e) => {
             error!("❌ 代币对池子查询失败: {:?}", e);
-            let error_response = crate::dtos::solana_dto::NewPoolListResponse {
+            let error_response = crate::dtos::solana::pool::listing::NewPoolListResponse {
                 id: uuid::Uuid::new_v4().to_string(),
                 success: false,
-                data: crate::dtos::solana_dto::PoolListData {
+                data: crate::dtos::solana::pool::listing::PoolListData {
                     count: 0,
                     data: vec![],
                     has_next_page: false,
@@ -880,22 +880,22 @@ pub async fn get_pools_by_mint_pair(
         ("ids" = String, Query, description = "多个池子地址，用逗号分隔")
     ),
     responses(
-        (status = 200, description = "查询成功", body = crate::dtos::solana_dto::PoolKeyResponse),
-        (status = 400, description = "参数错误", body = crate::dtos::solana_dto::PoolKeyResponse),
-        (status = 500, description = "查询失败", body = crate::dtos::solana_dto::PoolKeyResponse)
+        (status = 200, description = "查询成功", body = crate::dtos::solana::pool::info::PoolKeyResponse),
+        (status = 400, description = "参数错误", body = crate::dtos::solana::pool::info::PoolKeyResponse),
+        (status = 500, description = "查询失败", body = crate::dtos::solana::pool::info::PoolKeyResponse)
     ),
     tag = "CLMM池子查询"
 )]
 pub async fn get_pools_key_by_ids(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<crate::dtos::solana_dto::PoolKeyResponse>, (StatusCode, Json<crate::dtos::solana_dto::PoolKeyResponse>)>
+) -> Result<Json<crate::dtos::solana::pool::info::PoolKeyResponse>, (StatusCode, Json<crate::dtos::solana::pool::info::PoolKeyResponse>)>
 {
     info!("🔍 接收到池子密钥查询请求");
 
     // 验证必需参数
     let ids = params.get("ids").ok_or_else(|| {
-        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+        let error_response = crate::dtos::solana::pool::info::PoolKeyResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -905,7 +905,7 @@ pub async fn get_pools_key_by_ids(
 
     // 验证 ids 参数格式
     if ids.trim().is_empty() {
-        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+        let error_response = crate::dtos::solana::pool::info::PoolKeyResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -921,7 +921,7 @@ pub async fn get_pools_key_by_ids(
         .collect();
 
     if pool_addresses.is_empty() {
-        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+        let error_response = crate::dtos::solana::pool::info::PoolKeyResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -931,7 +931,7 @@ pub async fn get_pools_key_by_ids(
 
     // 限制一次查询的池子数量，防止过大查询
     if pool_addresses.len() > 100 {
-        let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+        let error_response = crate::dtos::solana::pool::info::PoolKeyResponse {
             id: uuid::Uuid::new_v4().to_string(),
             success: false,
             data: vec![],
@@ -942,7 +942,7 @@ pub async fn get_pools_key_by_ids(
     // 验证每个地址的格式（基本长度检查）
     for addr in &pool_addresses {
         if addr.len() < 32 || addr.len() > 44 {
-            let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+            let error_response = crate::dtos::solana::pool::info::PoolKeyResponse {
                 id: uuid::Uuid::new_v4().to_string(),
                 success: false,
                 data: vec![],
@@ -961,7 +961,7 @@ pub async fn get_pools_key_by_ids(
         }
         Err(e) => {
             error!("❌ 池子密钥查询失败: {:?}", e);
-            let error_response = crate::dtos::solana_dto::PoolKeyResponse {
+            let error_response = crate::dtos::solana::pool::info::PoolKeyResponse {
                 id: uuid::Uuid::new_v4().to_string(),
                 success: false,
                 data: vec![],

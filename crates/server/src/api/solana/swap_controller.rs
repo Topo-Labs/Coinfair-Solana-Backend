@@ -1,8 +1,4 @@
 use crate::{
-    dtos::solana_dto::{
-        ApiResponse, BalanceResponse, ErrorResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse,
-        WalletInfo,
-    },
     extractors::validation_extractor::ValidationExtractor,
     services::Services,
 };
@@ -14,6 +10,8 @@ use axum::{
     Router,
 };
 use tracing::{error, info};
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse, WalletInfo};
+use crate::dtos::solana::swap::basic::{BalanceResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse};
 
 pub struct SwapController;
 

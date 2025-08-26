@@ -1,7 +1,5 @@
-use crate::{
-    dtos::solana_dto::ErrorResponse, dtos::static_dto::ApiResponse,
-    extractors::validation_extractor::ValidationExtractor, services::Services,
-};
+use crate::dtos::solana::common::ErrorResponse;
+use crate::{dtos::static_dto::ApiResponse, extractors::validation_extractor::ValidationExtractor, services::Services};
 use axum::{
     extract::Extension,
     http::StatusCode,

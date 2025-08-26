@@ -1,4 +1,4 @@
-use crate::dtos::solana_dto::{LiquidityLinePoint, PoolLiquidityLineData, PoolLiquidityLineRequest};
+use crate::dtos::solana::pool::liquidity_line::{LiquidityLinePoint, PoolLiquidityLineData, PoolLiquidityLineRequest};
 use anchor_lang::AccountDeserialize;
 use anyhow::{anyhow, Result};
 use database::Database;

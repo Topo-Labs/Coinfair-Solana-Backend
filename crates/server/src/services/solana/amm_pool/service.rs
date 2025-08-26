@@ -1,8 +1,7 @@
 // AmmPoolService handles classic AMM pool creation operations
 
-use crate::dtos::solana_dto::{
+use crate::dtos::solana::pool::creation::{
     CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
-    TransactionStatus,
 };
 
 use super::super::shared::SharedContext;
@@ -16,6 +15,8 @@ use spl_associated_token_account;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
+use crate::dtos::solana::common::TransactionStatus;
+// use crate::dtos::solana::pool::creation::{CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse};
 
 /// AmmPoolService handles classic AMM pool creation operations
 #[allow(dead_code)]

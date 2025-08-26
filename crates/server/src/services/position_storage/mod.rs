@@ -1,8 +1,8 @@
-use crate::dtos::solana_dto::{
-    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
-    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
-    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
-};
+// use crate::dtos::solana_dto::{
+//     DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+//     IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+//     OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
+// };
 
 use database::{
     position::{
@@ -15,6 +15,14 @@ use database::{
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
+
+use crate::dtos::solana::position::{
+    liquidity::{
+        DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+        IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+    },
+    open_position::{OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse},
+};
 
 /// Position Storage Service - 负责仓位数据的链下存储和管理
 #[derive(Clone)]

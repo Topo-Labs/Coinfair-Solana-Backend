@@ -1,7 +1,6 @@
 use std::net::SocketAddr;
 
 use crate::dtos::{
-    solana_dto::ApiResponse,
     static_dto::{
         AutoFeeConfig, ChainTimeConfig, ClmmConfig, ClmmConfigResponse, InfoResponse, MintListResponse, RpcConfig,
         VersionConfig,
@@ -9,6 +8,7 @@ use crate::dtos::{
 };
 use axum::{extract::ConnectInfo, response::Json, routing::get, Router};
 use tracing::info;
+use crate::dtos::solana::common::ApiResponse;
 
 pub struct StaticConfigController;
 

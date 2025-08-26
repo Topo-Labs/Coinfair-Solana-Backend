@@ -2,7 +2,7 @@
 //!
 //! 负责将池子创建后的元数据存储到MongoDB数据库中
 
-use crate::dtos::solana_dto::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
+use crate::dtos::solana::pool::creation::{CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse};
 use database::clmm_pool::{
     ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
     TransactionInfo, TransactionStatus, VaultInfo,
@@ -222,7 +222,7 @@ impl ClmmPoolStorageService {
         let transaction_info = TransactionInfo {
             signature: response.signature.clone(),
             status: match response.status {
-                crate::dtos::solana_dto::TransactionStatus::Finalized => TransactionStatus::Finalized,
+                crate::dtos::solana::common::TransactionStatus::Finalized => TransactionStatus::Finalized,
                 _ => TransactionStatus::Confirmed,
             },
             explorer_url: response.explorer_url.clone(),

@@ -1,7 +1,6 @@
 // Tests for ClmmPoolService
 
 use super::ClmmPoolService;
-use crate::dtos::solana_dto::CreatePoolRequest;
 use crate::services::solana::config::ClmmConfigService;
 use crate::services::solana::shared::SharedContext;
 use solana_sdk::pubkey::Pubkey;
@@ -10,6 +9,7 @@ use std::sync::Arc;
 
 #[cfg(test)]
 mod create_pool_tests {
+    use crate::dtos::solana::pool::creation::CreatePoolRequest;
     use super::*;
 
     #[test]

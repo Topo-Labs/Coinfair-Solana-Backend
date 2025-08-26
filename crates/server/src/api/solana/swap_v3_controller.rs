@@ -1,8 +1,4 @@
 use crate::{
-    dtos::solana_dto::{
-        ComputeSwapV3Request, RaydiumResponse, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionData,
-        TransactionSwapV3Request,
-    },
     services::Services,
 };
 use axum::{
@@ -12,6 +8,9 @@ use axum::{
     Router,
 };
 use tracing::{error, info};
+use crate::dtos::solana::common::TransactionData;
+use crate::dtos::solana::swap::raydium::RaydiumResponse;
+use crate::dtos::solana::swap::swap_v3::{ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request};
 
 pub struct SwapV3Controller;
 
