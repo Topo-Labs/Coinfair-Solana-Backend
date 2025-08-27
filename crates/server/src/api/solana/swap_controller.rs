@@ -1,7 +1,8 @@
-use crate::{
-    extractors::validation_extractor::ValidationExtractor,
-    services::Services,
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse, WalletInfo};
+use crate::dtos::solana::swap::basic::{
+    BalanceResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse,
 };
+use crate::{extractors::validation_extractor::ValidationExtractor, services::Services};
 use axum::{
     extract::Extension,
     http::StatusCode,
@@ -10,8 +11,6 @@ use axum::{
     Router,
 };
 use tracing::{error, info};
-use crate::dtos::solana::common::{ApiResponse, ErrorResponse, WalletInfo};
-use crate::dtos::solana::swap::basic::{BalanceResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse};
 
 pub struct SwapController;
 

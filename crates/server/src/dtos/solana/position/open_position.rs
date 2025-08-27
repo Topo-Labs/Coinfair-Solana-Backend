@@ -1,7 +1,7 @@
+use crate::dtos::solana::common::{default_slippage, TransactionStatus};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
-use crate::dtos::solana::common::{default_slippage, TransactionStatus};
 
 // ============ OpenPosition API ============
 

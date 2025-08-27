@@ -1,7 +1,7 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::PoolCreationEventData, EventParser, ParsedEvent},
+    parser::{event_parser::PoolCreatedEventData, EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
@@ -14,7 +14,7 @@ use utils::solana::account_loader::AccountLoader;
 
 /// 池子创建事件的原始数据结构（与Raydium CLMM智能合约保持一致）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub struct PoolCreationEvent {
+pub struct PoolCreatedEvent {
     /// 第一个代币的mint地址（按地址排序）
     pub token_mint_0: Pubkey,
     /// 第二个代币的mint地址（按地址排序）
@@ -60,7 +60,7 @@ impl PoolCreationParser {
     }
 
     /// 从程序数据解析池子创建事件
-    fn parse_program_data(&self, data_str: &str) -> Result<PoolCreationEvent> {
+    fn parse_program_data(&self, data_str: &str) -> Result<PoolCreatedEvent> {
         // Base64解码
         let data = general_purpose::STANDARD
             .decode(data_str)
@@ -80,7 +80,7 @@ impl PoolCreationParser {
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = PoolCreationEvent::try_from_slice(event_data)
+        let event = PoolCreatedEvent::try_from_slice(event_data)
             .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
         info!("池子解析成功：{:?}", event);
         debug!(
@@ -91,7 +91,7 @@ impl PoolCreationParser {
     }
 
     /// 计算池子相关指标
-    fn calculate_pool_metrics(&self, event: &PoolCreationEvent, fee_rate: u32) -> (f64, f64, String) {
+    fn calculate_pool_metrics(&self, event: &PoolCreatedEvent, fee_rate: u32) -> (f64, f64, String) {
         // 计算价格 (从sqrt_price_x64反推)
         let sqrt_price_x64 = event.sqrt_price_x64;
         let price_ratio = if sqrt_price_x64 > 0 {
@@ -296,7 +296,7 @@ impl PoolCreationParser {
     /// 将原始事件转换为ParsedEvent
     async fn convert_to_parsed_event(
         &self,
-        event: PoolCreationEvent,
+        event: PoolCreatedEvent,
         signature: String,
         slot: u64,
     ) -> Result<ParsedEvent> {
@@ -307,7 +307,7 @@ impl PoolCreationParser {
 
         let (initial_price, annual_fee_rate, pool_type) = self.calculate_pool_metrics(&event, fee_rate);
 
-        Ok(ParsedEvent::PoolCreation(PoolCreationEventData {
+        Ok(ParsedEvent::PoolCreation(PoolCreatedEventData {
             pool_address: event.pool_state.to_string(),
             token_a_mint: event.token_mint_0.to_string(),
             token_b_mint: event.token_mint_1.to_string(),
@@ -332,7 +332,7 @@ impl PoolCreationParser {
     }
 
     /// 验证池子创建事件数据
-    fn validate_pool_creation(&self, event: &PoolCreationEventData) -> Result<bool> {
+    fn validate_pool_creation(&self, event: &PoolCreatedEventData) -> Result<bool> {
         // 验证池子地址
         if event.pool_address == Pubkey::default().to_string() {
             warn!("❌ 无效的池子地址");
@@ -500,8 +500,8 @@ mod tests {
         }
     }
 
-    fn create_test_pool_creation_event() -> PoolCreationEvent {
-        PoolCreationEvent {
+    fn create_test_pool_creation_event() -> PoolCreatedEvent {
+        PoolCreatedEvent {
             token_mint_0: Pubkey::new_unique(),
             token_mint_1: Pubkey::new_unique(),
             tick_spacing: 10,
@@ -556,7 +556,7 @@ mod tests {
         let config = create_test_config();
         let parser = PoolCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
-        let valid_event = PoolCreationEventData {
+        let valid_event = PoolCreatedEventData {
             pool_address: Pubkey::new_unique().to_string(),
             token_a_mint: Pubkey::new_unique().to_string(),
             token_b_mint: Pubkey::new_unique().to_string(),
@@ -582,7 +582,7 @@ mod tests {
         assert!(parser.validate_pool_creation(&valid_event).unwrap());
 
         // 测试无效事件（相同的代币）
-        let invalid_event = PoolCreationEventData {
+        let invalid_event = PoolCreatedEventData {
             token_b_mint: valid_event.token_a_mint.clone(), // 相同的代币
             ..valid_event.clone()
         };
@@ -595,7 +595,7 @@ mod tests {
         let config = create_test_config();
         let parser = PoolCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
-        let event = PoolCreationEvent {
+        let event = PoolCreatedEvent {
             tick_spacing: 10,            // 标准精度
             sqrt_price_x64: 1u128 << 64, // sqrt(1.0)
             ..create_test_pool_creation_event()
@@ -618,7 +618,7 @@ mod tests {
         assert!(!serialized.is_empty());
 
         // 测试反序列化
-        let deserialized = PoolCreationEvent::try_from_slice(&serialized).unwrap();
+        let deserialized = PoolCreatedEvent::try_from_slice(&serialized).unwrap();
         assert_eq!(deserialized.pool_state, event.pool_state);
         assert_eq!(deserialized.token_mint_0, event.token_mint_0);
         assert_eq!(deserialized.tick_spacing, event.tick_spacing);
@@ -643,7 +643,7 @@ mod tests {
         let config = create_test_config();
         let parser = PoolCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
-        let event = ParsedEvent::PoolCreation(PoolCreationEventData {
+        let event = ParsedEvent::PoolCreation(PoolCreatedEventData {
             pool_address: Pubkey::new_unique().to_string(),
             token_a_mint: Pubkey::new_unique().to_string(),
             token_b_mint: Pubkey::new_unique().to_string(),

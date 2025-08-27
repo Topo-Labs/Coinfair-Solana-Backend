@@ -228,8 +228,8 @@ async fn test_e2e_database_persistence() {
 }
 
 /// 辅助函数：创建测试池子事件
-fn create_test_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
-    crate::parser::event_parser::PoolCreationEventData {
+fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
+    crate::parser::event_parser::PoolCreatedEventData {
         pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: Pubkey::new_unique().to_string(),
         token_b_mint: Pubkey::new_unique().to_string(),

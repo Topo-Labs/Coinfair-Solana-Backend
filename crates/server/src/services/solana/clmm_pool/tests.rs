@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 #[cfg(test)]
 mod create_pool_tests {
-    use crate::dtos::solana::pool::creation::CreatePoolRequest;
     use super::*;
+    use crate::dtos::solana::pool::creation::CreatePoolRequest;
 
     #[test]
     fn test_calculate_sqrt_price_x64() {

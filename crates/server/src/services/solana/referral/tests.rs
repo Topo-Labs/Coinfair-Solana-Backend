@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
+    use crate::dtos::solana::referral::account::{GetMintCounterRequest, GetUpperRequest};
     use crate::services::solana::referral::service::{MintCounter, ReferralAccount};
     use crate::services::solana::referral::ReferralService;
     use crate::services::solana::shared::SharedContext;
     use solana_sdk::pubkey::Pubkey;
     use std::str::FromStr;
     use std::sync::Arc;
-    use crate::dtos::solana::referral::account::{GetMintCounterRequest, GetUpperRequest};
 
     fn create_test_service() -> ReferralService {
         let shared_context = Arc::new(SharedContext::new().expect("Failed to create shared context"));

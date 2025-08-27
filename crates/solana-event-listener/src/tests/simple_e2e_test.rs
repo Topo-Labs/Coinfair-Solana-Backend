@@ -270,8 +270,8 @@ fn create_test_events() -> Vec<ParsedEvent> {
     ]
 }
 
-fn create_test_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
-    crate::parser::event_parser::PoolCreationEventData {
+fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
+    crate::parser::event_parser::PoolCreatedEventData {
         pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(), // SOL
         token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse().unwrap(), // USDC

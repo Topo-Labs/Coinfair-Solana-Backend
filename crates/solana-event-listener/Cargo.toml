@@ -36,6 +36,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 sysinfo = "0.30"  # 系统资源监控
 dotenvy = "0.15"  # 环境配置文件加载
+reqwest = { version = "0.11", features = ["json"] }  # HTTP 客户端
 
 # Internal workspace dependencies
 database = { path = "../database" }
@@ -47,3 +48,4 @@ path = "src/main.rs"
 
 [dev-dependencies]
 tokio-test = "0.4"
+wiremock = "0.5"

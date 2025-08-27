@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use crate::{
-    services::Services,
-};
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
+use crate::services::Services;
 use axum::{
     extract::{Extension, Query},
     http::StatusCode,
@@ -12,7 +11,6 @@ use axum::{
 };
 use database::clmm_pool::model::PoolListRequest;
 use tracing::{error, info};
-use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
 
 pub struct ClmmPoolQueryController;
 
@@ -458,7 +456,10 @@ pub async fn get_pool_list(
     Query(params): Query<PoolListRequest>,
 ) -> Result<
     Json<crate::dtos::solana::pool::listing::NewPoolListResponse>,
-    (StatusCode, Json<crate::dtos::solana::pool::listing::NewPoolListResponse>),
+    (
+        StatusCode,
+        Json<crate::dtos::solana::pool::listing::NewPoolListResponse>,
+    ),
 > {
     info!("🔍 接收到获取池子列表请求");
     if let Some(ref mint_address) = params.mint_address {
@@ -551,7 +552,10 @@ pub async fn get_pools_by_ids(
     Query(params): Query<PoolListRequest>,
 ) -> Result<
     Json<crate::dtos::solana::pool::listing::NewPoolListResponse2>,
-    (StatusCode, Json<crate::dtos::solana::pool::listing::NewPoolListResponse2>),
+    (
+        StatusCode,
+        Json<crate::dtos::solana::pool::listing::NewPoolListResponse2>,
+    ),
 > {
     info!("🔍 接收到根据IDs查询池子列表请求");
     if let Some(ref ids) = params.ids {
@@ -706,7 +710,10 @@ pub async fn get_pools_by_mint_pair(
     Query(params): Query<PoolListRequest>,
 ) -> Result<
     Json<crate::dtos::solana::pool::listing::NewPoolListResponse>,
-    (StatusCode, Json<crate::dtos::solana::pool::listing::NewPoolListResponse>),
+    (
+        StatusCode,
+        Json<crate::dtos::solana::pool::listing::NewPoolListResponse>,
+    ),
 > {
     info!("🔍 接收到代币对池子查询请求");
     info!("  Mint1: {:?}", params.mint1);
@@ -889,8 +896,10 @@ pub async fn get_pools_by_mint_pair(
 pub async fn get_pools_key_by_ids(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<crate::dtos::solana::pool::info::PoolKeyResponse>, (StatusCode, Json<crate::dtos::solana::pool::info::PoolKeyResponse>)>
-{
+) -> Result<
+    Json<crate::dtos::solana::pool::info::PoolKeyResponse>,
+    (StatusCode, Json<crate::dtos::solana::pool::info::PoolKeyResponse>),
+> {
     info!("🔍 接收到池子密钥查询请求");
 
     // 验证必需参数

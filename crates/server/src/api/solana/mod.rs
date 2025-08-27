@@ -5,6 +5,9 @@ pub mod cpmm_pool_create;
 pub mod event_controller;
 #[cfg(test)]
 pub mod event_controller_tests;
+pub mod launch_migration_controller;
+#[cfg(test)]
+pub mod launch_migration_controller_tests;
 pub mod liquidity_line_controller;
 pub mod nft_controller;
 pub mod position_controller;
@@ -119,6 +122,11 @@ impl SolanaController {
             .merge(clmm_pool_create::ClmmPoolCreateController::routes())
             .merge(cpmm_pool_create::CpmmPoolCreateController::routes())
             .merge(clmm_pool_query::ClmmPoolQueryController::routes())
+            // 添加发射迁移路由
+            .nest(
+                "/launch-migration",
+                launch_migration_controller::LaunchMigrationController::routes(),
+            )
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }
 

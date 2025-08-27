@@ -1,7 +1,4 @@
-use crate::dtos::solana::nft::mint::{
-     MintNftAndSendTransactionResponse,
-    MintNftRequest, MintNftResponse,
-};
+use crate::dtos::solana::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
 
 use super::super::shared::{helpers::SolanaUtils, SharedContext};
 use ::utils::solana::ConfigManager;
@@ -19,10 +16,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tracing::info;
 
-use anchor_lang::prelude::AccountMeta;
-use spl_associated_token_account::get_associated_token_address;
 use crate::dtos::solana::common::TransactionStatus;
 use crate::dtos::solana::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
+use anchor_lang::prelude::AccountMeta;
+use spl_associated_token_account::get_associated_token_address;
 
 /// NFT服务 - 处理推荐NFT的铸造
 pub struct NftService {

@@ -4,7 +4,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 /// 交易状态枚举
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum TransactionStatus {
     /// 已发送，等待确认
     Pending,
@@ -184,36 +184,34 @@ pub fn default_page_size() -> u64 {
     20
 }
 
-
 /// 验证代币类型
 pub fn validate_token_type(token: &str) -> Result<(), validator::ValidationError> {
-      // 只支持实际的mint地址
-      match token {
-          // SOL的native mint地址
-          "So11111111111111111111111111111111111111112" => Ok(()),
-  
-          // USDC mint地址（支持多个常见的USDC地址）
-          "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" | // 标准USDC
-          "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" | // 配置中的USDC
-          "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM" => Ok(()), // 其他USDC变体
-  
-          _ => {
-              let mut error = validator::ValidationError::new("invalid_token");
-              error.message = Some("必须使用有效的代币mint地址".into());
-              Err(error)
-          }
-      }
-  }
-  
-  pub fn validate_sort_order(value: &str) -> Result<(), validator::ValidationError> {
-      if value == "asc" || value == "desc" {
-          Ok(())
-      } else {
-          Err(validator::ValidationError::new("invalid_sort_order"))
-      }
-  }
-  
+    // 只支持实际的mint地址
+    match token {
+        // SOL的native mint地址
+        "So11111111111111111111111111111111111111112" => Ok(()),
 
-  pub fn default_slippage() -> f64 {
+        // USDC mint地址（支持多个常见的USDC地址）
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" | // 标准USDC
+        "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU" | // 配置中的USDC
+        "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM" => Ok(()), // 其他USDC变体
+
+        _ => {
+            let mut error = validator::ValidationError::new("invalid_token");
+            error.message = Some("必须使用有效的代币mint地址".into());
+            Err(error)
+        }
+    }
+}
+
+pub fn validate_sort_order(value: &str) -> Result<(), validator::ValidationError> {
+    if value == "asc" || value == "desc" {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("invalid_sort_order"))
+    }
+}
+
+pub fn default_slippage() -> f64 {
     0.5 // 默认0.5%滑点
 }

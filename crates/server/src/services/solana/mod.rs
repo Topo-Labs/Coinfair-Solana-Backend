@@ -5,6 +5,7 @@ pub mod amm_pool;
 pub mod clmm_pool;
 pub mod config;
 pub mod event;
+pub mod launch_migration;
 pub mod liquidity;
 pub mod liquidity_line;
 pub mod nft;
@@ -20,3 +21,6 @@ pub use service::{DynSolanaService, SolanaService, SolanaServiceTrait};
 
 // Re-export commonly used types from shared module
 pub use shared::types::*;
+
+// Re-export launch migration service
+pub use launch_migration::LaunchMigrationService;

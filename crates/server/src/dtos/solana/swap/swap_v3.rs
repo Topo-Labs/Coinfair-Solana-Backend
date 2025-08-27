@@ -4,7 +4,10 @@ use validator::Validate;
 
 use crate::dtos::solana::{
     common::{RoutePlan, TransactionData, TransactionStatus, TransferFeeInfo},
-    swap::{raydium::RaydiumResponse, referral::{ReferralAccounts, ReferralInfo, ReferralTransactionInfo}},
+    swap::{
+        raydium::RaydiumResponse,
+        referral::{ReferralAccounts, ReferralInfo, ReferralTransactionInfo},
+    },
 };
 
 /// SwapV3计算交换请求参数（支持推荐系统）

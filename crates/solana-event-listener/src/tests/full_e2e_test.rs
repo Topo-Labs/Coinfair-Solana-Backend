@@ -583,8 +583,8 @@ async fn test_e2e_database_write_verification() {
 }
 
 // 辅助函数：创建逼真的测试数据
-fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
-    crate::parser::event_parser::PoolCreationEventData {
+fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
+    crate::parser::event_parser::PoolCreatedEventData {
         pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(), // SOL
         token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse().unwrap(), // USDC

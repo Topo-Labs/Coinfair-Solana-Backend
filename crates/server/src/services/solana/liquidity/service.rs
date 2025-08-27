@@ -9,6 +9,7 @@ use super::super::shared::{helpers::SolanaUtils, SharedContext};
 use crate::services::position_storage::PositionStorageService;
 use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtilsOptimized};
 
+use crate::dtos::solana::common::TransactionStatus;
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -18,7 +19,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{info, warn};
 use utils::TokenUtils;
-use crate::dtos::solana::common::TransactionStatus;
 
 /// 批量操作的共享数据
 #[derive(Debug)]

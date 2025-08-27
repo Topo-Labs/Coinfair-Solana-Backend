@@ -242,11 +242,36 @@ impl PositionService {
             &pool_state.token_mint_1,
             &transfer_fee_1.owner, // 这是mint账户的owner = token program ID
         );
+        let mut instructions = Vec::new();
+        // 使用幂等方法创建用户的Token0账户（如果已存在则跳过）
+        info!("  ➕ 确保用户Token0关联代币账户存在: {}", user_token_account_0);
+        let create_ata_0_instruction =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &user_wallet,             // payer
+                &user_wallet,             // wallet
+                &pool_state.token_mint_0, // token_mint
+                &transfer_fee_0.owner,    // token_program
+            );
+        instructions.push(create_ata_0_instruction);
+
+        // 使用幂等方法创建用户的Token1账户（如果已存在则跳过）
+        info!("  ➕ 确保用户Token1关联代币账户存在: {}", user_token_account_1);
+        let create_ata_1_instruction =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &user_wallet,             // payer
+                &user_wallet,             // wallet
+                &pool_state.token_mint_1, // token_mint
+                &transfer_fee_1.owner,    // token_program
+            );
+        instructions.push(create_ata_1_instruction);
 
         // 13. 构建OpenPosition指令
-        let instructions = PositionInstructionBuilder::build_open_position_with_token22_nft_instructions(
+        let position_instructions = PositionInstructionBuilder::build_open_position_with_token22_nft_instructions(
             &pool_address,
-            &pool_state,
+            &pool_state.token_vault_0,
+            &pool_state.token_vault_1,
+            &pool_state.token_mint_0,
+            &pool_state.token_mint_1,
             &user_wallet,
             &nft_mint.pubkey(),
             &user_token_account_0,
@@ -261,7 +286,7 @@ impl PositionService {
             request.with_metadata,
             remaining_accounts,
         )?;
-
+        instructions.extend(position_instructions);
         // 14. 构建未签名交易
         // 创建未签名的交易消息
         let mut message = solana_sdk::message::Message::new(&instructions, Some(&user_wallet));
@@ -476,11 +501,36 @@ impl PositionService {
             &pool_state.token_mint_1,
             &transfer_fee_1.owner, // 这是mint账户的owner = token program ID
         );
+        let mut instructions = Vec::new();
+        // 使用幂等方法创建用户的Token0账户（如果已存在则跳过）
+        info!("  ➕ 确保用户Token0关联代币账户存在: {}", user_token_account_0);
+        let create_ata_0_instruction =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &user_wallet,             // payer
+                &user_wallet,             // wallet
+                &pool_state.token_mint_0, // token_mint
+                &transfer_fee_0.owner,    // token_program
+            );
+        instructions.push(create_ata_0_instruction);
 
+        // 使用幂等方法创建用户的Token1账户（如果已存在则跳过）
+        info!("  ➕ 确保用户Token1关联代币账户存在: {}", user_token_account_1);
+        let create_ata_1_instruction =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &user_wallet,             // payer
+                &user_wallet,             // wallet
+                &pool_state.token_mint_1, // token_mint
+                &transfer_fee_1.owner,    // token_program
+            );
+
+        instructions.push(create_ata_1_instruction);
         // 13. 构建OpenPosition指令
-        let instructions = PositionInstructionBuilder::build_open_position_with_token22_nft_instructions(
+        let position_instructions = PositionInstructionBuilder::build_open_position_with_token22_nft_instructions(
             &pool_address,
-            &pool_state,
+            &pool_state.token_vault_0,
+            &pool_state.token_vault_1,
+            &pool_state.token_mint_0,
+            &pool_state.token_mint_1,
             &user_wallet,
             &nft_mint.pubkey(),
             &user_token_account_0,
@@ -495,7 +545,7 @@ impl PositionService {
             request.with_metadata,
             remaining_accounts,
         )?;
-
+        instructions.extend(position_instructions);
         // 14. 构建交易
         let recent_blockhash = self.shared.rpc_client.get_latest_blockhash()?;
         let transaction = Transaction::new_signed_with_payer(

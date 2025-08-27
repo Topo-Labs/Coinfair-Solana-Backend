@@ -3,8 +3,7 @@ use crate::{
     error::{EventListenerError, Result},
     parser::{
         event_parser::{
-            NftClaimEventData, PoolCreationEventData, RewardDistributionEventData, SwapEventData,
-            TokenCreationEventData,
+            NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData,
         },
         ParsedEvent,
     },
@@ -125,6 +124,11 @@ impl EventStorage {
                 ParsedEvent::Swap(swap_event) => {
                     swap_events.push(swap_event);
                 }
+                ParsedEvent::Launch(_) => {
+                    // LaunchEvent不需要存储，只需触发迁移操作
+                    // 迁移操作已经在LaunchEventParser中异步执行
+                    debug!("⏭️ 跳过LaunchEvent存储（仅触发迁移）");
+                }
             }
         }
 
@@ -203,7 +207,7 @@ impl EventStorage {
     }
 
     /// 批量写入池子创建事件
-    async fn write_pool_creation_batch(&self, events: &[&PoolCreationEventData]) -> Result<u64> {
+    async fn write_pool_creation_batch(&self, events: &[&PoolCreatedEventData]) -> Result<u64> {
         let mut written_count = 0u64;
 
         for event in events {
@@ -398,7 +402,7 @@ impl EventStorage {
     }
 
     /// 写入单个池子创建事件（改造版：更新ClmmPool表）
-    async fn write_single_pool_creation(&self, event: &PoolCreationEventData) -> Result<bool> {
+    async fn write_single_pool_creation(&self, event: &PoolCreatedEventData) -> Result<bool> {
         info!("🔄 处理链上池子创建事件: {}", event.pool_address);
 
         // 1. 查找是否有对应的API创建记录
@@ -496,7 +500,7 @@ impl EventStorage {
     }
 
     /// 将池子创建事件转换为数据库模型
-    fn convert_to_pool_event(&self, event: &PoolCreationEventData) -> Result<ClmmPoolEvent> {
+    fn convert_to_pool_event(&self, event: &PoolCreatedEventData) -> Result<ClmmPoolEvent> {
         let now = Utc::now().timestamp();
 
         Ok(ClmmPoolEvent {
@@ -666,11 +670,16 @@ impl EventStorage {
             ParsedEvent::NftClaim(nft_event) => self.write_single_nft_claim(nft_event).await,
             ParsedEvent::RewardDistribution(reward_event) => self.write_single_reward_distribution(reward_event).await,
             ParsedEvent::Swap(swap_event) => self.write_single_swap(swap_event).await,
+            ParsedEvent::Launch(_) => {
+                // LaunchEvent不需要存储，迁移操作已在解析器中异步执行
+                debug!("⏭️ 跳过LaunchEvent存储（仅触发迁移）");
+                Ok(false)
+            }
         }
     }
 
     /// 智能更新池子（防止覆盖）
-    async fn smart_update_pool_from_event(&self, pool: &mut ClmmPool, event: &PoolCreationEventData) -> Result<bool> {
+    async fn smart_update_pool_from_event(&self, pool: &mut ClmmPool, event: &PoolCreatedEventData) -> Result<bool> {
         // 版本控制：检查slot防止旧事件覆盖新数据
         if let Some(api_slot) = pool.api_created_slot {
             if event.slot < api_slot {
@@ -792,7 +801,7 @@ impl EventStorage {
     }
 
     /// 从链上事件创建新池子记录（仅在允许时调用）
-    async fn create_pool_from_chain_event(&self, event: &PoolCreationEventData) -> Result<bool> {
+    async fn create_pool_from_chain_event(&self, event: &PoolCreatedEventData) -> Result<bool> {
         // 再次检查开关（双重保险）
         if !self.app_config.enable_pool_event_insert {
             warn!("❌ 尝试从事件创建池子但开关已关闭: {}", event.pool_address);
@@ -905,7 +914,7 @@ impl EventStorage {
     }
 
     /// 保存池子事件作为审计日志
-    async fn save_pool_event_as_audit_log(&self, event: &PoolCreationEventData) -> Result<()> {
+    async fn save_pool_event_as_audit_log(&self, event: &PoolCreatedEventData) -> Result<()> {
         // 转换为ClmmPoolEvent用于审计
         let pool_event = self.convert_to_pool_event(event)?;
 
@@ -1139,9 +1148,9 @@ mod tests {
         }
     }
 
-    fn create_test_pool_event() -> crate::parser::event_parser::PoolCreationEventData {
-        use crate::parser::event_parser::PoolCreationEventData;
-        PoolCreationEventData {
+    fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
+        use crate::parser::event_parser::PoolCreatedEventData;
+        PoolCreatedEventData {
             pool_address: Pubkey::new_unique().to_string(),
             token_a_mint: Pubkey::new_unique().to_string(),
             token_b_mint: Pubkey::new_unique().to_string(),

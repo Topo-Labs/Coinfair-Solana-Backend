@@ -1,6 +1,6 @@
 use crate::config::EventListenerConfig;
 use crate::error::{EventListenerError, Result};
-use crate::parser::{NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser, TokenCreationParser};
+use crate::parser::{LaunchEventParser, NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser, TokenCreationParser};
 use anchor_lang::pubkey;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -59,13 +59,15 @@ pub enum ParsedEvent {
     /// 代币创建事件
     TokenCreation(TokenCreationEventData),
     /// 池子创建事件
-    PoolCreation(PoolCreationEventData),
+    PoolCreation(PoolCreatedEventData),
     /// NFT领取事件
     NftClaim(NftClaimEventData),
     /// 奖励分发事件
     RewardDistribution(RewardDistributionEventData),
     /// 交换事件
     Swap(SwapEventData),
+    /// Meme币发射事件
+    Launch(LaunchEventData),
 }
 
 impl ParsedEvent {
@@ -77,6 +79,7 @@ impl ParsedEvent {
             ParsedEvent::NftClaim(_) => "nft_claim",
             ParsedEvent::RewardDistribution(_) => "reward_distribution",
             ParsedEvent::Swap(_) => "swap",
+            ParsedEvent::Launch(_) => "launch",
         }
     }
 
@@ -88,6 +91,7 @@ impl ParsedEvent {
             ParsedEvent::NftClaim(data) => format!("{}_{}", data.nft_mint, data.signature),
             ParsedEvent::RewardDistribution(data) => format!("{}_{}", data.distribution_id, data.signature),
             ParsedEvent::Swap(data) => format!("{}_{}", data.pool_address, data.signature),
+            ParsedEvent::Launch(data) => format!("{}_{}", data.meme_token_mint, data.signature),
         }
     }
 }
@@ -123,7 +127,7 @@ pub struct TokenCreationEventData {
 
 /// 池子创建事件数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PoolCreationEventData {
+pub struct PoolCreatedEventData {
     /// CLMM池子地址
     pub pool_address: String,
     /// 代币A的mint地址
@@ -317,6 +321,41 @@ pub struct SwapEventData {
     pub processed_at: String,
 }
 
+/// Meme币发射事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LaunchEventData {
+    /// meme币合约地址
+    pub meme_token_mint: String,
+    /// 配对代币地址(通常是SOL或USDC)
+    pub base_token_mint: String,
+    /// 用户钱包地址
+    pub user_wallet: String,
+    /// CLMM配置索引
+    pub config_index: u32,
+    /// 初始价格
+    pub initial_price: f64,
+    /// 池子开放时间戳，0表示立即开放
+    pub open_time: u64,
+    /// 价格下限
+    pub tick_lower_price: f64,
+    /// 价格上限  
+    pub tick_upper_price: f64,
+    /// meme币数量
+    pub meme_token_amount: u64,
+    /// 配对代币数量
+    pub base_token_amount: u64,
+    /// 最大滑点百分比
+    pub max_slippage_percent: f64,
+    /// 是否包含NFT元数据
+    pub with_metadata: bool,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: String,
+}
+
 /// 事件解析器接口
 #[async_trait]
 pub trait EventParser: Send + Sync {
@@ -417,6 +456,14 @@ impl EventParserRegistry {
         }
 
         registry.register_program_parser(reward_distribution_parser)?;
+
+        // LaunchEvent解析器 - 支持Meme币发射平台
+        // 默认使用FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX程序ID，可以通过环境变量或配置调整
+        let launch_parser = Box::new(LaunchEventParser::new(
+            config,
+            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+        )?);
+        registry.register_program_parser(launch_parser)?;
 
         Ok(registry)
     }
@@ -1256,8 +1303,8 @@ mod tests {
 
         let registry = EventParserRegistry::new(&config).unwrap();
 
-        // 应该有5个解析器：2个swap、token_creation、pool_creation、nft_claim、reward_distribution
-        assert_eq!(registry.parser_count(), 5);
+        // 应该有6个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution、launch
+        assert_eq!(registry.parser_count(), 6);
 
         let parsers = registry.get_registered_parsers();
         let parser_types: Vec<String> = parsers.iter().map(|(name, _)| name.clone()).collect();
@@ -1268,7 +1315,9 @@ mod tests {
         assert!(parser_types.contains(&"nft_claim".to_string()));
         assert!(parser_types.contains(&"reward_distribution".to_string()));
 
-        // 注意：由于有两个swap解析器，总数是5个
+        assert!(parser_types.contains(&"launch".to_string()));
+        
+        // 注意：现在有6个解析器
         println!("📊 解析器统计: 总数={}, 类型={:?}", parsers.len(), parser_types);
     }
 
@@ -1499,9 +1548,9 @@ mod tests {
 
         // 验证解析器注册表的统计信息
         let stats = registry.get_detailed_stats();
-        // 应该有5个解析器：2个swap、token_creation、pool_creation、nft_claim、reward_distribution
-        assert_eq!(stats.total_parsers, 5, "应该有5个解析器");
-        assert_eq!(stats.program_specific_count, 5, "应该都是程序特定解析器");
+        // 应该有6个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution、launch
+        assert_eq!(stats.total_parsers, 6, "应该有6个解析器");
+        assert_eq!(stats.program_specific_count, 6, "应该都是程序特定解析器");
         assert_eq!(stats.universal_count, 0, "应该没有通用解析器");
         assert_eq!(stats.unique_programs, 2, "应该有2个不同的程序");
 
