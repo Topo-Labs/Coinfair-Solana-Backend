@@ -11,7 +11,7 @@ use chrono::Utc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// LaunchEvent的原始数据结构（与链上合约保持一致）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
@@ -213,34 +213,6 @@ impl EventParser for LaunchEventParser {
                             // 转换为ParsedEvent
                             let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot).await?;
 
-                            // 立即触发迁移（不等待）
-                            if let ParsedEvent::Launch(ref data) = parsed_event {
-                                // 使用tokio::spawn来异步执行迁移，避免阻塞事件处理
-                                let event_data = data.clone();
-                                let migration_client = Arc::clone(&self.migration_client);
-
-                                tokio::spawn(async move {
-                                    // 在异步任务中调用迁移
-                                    info!(
-                                        "🚀 触发LaunchMigration: meme={}, base={}, user={}",
-                                        event_data.meme_token_mint, event_data.base_token_mint, event_data.user_wallet
-                                    );
-
-                                    match migration_client.trigger_launch_migration(&event_data).await {
-                                        Ok(response) => {
-                                            info!(
-                                                "✅ 迁移成功触发: 池子地址={}, 交易签名={}",
-                                                response.pool_address, response.signature
-                                            );
-                                        }
-                                        Err(e) => {
-                                            error!("❌ 迁移触发失败: {}", e);
-                                        }
-                                    }
-                                });
-                                info!("✅ 已异步触发迁移任务");
-                            }
-
                             return Ok(Some(parsed_event));
                         }
                         Err(EventListenerError::DiscriminatorMismatch) => {
@@ -310,10 +282,7 @@ mod tests {
         let parser = LaunchEventParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "launch");
-        assert_eq!(
-            parser.get_discriminator(),
-            [0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x01]
-        );
+        assert_eq!(parser.get_discriminator(), [27, 193, 47, 130, 115, 92, 239, 94]);
     }
 
     #[test]

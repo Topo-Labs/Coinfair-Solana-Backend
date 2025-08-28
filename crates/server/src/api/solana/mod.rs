@@ -5,6 +5,7 @@ pub mod cpmm_pool_create;
 pub mod event_controller;
 #[cfg(test)]
 pub mod event_controller_tests;
+pub mod launch_event_controller;
 pub mod launch_migration_controller;
 #[cfg(test)]
 pub mod launch_migration_controller_tests;
@@ -88,9 +89,14 @@ impl SolanaController {
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 
-    /// 事件查询路由 - NFT领取和奖励分发事件
+    /// 事件查询路由 - NFT领取和奖励分发事件、Launch事件
     fn event_routes() -> Router {
-        event_controller::EventController::routes().layer(middleware::from_fn(Self::apply_solana_optional_auth))
+        Router::new()
+            // 基础事件路由 - NFT领取和奖励分发事件
+            .merge(event_controller::EventController::routes())
+            // Launch事件路由
+            .nest("/launch", launch_event_controller::LaunchEventController::routes())
+            .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 
     /// 交易路由 - 交换操作

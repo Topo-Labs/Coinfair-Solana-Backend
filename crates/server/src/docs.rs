@@ -123,6 +123,11 @@ use utoipa::OpenApi;
         crate::api::solana::nft_controller::claim_nft_and_send_transaction,
         // Liquidity Line endpoints
         crate::api::solana::liquidity_line_controller::get_pool_liquidity_line,
+        // Launch Event endpoints
+        crate::api::solana::launch_event_controller::get_launch_event_by_signature,
+        crate::api::solana::launch_event_controller::get_launch_event_stats,
+        crate::api::solana::launch_event_controller::get_pending_migrations,
+        crate::api::solana::launch_event_controller::get_failed_migrations_for_retry,
         // Static Price endpoint
         crate::api::static_controller::get_tokens_by_ids,
     ),
@@ -286,6 +291,9 @@ use utoipa::OpenApi;
             crate::dtos::solana::pool::liquidity_line::PoolLiquidityLineData,
             crate::dtos::solana::pool::liquidity_line::LiquidityLinePoint,
             crate::dtos::solana::common::ApiResponse<crate::dtos::solana::pool::liquidity_line::PoolLiquidityLineData>,
+            // Launch Event DTOs
+            crate::dtos::solana::events::launch_event::LaunchEventResponse,
+            crate::dtos::solana::events::launch_event::LaunchEventStatsResponse,
         )
     ),
     tags(
@@ -310,7 +318,9 @@ use utoipa::OpenApi;
         (name = "代币信息", description = "代币信息相关接口"),
         (name = "CLMM配置管理", description = "CLMM配置管理相关接口"),
         (name = "Solana推荐NFT", description = "Solana推荐NFT相关接口"),
-        (name = "流动性分布", description = "池子流动性分布查询接口")
+        (name = "流动性分布", description = "池子流动性分布查询接口"),
+        (name = "LaunchEvent", description = "Launch事件查询和统计接口"),
+        (name = "LaunchEvent统计", description = "Launch事件统计分析接口")
     )
 )]
 pub struct ApiDoc;

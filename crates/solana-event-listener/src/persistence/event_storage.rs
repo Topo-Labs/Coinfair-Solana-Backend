@@ -3,10 +3,11 @@ use crate::{
     error::{EventListenerError, Result},
     parser::{
         event_parser::{
-            NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData,
+            LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData,
         },
         ParsedEvent,
     },
+    services::migration_client::MigrationClient,
 };
 use chrono::Utc;
 use database::{
@@ -14,7 +15,7 @@ use database::{
         ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
         TransactionInfo, TransactionStatus, VaultInfo,
     },
-    event_model::{ClmmPoolEvent, NftClaimEvent, RewardDistributionEvent},
+    event_model::{ClmmPoolEvent, LaunchEvent, NftClaimEvent, RewardDistributionEvent, MigrationStatus},
     token_info::{DataSource as TokenDataSource, TokenInfoRepository, TokenPushRequest},
     Database,
 };
@@ -33,6 +34,7 @@ pub struct EventStorage {
     token_repository: Arc<TokenInfoRepository>,
     clmm_pool_repository: Arc<ClmmPoolRepository>,
     app_config: Arc<AppConfig>,
+    migration_client: Arc<MigrationClient>,
 }
 
 impl EventStorage {
@@ -75,6 +77,11 @@ impl EventStorage {
         // 创建CLMM池子仓库
         let clmm_pool_repository = Arc::new(database.clmm_pool_repository.clone());
 
+        // 创建迁移客户端
+        let migration_base_url = std::env::var("MIGRATION_BASE_URL")
+            .unwrap_or_else(|_| "http://localhost:8765".to_string());
+        let migration_client = Arc::new(MigrationClient::new(migration_base_url));
+
         info!("✅ 事件存储初始化完成，数据库: {}", config.database.database_name);
         info!(
             "📊 事件监听器配置: enable_insert={}, mode={}",
@@ -87,6 +94,7 @@ impl EventStorage {
             token_repository,
             clmm_pool_repository,
             app_config,
+            migration_client,
         })
     }
 
@@ -105,6 +113,7 @@ impl EventStorage {
         let mut pool_creation_events = Vec::new();
         let mut nft_claim_events = Vec::new();
         let mut reward_distribution_events = Vec::new();
+        let mut launch_events = Vec::new();
         let mut swap_events = Vec::new();
 
         for event in events {
@@ -121,13 +130,11 @@ impl EventStorage {
                 ParsedEvent::RewardDistribution(reward_event) => {
                     reward_distribution_events.push(reward_event);
                 }
+                ParsedEvent::Launch(launch_event) => {
+                    launch_events.push(launch_event);
+                }
                 ParsedEvent::Swap(swap_event) => {
                     swap_events.push(swap_event);
-                }
-                ParsedEvent::Launch(_) => {
-                    // LaunchEvent不需要存储，只需触发迁移操作
-                    // 迁移操作已经在LaunchEventParser中异步执行
-                    debug!("⏭️ 跳过LaunchEvent存储（仅触发迁移）");
                 }
             }
         }
@@ -183,6 +190,20 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ 奖励分发事件批量写入失败: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 批量处理LaunchEvent
+        if !launch_events.is_empty() {
+            match self.write_launch_batch(&launch_events).await {
+                Ok(count) => {
+                    written_count += count;
+                    info!("✅ 成功写入 {} 个Launch事件", count);
+                }
+                Err(e) => {
+                    error!("❌ Launch事件批量写入失败: {}", e);
                     return Err(e);
                 }
             }
@@ -499,6 +520,123 @@ impl EventStorage {
         Ok(true)
     }
 
+    /// 批量写入Launch事件
+    async fn write_launch_batch(&self, events: &[&LaunchEventData]) -> Result<u64> {
+        let mut written_count = 0u64;
+
+        for event in events {
+            match self.write_single_launch_event(event).await {
+                Ok(true) => {
+                    written_count += 1;
+                    debug!("✅ Launch事件已写入: {} by {}", event.meme_token_mint, event.user_wallet);
+                }
+                Ok(false) => {
+                    debug!("ℹ️ Launch事件已存在，跳过: {} by {}", event.meme_token_mint, event.user_wallet);
+                }
+                Err(e) => {
+                    error!(
+                        "❌ Launch事件写入失败: {} by {} - {}",
+                        event.meme_token_mint, event.user_wallet, e
+                    );
+
+                    if self.is_fatal_error(&e) {
+                        return Err(e);
+                    }
+
+                    warn!("⚠️ 跳过失败的事件: {} by {}", event.meme_token_mint, event.user_wallet);
+                }
+            }
+        }
+
+        Ok(written_count)
+    }
+
+    /// 写入单个Launch事件
+    async fn write_single_launch_event(&self, event: &LaunchEventData) -> Result<bool> {
+        // 检查是否已存在
+        let existing = self
+            .database
+            .launch_event_repository
+            .find_by_signature(&event.signature)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("查询现有Launch事件失败: {}", e)))?;
+
+        if existing.is_some() {
+            debug!("Launch事件已存在，跳过: {}", event.signature);
+            return Ok(false);
+        }
+
+        // 转换为数据库模型
+        let launch_event = self.convert_to_launch_event(event)?;
+
+        // 1. 立即插入数据库记录（状态：pending）
+        let event_id = self
+            .database
+            .launch_event_repository
+            .insert_launch_event(launch_event)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("插入Launch事件失败: {}", e)))?;
+
+        info!("✅ Launch事件已写入数据库: {} (id: {})", event.signature, event_id);
+
+        // 2. 异步触发迁移操作（不阻塞当前流程）
+        let event_data = event.clone();
+        let database = Arc::clone(&self.database);
+        let migration_client = Arc::clone(&self.migration_client);
+        let signature = event.signature.clone();
+        
+        tokio::spawn(async move {
+            info!("🚀 异步触发Launch事件迁移: {}", signature);
+            
+            // 调用真实的迁移API
+            match migration_client.trigger_launch_migration(&event_data).await {
+                Ok(response) => {
+                    info!(
+                        "✅ Launch迁移成功: signature={}, pool_address={}", 
+                        signature, response.pool_address
+                    );
+                    
+                    // 更新为成功状态
+                    match database.launch_event_repository
+                        .update_migration_status(
+                            &signature,
+                            MigrationStatus::Success,
+                            Some(response.pool_address),
+                            None
+                        ).await {
+                        Ok(_) => {
+                            info!("✅ Launch事件迁移状态更新为成功: {}", signature);
+                        }
+                        Err(e) => {
+                            error!("❌ Launch事件迁移状态更新失败: {} - {}", signature, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("❌ Launch迁移失败: {} - {}", signature, e);
+                    
+                    // 更新为失败状态并记录错误信息
+                    match database.launch_event_repository
+                        .update_migration_status(
+                            &signature,
+                            MigrationStatus::Failed,
+                            None,
+                            Some(e.to_string())
+                        ).await {
+                        Ok(_) => {
+                            info!("✅ Launch事件迁移状态更新为失败: {}", signature);
+                        }
+                        Err(update_e) => {
+                            error!("❌ Launch事件迁移状态更新失败: {} - {}", signature, update_e);
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(true)
+    }
+
     /// 将池子创建事件转换为数据库模型
     fn convert_to_pool_event(&self, event: &PoolCreatedEventData) -> Result<ClmmPoolEvent> {
         let now = Utc::now().timestamp();
@@ -606,6 +744,81 @@ impl EventStorage {
         })
     }
 
+    /// 将Launch事件转换为数据库模型
+    fn convert_to_launch_event(&self, event: &LaunchEventData) -> Result<LaunchEvent> {
+        let now = Utc::now().timestamp();
+
+        // 计算统计分析字段
+        let total_liquidity_usd = (event.meme_token_amount as f64 * event.initial_price) + 
+                                  (event.base_token_amount as f64);
+        
+        let price_range_width_percent = if event.tick_lower_price > 0.0 {
+            ((event.tick_upper_price - event.tick_lower_price) / event.tick_lower_price) * 100.0
+        } else {
+            0.0
+        };
+
+        // 判断代币对类型
+        let pair_type = if event.base_token_mint == "So11111111111111111111111111111111111111112" {
+            "MemeToSol"
+        } else if event.base_token_mint == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" {
+            "MemeToUsdc"
+        } else if event.base_token_mint == "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" {
+            "MemeToUsdt"
+        } else {
+            "MemeToOther"
+        };
+
+        // 判断是否为高价值发射（基于流动性阈值）
+        let is_high_value_launch = total_liquidity_usd >= 10000.0;
+
+        Ok(LaunchEvent {
+            id: None,
+            
+            // 核心业务字段
+            meme_token_mint: event.meme_token_mint.clone(),
+            base_token_mint: event.base_token_mint.clone(),
+            user_wallet: event.user_wallet.clone(),
+            
+            // 价格和流动性参数
+            config_index: event.config_index,
+            initial_price: event.initial_price,
+            tick_lower_price: event.tick_lower_price,
+            tick_upper_price: event.tick_upper_price,
+            
+            // 代币数量
+            meme_token_amount: event.meme_token_amount,
+            base_token_amount: event.base_token_amount,
+            
+            // 交易参数
+            max_slippage_percent: event.max_slippage_percent,
+            with_metadata: event.with_metadata,
+            
+            // 时间字段
+            open_time: event.open_time,
+            launched_at: now,
+            
+            // 迁移状态跟踪 - 初始状态为pending
+            migration_status: "pending".to_string(),
+            migrated_pool_address: None,
+            migration_completed_at: None,
+            migration_error: None,
+            migration_retry_count: 0,
+            
+            // 统计分析字段
+            total_liquidity_usd,
+            pair_type: pair_type.to_string(),
+            price_range_width_percent,
+            is_high_value_launch,
+            
+            // 区块链标准字段
+            signature: event.signature.clone(),
+            slot: event.slot,
+            processed_at: now,
+            updated_at: now,
+        })
+    }
+
     /// 将代币创建事件转换为TokenPushRequest
     fn convert_to_push_request(&self, event: &TokenCreationEventData) -> Result<TokenPushRequest> {
         // 确定标签
@@ -669,12 +882,8 @@ impl EventStorage {
             ParsedEvent::PoolCreation(pool_event) => self.write_single_pool_creation(pool_event).await,
             ParsedEvent::NftClaim(nft_event) => self.write_single_nft_claim(nft_event).await,
             ParsedEvent::RewardDistribution(reward_event) => self.write_single_reward_distribution(reward_event).await,
+            ParsedEvent::Launch(launch_event) => self.write_single_launch_event(launch_event).await,
             ParsedEvent::Swap(swap_event) => self.write_single_swap(swap_event).await,
-            ParsedEvent::Launch(_) => {
-                // LaunchEvent不需要存储，迁移操作已在解析器中异步执行
-                debug!("⏭️ 跳过LaunchEvent存储（仅触发迁移）");
-                Ok(false)
-            }
         }
     }
 
