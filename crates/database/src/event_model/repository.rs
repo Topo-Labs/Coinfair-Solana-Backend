@@ -1,4 +1,4 @@
-use crate::event_model::{ClmmPoolEvent, NftClaimEvent, RewardDistributionEvent};
+use crate::event_model::{ClmmPoolEvent, NftClaimEvent, RewardDistributionEvent, LaunchEvent, MigrationStatus};
 use chrono::Utc;
 use futures_util::TryStreamExt;
 use mongodb::bson::doc;
@@ -537,4 +537,321 @@ pub struct RewardStats {
     pub today_distributions: u64,
     pub locked_rewards: u64,
     pub reward_type_distribution: Vec<(u8, u64, u64)>, // (奖励类型, 数量, 总金额)
+}
+
+/// LaunchEvent仓库
+#[derive(Debug, Clone)]
+pub struct LaunchEventRepository {
+    collection: Collection<LaunchEvent>,
+}
+
+impl LaunchEventRepository {
+    pub fn new(collection: Collection<LaunchEvent>) -> Self {
+        Self { collection }
+    }
+
+    /// 初始化索引
+    pub async fn init_indexes(&self) -> AppResult<()> {
+        // 唯一索引：签名（防止重复）
+        let signature_index = IndexModel::builder()
+            .keys(doc! { "signature": 1 })
+            .options(IndexOptions::builder().unique(true).build())
+            .build();
+
+        // 用户钱包索引（支持用户历史查询）
+        let user_wallet_index = IndexModel::builder()
+            .keys(doc! { "user_wallet": 1 })
+            .build();
+
+        // meme代币索引
+        let meme_token_index = IndexModel::builder()
+            .keys(doc! { "meme_token_mint": 1 })
+            .build();
+
+        // 时间索引（支持时间范围查询）
+        let launched_at_index = IndexModel::builder()
+            .keys(doc! { "launched_at": -1 })
+            .build();
+
+        // 迁移状态索引（支持状态过滤）
+        let migration_status_index = IndexModel::builder()
+            .keys(doc! { "migration_status": 1 })
+            .build();
+
+        // 复合索引：状态+时间（优化迁移任务查询）
+        let status_time_index = IndexModel::builder()
+            .keys(doc! {
+                "migration_status": 1,
+                "launched_at": -1
+            })
+            .build();
+
+        let indexes = vec![
+            signature_index,
+            user_wallet_index,
+            meme_token_index,
+            launched_at_index,
+            migration_status_index,
+            status_time_index,
+        ];
+
+        self.collection.create_indexes(indexes, None).await?;
+        info!("✅ LaunchEvent数据库索引初始化完成");
+        Ok(())
+    }
+
+    /// 插入Launch事件
+    pub async fn insert_launch_event(&self, mut event: LaunchEvent) -> AppResult<String> {
+        event.updated_at = Utc::now().timestamp();
+
+        let result = self.collection.insert_one(event, None).await?;
+
+        Ok(result.inserted_id.as_object_id().unwrap().to_hex())
+    }
+
+    /// 根据签名查找事件
+    pub async fn find_by_signature(&self, signature: &str) -> AppResult<Option<LaunchEvent>> {
+        let filter = doc! { "signature": signature };
+        let result = self.collection.find_one(filter, None).await?;
+        Ok(result)
+    }
+
+    /// 更新迁移状态
+    pub async fn update_migration_status(
+        &self,
+        signature: &str,
+        status: MigrationStatus,
+        pool_address: Option<String>,
+        error: Option<String>,
+    ) -> AppResult<bool> {
+        let status_str = match status {
+            MigrationStatus::Pending => "pending",
+            MigrationStatus::Success => "success",
+            MigrationStatus::Failed => "failed",
+            MigrationStatus::Retrying => "retrying",
+        };
+
+        let mut update_doc = doc! {
+            "$set": {
+                "migration_status": status_str,
+                "updated_at": Utc::now().timestamp()
+            }
+        };
+
+        // 如果是成功状态，设置池子地址和完成时间
+        if matches!(status, MigrationStatus::Success) {
+            if let Some(pool_addr) = pool_address {
+                update_doc.get_document_mut("$set").unwrap().insert("migrated_pool_address", pool_addr);
+                update_doc.get_document_mut("$set").unwrap().insert("migration_completed_at", Utc::now().timestamp());
+            }
+        }
+
+        // 如果是失败状态，设置错误信息并递增重试次数
+        if matches!(status, MigrationStatus::Failed) {
+            if let Some(err) = error {
+                update_doc.get_document_mut("$set").unwrap().insert("migration_error", err);
+            }
+            update_doc.insert("$inc", doc! { "migration_retry_count": 1 });
+        }
+
+        let filter = doc! { "signature": signature };
+        let result = self.collection.update_one(filter, update_doc, None).await?;
+
+        Ok(result.modified_count > 0)
+    }
+
+    /// 查找待迁移的事件
+    pub async fn find_pending_migrations(&self) -> AppResult<Vec<LaunchEvent>> {
+        let filter = doc! { "migration_status": "pending" };
+        let cursor = self.collection.find(filter, None).await?;
+
+        let events: Vec<LaunchEvent> = cursor.try_collect().await?;
+
+        Ok(events)
+    }
+
+    /// 查找需要重试的失败事件
+    pub async fn find_failed_migrations_for_retry(&self) -> AppResult<Vec<LaunchEvent>> {
+        let filter = doc! {
+            "migration_status": "failed",
+            "migration_retry_count": { "$lt": 3 } // 最多重试3次
+        };
+        let cursor = self.collection.find(filter, None).await?;
+
+        let events: Vec<LaunchEvent> = cursor.try_collect().await?;
+
+        Ok(events)
+    }
+
+    /// 统计总Launch数量
+    pub async fn count_total_launches(&self) -> AppResult<u64> {
+        let count = self.collection.count_documents(doc! {}, None).await?;
+        Ok(count)
+    }
+
+    /// 获取迁移成功率
+    pub async fn get_migration_success_rate(&self) -> AppResult<f64> {
+        let total_count = self.collection.count_documents(doc! {}, None).await?;
+        
+        if total_count == 0 {
+            return Ok(0.0);
+        }
+
+        let success_count = self.collection
+            .count_documents(doc! { "migration_status": "success" }, None)
+            .await?;
+
+        let success_rate = (success_count as f64) / (total_count as f64) * 100.0;
+        Ok(success_rate)
+    }
+
+    /// 获取待迁移事件数量
+    pub async fn count_pending_migrations(&self) -> AppResult<u64> {
+        let count = self.collection
+            .count_documents(doc! { "migration_status": "pending" }, None)
+            .await?;
+        Ok(count)
+    }
+
+    /// 获取成功迁移事件数量
+    pub async fn count_success_migrations(&self) -> AppResult<u64> {
+        let count = self.collection
+            .count_documents(doc! { "migration_status": "success" }, None)
+            .await?;
+        Ok(count)
+    }
+
+    /// 获取失败迁移事件数量
+    pub async fn count_failed_migrations(&self) -> AppResult<u64> {
+        let count = self.collection
+            .count_documents(doc! { "migration_status": "failed" }, None)
+            .await?;
+        Ok(count)
+    }
+
+    /// 获取重试中迁移事件数量
+    pub async fn count_retrying_migrations(&self) -> AppResult<u64> {
+        let count = self.collection
+            .count_documents(doc! { "migration_status": "retrying" }, None)
+            .await?;
+        Ok(count)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::event_model::{PairType};
+    use chrono::Utc;
+
+    fn create_test_launch_event() -> LaunchEvent {
+        LaunchEvent {
+            id: None,
+            meme_token_mint: "So11111111111111111111111111111111111111112".to_string(),
+            base_token_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
+            user_wallet: "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string(),
+            config_index: 1,
+            initial_price: 0.001,
+            tick_lower_price: 0.0005,
+            tick_upper_price: 0.002,
+            meme_token_amount: 1000000,
+            base_token_amount: 1000,
+            max_slippage_percent: 1.0,
+            with_metadata: true,
+            open_time: 0,
+            launched_at: Utc::now().timestamp(),
+            migration_status: "pending".to_string(),
+            migrated_pool_address: None,
+            migration_completed_at: None,
+            migration_error: None,
+            migration_retry_count: 0,
+            total_liquidity_usd: 1000.0,
+            pair_type: "MemeToUsdc".to_string(),
+            price_range_width_percent: 300.0,
+            is_high_value_launch: true,
+            signature: "test_signature_123".to_string(),
+            slot: 12345,
+            processed_at: Utc::now().timestamp(),
+            updated_at: Utc::now().timestamp(),
+        }
+    }
+
+    #[test]
+    fn test_launch_event_creation() {
+        let event = create_test_launch_event();
+        assert_eq!(event.meme_token_mint, "So11111111111111111111111111111111111111112");
+        assert_eq!(event.base_token_mint, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+        assert_eq!(event.user_wallet, "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy");
+        assert_eq!(event.migration_status, "pending");
+        assert_eq!(event.migration_retry_count, 0);
+    }
+
+    #[test]
+    fn test_migration_status_enum() {
+        let pending = MigrationStatus::Pending;
+        let success = MigrationStatus::Success;
+        let failed = MigrationStatus::Failed;
+        let retrying = MigrationStatus::Retrying;
+
+        // 测试序列化
+        let pending_json = serde_json::to_string(&pending).unwrap();
+        let success_json = serde_json::to_string(&success).unwrap();
+        let failed_json = serde_json::to_string(&failed).unwrap();
+        let retrying_json = serde_json::to_string(&retrying).unwrap();
+
+        assert_eq!(pending_json, "\"Pending\"");
+        assert_eq!(success_json, "\"Success\"");
+        assert_eq!(failed_json, "\"Failed\"");
+        assert_eq!(retrying_json, "\"Retrying\"");
+
+        // 测试反序列化
+        let pending_from_json: MigrationStatus = serde_json::from_str(&pending_json).unwrap();
+        let success_from_json: MigrationStatus = serde_json::from_str(&success_json).unwrap();
+        let failed_from_json: MigrationStatus = serde_json::from_str(&failed_json).unwrap();
+        let retrying_from_json: MigrationStatus = serde_json::from_str(&retrying_json).unwrap();
+
+        assert!(matches!(pending_from_json, MigrationStatus::Pending));
+        assert!(matches!(success_from_json, MigrationStatus::Success));
+        assert!(matches!(failed_from_json, MigrationStatus::Failed));
+        assert!(matches!(retrying_from_json, MigrationStatus::Retrying));
+    }
+
+    #[test]
+    fn test_pair_type_enum() {
+        let pair_types = vec![
+            PairType::MemeToSol,
+            PairType::MemeToUsdc,
+            PairType::MemeToUsdt,
+            PairType::MemeToOther,
+        ];
+
+        for pair_type in pair_types {
+            let json = serde_json::to_string(&pair_type).unwrap();
+            let from_json: PairType = serde_json::from_str(&json).unwrap();
+
+            match pair_type {
+                PairType::MemeToSol => assert!(matches!(from_json, PairType::MemeToSol)),
+                PairType::MemeToUsdc => assert!(matches!(from_json, PairType::MemeToUsdc)),
+                PairType::MemeToUsdt => assert!(matches!(from_json, PairType::MemeToUsdt)),
+                PairType::MemeToOther => assert!(matches!(from_json, PairType::MemeToOther)),
+            }
+        }
+    }
+
+    #[test]
+    fn test_launch_event_serialization() {
+        let event = create_test_launch_event();
+        
+        // 测试序列化
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("So11111111111111111111111111111111111111112"));
+        assert!(json.contains("test_signature_123"));
+        assert!(json.contains("pending"));
+
+        // 测试反序列化
+        let from_json: LaunchEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(from_json.meme_token_mint, event.meme_token_mint);
+        assert_eq!(from_json.signature, event.signature);
+        assert_eq!(from_json.migration_status, event.migration_status);
+    }
 }

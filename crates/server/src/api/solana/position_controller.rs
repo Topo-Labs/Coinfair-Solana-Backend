@@ -1,17 +1,16 @@
 use std::collections::HashMap;
 
-use crate::dtos::solana_dto::ApiResponse;
-use crate::{
-    dtos::solana_dto::{
-        CalculateLiquidityRequest, CalculateLiquidityResponse, DecreaseLiquidityAndSendTransactionResponse,
-        DecreaseLiquidityRequest, DecreaseLiquidityResponse, ErrorResponse, GetUserPositionsRequest,
-        IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
-        OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
-        UserPositionsResponse,
-    },
-    extractors::validation_extractor::ValidationExtractor,
-    services::Services,
+use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
+use crate::dtos::solana::position::liquidity::{
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
 };
+use crate::dtos::solana::position::open_position::{
+    CalculateLiquidityRequest, CalculateLiquidityResponse, GetUserPositionsRequest,
+    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
+    UserPositionsResponse,
+};
+use crate::{extractors::validation_extractor::ValidationExtractor, services::Services};
 use axum::{
     extract::{Extension, Query},
     http::StatusCode,

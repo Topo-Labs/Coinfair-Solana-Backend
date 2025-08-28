@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::dtos::solana::swap::raydium::ComputeSwapV2Request;
+    use crate::dtos::solana::swap::swap_v3::{ComputeSwapV3Request, SwapComputeV3Data};
     use crate::services::solana::shared::{ResponseBuilder, SharedContext};
     use crate::services::solana::swap::SwapService;
     use std::sync::Arc;
@@ -156,8 +158,6 @@ mod tests {
     /// 测试ComputeSwapV3Request的基本验证
     #[test]
     fn test_compute_swap_v3_request_validation() {
-        use crate::dtos::solana_dto::ComputeSwapV3Request;
-
         let request = ComputeSwapV3Request {
             input_mint: "So11111111111111111111111111111111111111112".to_string(), // SOL
             output_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
@@ -181,8 +181,6 @@ mod tests {
     /// 测试SwapV3数据结构的完整性
     #[test]
     fn test_swap_v3_data_structure() {
-        use crate::dtos::solana_dto::SwapComputeV3Data;
-
         let swap_data = SwapComputeV3Data {
             swap_type: "BaseInV3".to_string(),
             input_mint: "So11111111111111111111111111111111111111112".to_string(),
@@ -208,8 +206,6 @@ mod tests {
     /// 测试推荐系统参数的处理逻辑
     #[test]
     fn test_referral_system_params() {
-        use crate::dtos::solana_dto::ComputeSwapV3Request;
-
         // 测试有推荐人的情况
         let request_with_referral = ComputeSwapV3Request {
             input_mint: "So11111111111111111111111111111111111111112".to_string(),
@@ -232,8 +228,6 @@ mod tests {
     /// 测试SwapV3和SwapV2的区别
     #[test]
     fn test_swap_v3_vs_v2_differences() {
-        use crate::dtos::solana_dto::{ComputeSwapV2Request, ComputeSwapV3Request};
-
         // SwapV3独有的字段
         let v3_request = ComputeSwapV3Request {
             input_mint: "So11111111111111111111111111111111111111112".to_string(),
@@ -297,8 +291,6 @@ mod tests {
     /// 测试默认参数处理
     #[test]
     fn test_swap_v3_default_parameters() {
-        use crate::dtos::solana_dto::ComputeSwapV3Request;
-
         let minimal_request = ComputeSwapV3Request {
             input_mint: "So11111111111111111111111111111111111111112".to_string(),
             output_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
@@ -318,8 +310,6 @@ mod tests {
     /// 测试错误处理场景
     #[test]
     fn test_swap_v3_error_handling() {
-        use crate::dtos::solana_dto::ComputeSwapV3Request;
-
         // 测试无效的滑点设置
         let invalid_slippage_request = ComputeSwapV3Request {
             input_mint: "So11111111111111111111111111111111111111112".to_string(),

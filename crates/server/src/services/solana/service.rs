@@ -1,20 +1,9 @@
 // Main SolanaService coordinator that delegates to specialized services
 
-use crate::dtos::solana_dto::{
-    BalanceResponse, CalculateLiquidityRequest, CalculateLiquidityResponse, ComputeSwapV2Request, ComputeSwapV3Request,
-    CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
-    CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
-    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
-    GetUserPositionsRequest, IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest,
-    IncreaseLiquidityResponse, NewPoolListResponse, NewPoolListResponse2, OpenPositionAndSendTransactionResponse,
-    OpenPositionRequest, OpenPositionResponse, PoolKeyResponse, PositionInfo, PriceQuoteRequest, PriceQuoteResponse,
-    SwapComputeV2Data, SwapComputeV3Data, SwapRequest, SwapResponse, SwapV3AndSendTransactionResponse, TransactionData,
-    TransactionSwapV2Request, TransactionSwapV3Request, UserPositionsResponse, WalletInfo,
-};
-
 use super::amm_pool::AmmPoolService;
 use super::clmm_pool::ClmmPoolService;
 use super::config::{ClmmConfigService, ClmmConfigServiceTrait};
+use super::launch_migration::LaunchMigrationService;
 use super::liquidity_line::LiquidityLineService;
 use super::nft::NftService;
 use super::position::PositionService;
@@ -26,6 +15,39 @@ use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 
+use crate::dtos::solana::common::{TransactionData, WalletInfo};
+use crate::dtos::solana::launch::{
+    LaunchMigrationAndSendTransactionResponse, LaunchMigrationRequest, LaunchMigrationResponse, LaunchMigrationStats,
+};
+use crate::dtos::solana::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
+use crate::dtos::solana::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
+use crate::dtos::solana::pool::creation::{
+    CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
+    CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
+};
+use crate::dtos::solana::pool::info::PoolKeyResponse;
+use crate::dtos::solana::pool::liquidity_line::{PoolLiquidityLineData, PoolLiquidityLineRequest};
+use crate::dtos::solana::pool::listing::{NewPoolListResponse, NewPoolListResponse2};
+use crate::dtos::solana::position::liquidity::{
+    DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
+    IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
+};
+use crate::dtos::solana::position::open_position::{
+    CalculateLiquidityRequest, CalculateLiquidityResponse, GetUserPositionsRequest,
+    OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
+    UserPositionsResponse,
+};
+use crate::dtos::solana::swap::basic::{
+    BalanceResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse,
+};
+use crate::dtos::solana::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
+use crate::dtos::solana::swap::swap_v3::{
+    ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
+};
+use crate::dtos::static_dto::{
+    ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
+    CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
+};
 use crate::services::data_transform::DataTransformService;
 use tokio::sync::Mutex;
 
@@ -41,6 +63,7 @@ pub struct SolanaService {
     amm_pool_service: AmmPoolService,
     config_service: ClmmConfigService,
     liquidity_line_service: LiquidityLineService,
+    pub launch_migration: LaunchMigrationService,
     pub nft: NftService,
     pub referral: ReferralService,
 }
@@ -102,8 +125,9 @@ impl SolanaService {
             ),
             liquidity_line_service: LiquidityLineService::new(
                 optimized_shared_context.rpc_client.clone(),
-                Arc::new(database),
+                Arc::new(database.clone()),
             ),
+            launch_migration: LaunchMigrationService::new(optimized_shared_context.clone(), &database),
             nft: NftService::new(optimized_shared_context.clone()),
             referral: ReferralService::new(optimized_shared_context.clone()),
             shared_context: optimized_shared_context,
@@ -239,51 +263,53 @@ pub trait SolanaServiceTrait {
     async fn start_clmm_pool_sync(&self) -> Result<()>;
 
     // CLMM Config operations
-    async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse>;
+    async fn get_clmm_configs(&self) -> Result<ClmmConfigResponse>;
     async fn sync_clmm_configs_from_chain(&self) -> Result<u64>;
-    async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String>;
-    async fn save_clmm_config_from_request(
-        &self,
-        request: crate::dtos::static_dto::SaveClmmConfigRequest,
-    ) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse>;
+    async fn save_clmm_config(&self, config: ClmmConfig) -> Result<String>;
+    async fn save_clmm_config_from_request(&self, request: SaveClmmConfigRequest) -> Result<SaveClmmConfigResponse>;
 
     /// 创建新的AMM配置（构建交易）
-    async fn create_amm_config(
-        &self,
-        request: crate::dtos::static_dto::CreateAmmConfigRequest,
-    ) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse>;
+    async fn create_amm_config(&self, request: CreateAmmConfigRequest) -> Result<CreateAmmConfigResponse>;
 
     /// 创建新的AMM配置并发送交易（用于测试）
     async fn create_amm_config_and_send_transaction(
         &self,
-        request: crate::dtos::static_dto::CreateAmmConfigRequest,
-    ) -> Result<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse>;
+        request: CreateAmmConfigRequest,
+    ) -> Result<CreateAmmConfigAndSendTransactionResponse>;
 
     // Liquidity line operations
-    async fn get_pool_liquidity_line(
-        &self,
-        request: &crate::dtos::solana_dto::PoolLiquidityLineRequest,
-    ) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData>;
+    async fn get_pool_liquidity_line(&self, request: &PoolLiquidityLineRequest) -> Result<PoolLiquidityLineData>;
 
     // NFT operations
-    async fn mint_nft(
-        &self,
-        request: crate::dtos::solana_dto::MintNftRequest,
-    ) -> Result<crate::dtos::solana_dto::MintNftResponse>;
-    async fn mint_nft_and_send_transaction(
-        &self,
-        request: crate::dtos::solana_dto::MintNftRequest,
-    ) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse>;
+    async fn mint_nft(&self, request: MintNftRequest) -> Result<MintNftResponse>;
+    async fn mint_nft_and_send_transaction(&self, request: MintNftRequest)
+        -> Result<MintNftAndSendTransactionResponse>;
 
     // Claim NFT operations
-    async fn claim_nft(
-        &self,
-        request: crate::dtos::solana_dto::ClaimNftRequest,
-    ) -> Result<crate::dtos::solana_dto::ClaimNftResponse>;
+    async fn claim_nft(&self, request: ClaimNftRequest) -> Result<ClaimNftResponse>;
     async fn claim_nft_and_send_transaction(
         &self,
-        request: crate::dtos::solana_dto::ClaimNftRequest,
-    ) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse>;
+        request: ClaimNftRequest,
+    ) -> Result<ClaimNftAndSendTransactionResponse>;
+
+    // Launch Migration operations
+    async fn launch_migration(&self, request: LaunchMigrationRequest) -> Result<LaunchMigrationResponse>;
+    async fn launch_migration_and_send_transaction(
+        &self,
+        request: LaunchMigrationRequest,
+    ) -> Result<LaunchMigrationAndSendTransactionResponse>;
+    
+    // Launch Migration query operations
+    async fn get_user_launch_history(
+        &self,
+        creator_wallet: &str,
+        page: u64,
+        limit: u64,
+    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>>;
+    
+    async fn get_user_launch_history_count(&self, creator_wallet: &str) -> Result<u64>;
+    
+    async fn get_launch_stats(&self) -> Result<LaunchMigrationStats>;
 }
 
 /// Implementation of SolanaServiceTrait that delegates to specialized services
@@ -574,10 +600,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // Liquidity line operations - delegate to liquidity_line_service
-    async fn get_pool_liquidity_line(
-        &self,
-        request: &crate::dtos::solana_dto::PoolLiquidityLineRequest,
-    ) -> Result<crate::dtos::solana_dto::PoolLiquidityLineData> {
+    async fn get_pool_liquidity_line(&self, request: &PoolLiquidityLineRequest) -> Result<PoolLiquidityLineData> {
         self.liquidity_line_service.get_pool_liquidity_line(request).await
     }
 
@@ -588,32 +611,56 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // NFT operations - delegate to nft service
-    async fn mint_nft(
-        &self,
-        request: crate::dtos::solana_dto::MintNftRequest,
-    ) -> Result<crate::dtos::solana_dto::MintNftResponse> {
+    async fn mint_nft(&self, request: MintNftRequest) -> Result<MintNftResponse> {
         self.nft.mint_nft(request).await
     }
 
     async fn mint_nft_and_send_transaction(
         &self,
-        request: crate::dtos::solana_dto::MintNftRequest,
-    ) -> Result<crate::dtos::solana_dto::MintNftAndSendTransactionResponse> {
+        request: MintNftRequest,
+    ) -> Result<MintNftAndSendTransactionResponse> {
         self.nft.mint_nft_and_send_transaction(request).await
     }
 
     // Claim NFT operations - delegate to nft service
-    async fn claim_nft(
-        &self,
-        request: crate::dtos::solana_dto::ClaimNftRequest,
-    ) -> Result<crate::dtos::solana_dto::ClaimNftResponse> {
+    async fn claim_nft(&self, request: ClaimNftRequest) -> Result<ClaimNftResponse> {
         self.nft.claim_nft(request).await
     }
 
     async fn claim_nft_and_send_transaction(
         &self,
-        request: crate::dtos::solana_dto::ClaimNftRequest,
-    ) -> Result<crate::dtos::solana_dto::ClaimNftAndSendTransactionResponse> {
+        request: ClaimNftRequest,
+    ) -> Result<ClaimNftAndSendTransactionResponse> {
         self.nft.claim_nft_and_send_transaction(request).await
+    }
+
+    // Launch Migration operations - delegate to launch_migration service
+    async fn launch_migration(&self, request: LaunchMigrationRequest) -> Result<LaunchMigrationResponse> {
+        self.launch_migration.launch(request).await
+    }
+
+    async fn launch_migration_and_send_transaction(
+        &self,
+        request: LaunchMigrationRequest,
+    ) -> Result<LaunchMigrationAndSendTransactionResponse> {
+        self.launch_migration.launch_and_send_transaction(request).await
+    }
+
+    // Launch Migration query operations - delegate to launch_migration service
+    async fn get_user_launch_history(
+        &self,
+        creator_wallet: &str,
+        page: u64,
+        limit: u64,
+    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
+        self.launch_migration.get_user_launch_history(creator_wallet, page, limit).await
+    }
+
+    async fn get_user_launch_history_count(&self, creator_wallet: &str) -> Result<u64> {
+        self.launch_migration.get_user_launch_history_count(creator_wallet).await
+    }
+
+    async fn get_launch_stats(&self) -> Result<LaunchMigrationStats> {
+        self.launch_migration.get_launch_stats().await
     }
 }

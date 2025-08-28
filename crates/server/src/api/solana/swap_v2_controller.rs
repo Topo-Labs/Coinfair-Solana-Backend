@@ -1,11 +1,9 @@
-use crate::{
-    dtos::solana_dto::{
-        ComputeSwapV2Request, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, TransactionData,
-        TransactionSwapV2Request, TransactionSwapV3Request,
-    },
-    extractors::validation_extractor::ValidationExtractor,
-    services::Services,
+use crate::dtos::solana::common::TransactionData;
+use crate::dtos::solana::swap::raydium::{
+    ComputeSwapV2Request, RaydiumErrorResponse, RaydiumResponse, SwapComputeV2Data, TransactionSwapV2Request,
 };
+use crate::dtos::solana::swap::swap_v3::TransactionSwapV3Request;
+use crate::{extractors::validation_extractor::ValidationExtractor, services::Services};
 use axum::{
     extract::{Extension, Query},
     http::StatusCode,

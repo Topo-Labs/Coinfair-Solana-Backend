@@ -1,8 +1,4 @@
-use crate::dtos::solana_dto::{
-    ComputeSwapV2Request, ComputeSwapV3Request, PriceQuoteRequest, PriceQuoteResponse, RoutePlan, SwapComputeV2Data,
-    SwapComputeV3Data, SwapRequest, SwapResponse, SwapV3AndSendTransactionResponse, TransactionData, TransactionStatus,
-    TransactionSwapV2Request, TransactionSwapV3Request, TransferFeeInfo,
-};
+use crate::dtos::solana::swap::basic::{PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse};
 
 use crate::services::solana::referral::service::ReferralAccount;
 use crate::services::solana::shared::{
@@ -10,6 +6,12 @@ use crate::services::solana::shared::{
     SharedContext,
 };
 
+use crate::dtos::solana::common::{RoutePlan, TransactionData, TransactionStatus, TransferFeeInfo};
+use crate::dtos::solana::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
+use crate::dtos::solana::swap::referral::ReferralInfo;
+use crate::dtos::solana::swap::swap_v3::{
+    ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
+};
 use ::utils::solana::builders::SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder;
 use ::utils::solana::builders::SwapV3InstructionBuilder as UtilsSwapV3InstructionBuilder;
 use ::utils::solana::{
@@ -1391,7 +1393,7 @@ impl SwapService {
 
         // 构建推荐系统信息（如果存在）
         let referral_info = if upper.is_some() {
-            Some(crate::dtos::solana_dto::ReferralInfo {
+            Some(ReferralInfo {
                 upper: upper.map(|u| u.to_string()),
                 upper_upper: upper_upper.map(|uu| uu.to_string()),
                 project_account: pool_state.owner.to_string(),
@@ -1926,7 +1928,7 @@ impl SwapService {
 
         // 构建推荐系统信息（如果存在）
         let referral_info = if upper.is_some() {
-            Some(crate::dtos::solana_dto::ReferralInfo {
+            Some(ReferralInfo {
                 upper: upper.map(|u| u.to_string()),
                 upper_upper: upper_upper.map(|uu| uu.to_string()),
                 project_account: pool_state.owner.to_string(),

@@ -403,6 +403,7 @@ impl BatchWriter {
             EventListenerError::IO(_) => true,                  // IO错误可重试
             EventListenerError::WebSocket(_) => true,           // WebSocket连接问题可重试
             EventListenerError::SolanaRpc(_) => true,           // Solana RPC错误可重试
+            EventListenerError::Network(_) => true,             // 网络错误可重试
             EventListenerError::Persistence(_) => true,         // 持久化错误可重试
             EventListenerError::EventParsing(_) => false,       // 解析错误不重试
             EventListenerError::DiscriminatorMismatch => false, // Discriminator不匹配不重试

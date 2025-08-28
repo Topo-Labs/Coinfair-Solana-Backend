@@ -4,6 +4,7 @@ pub mod metrics;
 pub mod parser;
 pub mod persistence;
 pub mod recovery;
+pub mod services;
 pub mod subscriber;
 
 #[cfg(test)]

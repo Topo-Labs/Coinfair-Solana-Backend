@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod integration_tests {
     use super::super::NftService;
-    use crate::dtos::solana_dto::MintNftRequest;
+    use crate::dtos::solana::nft::mint::MintNftRequest;
     use crate::services::solana::shared::SharedContext;
     use std::sync::Arc;
 

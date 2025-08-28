@@ -23,6 +23,7 @@ pub mod user_service;
 use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
+    solana::launch_event::LaunchEventService,
     solana::token::service::TokenService,
     solana::{DynSolanaService, SolanaService},
     solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
@@ -40,6 +41,7 @@ pub struct Services {
     pub solana: DynSolanaService,
     pub solana_permission: DynSolanaPermissionService,
     pub token: Arc<TokenService>,
+    pub launch_event: Arc<LaunchEventService>,
     pub database: Arc<Database>,
 }
 
@@ -84,6 +86,9 @@ impl Services {
                 // 创建代币服务
                 let token = Arc::new(TokenService::new(database.clone()));
 
+                // 创建Launch事件服务
+                let launch_event = Arc::new(LaunchEventService::new(database.clone()));
+
                 let mut services = Self {
                     user,
                     refer,
@@ -91,6 +96,7 @@ impl Services {
                     solana,
                     solana_permission,
                     token,
+                    launch_event,
                     database,
                 };
 
@@ -126,6 +132,9 @@ impl Services {
         // 创建代币服务
         let token = Arc::new(TokenService::new(database.clone()));
 
+        // 创建Launch事件服务
+        let launch_event = Arc::new(LaunchEventService::new(database.clone()));
+
         info!("🧠 initializing services from environment...");
 
         Ok(Self {
@@ -135,6 +144,7 @@ impl Services {
             solana,
             solana_permission,
             token,
+            launch_event,
             database,
         })
     }

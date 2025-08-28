@@ -415,6 +415,7 @@ impl SubscriptionManager {
             EventListenerError::EventParsing(_) => "parse_error".to_string(),
             EventListenerError::Database(_) => "database_error".to_string(),
             EventListenerError::WebSocket(_) => "websocket_error".to_string(),
+            EventListenerError::Network(_) => "network_error".to_string(),
             EventListenerError::Config(_) => "config_error".to_string(),
             EventListenerError::DiscriminatorMismatch => "discriminator_mismatch".to_string(),
             EventListenerError::Persistence(_) => "persistence_error".to_string(),

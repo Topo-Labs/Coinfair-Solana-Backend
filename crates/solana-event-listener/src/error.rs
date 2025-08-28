@@ -27,6 +27,9 @@ pub enum EventListenerError {
     #[error("Solana RPC错误: {0}")]
     SolanaRpc(String),
 
+    #[error("网络连接错误: {0}")]
+    Network(String),
+
     #[error("数据库错误: {0}")]
     Database(#[from] mongodb::error::Error),
 

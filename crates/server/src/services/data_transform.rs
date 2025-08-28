@@ -3,7 +3,7 @@
 //!
 //! 负责将数据库模型转换为新的API响应格式
 
-use crate::dtos::solana_dto::{
+use crate::dtos::solana::pool::listing::{
     ExtendedMintInfo, NewPoolListResponse, NewPoolListResponse2, PeriodStats, PoolConfigInfo, PoolInfo, PoolListData,
 };
 use crate::dtos::static_dto::SaveClmmConfigRequest;

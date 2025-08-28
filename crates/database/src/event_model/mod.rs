@@ -250,3 +250,96 @@ pub struct RewardDistributionEvent {
     /// 最后更新时间
     pub updated_at: i64,
 }
+
+/// 迁移状态枚举
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MigrationStatus {
+    Pending,   // 待迁移
+    Success,   // 迁移成功
+    Failed,    // 迁移失败
+    Retrying,  // 重试中
+}
+
+/// 代币对类型枚举
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PairType {
+    MemeToSol,     // MEME/SOL
+    MemeToUsdc,    // MEME/USDC
+    MemeToUsdt,    // MEME/USDT
+    MemeToOther,   // MEME/其他代币
+}
+
+/// LaunchEvent数据库模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LaunchEvent {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+
+    // 核心业务字段
+    /// meme币合约地址
+    pub meme_token_mint: String,
+    /// 配对代币地址(通常是SOL或USDC)
+    pub base_token_mint: String,
+    /// 用户钱包地址
+    pub user_wallet: String,
+    
+    // 价格和流动性参数
+    /// CLMM配置索引
+    pub config_index: u32,
+    /// 初始价格
+    pub initial_price: f64,
+    /// 价格下限
+    pub tick_lower_price: f64,
+    /// 价格上限
+    pub tick_upper_price: f64,
+    
+    // 代币数量
+    /// meme币数量
+    pub meme_token_amount: u64,
+    /// 配对代币数量
+    pub base_token_amount: u64,
+    
+    // 交易参数
+    /// 最大滑点百分比
+    pub max_slippage_percent: f64,
+    /// 是否包含NFT元数据
+    pub with_metadata: bool,
+    
+    // 时间字段
+    /// 池子开放时间戳，0表示立即开放
+    pub open_time: u64,
+    /// 发射时间戳
+    pub launched_at: i64,
+    
+    // 迁移状态跟踪
+    /// 迁移状态（pending/success/failed/retrying）
+    pub migration_status: String,
+    /// 迁移后的池子地址（成功后填入）
+    pub migrated_pool_address: Option<String>,
+    /// 迁移完成时间
+    pub migration_completed_at: Option<i64>,
+    /// 迁移错误信息（失败时填入）
+    pub migration_error: Option<String>,
+    /// 迁移重试次数
+    pub migration_retry_count: u32,
+    
+    // 统计分析字段
+    /// 流动性总价值（USD估算）
+    pub total_liquidity_usd: f64,
+    /// 代币对类型（meme/stable、meme/sol等）
+    pub pair_type: String,
+    /// 价格区间宽度百分比
+    pub price_range_width_percent: f64,
+    /// 是否为高价值发射（基于流动性阈值）
+    pub is_high_value_launch: bool,
+    
+    // 区块链标准字段 - 事件来源的交易签名
+    /// 事件交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: i64,
+    /// 最后更新时间
+    pub updated_at: i64,
+}

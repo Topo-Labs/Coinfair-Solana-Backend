@@ -21,7 +21,10 @@ impl PositionInstructionBuilder {
     /// 构建OpenPositionWithToken22Nft指令
     pub fn build_open_position_with_token22_nft_instructions(
         pool_address: &Pubkey,
-        pool_state: &raydium_amm_v3::states::PoolState,
+        token_vault_0: &Pubkey,
+        token_vault_1: &Pubkey,
+        token_mint_0: &Pubkey,
+        token_mint_1: &Pubkey,
         user_wallet: &Pubkey,
         nft_mint: &Pubkey,
         user_token_account_0: &Pubkey,
@@ -93,15 +96,15 @@ impl PositionInstructionBuilder {
             AccountMeta::new(personal_position, false),                           // 9. personal_position
             AccountMeta::new(*user_token_account_0, false),                       // 10. token_account_0
             AccountMeta::new(*user_token_account_1, false),                       // 11. token_account_1
-            AccountMeta::new(pool_state.token_vault_0, false),                    // 12. token_vault_0
-            AccountMeta::new(pool_state.token_vault_1, false),                    // 13. token_vault_1
+            AccountMeta::new(*token_vault_0, false),                              // 12. token_vault_0
+            AccountMeta::new(*token_vault_1, false),                              // 13. token_vault_1
             AccountMeta::new_readonly(sysvar::rent::id(), false),                 // 14. rent
             AccountMeta::new_readonly(system_program::id(), false),               // 15. system_program
             AccountMeta::new_readonly(spl_token::id(), false),                    // 16. token_program
             AccountMeta::new_readonly(spl_associated_token_account::id(), false), // 17. associated_token_program
             AccountMeta::new_readonly(spl_token_2022::id(), false),               // 18. token_program_2022
-            AccountMeta::new_readonly(pool_state.token_mint_0, false),            // 19. vault_0_mint
-            AccountMeta::new_readonly(pool_state.token_mint_1, false),            // 20. vault_1_mint
+            AccountMeta::new_readonly(*token_mint_0, false),                      // 19. vault_0_mint
+            AccountMeta::new_readonly(*token_mint_1, false),                      // 20. vault_1_mint
         ];
 
         // 添加remaining accounts
@@ -220,7 +223,10 @@ impl PositionInstructionBuilder {
         // 2. 添加OpenPositionWithToken22Nft核心指令
         let open_position_instructions = Self::build_open_position_with_token22_nft_instructions(
             pool_address,
-            pool_state,
+            &pool_state.token_vault_0,
+            &pool_state.token_vault_1,
+            &pool_state.token_mint_0,
+            &pool_state.token_mint_1,
             user_wallet,
             nft_mint,
             user_token_account_0,

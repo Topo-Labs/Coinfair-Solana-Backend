@@ -38,6 +38,7 @@ pub struct Database {
     pub clmm_pool_events: Collection<event_model::ClmmPoolEvent>,
     pub nft_claim_events: Collection<event_model::NftClaimEvent>,
     pub reward_distribution_events: Collection<event_model::RewardDistributionEvent>,
+    pub launch_events: Collection<event_model::LaunchEvent>,
     // 仓库层
     pub clmm_pool_repository: clmm_pool::repository::ClmmPoolRepository,
     pub global_permission_repository: permission_config::repository::GlobalPermissionConfigRepository,
@@ -48,6 +49,7 @@ pub struct Database {
     pub clmm_pool_event_repository: event_model::repository::ClmmPoolEventRepository,
     pub nft_claim_event_repository: event_model::repository::NftClaimEventRepository,
     pub reward_distribution_event_repository: event_model::repository::RewardDistributionEventRepository,
+    pub launch_event_repository: event_model::repository::LaunchEventRepository,
 }
 
 impl Database {
@@ -79,6 +81,7 @@ impl Database {
         let clmm_pool_events = db.collection("ClmmPoolEvent");
         let nft_claim_events = db.collection("NftClaimEvent");
         let reward_distribution_events = db.collection("RewardDistributionEvent");
+        let launch_events = db.collection("LaunchEvent");
 
         // 初始化仓库层
         let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
@@ -96,6 +99,8 @@ impl Database {
             event_model::repository::NftClaimEventRepository::new(nft_claim_events.clone());
         let reward_distribution_event_repository =
             event_model::repository::RewardDistributionEventRepository::new(reward_distribution_events.clone());
+        let launch_event_repository =
+            event_model::repository::LaunchEventRepository::new(launch_events.clone());
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -113,6 +118,7 @@ impl Database {
             clmm_pool_events,
             nft_claim_events,
             reward_distribution_events,
+            launch_events,
             clmm_pool_repository,
             global_permission_repository,
             api_permission_repository,
@@ -121,6 +127,7 @@ impl Database {
             clmm_pool_event_repository,
             nft_claim_event_repository,
             reward_distribution_event_repository,
+            launch_event_repository,
         })
     }
 
@@ -139,6 +146,7 @@ impl Database {
         let _result = self.clmm_pool_event_repository.init_indexes().await;
         let _result = self.nft_claim_event_repository.init_indexes().await;
         let _result = self.reward_distribution_event_repository.init_indexes().await;
+        let _result = self.launch_event_repository.init_indexes().await;
 
         info!("✅ 权限配置和事件索引初始化完成");
         Ok(())
