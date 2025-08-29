@@ -1,6 +1,8 @@
 use crate::config::EventListenerConfig;
 use crate::error::{EventListenerError, Result};
-use crate::parser::{LaunchEventParser, NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser, TokenCreationParser};
+use crate::parser::{
+    LaunchEventParser, NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser, TokenCreationParser,
+};
 use anchor_lang::pubkey;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -425,7 +427,7 @@ impl EventParserRegistry {
         // 代币创建事件解析器
         let token_creation_parser = Box::new(TokenCreationParser::new(
             config,
-            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+            pubkey!("EGfkx4gUuFM81tKmX9db8L5N8i86urN12CivT2JjqaDa"),
         )?);
         registry.register_program_parser(token_creation_parser)?;
 
@@ -461,7 +463,7 @@ impl EventParserRegistry {
         // 默认使用FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX程序ID，可以通过环境变量或配置调整
         let launch_parser = Box::new(LaunchEventParser::new(
             config,
-            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+            pubkey!("EGfkx4gUuFM81tKmX9db8L5N8i86urN12CivT2JjqaDa"),
         )?);
         registry.register_program_parser(launch_parser)?;
 
@@ -1316,7 +1318,7 @@ mod tests {
         assert!(parser_types.contains(&"reward_distribution".to_string()));
 
         assert!(parser_types.contains(&"launch".to_string()));
-        
+
         // 注意：现在有6个解析器
         println!("📊 解析器统计: 总数={}, 类型={:?}", parsers.len(), parser_types);
     }

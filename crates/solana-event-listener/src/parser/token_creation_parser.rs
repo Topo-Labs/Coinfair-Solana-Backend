@@ -51,7 +51,7 @@ impl TokenCreationParser {
     /// 创建新的代币创建事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // 代币创建事件的discriminator
-        let discriminator = [142, 175, 175, 21, 74, 229, 126, 116];
+        let discriminator = [67, 72, 26, 56, 174, 158, 245, 106];
 
         Ok(Self {
             discriminator,
