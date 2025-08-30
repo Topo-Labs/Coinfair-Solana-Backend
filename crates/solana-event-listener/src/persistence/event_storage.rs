@@ -3,7 +3,7 @@ use crate::{
     error::{EventListenerError, Result},
     parser::{
         event_parser::{
-            LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData,
+            DepositEventData, LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData,
         },
         ParsedEvent,
     },
@@ -115,6 +115,7 @@ impl EventStorage {
         let mut reward_distribution_events = Vec::new();
         let mut launch_events = Vec::new();
         let mut swap_events = Vec::new();
+        let mut deposit_events = Vec::new();
 
         for event in events {
             match event {
@@ -135,6 +136,9 @@ impl EventStorage {
                 }
                 ParsedEvent::Swap(swap_event) => {
                     swap_events.push(swap_event);
+                }
+                ParsedEvent::Deposit(deposit_event) => {
+                    deposit_events.push(deposit_event);
                 }
             }
         }
@@ -218,6 +222,20 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ 交换事件批量写入失败: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 批量处理存款事件
+        if !deposit_events.is_empty() {
+            match self.write_deposit_batch(&deposit_events).await {
+                Ok(count) => {
+                    written_count += count;
+                    info!("✅ 成功写入 {} 个存款事件", count);
+                }
+                Err(e) => {
+                    error!("❌ 存款事件批量写入失败: {}", e);
                     return Err(e);
                 }
             }
@@ -356,6 +374,35 @@ impl EventStorage {
 
         Ok(written_count)
     }
+
+    /// 批量写入存款事件
+    async fn write_deposit_batch(&self, events: &[&DepositEventData]) -> Result<u64> {
+        let mut written_count = 0u64;
+
+        for event in events {
+            match self.write_single_deposit(event).await {
+                Ok(true) => {
+                    written_count += 1;
+                    debug!("✅ 存款事件已写入: {} to {}", event.user, event.token_mint);
+                }
+                Ok(false) => {
+                    debug!("ℹ️ 存款事件已存在，跳过: {} to {}", event.user, event.token_mint);
+                }
+                Err(e) => {
+                    error!("❌ 存款事件写入失败: {} to {} - {}", event.user, event.token_mint, e);
+
+                    if self.is_fatal_error(&e) {
+                        return Err(e);
+                    }
+
+                    warn!("⚠️ 跳过失败的事件: {} to {}", event.user, event.token_mint);
+                }
+            }
+        }
+
+        Ok(written_count)
+    }
+
     async fn write_token_creation_batch(&self, events: &[&TokenCreationEventData]) -> Result<u64> {
         let mut written_count = 0u64;
 
@@ -819,7 +866,46 @@ impl EventStorage {
         })
     }
 
-    /// 将代币创建事件转换为TokenPushRequest
+    /// 将存款事件转换为数据库模型
+    fn convert_to_deposit_event(&self, event: &DepositEventData) -> Result<database::event_model::DepositEvent> {
+        use chrono::Utc;
+        
+        let now = Utc::now();
+
+        Ok(database::event_model::DepositEvent {
+            id: None,
+            
+            // 核心业务字段
+            user: event.user.clone(),
+            project_config: event.project_config.clone(),
+            token_mint: event.token_mint.clone(),
+            amount: event.amount,
+            total_raised: event.total_raised,
+
+            // 代币元数据字段
+            token_decimals: event.token_decimals,
+            token_name: event.token_name.clone(),
+            token_symbol: event.token_symbol.clone(),
+            token_logo_uri: event.token_logo_uri.clone(),
+
+            // 业务扩展字段
+            deposit_type: event.deposit_type,
+            deposit_type_name: event.deposit_type_name.clone(),
+            related_pool: event.related_pool.clone(),
+            is_high_value_deposit: event.is_high_value_deposit,
+            estimated_usd_value: event.estimated_usd_value,
+            actual_amount: event.actual_amount,
+            actual_total_raised: event.actual_total_raised,
+
+            // 区块链标准字段
+            signature: event.signature.clone(),
+            slot: event.slot,
+            deposited_at: event.deposited_at,
+            processed_at: now.timestamp(),
+            updated_at: now.timestamp(),
+        })
+    }
+
     fn convert_to_push_request(&self, event: &TokenCreationEventData) -> Result<TokenPushRequest> {
         // 确定标签
         let mut tags = vec!["event-listener".to_string(), "onchain".to_string()];
@@ -875,6 +961,39 @@ impl EventStorage {
         }
     }
 
+    /// 写入单个存款事件
+    async fn write_single_deposit(&self, event: &DepositEventData) -> Result<bool> {
+        // 检查是否已存在（根据交易签名去重）
+        let existing = self
+            .database
+            .deposit_event_repository
+            .find_by_signature(&event.signature)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("查询现有存款事件失败: {}", e)))?;
+
+        if existing.is_some() {
+            debug!("存款事件已存在，跳过: {}", event.signature);
+            return Ok(false);
+        }
+
+        // 转换为数据库模型
+        let deposit_event = self.convert_to_deposit_event(event)?;
+
+        // 插入数据库
+        self.database
+            .deposit_event_repository
+            .insert_deposit_event(deposit_event)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("插入存款事件失败: {}", e)))?;
+
+        info!(
+            "✅ 存款事件已写入: {} 存款 {} 到项目 {}",
+            event.user, event.amount, event.token_mint
+        );
+
+        Ok(true)
+    }
+
     /// 写入单个事件（非批量）
     pub async fn write_event(&self, event: &ParsedEvent) -> Result<bool> {
         match event {
@@ -884,6 +1003,7 @@ impl EventStorage {
             ParsedEvent::RewardDistribution(reward_event) => self.write_single_reward_distribution(reward_event).await,
             ParsedEvent::Launch(launch_event) => self.write_single_launch_event(launch_event).await,
             ParsedEvent::Swap(swap_event) => self.write_single_swap(swap_event).await,
+            ParsedEvent::Deposit(deposit_event) => self.write_single_deposit(deposit_event).await,
         }
     }
 

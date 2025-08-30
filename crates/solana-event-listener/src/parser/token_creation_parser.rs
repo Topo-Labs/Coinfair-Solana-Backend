@@ -16,6 +16,8 @@ use tracing::{debug, error, info, warn};
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct TokenCreationEvent {
     /// 代币的 Mint 地址
+    pub project_config: Pubkey,
+    /// 代币的 Mint 地址
     pub mint_address: Pubkey,
     /// 代币名称
     pub name: String,
@@ -341,6 +343,7 @@ mod tests {
 
     fn create_test_token_creation_event() -> TokenCreationEvent {
         TokenCreationEvent {
+            project_config: Pubkey::new_unique(),
             mint_address: Pubkey::new_unique(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),

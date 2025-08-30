@@ -343,3 +343,60 @@ pub struct LaunchEvent {
     /// 最后更新时间
     pub updated_at: i64,
 }
+
+/// 存款事件模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DepositEvent {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+
+    // ====== 核心业务字段 ======
+    /// 存款用户钱包地址
+    pub user: String,
+    /// 项目配置地址
+    pub project_config: String,
+    /// 项目代币mint的地址，用于区分是哪个项目，并非存款代币的mint，存款代币都是存sol
+    pub token_mint: String,
+    /// 存款数量（原始数量，需要根据decimals换算）
+    pub amount: u64,
+    /// 累计筹资总额
+    pub total_raised: u64,
+
+    // ====== 代币元数据字段 ======
+    /// 代币小数位数
+    pub token_decimals: Option<u8>,
+    /// 代币名称
+    pub token_name: Option<String>,
+    /// 代币符号
+    pub token_symbol: Option<String>,
+    /// 代币Logo URI
+    pub token_logo_uri: Option<String>,
+
+    // ====== 业务扩展字段 ======
+    /// 存款类型 (0: 初始存款, 1: 追加存款, 2: 应急存款)
+    pub deposit_type: u8,
+    /// 存款类型名称
+    pub deposit_type_name: String,
+    /// 关联的流动性池地址（可选）
+    pub related_pool: Option<String>,
+    /// 是否为高价值存款（基于预设阈值）
+    pub is_high_value_deposit: bool,
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+    /// 实际存款金额（考虑decimals后的可读数量）
+    pub actual_amount: f64,
+    /// 实际累计筹资额（考虑decimals后的可读数量）
+    pub actual_total_raised: f64,
+
+    // ====== 区块链标准字段 ======
+    /// 交易签名（唯一标识）
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 存款时间戳
+    pub deposited_at: i64,
+    /// 事件处理时间
+    pub processed_at: i64,
+    /// 最后更新时间
+    pub updated_at: i64,
+}
