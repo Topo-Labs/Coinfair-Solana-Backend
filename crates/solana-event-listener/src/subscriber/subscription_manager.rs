@@ -223,6 +223,16 @@ impl SubscriptionManager {
                         info!("📨 跳过零事件: {}", log_response.signature);
                         continue;
                     }
+
+                    // 在这里进行去重检查，防止重复事件进入处理队列
+                    if self.is_signature_processed(&log_response.signature) {
+                        info!("⏭️ 事件已处理，跳过: {}", log_response.signature);
+                        continue;
+                    }
+
+                    // 立即标记为已处理，防止并发重复
+                    self.mark_signature_processed(&log_response.signature);
+
                     // 更新活动时间
                     {
                         let mut last_activity = self.last_activity.write().await;
@@ -303,12 +313,6 @@ impl SubscriptionManager {
 
         debug!("🔍 处理事件: {} (slot: {})", signature, slot);
 
-        // 检查是否已处理过此事件
-        if self.is_signature_processed(signature) {
-            debug!("⏭️ 事件已处理，跳过: {}", signature);
-            return Ok(());
-        }
-
         // 应用事件过滤器
         if !self.event_filter.should_process(&log_response) {
             info!("🚫 事件被过滤器拒绝: {}", signature);
@@ -347,9 +351,6 @@ impl SubscriptionManager {
                     // 回退到向后兼容的方法（更新第一个程序的检查点）
                     self.checkpoint_manager.update_last_processed(signature, slot).await?;
                 }
-
-                // 标记为已处理
-                self.mark_signature_processed(signature);
 
                 // 更新指标 - 按实际处理的事件数量更新
                 let event_count = parsed_events.len();

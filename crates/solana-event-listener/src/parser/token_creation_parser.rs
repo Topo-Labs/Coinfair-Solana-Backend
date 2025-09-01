@@ -129,7 +129,7 @@ impl TokenCreationParser {
     ) -> Result<ParsedEvent> {
         // 从URI获取代币元数据
         let uri_metadata = self.fetch_uri_metadata(&event.uri).await?;
-
+        info!("🔍 uri_metadata: {:?}", uri_metadata);
         // 构建extensions JSON，包含项目配置和URI元数据
         let mut extensions = serde_json::json!({
             "project_config": event.project_config.to_string(),
@@ -240,7 +240,10 @@ impl TokenCreationParser {
 
         // 尝试从URI获取元数据
         match metaplex_service.fetch_metadata_from_uri(uri).await {
-            Ok(metadata) => Ok(metadata),
+            Ok(metadata) => {
+                info!("🔍 metadata: {:?}", metadata);
+                Ok(metadata)
+            }
             Err(e) => {
                 warn!("⚠️ 从URI获取元数据失败: {} - {}", uri, e);
                 Ok(None)

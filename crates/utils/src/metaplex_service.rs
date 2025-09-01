@@ -176,6 +176,9 @@ impl MetaplexService {
 
         let client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_seconds))
+            .pool_max_idle_per_host(10) // 每个主机保持10个空闲连接
+            .pool_idle_timeout(Duration::from_secs(90)) // 空闲连接保持90秒
+            .tcp_keepalive(Duration::from_secs(60)) // TCP keepalive
             .build()?;
 
         // 创建Solana RPC客户端用于链上查询
@@ -789,36 +792,84 @@ impl MetaplexService {
     /// 从URI获取扩展元数据（JSON格式）
     async fn fetch_uri_metadata(&self, uri: &str) -> Result<Option<UriMetadata>> {
         if !uri.starts_with("http") {
-            debug!("⚠️ URI不是HTTP格式，跳过: {}", uri);
+            warn!("⚠️ URI不是HTTP格式，跳过: {}", uri);
             return Ok(None);
         }
 
-        // 设置较短的超时时间，避免阻塞
-        let client = Client::builder().timeout(Duration::from_secs(5)).build()?;
+        info!("🔍 尝试获取URI元数据: {}", uri);
 
-        debug!("🔍 尝试获取URI元数据: {}", uri);
-
-        match client.get(uri).send().await {
-            Ok(response) => {
-                if response.status().is_success() {
-                    match response.json::<UriMetadata>().await {
-                        Ok(metadata) => {
-                            info!("✅ 成功获取URI元数据: {}", uri);
-                            Ok(Some(metadata))
+        // 重试机制：失败后重试6次，使用合理的递增延迟
+        for attempt in 1..=6 {
+            match self.client.get(uri).send().await {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
+                        match response.json::<UriMetadata>().await {
+                            Ok(metadata) => {
+                                info!("✅ 成功获取URI元数据: {} (尝试第{}次)", uri, attempt);
+                                return Ok(Some(metadata));
+                            }
+                            Err(e) => {
+                                if attempt == 6 {
+                                    warn!("⚠️ 解析URI元数据JSON失败: {} - {} (最终失败)", uri, e);
+                                    return Ok(None);
+                                }
+                                let delay = Self::calculate_retry_delay(attempt, &status);
+                                warn!("⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)", uri, e, attempt, delay);
+                                tokio::time::sleep(Duration::from_secs(delay)).await;
+                            }
                         }
-                        Err(e) => {
-                            debug!("⚠️ 解析URI元数据JSON失败: {} - {}", uri, e);
-                            Ok(None)
+                    } else {
+                        if attempt == 6 {
+                            warn!("⚠️ URI元数据请求失败: {} - {} (最终失败)", uri, status);
+                            return Ok(None);
                         }
+                        let delay = Self::calculate_retry_delay(attempt, &status);
+                        warn!("⚠️ URI元数据请求失败: {} - {} (第{}次，{}秒后重试)", uri, status, attempt, delay);
+                        tokio::time::sleep(Duration::from_secs(delay)).await;
                     }
-                } else {
-                    debug!("⚠️ URI元数据请求失败: {} - {}", uri, response.status());
-                    Ok(None)
+                }
+                Err(e) => {
+                    if attempt == 6 {
+                        warn!("⚠️ 无法访问URI: {} - {} (最终失败)", uri, e);
+                        return Ok(None);
+                    }
+                    let delay = Self::calculate_retry_delay(attempt, &reqwest::StatusCode::INTERNAL_SERVER_ERROR);
+                    warn!("⚠️ 无法访问URI: {} - {} (第{}次，{}秒后重试)", uri, e, attempt, delay);
+                    tokio::time::sleep(Duration::from_secs(delay)).await;
                 }
             }
-            Err(e) => {
-                debug!("⚠️ 无法访问URI: {} - {}", uri, e);
-                Ok(None)
+        }
+
+        Ok(None)
+    }
+
+    /// 计算重试延迟时间（线性递增策略）
+    fn calculate_retry_delay(attempt: u32, status: &reqwest::StatusCode) -> u64 {
+        match status {
+            // 429 Too Many Requests - 使用线性递增延迟: 1,3,5,7,9,11秒
+            &reqwest::StatusCode::TOO_MANY_REQUESTS => {
+                match attempt {
+                    1 => 1,
+                    2 => 3,
+                    3 => 5,
+                    4 => 7,
+                    5 => 9,
+                    6 => 11,
+                    _ => 11, // 备用，不过不应该到达这里
+                }
+            }
+            // 5xx服务器错误 - 较短延迟: 2,4,6,8,10,12秒
+            status if status.is_server_error() => {
+                (attempt * 2) as u64
+            }
+            // 网络错误和超时 - 线性递增: 1,2,3,4,5,6秒
+            &reqwest::StatusCode::INTERNAL_SERVER_ERROR => {
+                attempt as u64
+            }
+            // 其他错误 - 线性递增: 1,2,3,4,5,6秒  
+            _ => {
+                attempt as u64
             }
         }
     }
