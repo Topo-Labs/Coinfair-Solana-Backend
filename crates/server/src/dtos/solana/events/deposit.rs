@@ -302,6 +302,9 @@ pub struct PaginatedDepositResponse {
 
     /// 总页数
     pub total_pages: u64,
+
+    /// 独特用户数
+    pub unique_users: Option<u64>,
 }
 
 /// 存款统计响应
@@ -668,7 +671,7 @@ impl From<CreateDepositEventRequest> for database::event_model::DepositEvent {
         let decimal_factor = 10_u64.pow(decimals as u32) as f64;
         let actual_amount = request.amount as f64 / decimal_factor;
         let actual_total_raised = request.total_raised as f64 / decimal_factor;
-        
+
         // 计算USD价值
         let estimated_usd_value = request.estimated_usd_value.unwrap_or(0.0);
         let is_high_value_deposit = estimated_usd_value >= 1000.0; // 超过1000USD为高价值

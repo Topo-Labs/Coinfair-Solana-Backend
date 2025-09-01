@@ -126,8 +126,68 @@ impl TokenService {
     }
 
     /// 获取代币列表 (新格式，包含分页和统计信息)
-    pub async fn query_tokens(&self, query: TokenListQuery) -> AppResult<TokenListResponse> {
+    pub async fn query_tokens(&self, mut query: TokenListQuery) -> AppResult<TokenListResponse> {
         info!("🔍 查询代币列表: page={:?}, size={:?}", query.page, query.page_size);
+
+        // 处理participate过滤逻辑
+        if let Some(participate_wallet) = &query.participate {
+            if !participate_wallet.trim().is_empty() {
+                info!("🔍 处理参与者过滤: {}", participate_wallet);
+
+                // 从DepositEvent表查询用户参与过的代币地址列表
+                let participated_tokens = self
+                    .db
+                    .deposit_event_repository
+                    .find_participated_tokens_by_user(participate_wallet)
+                    .await?;
+
+                info!(
+                    "✅ 找到用户参与的代币数量: {}，地址: {}",
+                    participated_tokens.len(),
+                    participated_tokens.join(",")
+                );
+
+                if participated_tokens.is_empty() {
+                    // 如果用户没有参与任何代币活动，直接返回空结果
+                    info!("⚠️ 用户 {} 没有参与任何代币众筹活动", participate_wallet);
+
+                    let empty_response = TokenListResponse {
+                        mint_list: Vec::new(),
+                        blacklist: Vec::new(),
+                        white_list: Vec::new(),
+                        pagination: database::token_info::PaginationInfo {
+                            current_page: query.page.unwrap_or(1),
+                            page_size: query.page_size.unwrap_or(100),
+                            total_count: 0,
+                            total_pages: 0,
+                            has_next: false,
+                            has_prev: false,
+                        },
+                        stats: database::token_info::FilterStats {
+                            status_counts: Vec::new(),
+                            source_counts: Vec::new(),
+                            verification_counts: Vec::new(),
+                            tag_counts: Vec::new(),
+                        },
+                    };
+
+                    return Ok(empty_response);
+                } else {
+                    // 将参与的代币地址列表转换为逗号分隔的字符串，用于地址过滤
+                    let addresses_string = participated_tokens.join(",");
+                    query.addresses = Some(addresses_string);
+
+                    info!(
+                        "🔍 设置地址过滤: 参与的代币数量={}，地址: {}",
+                        participated_tokens.len(),
+                        participated_tokens.join(",")
+                    );
+                }
+
+                // 清除participate参数，避免在repository层处理
+                query.participate = None;
+            }
+        }
 
         let response = self.get_repository().query_tokens(&query).await?;
 

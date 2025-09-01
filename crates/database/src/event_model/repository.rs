@@ -1,4 +1,6 @@
-use crate::event_model::{ClmmPoolEvent, NftClaimEvent, RewardDistributionEvent, LaunchEvent, MigrationStatus, DepositEvent};
+use crate::event_model::{
+    ClmmPoolEvent, DepositEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent,
+};
 use chrono::Utc;
 use futures_util::TryStreamExt;
 use mongodb::bson::doc;
@@ -559,24 +561,16 @@ impl LaunchEventRepository {
             .build();
 
         // 用户钱包索引（支持用户历史查询）
-        let user_wallet_index = IndexModel::builder()
-            .keys(doc! { "user_wallet": 1 })
-            .build();
+        let user_wallet_index = IndexModel::builder().keys(doc! { "user_wallet": 1 }).build();
 
         // meme代币索引
-        let meme_token_index = IndexModel::builder()
-            .keys(doc! { "meme_token_mint": 1 })
-            .build();
+        let meme_token_index = IndexModel::builder().keys(doc! { "meme_token_mint": 1 }).build();
 
         // 时间索引（支持时间范围查询）
-        let launched_at_index = IndexModel::builder()
-            .keys(doc! { "launched_at": -1 })
-            .build();
+        let launched_at_index = IndexModel::builder().keys(doc! { "launched_at": -1 }).build();
 
         // 迁移状态索引（支持状态过滤）
-        let migration_status_index = IndexModel::builder()
-            .keys(doc! { "migration_status": 1 })
-            .build();
+        let migration_status_index = IndexModel::builder().keys(doc! { "migration_status": 1 }).build();
 
         // 复合索引：状态+时间（优化迁移任务查询）
         let status_time_index = IndexModel::builder()
@@ -641,15 +635,24 @@ impl LaunchEventRepository {
         // 如果是成功状态，设置池子地址和完成时间
         if matches!(status, MigrationStatus::Success) {
             if let Some(pool_addr) = pool_address {
-                update_doc.get_document_mut("$set").unwrap().insert("migrated_pool_address", pool_addr);
-                update_doc.get_document_mut("$set").unwrap().insert("migration_completed_at", Utc::now().timestamp());
+                update_doc
+                    .get_document_mut("$set")
+                    .unwrap()
+                    .insert("migrated_pool_address", pool_addr);
+                update_doc
+                    .get_document_mut("$set")
+                    .unwrap()
+                    .insert("migration_completed_at", Utc::now().timestamp());
             }
         }
 
         // 如果是失败状态，设置错误信息并递增重试次数
         if matches!(status, MigrationStatus::Failed) {
             if let Some(err) = error {
-                update_doc.get_document_mut("$set").unwrap().insert("migration_error", err);
+                update_doc
+                    .get_document_mut("$set")
+                    .unwrap()
+                    .insert("migration_error", err);
             }
             update_doc.insert("$inc", doc! { "migration_retry_count": 1 });
         }
@@ -692,12 +695,13 @@ impl LaunchEventRepository {
     /// 获取迁移成功率
     pub async fn get_migration_success_rate(&self) -> AppResult<f64> {
         let total_count = self.collection.count_documents(doc! {}, None).await?;
-        
+
         if total_count == 0 {
             return Ok(0.0);
         }
 
-        let success_count = self.collection
+        let success_count = self
+            .collection
             .count_documents(doc! { "migration_status": "success" }, None)
             .await?;
 
@@ -707,7 +711,8 @@ impl LaunchEventRepository {
 
     /// 获取待迁移事件数量
     pub async fn count_pending_migrations(&self) -> AppResult<u64> {
-        let count = self.collection
+        let count = self
+            .collection
             .count_documents(doc! { "migration_status": "pending" }, None)
             .await?;
         Ok(count)
@@ -715,7 +720,8 @@ impl LaunchEventRepository {
 
     /// 获取成功迁移事件数量
     pub async fn count_success_migrations(&self) -> AppResult<u64> {
-        let count = self.collection
+        let count = self
+            .collection
             .count_documents(doc! { "migration_status": "success" }, None)
             .await?;
         Ok(count)
@@ -723,7 +729,8 @@ impl LaunchEventRepository {
 
     /// 获取失败迁移事件数量
     pub async fn count_failed_migrations(&self) -> AppResult<u64> {
-        let count = self.collection
+        let count = self
+            .collection
             .count_documents(doc! { "migration_status": "failed" }, None)
             .await?;
         Ok(count)
@@ -731,7 +738,8 @@ impl LaunchEventRepository {
 
     /// 获取重试中迁移事件数量
     pub async fn count_retrying_migrations(&self) -> AppResult<u64> {
-        let count = self.collection
+        let count = self
+            .collection
             .count_documents(doc! { "migration_status": "retrying" }, None)
             .await?;
         Ok(count)
@@ -741,7 +749,7 @@ impl LaunchEventRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event_model::{PairType};
+    use crate::event_model::PairType;
     use chrono::Utc;
 
     fn create_test_launch_event() -> LaunchEvent {
@@ -841,7 +849,7 @@ mod tests {
     #[test]
     fn test_launch_event_serialization() {
         let event = create_test_launch_event();
-        
+
         // 测试序列化
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("So11111111111111111111111111111111111111112"));
@@ -877,69 +885,57 @@ impl DepositEventRepository {
 
         // 2. 用户历史查询优化
         let user_deposited_at_index = IndexModel::builder()
-            .keys(doc! { 
-                "user": 1, 
-                "deposited_at": -1 
+            .keys(doc! {
+                "user": 1,
+                "deposited_at": -1
             })
             .build();
 
         // 3. 代币查询优化
         let token_deposited_at_index = IndexModel::builder()
-            .keys(doc! { 
-                "token_mint": 1, 
-                "deposited_at": -1 
+            .keys(doc! {
+                "token_mint": 1,
+                "deposited_at": -1
             })
             .build();
 
         // 4. 项目配置查询优化
         let project_deposited_at_index = IndexModel::builder()
-            .keys(doc! { 
-                "project_config": 1, 
-                "deposited_at": -1 
+            .keys(doc! {
+                "project_config": 1,
+                "deposited_at": -1
             })
             .build();
 
         // 5. 时间范围查询
-        let deposited_at_index = IndexModel::builder()
-            .keys(doc! { "deposited_at": -1 })
-            .build();
+        let deposited_at_index = IndexModel::builder().keys(doc! { "deposited_at": -1 }).build();
 
         // 6-7. 金额范围查询
-        let amount_index = IndexModel::builder()
-            .keys(doc! { "amount": 1 })
-            .build();
+        let amount_index = IndexModel::builder().keys(doc! { "amount": 1 }).build();
 
-        let total_raised_index = IndexModel::builder()
-            .keys(doc! { "total_raised": 1 })
-            .build();
+        let total_raised_index = IndexModel::builder().keys(doc! { "total_raised": 1 }).build();
 
         // 8-11. 业务查询索引
-        let deposit_type_index = IndexModel::builder()
-            .keys(doc! { "deposit_type": 1 })
-            .build();
+        let deposit_type_index = IndexModel::builder().keys(doc! { "deposit_type": 1 }).build();
 
-        let high_value_index = IndexModel::builder()
-            .keys(doc! { "is_high_value_deposit": 1 })
-            .build();
+        let high_value_index = IndexModel::builder().keys(doc! { "is_high_value_deposit": 1 }).build();
 
-        let related_pool_index = IndexModel::builder()
-            .keys(doc! { "related_pool": 1 })
-            .build();
+        let related_pool_index = IndexModel::builder().keys(doc! { "related_pool": 1 }).build();
 
         // 12-13. 复合查询索引
         let token_type_deposited_index = IndexModel::builder()
-            .keys(doc! { 
-                "token_mint": 1, 
-                "deposit_type": 1, 
-                "deposited_at": -1 
+            .keys(doc! {
+                "token_mint": 1,
+                "deposit_type": 1,
+                "deposited_at": -1
             })
             .build();
 
         let project_user_deposited_index = IndexModel::builder()
-            .keys(doc! { 
-                "project_config": 1, 
-                "user": 1, 
-                "deposited_at": -1 
+            .keys(doc! {
+                "project_config": 1,
+                "user": 1,
+                "deposited_at": -1
             })
             .build();
 
@@ -1007,14 +1003,13 @@ impl DepositEventRepository {
             .unwrap()
             .and_utc()
             .timestamp();
-        let today_deposits = self.collection
+        let today_deposits = self
+            .collection
             .count_documents(doc! { "deposited_at": { "$gte": today_start } }, None)
             .await?;
 
         // 统计独特用户数
-        let unique_users_pipeline = vec![
-            doc! { "$group": { "_id": "$user", "count": { "$sum": 1 } } }
-        ];
+        let unique_users_pipeline = vec![doc! { "$group": { "_id": "$user", "count": { "$sum": 1 } } }];
         let mut unique_users_cursor = self.collection.aggregate(unique_users_pipeline, None).await?;
         let mut unique_users = 0u64;
         while let Some(_doc) = unique_users_cursor.try_next().await? {
@@ -1022,9 +1017,7 @@ impl DepositEventRepository {
         }
 
         // 统计独特代币数
-        let unique_tokens_pipeline = vec![
-            doc! { "$group": { "_id": "$token_mint", "count": { "$sum": 1 } } }
-        ];
+        let unique_tokens_pipeline = vec![doc! { "$group": { "_id": "$token_mint", "count": { "$sum": 1 } } }];
         let mut unique_tokens_cursor = self.collection.aggregate(unique_tokens_pipeline, None).await?;
         let mut unique_tokens = 0u64;
         while let Some(_doc) = unique_tokens_cursor.try_next().await? {
@@ -1032,9 +1025,8 @@ impl DepositEventRepository {
         }
 
         // 统计总美元交易量
-        let total_volume_pipeline = vec![
-            doc! { "$group": { "_id": null, "total": { "$sum": "$estimated_usd_value" } } }
-        ];
+        let total_volume_pipeline =
+            vec![doc! { "$group": { "_id": null, "total": { "$sum": "$estimated_usd_value" } } }];
         let mut volume_cursor = self.collection.aggregate(total_volume_pipeline, None).await?;
         let total_volume_usd = if let Some(doc) = volume_cursor.try_next().await? {
             doc.get_f64("total").unwrap_or(0.0)
@@ -1045,7 +1037,7 @@ impl DepositEventRepository {
         // 统计今日美元交易量
         let today_volume_pipeline = vec![
             doc! { "$match": { "deposited_at": { "$gte": today_start } } },
-            doc! { "$group": { "_id": null, "total": { "$sum": "$estimated_usd_value" } } }
+            doc! { "$group": { "_id": null, "total": { "$sum": "$estimated_usd_value" } } },
         ];
         let mut today_volume_cursor = self.collection.aggregate(today_volume_pipeline, None).await?;
         let today_volume_usd = if let Some(doc) = today_volume_cursor.try_next().await? {
@@ -1063,7 +1055,7 @@ impl DepositEventRepository {
                     "name": { "$first": "$deposit_type_name" }
                 }
             },
-            doc! { "$sort": { "_id": 1 } }
+            doc! { "$sort": { "_id": 1 } },
         ];
         let mut type_cursor = self.collection.aggregate(deposit_type_pipeline, None).await?;
         let mut deposit_type_distribution = Vec::new();
@@ -1093,7 +1085,7 @@ impl DepositEventRepository {
                 }
             },
             doc! { "$sort": { "count": -1 } },
-            doc! { "$limit": 10 }
+            doc! { "$limit": 10 },
         ];
         let mut token_cursor = self.collection.aggregate(token_distribution_pipeline, None).await?;
         let mut token_distribution = Vec::new();
@@ -1125,6 +1117,27 @@ impl DepositEventRepository {
         })
     }
 
+    /// 按代币统计独立用户数（distinct user by token_mint）
+    pub async fn count_unique_users_by_token(&self, token_mint: &str) -> AppResult<u64> {
+        // 使用聚合实现去重计数，避免 distinct 拉取全部结果到内存
+        let pipeline = vec![
+            doc! { "$match": { "token_mint": token_mint } },
+            doc! { "$group": { "_id": "$user" } },
+            doc! { "$count": "count" },
+        ];
+
+        let mut cursor = self.collection.aggregate(pipeline, None).await?;
+        if let Some(doc) = cursor.try_next().await? {
+            if let Ok(v) = doc.get_i64("count") {
+                return Ok(v as u64);
+            }
+            if let Ok(v) = doc.get_i32("count") {
+                return Ok(v as u64);
+            }
+        }
+        Ok(0)
+    }
+
     /// 根据签名查询
     pub async fn find_by_signature(&self, signature: &str) -> AppResult<Option<DepositEvent>> {
         let filter = doc! { "signature": signature };
@@ -1136,6 +1149,50 @@ impl DepositEventRepository {
         let filter = doc! { "signature": signature };
         let count = self.collection.count_documents(filter, None).await?;
         Ok(count > 0)
+    }
+
+    /// 根据用户钱包地址查询参与过的代币列表（去重）
+    /// 用于支持按participate参数过滤代币查询
+    pub async fn find_participated_tokens_by_user(&self, user_wallet: &str) -> AppResult<Vec<String>> {
+        // 使用MongoDB聚合管道实现高效去重
+        let pipeline = vec![
+            // 1. 匹配指定用户的存款记录
+            doc! {
+                "$match": {
+                    "user": user_wallet
+                }
+            },
+            // 2. 按token_mint分组，去重
+            doc! {
+                "$group": {
+                    "_id": "$token_mint"
+                }
+            },
+            // 3. 重新整理输出格式
+            doc! {
+                "$project": {
+                    "_id": 0,
+                    "token_mint": "$_id"
+                }
+            },
+            // 4. 按token_mint排序，确保结果稳定
+            doc! {
+                "$sort": {
+                    "token_mint": 1
+                }
+            }
+        ];
+
+        let mut cursor = self.collection.aggregate(pipeline, None).await?;
+        let mut token_mints = Vec::new();
+
+        while let Some(doc) = cursor.try_next().await? {
+            if let Ok(token_mint) = doc.get_str("token_mint") {
+                token_mints.push(token_mint.to_string());
+            }
+        }
+
+        Ok(token_mints)
     }
 }
 
@@ -1190,9 +1247,9 @@ mod deposit_tests {
             // 核心业务字段
             user: "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string(),
             token_mint: "So11111111111111111111111111111111111111112".to_string(),
-            amount: 1000000,  // 1 SOL
+            amount: 1000000, // 1 SOL
             project_config: "test_project_config".to_string(),
-            total_raised: 5000000,  // 5 SOL 总筹资
+            total_raised: 5000000, // 5 SOL 总筹资
             deposited_at: Utc::now().timestamp(),
 
             // 代币元数据
@@ -1206,9 +1263,9 @@ mod deposit_tests {
             deposit_type_name: "初始存款".to_string(),
             is_high_value_deposit: false,
             related_pool: Some("test_pool_address".to_string()),
-            estimated_usd_value: 100.0,  // $100
-            actual_amount: 1.0,  // 1.0 SOL (1000000 / 10^9)
-            actual_total_raised: 5.0,  // 5.0 SOL
+            estimated_usd_value: 100.0, // $100
+            actual_amount: 1.0,         // 1.0 SOL (1000000 / 10^9)
+            actual_total_raised: 5.0,   // 5.0 SOL
 
             // 区块链标准字段
             signature: signature.to_string(),
@@ -1221,19 +1278,19 @@ mod deposit_tests {
     #[test]
     fn test_deposit_event_creation() {
         let event = create_test_deposit_event("test_signature_123");
-        
+
         // 验证核心字段
         assert_eq!(event.user, "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy");
         assert_eq!(event.token_mint, "So11111111111111111111111111111111111111112");
         assert_eq!(event.amount, 1000000);
         assert_eq!(event.deposit_type, 1);
         assert_eq!(event.signature, "test_signature_123");
-        
+
         // 验证元数据字段
         assert_eq!(event.token_symbol, Some("SOL".to_string()));
         assert_eq!(event.token_name, Some("Solana".to_string()));
         assert_eq!(event.token_decimals, Some(9));
-        
+
         // 验证业务字段
         assert!(!event.is_high_value_deposit);
         assert_eq!(event.estimated_usd_value, 100.0);
@@ -1276,7 +1333,7 @@ mod deposit_tests {
         assert!(json.contains("\"token_symbol\":\"SOL\""));
         assert!(json.contains("\"total_volume_usd\":500.0"));
 
-        // 测试反序列化  
+        // 测试反序列化
         let from_json: TokenDistribution = serde_json::from_str(&json).unwrap();
         assert_eq!(from_json.token_mint, "So11111111111111111111111111111111111111112");
         assert_eq!(from_json.token_symbol, Some("SOL".to_string()));
@@ -1304,15 +1361,13 @@ mod deposit_tests {
                     count: 40,
                 },
             ],
-            token_distribution: vec![
-                TokenDistribution {
-                    token_mint: "So11111111111111111111111111111111111111112".to_string(),
-                    token_symbol: Some("SOL".to_string()),
-                    token_name: Some("Solana".to_string()),
-                    count: 70,
-                    total_volume_usd: 7000.0,
-                },
-            ],
+            token_distribution: vec![TokenDistribution {
+                token_mint: "So11111111111111111111111111111111111111112".to_string(),
+                token_symbol: Some("SOL".to_string()),
+                token_name: Some("Solana".to_string()),
+                count: 70,
+                total_volume_usd: 7000.0,
+            }],
         };
 
         // 验证基础统计
@@ -1331,7 +1386,10 @@ mod deposit_tests {
 
         // 验证代币分布
         assert_eq!(stats.token_distribution.len(), 1);
-        assert_eq!(stats.token_distribution[0].token_mint, "So11111111111111111111111111111111111111112");
+        assert_eq!(
+            stats.token_distribution[0].token_mint,
+            "So11111111111111111111111111111111111111112"
+        );
         assert_eq!(stats.token_distribution[0].count, 70);
         assert_eq!(stats.token_distribution[0].total_volume_usd, 7000.0);
     }

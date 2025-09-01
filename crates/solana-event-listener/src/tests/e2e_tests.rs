@@ -179,10 +179,12 @@ async fn test_e2e_database_persistence() {
             // 创建测试事件
             let test_events = vec![
                 crate::parser::ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+                    project_config: Pubkey::new_unique().to_string(),
                     mint_address: Pubkey::new_unique().to_string(),
                     name: "E2E Test Token".to_string(),
                     symbol: "E2E".to_string(),
-                    uri: "https://e2e-test.example.com/metadata.json".to_string(),
+                    metadata_uri: "https://e2e-test.example.com/metadata.json".to_string(),
+                    logo_uri: "https://e2e-test.example.com/logo.png".to_string(),
                     decimals: 9,
                     supply: 1000000,
                     creator: Pubkey::new_unique().to_string(),
@@ -191,6 +193,8 @@ async fn test_e2e_database_persistence() {
                     created_at: chrono::Utc::now().timestamp(),
                     signature: format!("e2e_test_signature_{}", chrono::Utc::now().timestamp_millis()),
                     slot: 999999,
+                    extensions: None,
+                    source: None,
                 }),
                 crate::parser::ParsedEvent::PoolCreation(create_test_pool_event()),
                 crate::parser::ParsedEvent::NftClaim(create_test_nft_event()),

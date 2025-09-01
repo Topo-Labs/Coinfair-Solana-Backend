@@ -91,21 +91,59 @@ impl Default for MetaplexConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UriMetadata {
     /// 代币名称
-    pub name: Option<String>,
+    #[serde(rename = "tokenName")]
+    pub token_name: Option<String>,
     /// 代币符号
-    pub symbol: Option<String>,
+    #[serde(rename = "tokenSymbol")]
+    pub token_symbol: Option<String>,
     /// 描述
     pub description: Option<String>,
-    /// 图片URL
-    pub image: Option<String>,
-    /// 动画URL
-    pub animation_url: Option<String>,
-    /// 外部链接
-    pub external_url: Option<String>,
-    /// 属性列表
-    pub attributes: Option<Vec<TokenAttribute>>,
-    /// 其他属性（用于兼容性）
-    pub properties: Option<serde_json::Value>,
+    /// 头像URL（Logo）
+    #[serde(rename = "avatarUrl")]
+    pub avatar_url: Option<String>,
+    /// 社交链接
+    #[serde(rename = "socialLinks")]
+    pub social_links: Option<SocialLinks>,
+    /// 白名单信息
+    pub whitelist: Option<WhitelistInfo>,
+    /// 购买限制
+    #[serde(rename = "purchaseLimit")]
+    pub purchase_limit: Option<String>,
+    /// 众筹信息
+    pub crowdfunding: Option<CrowdfundingInfo>,
+}
+
+/// 社交链接结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SocialLinks {
+    /// Twitter链接
+    pub twitter: Option<String>,
+    /// Telegram链接
+    pub telegram: Option<String>,
+    /// 网站链接
+    pub website: Option<String>,
+}
+
+/// 白名单信息结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WhitelistInfo {
+    /// 是否启用白名单
+    pub enabled: bool,
+    /// 白名单地址列表
+    pub addresses: Vec<String>,
+}
+
+/// 众筹信息结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrowdfundingInfo {
+    /// 开始时间
+    #[serde(rename = "startTime")]
+    pub start_time: Option<String>,
+    /// 结束时间
+    #[serde(rename = "endTime")]
+    pub end_time: Option<String>,
+    /// 持续时间（天）
+    pub duration: Option<u32>,
 }
 
 /// Metaplex API 服务
@@ -210,6 +248,12 @@ impl MetaplexService {
 
         // 如果都失败了，返回基本信息
         Ok(Some(self.create_fallback_metadata(mint_address)))
+    }
+
+    /// 从URI直接获取代币元数据（公开方法）
+    pub async fn fetch_metadata_from_uri(&self, uri: &str) -> Result<Option<UriMetadata>> {
+        info!("🔍 从URI获取代币元数据: {}", uri);
+        self.fetch_uri_metadata(uri).await
     }
 
     /// 从 Jupiter Token List 获取元数据
@@ -785,26 +829,24 @@ impl MetaplexService {
             let mut tags = chain_metadata.tags;
 
             // 检查动画URL
-            if uri_meta.animation_url.is_some() {
-                tags.push("animated".to_string());
+            if uri_meta.avatar_url.is_some() {
+                tags.push("avatar_url".to_string());
             }
 
             // 检查属性
-            if let Some(ref attrs) = uri_meta.attributes {
-                if !attrs.is_empty() {
-                    tags.push("rich-metadata".to_string());
-                }
+            if let Some(_) = uri_meta.social_links {
+                tags.push("rich-metadata".to_string());
             }
 
             TokenMetadata {
                 address: chain_metadata.address,
                 decimals: chain_metadata.decimals,
-                symbol: chain_metadata.symbol.or(uri_meta.symbol),
-                name: chain_metadata.name.or(uri_meta.name),
-                logo_uri: chain_metadata.logo_uri.or(uri_meta.image),
+                symbol: chain_metadata.symbol.or(uri_meta.token_symbol),
+                name: chain_metadata.name.or(uri_meta.token_name),
+                logo_uri: chain_metadata.logo_uri.or(uri_meta.avatar_url.clone()),
                 description: chain_metadata.description.or(uri_meta.description),
-                external_url: chain_metadata.external_url.or(uri_meta.external_url),
-                attributes: chain_metadata.attributes.or(uri_meta.attributes),
+                external_url: chain_metadata.external_url.or(uri_meta.avatar_url),
+                attributes: chain_metadata.attributes.or(None),
                 tags,
             }
         } else {
@@ -1159,5 +1201,61 @@ mod tests {
         // 这个测试确保 MetaplexService 正确实现了 TokenMetadataProvider trait
         // 即使没有网络连接，fallback机制也应该能工作
         assert!(true); // 如果编译通过，说明 trait 实现正确
+    }
+
+    #[tokio::test]
+    async fn test_fetch_metadata_from_uri() {
+        let service = MetaplexService::new(None).unwrap();
+
+        // 测试无效的URI
+        let invalid_uri = "not-a-valid-url";
+        let result = service.fetch_metadata_from_uri(invalid_uri).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+
+        // 测试非HTTP URI
+        let ipfs_uri = "ipfs://QmTest123";
+        let result = service.fetch_metadata_from_uri(ipfs_uri).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none()); // IPFS URI应该被跳过
+    }
+
+    #[test]
+    fn test_uri_metadata_structure() {
+        // 测试UriMetadata结构的序列化/反序列化
+        let uri_metadata = UriMetadata {
+            token_name: Some("Test Token".to_string()),
+            token_symbol: Some("TEST".to_string()),
+            avatar_url: Some("https://example.com/test.png".to_string()),
+            social_links: Some(SocialLinks {
+                twitter: Some("https://twitter.com/test".to_string()),
+                telegram: Some("https://t.me/test".to_string()),
+                website: Some("https://example.com".to_string()),
+            }),
+            description: Some("A test token from URI".to_string()),
+            whitelist: Some(WhitelistInfo {
+                enabled: true,
+                addresses: vec!["test1".to_string(), "test2".to_string()],
+            }),
+            purchase_limit: Some("100".to_string()),
+            crowdfunding: Some(CrowdfundingInfo {
+                start_time: Some("2021-01-01T00:00:00Z".to_string()),
+                end_time: Some("2021-01-02T00:00:00Z".to_string()),
+                duration: Some(1),
+            }),
+        };
+
+        // 测试序列化
+        let json = serde_json::to_string(&uri_metadata);
+        assert!(json.is_ok());
+
+        // 测试反序列化
+        let deserialized: Result<UriMetadata, _> = serde_json::from_str(&json.unwrap());
+        assert!(deserialized.is_ok());
+
+        let deserialized = deserialized.unwrap();
+        assert_eq!(deserialized.token_name, Some("Test Token".to_string()));
+        assert_eq!(deserialized.token_symbol, Some("TEST".to_string()));
+        assert_eq!(deserialized.description, Some("A test token from URI".to_string()));
     }
 }

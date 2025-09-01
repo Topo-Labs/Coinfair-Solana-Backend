@@ -13,6 +13,7 @@ use database::{
     token_info::{DataSource, TokenPushRequest},
     Database,
 };
+use mongodb::bson::doc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::program_pack::Pack;
 use spl_token::state::Mint;
@@ -21,6 +22,7 @@ use tokio::sync::RwLock;
 
 // 使用 utils 中的共享类型
 use utils::{ExternalTokenMetadata, TokenMetadata as UtilsTokenMetadata, TokenMetadataProvider};
+// use utils::metaplex_service::{MetaplexConfig, MetaplexService, UriMetadata};
 
 // 使用utils中的共享TokenMetadata结构
 // 为了保持向后兼容，保留原有的TokenMetadata别名
@@ -34,7 +36,7 @@ pub struct DepositEvent {
     /// 项目配置地址
     pub project_config: Pubkey,
     /// 项目状态
-    pub project_state: String,
+    pub project_state: u8,
     /// 存款代币mint地址
     pub token_mint: Pubkey,
     /// 存款数量
@@ -187,6 +189,7 @@ impl DepositEventParser {
         ParsedEvent::Deposit(DepositEventData {
             user: event.user.to_string(),
             project_config: event.project_config.to_string(),
+            project_state: event.project_state,
             token_mint: event.token_mint.to_string(),
             amount: event.amount,
             total_raised: event.total_raised,
@@ -710,7 +713,7 @@ mod tests {
         DepositEvent {
             user: Pubkey::new_unique(),
             project_config: Pubkey::new_unique(),
-            project_state: "ended_success".to_string(),
+            project_state: 3,
             token_mint: Pubkey::new_unique(),
             amount: 1000000,       // 1 token with 6 decimals
             total_raised: 5000000, // 5 tokens

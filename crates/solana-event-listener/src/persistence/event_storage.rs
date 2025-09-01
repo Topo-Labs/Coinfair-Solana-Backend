@@ -3,7 +3,8 @@ use crate::{
     error::{EventListenerError, Result},
     parser::{
         event_parser::{
-            DepositEventData, LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData, SwapEventData, TokenCreationEventData,
+            DepositEventData, LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData,
+            SwapEventData, TokenCreationEventData,
         },
         ParsedEvent,
     },
@@ -15,14 +16,18 @@ use database::{
         ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
         TransactionInfo, TransactionStatus, VaultInfo,
     },
-    event_model::{ClmmPoolEvent, LaunchEvent, NftClaimEvent, RewardDistributionEvent, MigrationStatus},
-    token_info::{DataSource as TokenDataSource, TokenInfoRepository, TokenPushRequest},
+    event_model::{ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent},
+    token_info::{TokenInfoRepository, TokenPushRequest},
     Database,
 };
 use mongodb::bson::doc;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use utils::config::{AppConfig, EventListenerDbMode};
+use utils::metaplex_service::{MetaplexConfig, MetaplexService};
 
 /// 事件存储接口
 ///
@@ -38,6 +43,23 @@ pub struct EventStorage {
 }
 
 impl EventStorage {
+    /// 合并/更新 TokenInfo.extensions（存款驱动的最小集字段）
+    fn merge_extensions_for_deposit(
+        mut extensions: serde_json::Value,
+        project_config: &str,
+        project_state: u8,
+        total_raised: u64,
+    ) -> serde_json::Value {
+        if !extensions.is_object() {
+            extensions = serde_json::json!({});
+        }
+
+        extensions["project_config"] = serde_json::Value::String(project_config.to_string());
+        extensions["project_state"] = serde_json::Value::Number(serde_json::Number::from(project_state));
+        extensions["total_raised"] = serde_json::Value::Number(serde_json::Number::from(total_raised));
+
+        extensions
+    }
     /// 创建新的事件存储
     pub async fn new(config: &EventListenerConfig) -> Result<Self> {
         let config = Arc::new(config.clone());
@@ -78,8 +100,8 @@ impl EventStorage {
         let clmm_pool_repository = Arc::new(database.clmm_pool_repository.clone());
 
         // 创建迁移客户端
-        let migration_base_url = std::env::var("MIGRATION_BASE_URL")
-            .unwrap_or_else(|_| "http://localhost:8765".to_string());
+        let migration_base_url =
+            std::env::var("MIGRATION_BASE_URL").unwrap_or_else(|_| "http://localhost:8765".to_string());
         let migration_client = Arc::new(MigrationClient::new(migration_base_url));
 
         info!("✅ 事件存储初始化完成，数据库: {}", config.database.database_name);
@@ -445,12 +467,12 @@ impl EventStorage {
             .map_err(|e| EventListenerError::Persistence(format!("查询现有代币失败: {}", e)))?;
 
         if existing.is_some() {
-            debug!("代币已存在，跳过: {}", event.mint_address);
+            info!("代币已存在，跳过: {}", event.mint_address);
             return Ok(false);
         }
 
         // 构建TokenPushRequest
-        let push_request = self.convert_to_push_request(event)?;
+        let push_request = self.convert_to_push_token_request(event)?;
 
         // 推送到数据库
         let response = self
@@ -575,10 +597,16 @@ impl EventStorage {
             match self.write_single_launch_event(event).await {
                 Ok(true) => {
                     written_count += 1;
-                    debug!("✅ Launch事件已写入: {} by {}", event.meme_token_mint, event.user_wallet);
+                    debug!(
+                        "✅ Launch事件已写入: {} by {}",
+                        event.meme_token_mint, event.user_wallet
+                    );
                 }
                 Ok(false) => {
-                    debug!("ℹ️ Launch事件已存在，跳过: {} by {}", event.meme_token_mint, event.user_wallet);
+                    debug!(
+                        "ℹ️ Launch事件已存在，跳过: {} by {}",
+                        event.meme_token_mint, event.user_wallet
+                    );
                 }
                 Err(e) => {
                     error!(
@@ -631,26 +659,29 @@ impl EventStorage {
         let database = Arc::clone(&self.database);
         let migration_client = Arc::clone(&self.migration_client);
         let signature = event.signature.clone();
-        
+
         tokio::spawn(async move {
             info!("🚀 异步触发Launch事件迁移: {}", signature);
-            
+
             // 调用真实的迁移API
             match migration_client.trigger_launch_migration(&event_data).await {
                 Ok(response) => {
                     info!(
-                        "✅ Launch迁移成功: signature={}, pool_address={}", 
+                        "✅ Launch迁移成功: signature={}, pool_address={}",
                         signature, response.pool_address
                     );
-                    
+
                     // 更新为成功状态
-                    match database.launch_event_repository
+                    match database
+                        .launch_event_repository
                         .update_migration_status(
                             &signature,
                             MigrationStatus::Success,
                             Some(response.pool_address),
-                            None
-                        ).await {
+                            None,
+                        )
+                        .await
+                    {
                         Ok(_) => {
                             info!("✅ Launch事件迁移状态更新为成功: {}", signature);
                         }
@@ -661,15 +692,13 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ Launch迁移失败: {} - {}", signature, e);
-                    
+
                     // 更新为失败状态并记录错误信息
-                    match database.launch_event_repository
-                        .update_migration_status(
-                            &signature,
-                            MigrationStatus::Failed,
-                            None,
-                            Some(e.to_string())
-                        ).await {
+                    match database
+                        .launch_event_repository
+                        .update_migration_status(&signature, MigrationStatus::Failed, None, Some(e.to_string()))
+                        .await
+                    {
                         Ok(_) => {
                             info!("✅ Launch事件迁移状态更新为失败: {}", signature);
                         }
@@ -796,9 +825,9 @@ impl EventStorage {
         let now = Utc::now().timestamp();
 
         // 计算统计分析字段
-        let total_liquidity_usd = (event.meme_token_amount as f64 * event.initial_price) + 
-                                  (event.base_token_amount as f64);
-        
+        let total_liquidity_usd =
+            (event.meme_token_amount as f64 * event.initial_price) + (event.base_token_amount as f64);
+
         let price_range_width_percent = if event.tick_lower_price > 0.0 {
             ((event.tick_upper_price - event.tick_lower_price) / event.tick_lower_price) * 100.0
         } else {
@@ -821,43 +850,43 @@ impl EventStorage {
 
         Ok(LaunchEvent {
             id: None,
-            
+
             // 核心业务字段
             meme_token_mint: event.meme_token_mint.clone(),
             base_token_mint: event.base_token_mint.clone(),
             user_wallet: event.user_wallet.clone(),
-            
+
             // 价格和流动性参数
             config_index: event.config_index,
             initial_price: event.initial_price,
             tick_lower_price: event.tick_lower_price,
             tick_upper_price: event.tick_upper_price,
-            
+
             // 代币数量
             meme_token_amount: event.meme_token_amount,
             base_token_amount: event.base_token_amount,
-            
+
             // 交易参数
             max_slippage_percent: event.max_slippage_percent,
             with_metadata: event.with_metadata,
-            
+
             // 时间字段
             open_time: event.open_time,
             launched_at: now,
-            
+
             // 迁移状态跟踪 - 初始状态为pending
             migration_status: "pending".to_string(),
             migrated_pool_address: None,
             migration_completed_at: None,
             migration_error: None,
             migration_retry_count: 0,
-            
+
             // 统计分析字段
             total_liquidity_usd,
             pair_type: pair_type.to_string(),
             price_range_width_percent,
             is_high_value_launch,
-            
+
             // 区块链标准字段
             signature: event.signature.clone(),
             slot: event.slot,
@@ -869,12 +898,12 @@ impl EventStorage {
     /// 将存款事件转换为数据库模型
     fn convert_to_deposit_event(&self, event: &DepositEventData) -> Result<database::event_model::DepositEvent> {
         use chrono::Utc;
-        
+
         let now = Utc::now();
 
         Ok(database::event_model::DepositEvent {
             id: None,
-            
+
             // 核心业务字段
             user: event.user.clone(),
             project_config: event.project_config.clone(),
@@ -906,7 +935,7 @@ impl EventStorage {
         })
     }
 
-    fn convert_to_push_request(&self, event: &TokenCreationEventData) -> Result<TokenPushRequest> {
+    fn convert_to_push_token_request(&self, event: &TokenCreationEventData) -> Result<TokenPushRequest> {
         // 确定标签
         let mut tags = vec!["event-listener".to_string(), "onchain".to_string()];
 
@@ -930,7 +959,7 @@ impl EventStorage {
             name: event.name.clone(),
             symbol: event.symbol.clone(),
             decimals: event.decimals,
-            logo_uri: event.uri.clone(),
+            logo_uri: event.logo_uri.clone(),
             tags: Some(tags),
             daily_volume: Some(0.0), // 新创建的代币没有交易量
             freeze_authority: None,  // 从事件中无法获取，设为None
@@ -939,15 +968,8 @@ impl EventStorage {
             minted_at: Some(
                 chrono::DateTime::from_timestamp(event.created_at, 0).unwrap_or_else(|| chrono::Utc::now()),
             ),
-            extensions: Some(serde_json::json!({
-                "supply": event.supply,
-                "has_whitelist": event.has_whitelist,
-                "whitelist_deadline": event.whitelist_deadline,
-                "signature": event.signature,
-                "slot": event.slot,
-                "source": "event-listener"
-            })),
-            source: Some(TokenDataSource::OnchainSync),
+            extensions: event.extensions.clone(),
+            source: event.source.clone(),
         })
     }
 
@@ -990,6 +1012,170 @@ impl EventStorage {
             "✅ 存款事件已写入: {} 存款 {} 到项目 {}",
             event.user, event.amount, event.token_mint
         );
+
+        // 异步触发 TokenInfo.extensions 维护
+        // 通过解析器上的方法更新，这里复用数据库引用自行实现
+        let db = Arc::clone(&self.database);
+        let cfg = Arc::clone(&self.config);
+        let event_clone = event.clone();
+        tokio::spawn(async move {
+            info!("异步触发 TokenInfo.extensions 维护: {}", event_clone.token_mint);
+            // 查找 TokenInfo 并最小化更新 extensions
+            if let Ok(Some(existing)) = db.token_info_repository.find_by_address(&event_clone.token_mint).await {
+                // 现有 extensions
+                let mut extensions = if existing.extensions.is_null() {
+                    info!("TokenInfo.extensions 为空，创建空对象");
+                    serde_json::json!({})
+                } else {
+                    info!("TokenInfo.extensions 不为空:{}，复制现有对象", existing.extensions);
+                    existing.extensions.clone()
+                };
+
+                // 合并最小必需字段
+                extensions = EventStorage::merge_extensions_for_deposit(
+                    extensions,
+                    &event_clone.project_config,
+                    event_clone.project_state,
+                    event_clone.total_raised,
+                );
+
+                // 若 extensions 为空或缺关键字段，则尝试补齐：creator、description、log_url、social_links、whitelist、crowdfunding
+                let need_enrich = extensions.get("description").is_none()
+                    || extensions.get("log_url").is_none()
+                    || extensions.get("social_links").is_none()
+                    || extensions.get("whitelist").is_none()
+                    || extensions.get("crowdfunding").is_none()
+                    || extensions.get("creator").is_none();
+
+                if need_enrich {
+                    info!("TokenInfo.extensions 需要补齐:{}，从链上获取", event_clone.token_mint);
+                    // 读取链上 ProjectConfig 的 project_wallet 与 meta_uri
+                    let rpc_url = cfg.solana.rpc_url.clone();
+                    if !rpc_url.is_empty() {
+                        if let Ok(proj_key) = Pubkey::from_str(&event_clone.project_config) {
+                            let rpc = RpcClient::new(rpc_url);
+                            if let Ok(data) = rpc.get_account_data(&proj_key) {
+                                // 解析：authority(32) + project_wallet(32) + meta_uri(String)
+                                if data.len() >= 64 + 4 {
+                                    let mut offset = 0usize;
+                                    offset += 32; // skip authority
+                                    let wallet_bytes = &data[offset..offset + 32];
+                                    if let Ok(wallet) = <[u8; 32]>::try_from(wallet_bytes) {
+                                        let wallet_pk = Pubkey::new_from_array(wallet);
+                                        extensions["creator"] = serde_json::Value::String(wallet_pk.to_string());
+                                    }
+                                    offset += 32;
+                                    if offset + 4 <= data.len() {
+                                        let len_bytes: [u8; 4] = match data[offset..offset + 4].try_into() {
+                                            Ok(b) => b,
+                                            Err(_) => [0u8; 4],
+                                        };
+                                        let str_len = u32::from_le_bytes(len_bytes) as usize;
+                                        offset += 4;
+                                        if offset + str_len <= data.len() {
+                                            let uri_bytes = &data[offset..offset + str_len];
+                                            if let Ok(uri) = String::from_utf8(uri_bytes.to_vec()) {
+                                                // 拉取 URI 元数据
+                                                if uri.starts_with("http") {
+                                                    info!("拉取 URI 元数据: {}", uri);
+                                                    if let Ok(svc) =
+                                                        MetaplexService::new(Some(MetaplexConfig::default()))
+                                                    {
+                                                        if let Ok(meta_opt) = svc.fetch_metadata_from_uri(&uri).await {
+                                                            if let Some(meta) = meta_opt {
+                                                                info!("拉取 URI 元数据成功: {:#?}", meta);
+                                                                if extensions.get("description").is_none() {
+                                                                    if let Some(desc) = meta.description {
+                                                                        extensions["description"] =
+                                                                            serde_json::Value::String(desc);
+                                                                    }
+                                                                }
+                                                                if extensions.get("log_url").is_none() {
+                                                                    if let Some(url) = meta.avatar_url {
+                                                                        extensions["log_url"] =
+                                                                            serde_json::Value::String(url);
+                                                                    }
+                                                                }
+                                                                if extensions.get("social_links").is_none() {
+                                                                    if let Ok(v) =
+                                                                        serde_json::to_value(meta.social_links)
+                                                                    {
+                                                                        if !v.is_null() {
+                                                                            extensions["social_links"] = v;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                if extensions.get("whitelist").is_none() {
+                                                                    if let Ok(v) = serde_json::to_value(meta.whitelist)
+                                                                    {
+                                                                        if !v.is_null() {
+                                                                            extensions["whitelist"] = v;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                if extensions.get("crowdfunding").is_none() {
+                                                                    if let Ok(v) =
+                                                                        serde_json::to_value(meta.crowdfunding)
+                                                                    {
+                                                                        if !v.is_null() {
+                                                                            extensions["crowdfunding"] = v;
+                                                                        }
+                                                                    }
+                                                                }
+                                                                info!(
+                                                                    "✅ TokenInfo.extensions 补齐完成: {:#?}",
+                                                                    extensions
+                                                                );
+                                                            } else {
+                                                                warn!("⚠️ 拉取 URI 元数据失败: metadata is None");
+                                                            }
+                                                        } else {
+                                                            warn!(
+                                                                "⚠️ 拉取 URI 元数据失败: call fetch_metadata_from_uri failed"
+                                                            );
+                                                        }
+                                                    } else {
+                                                        warn!("⚠️ 拉取 URI 元数据失败: MetaplexService initialization failed");
+                                                    }
+                                                } else {
+                                                    warn!("⚠️ 拉取 URI 元数据失败: uri is not valid");
+                                                }
+                                            } else {
+                                                warn!("⚠️ 拉取 URI 元数据失败: String::from_utf8 解析urifailed");
+                                            }
+                                        }
+                                    } else {
+                                        warn!("⚠️ 拉取 URI 元数据失败: offset + str_len > data.len()");
+                                    }
+                                } else {
+                                    warn!("⚠️ 拉取 URI 元数据失败: data.len() < 64 + 4");
+                                }
+                            } else {
+                                warn!("⚠️ 拉取 URI 元数据失败: get_account_data failed");
+                            }
+                        } else {
+                            warn!("⚠️ 拉取 URI 元数据失败: project_config is invalid");
+                        }
+                    } else {
+                        warn!("⚠️ 拉取 URI 元数据失败: rpc_url is empty");
+                    }
+                }
+
+                // 写回
+                if let Ok(bson) = mongodb::bson::to_bson(&extensions) {
+                    let _ = db
+                        .token_info_repository
+                        .update_token(&event_clone.token_mint, mongodb::bson::doc! {"extensions": bson})
+                        .await;
+                    info!("TokenInfo.extensions 写回成功!");
+                }
+            } else {
+                info!(
+                    "异步触发 TokenInfo.extensions 维护完成: {}，但TokenInfo不存在",
+                    event_clone.token_mint
+                );
+            }
+        });
 
         Ok(true)
     }
@@ -1352,10 +1538,12 @@ mod tests {
 
     fn create_test_token_event() -> TokenCreationEventData {
         TokenCreationEventData {
+            project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
-            uri: "https://example.com/metadata.json".to_string(),
+            metadata_uri: "https://example.com/metadata.json".to_string(),
+            logo_uri: "https://example.com/logo.png".to_string(),
             decimals: 9,
             supply: 1000000,
             creator: Pubkey::new_unique().to_string(),
@@ -1364,6 +1552,8 @@ mod tests {
             created_at: 1234567890,
             signature: "test_signature".to_string(),
             slot: 12345,
+            extensions: None,
+            source: None,
         }
     }
 
@@ -1380,13 +1570,13 @@ mod tests {
         let storage = storage.unwrap();
         let event = create_test_token_event();
 
-        let push_request = storage.convert_to_push_request(&event).unwrap();
+        let push_request = storage.convert_to_push_token_request(&event).unwrap();
 
         assert_eq!(push_request.address, event.mint_address.to_string());
         assert_eq!(push_request.name, event.name);
         assert_eq!(push_request.symbol, event.symbol);
         assert_eq!(push_request.decimals, event.decimals);
-        assert_eq!(push_request.logo_uri, event.uri);
+        assert_eq!(push_request.logo_uri, event.metadata_uri);
         assert!(push_request
             .tags
             .as_ref()
@@ -1503,6 +1693,44 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_merge_extensions_for_deposit_minimal() {
+        let existing = serde_json::json!({});
+        let merged = EventStorage::merge_extensions_for_deposit(existing, "proj_cfg", 3, 12345);
+        assert_eq!(
+            merged["project_config"],
+            serde_json::Value::String("proj_cfg".to_string())
+        );
+        assert_eq!(
+            merged["project_state"],
+            serde_json::Value::Number(serde_json::Number::from(3u8))
+        );
+        assert_eq!(
+            merged["total_raised"],
+            serde_json::Value::Number(serde_json::Number::from(12345u64))
+        );
+    }
+
+    #[test]
+    fn test_merge_extensions_for_deposit_preserve_other_fields() {
+        let existing = serde_json::json!({
+            "description": "keep me",
+            "social_links": {"twitter": "x"}
+        });
+        let merged = EventStorage::merge_extensions_for_deposit(existing.clone(), "cfg", 4, 1);
+        assert_eq!(merged["description"], existing["description"]);
+        assert_eq!(merged["social_links"], existing["social_links"]);
+        assert_eq!(merged["project_config"], serde_json::Value::String("cfg".to_string()));
+        assert_eq!(
+            merged["project_state"],
+            serde_json::Value::Number(serde_json::Number::from(4u8))
+        );
+        assert_eq!(
+            merged["total_raised"],
+            serde_json::Value::Number(serde_json::Number::from(1u64))
+        );
+    }
+
     fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
         use crate::parser::event_parser::NftClaimEventData;
         NftClaimEventData {
@@ -1587,7 +1815,7 @@ mod tests {
             ..create_test_token_event()
         };
 
-        let push_request = storage.convert_to_push_request(&large_supply_event).unwrap();
+        let push_request = storage.convert_to_push_token_request(&large_supply_event).unwrap();
         let tags = push_request.tags.unwrap();
         assert!(tags.contains(&"large-supply".to_string()));
 
@@ -1598,7 +1826,7 @@ mod tests {
             ..create_test_token_event()
         };
 
-        let push_request = storage.convert_to_push_request(&small_supply_event).unwrap();
+        let push_request = storage.convert_to_push_token_request(&small_supply_event).unwrap();
         let tags = push_request.tags.unwrap();
         assert!(tags.contains(&"small-supply".to_string()));
 
@@ -1608,7 +1836,7 @@ mod tests {
             ..create_test_token_event()
         };
 
-        let push_request = storage.convert_to_push_request(&whitelist_event).unwrap();
+        let push_request = storage.convert_to_push_token_request(&whitelist_event).unwrap();
         let tags = push_request.tags.unwrap();
         assert!(tags.contains(&"whitelist".to_string()));
     }

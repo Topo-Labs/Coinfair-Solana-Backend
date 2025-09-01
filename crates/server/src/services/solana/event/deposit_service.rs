@@ -28,37 +28,41 @@ impl DepositEventService {
     /// 创建新的存款事件
     pub async fn create_deposit_event(&self, event: DepositEvent) -> Result<(String, DepositEvent)> {
         info!("💾 创建新的存款事件，用户：{}, 签名：{}", event.user, event.signature);
-        
+
         // 检查是否已存在相同签名的事件（防止重复）
-        let existing = self.database
+        let existing = self
+            .database
             .deposit_event_repository
             .find_by_signature(&event.signature)
             .await?;
-        
+
         if existing.is_some() {
             error!("❌ 存款事件已存在，签名：{}", event.signature);
             return Err(anyhow::anyhow!("存款事件已存在，签名：{}", event.signature));
         }
-        
+
         // 插入事件
-        let event_id = self.database
+        let event_id = self
+            .database
             .deposit_event_repository
             .insert_deposit_event(event.clone())
             .await?;
-        
-        info!("✅ 成功创建存款事件，ID: {}, 用户: {}, 金额: {}", 
-            event_id, event.user, event.actual_amount);
-        
+
+        info!(
+            "✅ 成功创建存款事件，ID: {}, 用户: {}, 金额: {}",
+            event_id, event.user, event.actual_amount
+        );
+
         Ok((event_id, event))
     }
 
     /// 批量创建存款事件
     pub async fn batch_create_deposit_events(&self, events: Vec<DepositEvent>) -> Result<Vec<String>> {
         info!("💾 批量创建存款事件，数量：{}", events.len());
-        
+
         let mut created_ids = Vec::new();
         let mut failed_count = 0;
-        
+
         for event in events {
             match self.create_deposit_event(event).await {
                 Ok((id, _)) => {
@@ -70,13 +74,13 @@ impl DepositEventService {
                 }
             }
         }
-        
+
         info!("✅ 批量创建完成，成功：{}, 失败：{}", created_ids.len(), failed_count);
-        
+
         if created_ids.is_empty() && failed_count > 0 {
             return Err(anyhow::anyhow!("所有存款事件创建失败"));
         }
-        
+
         Ok(created_ids)
     }
 
@@ -353,7 +357,7 @@ impl DepositEventService {
         token_mint: &str,
         page: Option<u32>,
         page_size: Option<u32>,
-    ) -> Result<PaginatedResponse<DepositEvent>> {
+    ) -> Result<TokenDepositsResponse> {
         info!("🔍 查询代币 {} 的存款记录", token_mint);
 
         let page = page.unwrap_or(1);
@@ -377,12 +381,20 @@ impl DepositEventService {
 
         let total_pages = (result.total + page_size as u64 - 1) / page_size as u64;
 
-        Ok(PaginatedResponse {
+        // 统计 unique_users（按该 token_mint 去重的用户数）
+        let unique_users = self
+            .database
+            .deposit_event_repository
+            .count_unique_users_by_token(token_mint)
+            .await? as u64;
+
+        Ok(TokenDepositsResponse {
             items: result.items,
             total: result.total,
             page: page as u64,
             page_size: page_size as u64,
             total_pages,
+            unique_users,
         })
     }
 
@@ -770,6 +782,17 @@ pub struct PaginatedResponse<T> {
     pub page: u64,
     pub page_size: u64,
     pub total_pages: u64,
+}
+
+/// 代币存款分页响应（包含 unique_users）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TokenDepositsResponse {
+    pub items: Vec<DepositEvent>,
+    pub total: u64,
+    pub page: u64,
+    pub page_size: u64,
+    pub total_pages: u64,
+    pub unique_users: u64,
 }
 
 /// 用户存款汇总响应

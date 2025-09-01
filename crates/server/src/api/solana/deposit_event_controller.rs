@@ -1,12 +1,11 @@
-use crate::services::solana::event::DepositEventService;
-use crate::services::Services;
 use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
 use crate::dtos::solana::events::deposit::{
-    DepositAdvancedQuery, DepositEventQuery, DepositEventResponse, DepositStatsResponse,
-    DepositTrendQuery, PaginatedDepositResponse, TokenDepositQuery, TrendPeriod,
-    UserDepositQuery, UserDepositSummaryResponse, TokenDepositSummaryResponse,
-    DepositTrendResponse, CreateDepositEventRequest, CreateDepositEventResponse,
+    CreateDepositEventRequest, CreateDepositEventResponse, DepositAdvancedQuery, DepositEventQuery,
+    DepositEventResponse, DepositStatsResponse, DepositTrendQuery, DepositTrendResponse, PaginatedDepositResponse,
+    TokenDepositQuery, TokenDepositSummaryResponse, TrendPeriod, UserDepositQuery, UserDepositSummaryResponse,
 };
+use crate::services::solana::event::DepositEventService;
+use crate::services::Services;
 use axum::{
     extract::{Extension, Json, Path, Query},
     http::StatusCode,
@@ -30,7 +29,6 @@ impl DepositEventController {
             .route("/deposits/by-user/:address", get(get_deposits_by_user))
             .route("/deposits/by-token/:mint", get(get_deposits_by_token))
             .route("/deposits/by-signature/:signature", get(get_deposit_by_signature))
-            
             // ====== 统计分析接口 ======
             .route("/deposits/stats", get(get_deposit_stats))
             .route("/deposits/summary/:address", get(get_user_deposit_summary))
@@ -172,6 +170,7 @@ pub async fn get_deposit_events(
                 page: result.page,
                 page_size: result.page_size,
                 total_pages: result.total_pages,
+                unique_users: None,
             };
 
             Ok(ResponseJson(ApiResponse::success(response)))
@@ -241,6 +240,7 @@ pub async fn get_deposit_events_advanced(
                 page: result.page,
                 page_size: result.page_size,
                 total_pages: result.total_pages,
+                unique_users: None,
             };
 
             Ok(ResponseJson(ApiResponse::success(response)))
@@ -249,7 +249,10 @@ pub async fn get_deposit_events_advanced(
             error!("高级查询存款事件失败: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ResponseJson(ErrorResponse::new("ADVANCED_QUERY_DEPOSITS_FAILED", "高级查询存款事件失败")),
+                ResponseJson(ErrorResponse::new(
+                    "ADVANCED_QUERY_DEPOSITS_FAILED",
+                    "高级查询存款事件失败",
+                )),
             ))
         }
     }
@@ -291,6 +294,7 @@ pub async fn get_deposits_by_user(
                 page: result.page,
                 page_size: result.page_size,
                 total_pages: result.total_pages,
+                unique_users: None,
             };
 
             Ok(ResponseJson(ApiResponse::success(response)))
@@ -341,7 +345,14 @@ pub async fn get_deposits_by_token(
                 page: result.page,
                 page_size: result.page_size,
                 total_pages: result.total_pages,
+                unique_users: Some(result.unique_users),
             };
+
+            // 日志提示 unique_users
+            info!(
+                "📊 代币{}的unique_users: {} (page={}, page_size={})",
+                mint, result.unique_users, response.page, response.page_size
+            );
 
             Ok(ResponseJson(ApiResponse::success(response)))
         }
@@ -349,7 +360,10 @@ pub async fn get_deposits_by_token(
             error!("查询代币存款记录失败: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ResponseJson(ErrorResponse::new("QUERY_TOKEN_DEPOSITS_FAILED", "查询代币存款记录失败")),
+                ResponseJson(ErrorResponse::new(
+                    "QUERY_TOKEN_DEPOSITS_FAILED",
+                    "查询代币存款记录失败",
+                )),
             ))
         }
     }
@@ -387,7 +401,10 @@ pub async fn get_deposit_by_signature(
             error!("查询存款事件失败: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ResponseJson(ErrorResponse::new("QUERY_DEPOSIT_BY_SIGNATURE_FAILED", "查询存款事件失败")),
+                ResponseJson(ErrorResponse::new(
+                    "QUERY_DEPOSIT_BY_SIGNATURE_FAILED",
+                    "查询存款事件失败",
+                )),
             ))
         }
     }
@@ -457,7 +474,10 @@ pub async fn get_user_deposit_summary(
             error!("获取用户存款汇总失败: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ResponseJson(ErrorResponse::new("GET_USER_DEPOSIT_SUMMARY_FAILED", "获取用户存款汇总失败")),
+                ResponseJson(ErrorResponse::new(
+                    "GET_USER_DEPOSIT_SUMMARY_FAILED",
+                    "获取用户存款汇总失败",
+                )),
             ))
         }
     }
@@ -493,7 +513,10 @@ pub async fn get_token_deposit_summary(
             error!("获取代币存款汇总失败: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                ResponseJson(ErrorResponse::new("GET_TOKEN_DEPOSIT_SUMMARY_FAILED", "获取代币存款汇总失败")),
+                ResponseJson(ErrorResponse::new(
+                    "GET_TOKEN_DEPOSIT_SUMMARY_FAILED",
+                    "获取代币存款汇总失败",
+                )),
             ))
         }
     }
@@ -533,9 +556,7 @@ pub async fn get_deposit_trends(
     {
         Ok(trends) => {
             let trend_points = trends.into_iter().map(Into::into).collect();
-            let response = DepositTrendResponse {
-                trends: trend_points,
-            };
+            let response = DepositTrendResponse { trends: trend_points };
             Ok(ResponseJson(ApiResponse::success(response)))
         }
         Err(e) => {
@@ -591,9 +612,9 @@ mod tests {
             deposit_type: Some(1),
             start_date: Some(1640995200),
             end_date: Some(1672531199),
-            amount_min: Some(1000000), // 1 SOL
-            amount_max: Some(10000000), // 10 SOL
-            total_raised_min: Some(5000000), // 5 SOL
+            amount_min: Some(1000000),        // 1 SOL
+            amount_max: Some(10000000),       // 10 SOL
+            total_raised_min: Some(5000000),  // 5 SOL
             total_raised_max: Some(50000000), // 50 SOL
             is_high_value_deposit: Some(false),
             related_pool: Some("test_pool_address".to_string()),
@@ -617,10 +638,7 @@ mod tests {
     #[test]
     fn test_user_deposit_query_structure() {
         // 测试用户存款查询参数
-        let query = UserDepositQuery {
-            page: 1,
-            page_size: 20,
-        };
+        let query = UserDepositQuery { page: 1, page_size: 20 };
 
         assert_eq!(query.page, 1);
         assert_eq!(query.page_size, 20);
@@ -631,10 +649,7 @@ mod tests {
     #[test]
     fn test_token_deposit_query_structure() {
         // 测试代币存款查询参数
-        let query = TokenDepositQuery {
-            page: 2,
-            page_size: 30,
-        };
+        let query = TokenDepositQuery { page: 2, page_size: 30 };
 
         assert_eq!(query.page, 2);
         assert_eq!(query.page_size, 30);
@@ -654,7 +669,7 @@ mod tests {
         assert!(query.period.is_some());
         assert!(matches!(query.period.unwrap(), TrendPeriod::Day));
         assert!(query.start_date.unwrap() < query.end_date.unwrap());
-        
+
         // 测试不同的趋势周期
         let periods = vec![
             TrendPeriod::Hour,
@@ -669,7 +684,7 @@ mod tests {
                 start_date: Some(1640995200),
                 end_date: Some(1672531199),
             };
-            
+
             assert!(trend_query.period.is_some());
             match period {
                 TrendPeriod::Hour => assert!(matches!(trend_query.period.unwrap(), TrendPeriod::Hour)),
@@ -714,7 +729,10 @@ mod tests {
         ];
 
         for (input, expected) in test_cases {
-            let json_data = format!(r#"{{"period": "{}", "start_date": 1640995200, "end_date": 1672531199}}"#, input);
+            let json_data = format!(
+                r#"{{"period": "{}", "start_date": 1640995200, "end_date": 1672531199}}"#,
+                input
+            );
             let query: Result<DepositTrendQuery, _> = serde_json::from_str(&json_data);
             assert!(query.is_ok(), "Failed to deserialize: {}", input);
             let query = query.unwrap();
@@ -738,7 +756,7 @@ mod tests {
         // 测试API错误代码的一致性和覆盖度
         let error_codes = vec![
             "QUERY_DEPOSITS_FAILED",
-            "ADVANCED_QUERY_DEPOSITS_FAILED", 
+            "ADVANCED_QUERY_DEPOSITS_FAILED",
             "QUERY_USER_DEPOSITS_FAILED",
             "QUERY_TOKEN_DEPOSITS_FAILED",
             "QUERY_DEPOSIT_BY_SIGNATURE_FAILED",
@@ -809,7 +827,7 @@ mod tests {
             assert!(path.starts_with("/deposits"));
             assert!(!path.ends_with('/') || *path == "/");
             assert!(!path.contains("//"));
-            
+
             // 验证路径参数格式
             if path.contains('{') {
                 assert!(path.contains('}'));
@@ -846,11 +864,11 @@ mod tests {
     fn test_api_response_structure() {
         // 测试API响应结构的一致性
         use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
-        
+
         // 测试成功响应
         let success_data = "test_data";
         let success_response = ApiResponse::success(success_data);
-        
+
         assert!(success_response.success);
         assert!(success_response.data.is_some());
         assert_eq!(success_response.data.unwrap(), "test_data");
@@ -858,16 +876,15 @@ mod tests {
 
         // 测试错误响应
         let error_response = ErrorResponse::new("TEST_ERROR", "测试错误");
-        
+
         assert_eq!(error_response.code, "TEST_ERROR");
         assert_eq!(error_response.message, "测试错误");
         assert!(error_response.details.is_none());
         assert!(error_response.timestamp > 0);
-        
+
         // 测试带详情的错误响应
-        let detailed_error = ErrorResponse::new("TEST_ERROR", "测试错误")
-            .with_details("详细错误信息");
-        
+        let detailed_error = ErrorResponse::new("TEST_ERROR", "测试错误").with_details("详细错误信息");
+
         assert!(detailed_error.details.is_some());
         assert_eq!(detailed_error.details.unwrap(), "详细错误信息");
     }
@@ -877,7 +894,7 @@ mod tests {
         // 测试控制器日志记录的一致性
         let log_messages = vec![
             "📊 查询存款事件列表",
-            "📊 高级查询存款事件", 
+            "📊 高级查询存款事件",
             "📊 查询用户{}的存款记录",
             "📊 查询代币{}的存款记录",
             "📊 查询签名{}的存款事件",
@@ -892,11 +909,9 @@ mod tests {
             assert!(message.starts_with("📊"));
             assert!(message.len() > 3);
             assert!(!message.ends_with(' '));
-            
+
             // 验证中文字符正确性
-            let has_chinese = message.chars().any(|c| {
-                ('\u{4e00}'..='\u{9fff}').contains(&c)
-            });
+            let has_chinese = message.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c));
             assert!(has_chinese, "日志消息应包含中文: {}", message);
         }
     }
@@ -908,7 +923,7 @@ mod tests {
             user: "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string(),
             project_config: "test_config".to_string(),
             token_mint: "So11111111111111111111111111111111111111112".to_string(),
-            amount: 1000000, // 1 SOL
+            amount: 1000000,       // 1 SOL
             total_raised: 5000000, // 5 SOL
             signature: "test_signature_12345".to_string(),
             deposited_at: 1640995200,

@@ -191,18 +191,87 @@ pub async fn get_token_list(
 
 /// 查询代币列表（新格式，支持分页和高级筛选）
 ///
-/// 支持分页、筛选、排序等高级查询功能，返回详细的代币信息和统计数据。
+/// 支持分页、筛选、多字段排序等高级查询功能，返回详细的代币信息和统计数据。
 /// 适用于需要高级查询功能的新版本前端。
 ///
 /// # 查询参数
 ///
 /// - `page`: 页码（从1开始，默认1）
-/// - `size`: 每页数量（默认20，最大100）
-/// - `sort_by`: 排序字段（created_at, daily_volume, name等）
-/// - `order`: 排序方向（asc/desc，默认desc）
+/// - `pageSize`: 每页数量（默认100，最大1000）
+/// - `sortBy`: 排序字段，支持多字段排序
+///   - 单字段：`created_at`, `daily_volume`, `name`, `symbol`, `updated_at`, `push_time`
+///   - 多字段：用逗号分隔，如 `daily_volume,created_at`
+/// - `sortOrder`: 排序方向，支持多方向排序
+///   - 单方向：`asc` 或 `desc`（默认desc）
+///   - 多方向：用逗号分隔，如 `desc,asc`
+///   - 如果字段数多于方向数，多余字段使用默认方向(desc)
 /// - `status`: 代币状态筛选
 /// - `verification`: 验证状态筛选
 /// - `tags`: 标签筛选（逗号分隔）
+/// - `search`: 搜索关键词（匹配名称、符号、地址）
+/// - `minVolume`: 最小日交易量过滤
+/// - `maxVolume`: 最大日交易量过滤
+/// - `source`: 数据来源过滤
+/// - `projectState`: 项目状态过滤（从extensions.project_state字段过滤）
+/// - `creator`: 创建者过滤（从extensions.creator字段过滤）
+/// - `addresses`: 地址过滤（支持多个地址，用逗号分隔）
+/// - `participate`: 参与者过滤（钱包地址，查询该地址参与过的代币众筹活动）
+///
+/// # 项目状态过滤示例
+///
+/// ```
+/// # 过滤正在进行中的项目
+/// projectState=2
+///
+/// # 过滤已完成的项目
+/// projectState=4
+///
+/// # 结合其他过滤条件
+/// status=active&projectState=4&minVolume=1000
+/// ```
+///
+/// # 创建者过滤示例
+///
+/// ```
+/// # 按特定创建者过滤
+/// creator=8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy
+///
+/// # 结合状态和创建者过滤
+/// status=active&creator=8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy&minVolume=1000
+/// ```
+///
+/// # 地址过滤示例
+///
+/// ```
+/// # 查询单个地址
+/// addresses=So11111111111111111111111111111111111111112
+///
+/// # 查询多个地址（逗号分隔）
+/// addresses=So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+///
+/// # 结合其他过滤条件
+/// status=active&addresses=So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&minVolume=1000
+/// ```
+///
+/// # 参与者过滤示例
+///
+/// ```
+/// # 查询特定钱包参与过的代币众筹活动
+/// participate=8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy
+///
+/// # 结合其他过滤条件
+/// participate=8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy&status=active&minVolume=1000
+/// ```
+///
+/// # 多字段排序示例
+///
+/// ```
+/// # 先按交易量降序，再按创建时间升序
+/// sortBy=daily_volume,created_at&sortOrder=desc,asc
+///
+/// # 先按验证状态降序，再按名称升序，最后按创建时间降序
+/// sortBy=verification,name,created_at&sortOrder=desc,asc,desc
+/// ```
 ///
 /// # 响应示例
 ///
@@ -211,27 +280,23 @@ pub async fn get_token_list(
 ///   "id": "uuid-string",
 ///   "success": true,
 ///   "data": {
-///     "tokens": [
+///     "mintList": [
 ///       {
-///         "id": "代币内部ID",
 ///         "address": "So11111111111111111111111111111111111111112",
 ///         "name": "Wrapped SOL",
 ///         "symbol": "WSOL",
 ///         "decimals": 9,
 ///         "logo_uri": "https://...",
-///         "status": "Active",
-///         "verification_status": "Verified",
 ///         "daily_volume": 50000000.0,
 ///         "tags": ["defi", "wrapped"],
-///         "created_at": "2024-01-01T00:00:00Z",
-///         "updated_at": "2024-01-01T00:00:00Z"
+///         "created_at": "2024-01-01T00:00:00Z"
 ///       }
 ///     ],
 ///     "pagination": {
 ///       "current_page": 1,
 ///       "total_pages": 5,
-///       "page_size": 20,
-///       "total_count": 100,
+///       "page_size": 100,
+///       "total_count": 500,
 ///       "has_next": true,
 ///       "has_prev": false
 ///     }

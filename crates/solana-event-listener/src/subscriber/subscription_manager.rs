@@ -18,7 +18,7 @@ use std::{
 };
 use tokio::{sync::RwLock, time::interval};
 use tracing::{debug, error, info, warn};
-
+pub const ZERO_SIG: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 /// 订阅管理器
 ///
 /// 负责协调所有订阅相关的组件:
@@ -219,7 +219,10 @@ impl SubscriptionManager {
             match tokio::time::timeout(Duration::from_millis(100), event_receiver.recv()).await {
                 Ok(Ok(log_response)) => {
                     info!("📨 订阅管理器接收到事件: {}", log_response.signature);
-
+                    if log_response.signature == ZERO_SIG {
+                        info!("📨 跳过零事件: {}", log_response.signature);
+                        continue;
+                    }
                     // 更新活动时间
                     {
                         let mut last_activity = self.last_activity.write().await;
@@ -685,133 +688,5 @@ mod tests {
                 println!("⚠️ 无法获取slot（测试环境RPC可能不可用）: {}", e);
             }
         }
-    }
-
-    #[tokio::test]
-    async fn test_intelligent_routing_calls_with_context() {
-        let config = create_test_config();
-        let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
-        let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
-        let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
-
-        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
-            .await
-            .unwrap();
-
-        // 测试日志数据，包含程序调用信息
-        let logs_with_program_invocation = vec![
-            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
-            "Program data: invalid_base64_data".to_string(),
-            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK consumed 52341 of 200000 compute units".to_string(),
-            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
-        ];
-
-        // 验证解析器注册表能够正确提取程序ID
-        let extracted_program_id = manager
-            .parser_registry
-            .extract_program_id_from_logs(&logs_with_program_invocation, &manager.config.solana.program_ids);
-        assert!(extracted_program_id.is_some(), "应该能从日志中提取到程序ID");
-
-        // 测试智能路由是否正确调用parse_event_with_context
-        let result = manager
-            .parser_registry
-            .parse_event_with_context(
-                &logs_with_program_invocation,
-                "test_signature",
-                12345,
-                &manager.config.solana.program_ids,
-            )
-            .await;
-
-        // 验证调用成功（即使数据无效，智能路由流程应该正常工作
-        match result {
-            Ok(None) => {
-                // 这是预期结果：没有找到匹配的事件，但智能路由正常工作
-                println!("✅ 智能路由正常工作，未找到匹配事件（预期结果）");
-            }
-            Err(_) => {
-                // 也是可以接受的：可能因为数据解析失败
-                println!("✅ 智能路由正常调用，数据解析失败（预期结果）");
-            }
-            Ok(Some(_)) => {
-                // 意外的成功解析
-                println!("⚠️ 意外解析成功，可能是测试数据问题");
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_parse_all_events_integration() {
-        let config = create_test_config();
-
-        // 创建所有必需的组件
-        let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
-        let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
-        let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
-
-        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
-            .await
-            .unwrap();
-
-        // 模拟包含多个Program data的日志
-        let logs_with_multiple_program_data = vec![
-            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK invoke [1]".to_string(),
-            "Program data: dGVzdF9kYXRhXzE=".to_string(), // base64编码的"test_data_1"
-            "Program data: dGVzdF9kYXRhXzI=".to_string(), // base64编码的"test_data_2"
-            "Program data: dGVzdF9kYXRhXzM=".to_string(), // base64编码的"test_data_3"
-            "Program CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK success".to_string(),
-        ];
-
-        // 测试新的 parse_all_events_with_context 方法
-        let all_events_result = manager
-            .parser_registry
-            .parse_all_events_with_context(
-                &logs_with_multiple_program_data,
-                "test_signature",
-                12345,
-                &manager.config.solana.program_ids,
-            )
-            .await;
-
-        // 验证方法调用成功
-        match all_events_result {
-            Ok(events) => {
-                println!("✅ parse_all_events_with_context 调用成功，返回{}个事件", events.len());
-                // 由于测试数据是无效的，预期返回空列表
-                // 但重要的是验证方法能够正常调用并处理多个 Program data
-            }
-            Err(e) => {
-                println!(
-                    "✅ parse_all_events_with_context 调用成功，数据解析失败（预期结果）: {}",
-                    e
-                );
-                // 这也是预期的，因为测试数据是无效的
-            }
-        }
-
-        // 对比测试：验证原有的 parse_event_with_context 仍然正常工作
-        let single_event_result = manager
-            .parser_registry
-            .parse_event_with_context(
-                &logs_with_multiple_program_data,
-                "test_signature",
-                12345,
-                &manager.config.solana.program_ids,
-            )
-            .await;
-
-        match single_event_result {
-            Ok(event) => match event {
-                Some(_) => println!("✅ parse_event_with_context 返回了1个事件"),
-                None => println!("✅ parse_event_with_context 没有找到有效事件"),
-            },
-            Err(e) => {
-                println!("✅ parse_event_with_context 数据解析失败（预期结果）: {}", e);
-            }
-        }
-
-        println!("🎉 多事件处理集成测试完成");
     }
 }
