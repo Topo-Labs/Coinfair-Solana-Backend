@@ -388,10 +388,12 @@ mod tests {
 
         // 测试其他类型的事件应该返回false
         let token_event = ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+            project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Test".to_string(),
             symbol: "TEST".to_string(),
-            uri: "https://example.com".to_string(),
+            metadata_uri: "https://example.com".to_string(),
+            logo_uri: "https://example.com/logo.png".to_string(),
             decimals: 9,
             supply: 1000000,
             creator: Pubkey::new_unique().to_string(),
@@ -400,6 +402,8 @@ mod tests {
             created_at: 1234567890,
             signature: "test_sig".to_string(),
             slot: 12345,
+            extensions: None,
+            source: None,
         });
 
         assert!(!parser.validate_event(&token_event).await.unwrap());

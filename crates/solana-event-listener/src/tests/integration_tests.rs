@@ -126,10 +126,12 @@ async fn test_fix_3_intelligent_retry_logic() {
     // 创建测试事件
     let test_batch = vec![crate::parser::ParsedEvent::TokenCreation(
         crate::parser::event_parser::TokenCreationEventData {
+            project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Integration Test Token".to_string(),
             symbol: "ITEST".to_string(),
-            uri: "https://test.example.com/metadata.json".to_string(),
+            metadata_uri: "https://test.example.com/metadata.json".to_string(),
+            logo_uri: "https://test.example.com/logo.png".to_string(),
             decimals: 9,
             supply: 1000000,
             creator: Pubkey::new_unique().to_string(),
@@ -138,6 +140,8 @@ async fn test_fix_3_intelligent_retry_logic() {
             created_at: 1234567890,
             signature: "integration_test_signature".to_string(),
             slot: 12345,
+            extensions: None,
+            source: None,
         },
     )];
 

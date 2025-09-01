@@ -251,10 +251,12 @@ async fn test_simple_e2e_flow() {
 fn create_test_events() -> Vec<ParsedEvent> {
     vec![
         ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+            project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Simple E2E Test Token".to_string(),
             symbol: "SE2E".to_string(),
-            uri: "https://simple-e2e-test.example.com/metadata.json".to_string(),
+            metadata_uri: "https://simple-e2e-test.example.com/metadata.json".to_string(),
+            logo_uri: "https://simple-e2e-test.example.com/logo.png".to_string(),
             decimals: 9,
             supply: 1000000000000,
             creator: Pubkey::new_unique().to_string(),
@@ -263,6 +265,8 @@ fn create_test_events() -> Vec<ParsedEvent> {
             created_at: chrono::Utc::now().timestamp(),
             signature: format!("simple_e2e_test_sig_{}", chrono::Utc::now().timestamp_millis()),
             slot: 999999999,
+            extensions: None,
+            source: None,
         }),
         ParsedEvent::PoolCreation(create_test_pool_event()),
         ParsedEvent::NftClaim(create_test_nft_event()),

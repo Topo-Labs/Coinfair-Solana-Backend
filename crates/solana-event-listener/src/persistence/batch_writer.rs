@@ -645,10 +645,12 @@ mod tests {
 
     fn create_test_event() -> ParsedEvent {
         ParsedEvent::TokenCreation(TokenCreationEventData {
+            project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
-            uri: "https://example.com/metadata.json".to_string(),
+            metadata_uri: "https://example.com/metadata.json".to_string(),
+            logo_uri: "https://example.com/logo.png".to_string(),
             decimals: 9,
             supply: 1000000,
             creator: Pubkey::new_unique().to_string(),
@@ -657,6 +659,8 @@ mod tests {
             created_at: 1234567890,
             signature: "test_signature".to_string(),
             slot: 12345,
+            extensions: None,
+            source: None,
         })
     }
 

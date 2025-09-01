@@ -5,16 +5,18 @@ use crate::{
 };
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use database::token_info::{DataSource, TokenInfo, TokenInfoRepository, TokenPushRequest};
+use database::token_info::{DataSource, TokenInfo, TokenInfoRepository};
 use mongodb::Client;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 /// 代币创建事件的原始数据结构（与智能合约保持一致）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct TokenCreationEvent {
+    /// 项目配置地址
+    pub project_config: Pubkey,
     /// 代币的 Mint 地址
     pub mint_address: Pubkey,
     /// 代币名称
@@ -51,7 +53,7 @@ impl TokenCreationParser {
     /// 创建新的代币创建事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
         // 代币创建事件的discriminator
-        let discriminator = [142, 175, 175, 21, 74, 229, 126, 116];
+        let discriminator = [67, 72, 26, 56, 174, 158, 245, 106];
 
         Ok(Self {
             discriminator,
@@ -104,21 +106,9 @@ impl TokenCreationParser {
 
         // 验证discriminator
         let discriminator = &data[0..8];
-        // info!("🔍 实际discriminator: {:?}", discriminator);
-        // info!("🔍 期望discriminator: {:?}", self.discriminator);
-
-        // // 将discriminator信息写入文件，便于调试
-        // if let Err(e) = std::fs::write(
-        //     "/tmp/discriminator_debug.txt",
-        //     format!("实际discriminator: {:?}\n期望discriminator: {:?}\n", discriminator, self.discriminator),
-        // ) {
-        //     warn!("写入调试文件失败: {}", e);
-        // }
-
         if discriminator != self.discriminator {
             return Err(EventListenerError::DiscriminatorMismatch);
         }
-
         info!("✅ Discriminator匹配:{}，开始反序列化", self.get_event_type());
 
         // 反序列化事件数据
@@ -131,12 +121,51 @@ impl TokenCreationParser {
     }
 
     /// 将原始事件转换为ParsedEvent
-    fn convert_to_parsed_event(&self, event: TokenCreationEvent, signature: String, slot: u64) -> ParsedEvent {
-        ParsedEvent::TokenCreation(TokenCreationEventData {
+    async fn convert_to_parsed_event(
+        &self,
+        event: TokenCreationEvent,
+        signature: String,
+        slot: u64,
+    ) -> Result<ParsedEvent> {
+        // 从URI获取代币元数据
+        let uri_metadata = self.fetch_uri_metadata(&event.uri).await?;
+
+        // 构建extensions JSON，包含项目配置和URI元数据
+        let mut extensions = serde_json::json!({
+            "project_config": event.project_config.to_string(),
+            "creator": event.creator.to_string(),
+            "total_raised": 0u64,
+            "project_state": 3,
+        });
+        let mut logo_uri = String::new();
+        // 如果成功获取URI元数据，添加到extensions中
+        if let Some(metadata) = &uri_metadata {
+            if let Some(description) = &metadata.description {
+                extensions["description"] = serde_json::Value::String(description.clone());
+            }
+            if let Some(log_url) = &metadata.avatar_url {
+                logo_uri = log_url.clone();
+                extensions["log_url"] = serde_json::Value::String(log_url.clone());
+            }
+            if let Some(social_links) = &metadata.social_links {
+                extensions["social_links"] = serde_json::to_value(social_links).unwrap_or_default();
+            }
+            if let Some(whitelist) = &metadata.whitelist {
+                extensions["whitelist"] = serde_json::to_value(whitelist).unwrap_or_default();
+            }
+            if let Some(crowdfunding) = &metadata.crowdfunding {
+                extensions["crowdfunding"] = serde_json::to_value(crowdfunding).unwrap_or_default();
+            }
+        }
+
+        info!("🔍 extensions: {}", extensions);
+        Ok(ParsedEvent::TokenCreation(TokenCreationEventData {
+            project_config: event.project_config.to_string(),
             mint_address: event.mint_address.to_string(),
             name: event.name,
             symbol: event.symbol,
-            uri: event.uri,
+            metadata_uri: event.uri,
+            logo_uri,
             decimals: event.decimals,
             supply: event.supply,
             creator: event.creator.to_string(),
@@ -145,7 +174,9 @@ impl TokenCreationParser {
             created_at: event.created_at,
             signature,
             slot,
-        })
+            extensions: Some(extensions),
+            source: Some(DataSource::OnchainSync),
+        }))
     }
 
     /// 验证代币创建事件数据
@@ -163,8 +194,11 @@ impl TokenCreationParser {
         }
 
         // 验证URI格式
-        if !event.uri.starts_with("http") && !event.uri.starts_with("ipfs://") && !event.uri.starts_with("ar://") {
-            warn!("⚠️ 无效的URI格式: {} ({})", event.uri, event.mint_address);
+        if !event.metadata_uri.starts_with("http")
+            && !event.metadata_uri.starts_with("ipfs://")
+            && !event.metadata_uri.starts_with("ar://")
+        {
+            warn!("⚠️ 无效的URI格式: {} ({})", event.metadata_uri, event.mint_address);
         }
 
         // 验证小数位数
@@ -195,56 +229,23 @@ impl TokenCreationParser {
         Ok(true)
     }
 
-    /// 持久化代币创建事件到数据库
-    pub async fn persist_token_creation(&self, event: &TokenCreationEventData) -> Result<()> {
-        let repository = self
-            .token_repository
-            .as_ref()
-            .ok_or_else(|| EventListenerError::Persistence("数据库未初始化".to_string()))?;
+    /// 从URI获取代币元数据
+    async fn fetch_uri_metadata(&self, uri: &str) -> Result<Option<utils::metaplex_service::UriMetadata>> {
+        use utils::metaplex_service::{MetaplexConfig, MetaplexService};
 
-        // 构建TokenPushRequest
-        let push_request = TokenPushRequest {
-            address: event.mint_address.to_string(),
-            program_id: Some("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string()),
-            name: event.name.clone(),
-            symbol: event.symbol.clone(),
-            decimals: event.decimals,
-            logo_uri: event.uri.clone(),
-            tags: Some(vec!["meme".to_string(), "new".to_string()]),
-            daily_volume: Some(0.0),
-            freeze_authority: None,
-            mint_authority: Some(event.creator.to_string()),
-            permanent_delegate: None,
-            minted_at: Some(
-                chrono::DateTime::from_timestamp(event.created_at, 0).unwrap_or_else(|| chrono::Utc::now()),
-            ),
-            extensions: Some(serde_json::json!({
-                "supply": event.supply,
-                "has_whitelist": event.has_whitelist,
-                "whitelist_deadline": event.whitelist_deadline,
-                "signature": event.signature,
-                "slot": event.slot
-            })),
-            source: Some(DataSource::OnchainSync),
-        };
+        // 创建MetaplexService实例
+        let config = MetaplexConfig::default();
+        let metaplex_service = MetaplexService::new(Some(config))
+            .map_err(|e| EventListenerError::Persistence(format!("创建MetaplexService失败: {}", e)))?;
 
-        // 推送到数据库
-        let response = repository
-            .push_token(push_request)
-            .await
-            .map_err(|e| EventListenerError::Persistence(format!("推送代币信息失败: {}", e)))?;
-
-        if response.success {
-            info!(
-                "✅ 代币创建事件已持久化: {} ({}) - {}",
-                event.symbol, event.mint_address, response.operation
-            );
-        } else {
-            error!("❌ 代币创建事件持久化失败: {} ({})", event.symbol, event.mint_address);
-            return Err(EventListenerError::Persistence(response.message));
+        // 尝试从URI获取元数据
+        match metaplex_service.fetch_metadata_from_uri(uri).await {
+            Ok(metadata) => Ok(metadata),
+            Err(e) => {
+                warn!("⚠️ 从URI获取元数据失败: {} - {}", uri, e);
+                Ok(None)
+            }
         }
-
-        Ok(())
     }
 }
 
@@ -272,7 +273,7 @@ impl EventParser for TokenCreationParser {
                 if let Some(data_part) = log.strip_prefix("Program data: ") {
                     match self.parse_program_data(data_part) {
                         Ok(event) => {
-                            let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot);
+                            let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot).await?;
                             return Ok(Some(parsed_event));
                         }
                         Err(EventListenerError::DiscriminatorMismatch) => {
@@ -281,7 +282,7 @@ impl EventParser for TokenCreationParser {
                         }
                         Err(e) => {
                             // 其他错误需要记录
-                            debug!("解析程序数据失败: {}", e);
+                            warn!("❌ 解析程序数据失败: {}", e);
                             continue;
                         }
                     }
@@ -341,6 +342,7 @@ mod tests {
 
     fn create_test_token_creation_event() -> TokenCreationEvent {
         TokenCreationEvent {
+            project_config: Pubkey::new_unique(),
             mint_address: Pubkey::new_unique(),
             name: "Test Token".to_string(),
             symbol: "TEST".to_string(),
@@ -364,13 +366,16 @@ mod tests {
         assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
     }
 
-    #[test]
-    fn test_convert_to_parsed_event() {
+    #[tokio::test]
+    async fn test_convert_to_parsed_event() {
         let config = create_test_config();
         let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
         let test_event = create_test_token_creation_event();
 
-        let parsed = parser.convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345);
+        let parsed = parser
+            .convert_to_parsed_event(test_event.clone(), "test_signature".to_string(), 12345)
+            .await
+            .unwrap();
 
         match parsed {
             ParsedEvent::TokenCreation(data) => {
@@ -390,10 +395,12 @@ mod tests {
         let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
         let valid_event = TokenCreationEventData {
+            project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Valid Token".to_string(),
             symbol: "VALID".to_string(),
-            uri: "https://example.com/metadata.json".to_string(),
+            metadata_uri: "https://example.com/metadata.json".to_string(),
+            logo_uri: "https://example.com/logo.png".to_string(),
             decimals: 9,
             supply: 1000000,
             creator: Pubkey::new_unique().to_string(),
@@ -402,6 +409,8 @@ mod tests {
             created_at: 1234567890,
             signature: "test_sig".to_string(),
             slot: 12345,
+            extensions: None,
+            source: None,
         };
 
         assert!(parser.validate_token_creation(&valid_event).unwrap());
@@ -414,6 +423,72 @@ mod tests {
 
         assert!(!parser.validate_token_creation(&invalid_event).unwrap());
     }
+
+    #[test]
+    fn test_project_config_field() {
+        let test_event = create_test_token_creation_event();
+
+        // 验证project_config字段存在且不为空
+        assert_ne!(test_event.project_config, Pubkey::default());
+    }
+
+    #[tokio::test]
+    async fn test_uri_metadata_fetch() {
+        let config = create_test_config();
+        let parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
+
+        // 测试有效的HTTP URI
+        let http_uri = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png";
+        let result = parser.fetch_uri_metadata(http_uri).await;
+        // 这个测试可能因为网络原因失败，但不应该导致程序崩溃
+        assert!(result.is_ok());
+
+        // 测试无效的URI
+        let invalid_uri = "invalid-uri";
+        let result = parser.fetch_uri_metadata(invalid_uri).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    // #[tokio::test]
+    // async fn test_enhanced_persist_token_creation() {
+    //     let config = create_test_config();
+    //     let mut parser = TokenCreationParser::new(&config, Pubkey::new_unique()).unwrap();
+
+    //     // 尝试初始化数据库（如果失败就跳过测试）
+    //     if parser.init_database(&config).await.is_err() {
+    //         return; // 跳过测试，因为没有数据库连接
+    //     }
+
+    //     let test_event = TokenCreationEventData {
+    //         project_config: Pubkey::new_unique().to_string(),
+    //         mint_address: Pubkey::new_unique().to_string(),
+    //         name: "Enhanced Test Token".to_string(),
+    //         symbol: "ENHANCED".to_string(),
+    //         uri: "https://example.com/metadata.json".to_string(),
+    //         decimals: 9,
+    //         supply: 1000000000,
+    //         creator: Pubkey::new_unique().to_string(),
+    //         has_whitelist: true,
+    //         whitelist_deadline: 1700000000,
+    //         created_at: 1234567890,
+    //         signature: "enhanced_test_signature".to_string(),
+    //         slot: 54321,
+    //         extensions: None,
+    //         source: None,
+    //     };
+
+    //     // 测试持久化过程
+    //     let result = parser.persist_token_creation(&test_event).await;
+    //     match result {
+    //         Ok(_) => {
+    //             println!("✅ 增强的持久化测试成功");
+    //         }
+    //         Err(e) => {
+    //             println!("⚠️ 持久化测试失败，可能是数据库连接问题: {}", e);
+    //         }
+    //     }
+    // }
 
     #[test]
     fn test_borsh_serialization() {

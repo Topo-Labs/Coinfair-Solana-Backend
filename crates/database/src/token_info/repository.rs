@@ -87,6 +87,14 @@ impl TokenInfoRepository {
                         .build(),
                 )
                 .build(),
+            // 扩展字段索引 - 项目状态过滤优化
+            IndexModel::builder()
+                .keys(doc! { "extensions.project_state": 1 })
+                .build(),
+            // 扩展字段索引 - 创建者过滤优化
+            IndexModel::builder()
+                .keys(doc! { "extensions.creator": 1 })
+                .build(),
         ];
 
         self.collection.create_indexes(indexes, None).await?;
@@ -208,17 +216,49 @@ impl TokenInfoRepository {
             }
         }
 
+        // 项目状态过滤 (从extensions.project_state字段过滤)
+        if let Some(project_state) = &query.project_state {
+            filter.insert("extensions.project_state", mongodb::bson::to_bson(project_state)?);
+        }
+
+        // 创建者过滤 (从extensions.creator字段过滤)
+        if let Some(creator) = &query.creator {
+            if !creator.trim().is_empty() {
+                filter.insert("extensions.creator", creator);
+            }
+        }
+
+        // 地址过滤 (支持多个地址，用逗号分隔)
+        if let Some(addresses_str) = &query.addresses {
+            let addresses: Vec<String> = addresses_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && s.len() >= 32 && s.len() <= 44) // 验证地址长度
+                .collect();
+
+            if !addresses.is_empty() {
+                filter.insert("address", doc! { "$in": addresses });
+            }
+        }
+
+        // 参与者过滤 (根据钱包地址查询参与过的众筹代币)
+        // 注意：此逻辑在service层实现，这里repository层不直接处理participate参数
+
         // 获取总数用于分页
         let total_count = self.collection.count_documents(filter.clone(), None).await?;
 
-        // 构建排序
-        let sort_field = query.sort_by.as_deref().unwrap_or("created_at");
-        let sort_direction = if query.sort_order.as_deref() == Some("asc") {
-            1
-        } else {
-            -1
-        };
-        let sort_doc = doc! { sort_field: sort_direction };
+        // 构建排序文档 - 支持多字段排序
+        let sort_params = query.parse_sort_params();
+        let mut sort_doc = Document::new();
+
+        for (field, direction) in sort_params {
+            sort_doc.insert(field, direction);
+        }
+
+        // 如果没有任何有效的排序字段，使用默认排序
+        if sort_doc.is_empty() {
+            sort_doc.insert("created_at", -1);
+        }
 
         // 计算分页参数
         let page = query.page.unwrap_or(1);

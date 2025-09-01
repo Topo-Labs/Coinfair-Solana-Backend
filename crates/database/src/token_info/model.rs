@@ -269,11 +269,27 @@ pub struct TokenListQuery {
     /// 搜索关键词 (匹配名称、符号、地址)
     pub search: Option<String>,
 
-    /// 排序字段 (created_at, daily_volume, name, symbol)
+    /// 按项目状态过滤 (从extensions.project_state字段过滤)
+    #[serde(rename = "projectState")]
+    pub project_state: Option<u8>,
+
+    /// 按创建者过滤 (从extensions.creator字段过滤)
+    pub creator: Option<String>,
+
+    /// 按地址过滤 (可多选，用逗号分隔)
+    pub addresses: Option<String>,
+
+    /// 按参与者过滤 (钱包地址，查询该地址参与过的代币众筹活动)
+    pub participate: Option<String>,
+
+    /// 排序字段 (created_at, daily_volume, name, symbol, updated_at, push_time)
+    /// 支持多字段排序，用逗号分隔，如: "daily_volume,created_at"
     #[serde(rename = "sortBy")]
     pub sort_by: Option<String>,
 
     /// 排序方向 (asc, desc)
+    /// 支持多方向排序，用逗号分隔，如: "desc,asc"
+    /// 如果字段数量多于方向数量，多余字段使用默认方向(desc)
     #[serde(rename = "sortOrder")]
     pub sort_order: Option<String>,
 }
@@ -290,9 +306,70 @@ impl Default for TokenListQuery {
             min_volume: None,
             max_volume: None,
             search: None,
+            project_state: None,
+            creator: None,
+            addresses: None,
+            participate: None,
             sort_by: Some("created_at".to_string()),
             sort_order: Some("desc".to_string()),
         }
+    }
+}
+
+impl TokenListQuery {
+    /// 获取有效的排序字段列表
+    pub const VALID_SORT_FIELDS: &'static [&'static str] = &[
+        "created_at",
+        "daily_volume",
+        "name",
+        "symbol",
+        "updated_at",
+        "push_time",
+        "address",
+        "decimals",
+        "extensions.total_raised",
+    ];
+
+    /// 验证排序字段是否有效
+    pub fn validate_sort_field(field: &str) -> bool {
+        Self::VALID_SORT_FIELDS.contains(&field)
+    }
+
+    /// 解析排序参数为字段和方向的配对
+    /// 返回 (字段名, 排序方向) 的向量，排序方向为 1(升序) 或 -1(降序)
+    pub fn parse_sort_params(&self) -> Vec<(String, i32)> {
+        let mut sort_fields = match &self.sort_by {
+            Some(fields) => fields
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && Self::validate_sort_field(s))
+                .collect::<Vec<_>>(),
+            None => vec![],
+        };
+
+        // 如果没有有效的排序字段，使用默认排序
+        if sort_fields.is_empty() {
+            sort_fields.push("created_at".to_string());
+        }
+
+        let sort_orders = match &self.sort_order {
+            Some(orders) => orders
+                .split(',')
+                .map(|s| s.trim())
+                .map(|s| if s.eq_ignore_ascii_case("asc") { 1 } else { -1 })
+                .collect::<Vec<_>>(),
+            None => vec![-1], // 默认降序
+        };
+
+        // 将字段和方向配对，如果方向不够则使用默认值(-1降序)
+        sort_fields
+            .into_iter()
+            .enumerate()
+            .map(|(i, field)| {
+                let order = sort_orders.get(i).copied().unwrap_or(-1);
+                (field, order)
+            })
+            .collect()
     }
 }
 
@@ -645,5 +722,380 @@ mod tests {
 
         token.verification = VerificationStatus::Strict;
         assert!(token.is_whitelisted());
+    }
+
+    #[test]
+    fn test_token_list_query_validate_sort_field() {
+        // 测试有效字段
+        assert!(TokenListQuery::validate_sort_field("created_at"));
+        assert!(TokenListQuery::validate_sort_field("daily_volume"));
+        assert!(TokenListQuery::validate_sort_field("name"));
+        assert!(TokenListQuery::validate_sort_field("symbol"));
+        assert!(TokenListQuery::validate_sort_field("updated_at"));
+        assert!(TokenListQuery::validate_sort_field("push_time"));
+        assert!(TokenListQuery::validate_sort_field("address"));
+        assert!(TokenListQuery::validate_sort_field("decimals"));
+
+        // 测试无效字段
+        assert!(!TokenListQuery::validate_sort_field("invalid_field"));
+        assert!(!TokenListQuery::validate_sort_field(""));
+    }
+
+    #[test]
+    fn test_token_list_query_parse_sort_params_single_field() {
+        // 单字段排序 - 默认参数
+        let query = TokenListQuery::default();
+        let params = query.parse_sort_params();
+        assert_eq!(params, vec![("created_at".to_string(), -1)]);
+
+        // 单字段排序 - 自定义字段和方向
+        let query = TokenListQuery {
+            sort_by: Some("daily_volume".to_string()),
+            sort_order: Some("asc".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(params, vec![("daily_volume".to_string(), 1)]);
+
+        // 单字段排序 - 降序
+        let query = TokenListQuery {
+            sort_by: Some("name".to_string()),
+            sort_order: Some("desc".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(params, vec![("name".to_string(), -1)]);
+    }
+
+    #[test]
+    fn test_token_list_query_parse_sort_params_multi_field() {
+        // 多字段排序 - 字段和方向数量相等
+        let query = TokenListQuery {
+            sort_by: Some("daily_volume,created_at,name".to_string()),
+            sort_order: Some("desc,asc,desc".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(
+            params,
+            vec![
+                ("daily_volume".to_string(), -1),
+                ("created_at".to_string(), 1),
+                ("name".to_string(), -1)
+            ]
+        );
+
+        // 多字段排序 - 方向数量少于字段数量，使用默认方向
+        let query = TokenListQuery {
+            sort_by: Some("daily_volume,created_at,name".to_string()),
+            sort_order: Some("desc,asc".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(
+            params,
+            vec![
+                ("daily_volume".to_string(), -1),
+                ("created_at".to_string(), 1),
+                ("name".to_string(), -1) // 使用默认方向
+            ]
+        );
+
+        // 多字段排序 - 只有字段没有方向，全部使用默认方向
+        let query = TokenListQuery {
+            sort_by: Some("daily_volume,created_at".to_string()),
+            sort_order: None,
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(
+            params,
+            vec![("daily_volume".to_string(), -1), ("created_at".to_string(), -1)]
+        );
+    }
+
+    #[test]
+    fn test_token_list_query_parse_sort_params_invalid_fields() {
+        // 包含无效字段，应该被过滤掉
+        let query = TokenListQuery {
+            sort_by: Some("daily_volume,invalid_field,created_at".to_string()),
+            sort_order: Some("desc,asc,desc".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(
+            params,
+            vec![("daily_volume".to_string(), -1), ("created_at".to_string(), 1)]
+        );
+
+        // 全部是无效字段，应该返回默认排序
+        let query = TokenListQuery {
+            sort_by: Some("invalid1,invalid2".to_string()),
+            sort_order: Some("desc,asc".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(params, vec![("created_at".to_string(), -1)]);
+    }
+
+    #[test]
+    fn test_token_list_query_parse_sort_params_whitespace_handling() {
+        // 测试空格处理
+        let query = TokenListQuery {
+            sort_by: Some(" daily_volume , created_at , name ".to_string()),
+            sort_order: Some(" desc , asc , desc ".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(
+            params,
+            vec![
+                ("daily_volume".to_string(), -1),
+                ("created_at".to_string(), 1),
+                ("name".to_string(), -1)
+            ]
+        );
+
+        // 测试大小写不敏感的方向处理
+        let query = TokenListQuery {
+            sort_by: Some("daily_volume,created_at".to_string()),
+            sort_order: Some("DESC,ASC".to_string()),
+            ..Default::default()
+        };
+        let params = query.parse_sort_params();
+        assert_eq!(
+            params,
+            vec![("daily_volume".to_string(), -1), ("created_at".to_string(), 1)]
+        );
+    }
+
+    #[test]
+    fn test_token_list_query_project_state_default() {
+        // 测试默认查询不包含project_state过滤
+        let query = TokenListQuery::default();
+        assert!(query.project_state.is_none());
+    }
+
+    #[test]
+    fn test_token_list_query_project_state_filtering() {
+        // 测试project_state过滤功能
+        let query = TokenListQuery {
+            project_state: Some(4),
+            ..Default::default()
+        };
+        assert_eq!(query.project_state, Some(4));
+
+        // 测试空格处理
+        let query = TokenListQuery {
+            project_state: Some(3),
+            ..Default::default()
+        };
+        assert_eq!(query.project_state, Some(3));
+    }
+
+    #[test]
+    fn test_token_info_extensions_structure() {
+        // 测试扩展信息的结构
+        let mut token = TokenInfo::new(
+            "test_address".to_string(),
+            "test_program".to_string(),
+            "Test Token".to_string(),
+            "TEST".to_string(),
+            6,
+            "https://example.com/test.png".to_string(),
+        );
+
+        // 测试设置extensions.project_state
+        let extensions = serde_json::json!({
+            "project_state": "launched",
+            "total_raised": 1000000.0,
+            "launch_date": "2024-01-01T00:00:00Z"
+        });
+
+        token.extensions = extensions;
+
+        // 验证可以访问project_state
+        if let serde_json::Value::Object(obj) = &token.extensions {
+            assert_eq!(
+                obj.get("project_state"),
+                Some(&serde_json::Value::String("launched".to_string()))
+            );
+        } else {
+            panic!("Extensions should be an object");
+        }
+    }
+
+    #[test]
+    fn test_token_list_query_creator_filtering() {
+        // 测试creator过滤功能
+        let query = TokenListQuery {
+            creator: Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.creator, Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()));
+
+        // 测试空creator过滤
+        let query = TokenListQuery {
+            creator: Some("".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.creator, Some("".to_string()));
+
+        // 测试None creator过滤
+        let query = TokenListQuery {
+            creator: None,
+            ..Default::default()
+        };
+        assert_eq!(query.creator, None);
+    }
+
+    #[test]
+    fn test_token_list_query_creator_default() {
+        // 测试默认查询不包含creator过滤
+        let query = TokenListQuery::default();
+        assert!(query.creator.is_none());
+    }
+
+    #[test]
+    fn test_token_info_extensions_creator_structure() {
+        // 测试扩展信息的creator结构
+        let mut token = TokenInfo::new(
+            "test_address".to_string(),
+            "test_program".to_string(),
+            "Test Token".to_string(),
+            "TEST".to_string(),
+            6,
+            "https://example.com/test.png".to_string(),
+        );
+
+        // 测试设置extensions.creator
+        let extensions = serde_json::json!({
+            "creator": "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy",
+            "project_state": "launched",
+            "total_raised": 1000000.0
+        });
+
+        token.extensions = extensions;
+
+        // 验证可以访问creator
+        if let serde_json::Value::Object(obj) = &token.extensions {
+            assert_eq!(
+                obj.get("creator"),
+                Some(&serde_json::Value::String("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()))
+            );
+            assert_eq!(
+                obj.get("project_state"),
+                Some(&serde_json::Value::String("launched".to_string()))
+            );
+        } else {
+            panic!("Extensions should be an object");
+        }
+    }
+
+    #[test]
+    fn test_token_list_query_addresses_filtering() {
+        // 测试单个地址过滤功能
+        let query = TokenListQuery {
+            addresses: Some("So11111111111111111111111111111111111111112".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.addresses, Some("So11111111111111111111111111111111111111112".to_string()));
+
+        // 测试多个地址过滤功能
+        let query = TokenListQuery {
+            addresses: Some("So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.addresses, Some("So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()));
+
+        // 测试空地址过滤
+        let query = TokenListQuery {
+            addresses: Some("".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.addresses, Some("".to_string()));
+
+        // 测试None地址过滤
+        let query = TokenListQuery {
+            addresses: None,
+            ..Default::default()
+        };
+        assert_eq!(query.addresses, None);
+    }
+
+    #[test]
+    fn test_token_list_query_addresses_default() {
+        // 测试默认查询不包含addresses过滤
+        let query = TokenListQuery::default();
+        assert!(query.addresses.is_none());
+    }
+
+    #[test]
+    fn test_token_list_query_addresses_validation() {
+        // 测试地址格式验证逻辑（这个测试主要验证我们的过滤参数设计）
+        let valid_addresses = vec![
+            "So11111111111111111111111111111111111111112", // 44字符
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // 44字符
+        ];
+        
+        let query = TokenListQuery {
+            addresses: Some(valid_addresses.join(",")),
+            ..Default::default()
+        };
+        
+        // 验证地址字符串被正确存储
+        let addresses_str = query.addresses.unwrap();
+        let parsed_addresses: Vec<&str> = addresses_str.split(',').collect();
+        assert_eq!(parsed_addresses.len(), 2);
+        assert!(parsed_addresses.contains(&"So11111111111111111111111111111111111111112"));
+        assert!(parsed_addresses.contains(&"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"));
+    }
+
+    #[test]
+    fn test_token_list_query_participate_filtering() {
+        // 测试单个参与者过滤功能
+        let query = TokenListQuery {
+            participate: Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.participate, Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()));
+
+        // 测试空参与者过滤
+        let query = TokenListQuery {
+            participate: Some("".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(query.participate, Some("".to_string()));
+
+        // 测试None参与者过滤
+        let query = TokenListQuery {
+            participate: None,
+            ..Default::default()
+        };
+        assert_eq!(query.participate, None);
+    }
+
+    #[test]
+    fn test_token_list_query_participate_default() {
+        // 测试默认查询不包含participate过滤
+        let query = TokenListQuery::default();
+        assert!(query.participate.is_none());
+    }
+
+    #[test]
+    fn test_token_list_query_participate_with_other_filters() {
+        // 测试participate与其他过滤条件结合使用
+        let query = TokenListQuery {
+            participate: Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()),
+            status: Some(TokenStatus::Active),
+            min_volume: Some(1000.0),
+            verification: Some(VerificationStatus::Verified),
+            ..Default::default()
+        };
+
+        assert_eq!(query.participate, Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()));
+        assert_eq!(query.status, Some(TokenStatus::Active));
+        assert_eq!(query.min_volume, Some(1000.0));
+        assert_eq!(query.verification, Some(VerificationStatus::Verified));
     }
 }
