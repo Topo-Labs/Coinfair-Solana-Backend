@@ -16,7 +16,10 @@ use database::{
         ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
         TransactionInfo, TransactionStatus, VaultInfo,
     },
-    event_model::{ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent},
+    event_model::{
+        repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
+        RewardDistributionEvent, TokenCreationEvent,
+    },
     token_info::{TokenInfoRepository, TokenPushRequest},
     Database,
 };
@@ -38,6 +41,7 @@ pub struct EventStorage {
     database: Arc<Database>,
     token_repository: Arc<TokenInfoRepository>,
     clmm_pool_repository: Arc<ClmmPoolRepository>,
+    token_creation_event_repository: Arc<TokenCreationEventRepository>,
     app_config: Arc<AppConfig>,
     migration_client: Arc<MigrationClient>,
 }
@@ -99,6 +103,9 @@ impl EventStorage {
         // 创建CLMM池子仓库
         let clmm_pool_repository = Arc::new(database.clmm_pool_repository.clone());
 
+        // 创建代币创建事件仓库
+        let token_creation_event_repository = Arc::new(database.token_creation_event_repository.clone());
+
         // 创建迁移客户端
         let migration_base_url =
             std::env::var("MIGRATION_BASE_URL").unwrap_or_else(|_| "http://localhost:8765".to_string());
@@ -115,6 +122,7 @@ impl EventStorage {
             database,
             token_repository,
             clmm_pool_repository,
+            token_creation_event_repository,
             app_config,
             migration_client,
         })
@@ -459,36 +467,53 @@ impl EventStorage {
 
     /// 写入单个代币创建事件
     async fn write_single_token_creation(&self, event: &TokenCreationEventData) -> Result<bool> {
-        // 检查是否已存在
+        // 1. 检查事件表中是否已存在（防重复）
+        let event_exists = self
+            .token_creation_event_repository
+            .exists_by_signature(&event.signature)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("检查事件是否存在失败: {}", e)))?;
+
+        if !event_exists {
+            // 2. 写入到事件表
+            let token_creation_event = self.convert_to_token_creation_event(event)?;
+            let _event_id = self
+                .token_creation_event_repository
+                .insert_token_creation_event(token_creation_event)
+                .await
+                .map_err(|e| EventListenerError::Persistence(format!("插入代币创建事件失败: {}", e)))?;
+            info!("写入到事件表成功: {}", event.signature);
+        } else {
+            info!("✅ 代币创建事件已存在，跳过: {}", event.signature);
+        }
+
+        // 3. 检查代币信息表中是否已存在
         let existing = self
             .token_repository
             .find_by_address(&event.mint_address.to_string())
             .await
             .map_err(|e| EventListenerError::Persistence(format!("查询现有代币失败: {}", e)))?;
-
-        if existing.is_some() {
-            info!("代币已存在，跳过: {}", event.mint_address);
-            return Ok(false);
+        if existing.is_none() {
+            // 4. 写入到代币信息表
+            let push_request = self.convert_to_push_token_request(event)?;
+            let response = self
+                .token_repository
+                .push_token(push_request)
+                .await
+                .map_err(|e| EventListenerError::Persistence(format!("推送代币信息失败: {}", e)))?;
+            if !response.success {
+                return Err(EventListenerError::Persistence(format!(
+                    "代币信息推送失败: {}",
+                    response.message
+                )));
+            }
+            info!("✅ 代币信息写入到代币信息表成功: {}", event.mint_address);
+            return Ok(true);
+        } else {
+            info!("代币信息已存在，跳过: {}", event.mint_address);
         }
 
-        // 构建TokenPushRequest
-        let push_request = self.convert_to_push_token_request(event)?;
-
-        // 推送到数据库
-        let response = self
-            .token_repository
-            .push_token(push_request)
-            .await
-            .map_err(|e| EventListenerError::Persistence(format!("推送代币信息失败: {}", e)))?;
-
-        if !response.success {
-            return Err(EventListenerError::Persistence(format!(
-                "代币信息推送失败: {}",
-                response.message
-            )));
-        }
-
-        Ok(true)
+        Ok(false)
     }
 
     /// 写入单个池子创建事件（改造版：更新ClmmPool表）
@@ -932,6 +957,44 @@ impl EventStorage {
             deposited_at: event.deposited_at,
             processed_at: now.timestamp(),
             updated_at: now.timestamp(),
+        })
+    }
+
+    /// 将TokenCreationEventData转换为TokenCreationEvent
+    fn convert_to_token_creation_event(&self, event: &TokenCreationEventData) -> Result<TokenCreationEvent> {
+        let now = Utc::now().timestamp();
+
+        // 处理 extensions 字段，将 Option<serde_json::Value> 转换为 Option<mongodb::bson::Document>
+        let extensions_doc = if let Some(ref extensions) = event.extensions {
+            // 将 serde_json::Value 转换为 mongodb::bson::Document
+            Some(
+                mongodb::bson::to_document(extensions)
+                    .map_err(|e| EventListenerError::Persistence(format!("转换extensions到BSON失败: {}", e)))?,
+            )
+        } else {
+            None
+        };
+
+        Ok(TokenCreationEvent {
+            id: None,
+            project_config: event.project_config.clone(),
+            mint_address: event.mint_address.clone(),
+            name: event.name.clone(),
+            symbol: event.symbol.clone(),
+            metadata_uri: event.metadata_uri.clone(),
+            logo_uri: event.logo_uri.clone(),
+            decimals: event.decimals,
+            supply: event.supply,
+            creator: event.creator.clone(),
+            has_whitelist: event.has_whitelist,
+            whitelist_deadline: event.whitelist_deadline,
+            extensions: extensions_doc,
+            source: event.source.as_ref().map(|s| format!("{:?}", s)),
+            signature: event.signature.clone(),
+            slot: event.slot,
+            created_at: event.created_at,
+            processed_at: now,
+            updated_at: now,
         })
     }
 
@@ -1533,6 +1596,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         }
     }
 

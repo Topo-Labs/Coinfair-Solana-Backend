@@ -13,8 +13,8 @@ pub mod tests;
 pub use error::{EventListenerError, Result};
 
 use crate::{
-    config::EventListenerConfig, metrics::MetricsCollector, parser::EventParserRegistry, persistence::BatchWriter,
-    recovery::CheckpointManager, subscriber::SubscriptionManager,
+    config::EventListenerConfig, metrics::MetricsCollector, parser::EventParserRegistry, persistence::{BatchWriter, CheckpointPersistence, ScanRecordPersistence},
+    recovery::CheckpointManager, subscriber::{BackfillManager, SubscriptionManager},
 };
 use std::sync::Arc;
 use tokio::signal;
@@ -29,6 +29,7 @@ use utils::{MetaplexService, TokenMetadataProvider};
 /// - 批量持久化
 /// - 检查点管理
 /// - 监控指标收集
+/// - 历史事件回填
 #[derive(Clone)]
 pub struct EventListenerService {
     config: Arc<EventListenerConfig>,
@@ -37,6 +38,7 @@ pub struct EventListenerService {
     batch_writer: Arc<BatchWriter>,
     checkpoint_manager: Arc<CheckpointManager>,
     metrics: Arc<MetricsCollector>,
+    backfill_manager: Option<Arc<BackfillManager>>,
 }
 
 impl EventListenerService {
@@ -82,6 +84,48 @@ impl EventListenerService {
             .await?,
         );
 
+        // 初始化回填管理器（可选功能）
+        let backfill_manager = if let Some(backfill_config) = &config.backfill {
+            if backfill_config.enabled {
+                info!("🔄 初始化历史事件回填管理器...");
+                
+                // 创建数据库连接用于持久化组件
+                let client = mongodb::Client::with_uri_str(&config.database.uri)
+                    .await
+                    .map_err(|e| EventListenerError::Database(e))?;
+                let database = Arc::new(client.database(&config.database.database_name));
+                
+                // 创建持久化组件
+                let checkpoint_persistence = Arc::new(CheckpointPersistence::new(database.clone()).await?);
+                let scan_record_persistence = Arc::new(ScanRecordPersistence::new(database.clone()).await?);
+                
+                // 获取回填事件配置
+                let event_configs = config.get_backfill_event_configs()?;
+                let default_check_interval = backfill_config.default_check_interval_secs.unwrap_or(300);
+                
+                let manager = BackfillManager::new(
+                    &config,
+                    Arc::clone(&parser_registry),
+                    Arc::clone(&batch_writer),
+                    Arc::clone(&checkpoint_manager),
+                    Arc::clone(&metrics),
+                    checkpoint_persistence,
+                    scan_record_persistence,
+                    event_configs,
+                    default_check_interval,
+                );
+                
+                info!("✅ 回填管理器初始化完成");
+                Some(Arc::new(manager))
+            } else {
+                info!("⚠️ 回填功能已禁用");
+                None
+            }
+        } else {
+            info!("⚠️ 未配置回填功能");
+            None
+        };
+
         info!("✅ Event-Listener服务初始化完成");
 
         Ok(Self {
@@ -91,6 +135,7 @@ impl EventListenerService {
             batch_writer,
             checkpoint_manager,
             metrics,
+            backfill_manager,
         })
     }
 
@@ -135,6 +180,18 @@ impl EventListenerService {
             })
         };
 
+        // 启动回填管理器（如果启用）
+        let backfill_task = if let Some(backfill_manager) = &self.backfill_manager {
+            let manager = Arc::clone(backfill_manager);
+            Some(tokio::spawn(async move {
+                if let Err(e) = manager.start().await {
+                    error!("回填管理器启动失败: {}", e);
+                }
+            }))
+        } else {
+            None
+        };
+
         info!("✅ Event-Listener服务启动完成");
 
         // 等待关闭信号
@@ -147,6 +204,11 @@ impl EventListenerService {
         checkpoint_task.abort();
         batch_writer_task.abort();
         metrics_task.abort();
+        
+        // 停止回填任务（如果存在）
+        if let Some(task) = backfill_task {
+            task.abort();
+        }
 
         // 执行清理工作
         self.shutdown().await?;
@@ -223,11 +285,21 @@ impl EventListenerService {
         let batch_writer_healthy = self.batch_writer.is_healthy().await;
         let checkpoint_healthy = self.checkpoint_manager.is_healthy().await;
 
+        // 如果启用回填服务，检查其健康状态，否则默认为健康
+        let backfill_healthy = if self.backfill_manager.is_some() {
+            // 回填服务暂时假设总是健康的，因为它是周期性任务
+            // 可以在后续添加更复杂的健康检查逻辑
+            true
+        } else {
+            true // 未启用时视为健康
+        };
+
         Ok(HealthStatus {
-            overall_healthy: subscription_healthy && batch_writer_healthy && checkpoint_healthy,
+            overall_healthy: subscription_healthy && batch_writer_healthy && checkpoint_healthy && backfill_healthy,
             subscription_manager: subscription_healthy,
             batch_writer: batch_writer_healthy,
             checkpoint_manager: checkpoint_healthy,
+            backfill_manager: backfill_healthy,
             metrics: self.metrics.get_stats().await?,
         })
     }
@@ -240,5 +312,6 @@ pub struct HealthStatus {
     pub subscription_manager: bool,
     pub batch_writer: bool,
     pub checkpoint_manager: bool,
+    pub backfill_manager: bool,
     pub metrics: crate::metrics::MetricsStats,
 }

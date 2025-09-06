@@ -1,4 +1,5 @@
 pub mod repository;
+pub mod event_model_repository;
 
 use mongodb::bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
@@ -339,6 +340,57 @@ pub struct LaunchEvent {
     /// 区块高度
     pub slot: u64,
     /// 处理时间
+    pub processed_at: i64,
+    /// 最后更新时间
+    pub updated_at: i64,
+}
+
+/// 代币创建事件模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenCreationEvent {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+
+    // ====== 核心业务字段 ======
+    /// 项目配置地址
+    pub project_config: String,
+    /// 代币的 Mint 地址
+    pub mint_address: String,
+    /// 代币名称
+    pub name: String,
+    /// 代币符号
+    pub symbol: String,
+    /// 代币元数据的 URI（如 IPFS 链接）
+    pub metadata_uri: String,
+    /// 代币logo的URI
+    pub logo_uri: String,
+    /// 代币小数位数
+    pub decimals: u8,
+    /// 供应量（以最小单位计）
+    pub supply: u64,
+    /// 创建者的钱包地址
+    pub creator: String,
+
+    // ====== 白名单相关字段 ======
+    /// 是否支持白名单（true 表示有白名单机制）
+    pub has_whitelist: bool,
+    /// 白名单资格检查的时间戳（Unix 时间戳，0 表示无时间限制）
+    pub whitelist_deadline: i64,
+
+    // ====== 扩展信息字段 ======
+    /// 扩展信息 (JSON格式，包含项目详细信息、社交链接等)
+    pub extensions: Option<mongodb::bson::Document>,
+    /// 数据来源类型
+    pub source: Option<String>,
+
+    // ====== 区块链标准字段 ======
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 创建时间（Unix 时间戳）
+    pub created_at: i64,
+    /// 事件处理时间
     pub processed_at: i64,
     /// 最后更新时间
     pub updated_at: i64,

@@ -28,8 +28,6 @@ impl TokenInfoRepository {
 
     /// 初始化数据库索引
     pub async fn init_indexes(&self) -> AppResult<()> {
-        info!("🔧 初始化TokenInfo数据库索引...");
-
         let indexes = vec![
             // 代币地址唯一索引 (主键)
             IndexModel::builder()
@@ -92,9 +90,7 @@ impl TokenInfoRepository {
                 .keys(doc! { "extensions.project_state": 1 })
                 .build(),
             // 扩展字段索引 - 创建者过滤优化
-            IndexModel::builder()
-                .keys(doc! { "extensions.creator": 1 })
-                .build(),
+            IndexModel::builder().keys(doc! { "extensions.creator": 1 }).build(),
         ];
 
         self.collection.create_indexes(indexes, None).await?;

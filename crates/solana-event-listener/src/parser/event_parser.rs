@@ -1,7 +1,8 @@
 use crate::config::EventListenerConfig;
 use crate::error::{EventListenerError, Result};
 use crate::parser::{
-    DepositEventParser, NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser, TokenCreationParser,
+    DepositEventParser, LaunchEventParser, NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser,
+    TokenCreationParser,
 };
 use anchor_lang::pubkey;
 use async_trait::async_trait;
@@ -480,10 +481,6 @@ impl EventParserRegistry {
         )?);
         registry.register_program_parser(swap_parser)?;
 
-        // 交换事件解析器
-        // let swap_parser = Box::new(SwapParser::new(config, pubkey!("devi51mZmdwUJGU9hjN27vEz64Gps7uUefqxg27EAtH"))?);
-        // registry.register_program_parser(swap_parser)?;
-
         // 池子创建事件解析器
         let pool_creation_parser = Box::new(PoolCreationParser::new(
             config,
@@ -534,12 +531,12 @@ impl EventParserRegistry {
         registry.register_program_parser(deposit_parser)?;
 
         // LaunchEvent解析器 - 支持Meme币发射平台 发射动作现在是在合约里处理，暂时不订阅发射事件
-        // 默认使用FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX程序ID，可以通过环境变量或配置调整
-        // let launch_parser = Box::new(LaunchEventParser::new(
-        //     config,
-        //     pubkey!("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1"),
-        // )?);
-        // registry.register_program_parser(launch_parser)?;
+        // 默认使用7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1程序ID，可以通过环境变量或配置调整
+        let launch_parser = Box::new(LaunchEventParser::new(
+            config,
+            pubkey!("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1"),
+        )?);
+        registry.register_program_parser(launch_parser)?;
 
         Ok(registry)
     }
@@ -1135,6 +1132,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         };
 
         let registry = EventParserRegistry::new(&config).unwrap();
@@ -1175,6 +1173,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         };
 
         let mut registry = EventParserRegistry::new(&config).unwrap();
@@ -1231,6 +1230,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         };
 
         let registry = EventParserRegistry::new(&config).unwrap();
@@ -1284,6 +1284,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         };
 
         let registry = EventParserRegistry::new(&config).unwrap();

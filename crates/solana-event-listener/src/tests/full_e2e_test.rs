@@ -67,6 +67,7 @@ fn create_complete_e2e_config() -> EventListenerConfig {
             enable_performance_monitoring: true,
             health_check_interval_secs: 5, // 减少健康检查间隔
         },
+        backfill: None,
     }
 }
 

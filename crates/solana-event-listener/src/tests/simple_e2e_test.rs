@@ -51,6 +51,7 @@ fn create_simple_e2e_config() -> EventListenerConfig {
             enable_performance_monitoring: true,
             health_check_interval_secs: 10,
         },
+        backfill: None,
     }
 }
 

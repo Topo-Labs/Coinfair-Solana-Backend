@@ -26,7 +26,7 @@ impl ApplicationServer {
         let services = Services::new(db);
         let router = AppRouter::new(services);
 
-        info!("🟢 server:referring_reward has launched on {local_addr} 🚀");
+        info!("🟢 Server: CoinFair-Solana-Backend Has Launched On {local_addr} 🚀");
 
         serve(tcp_listener, router.into_make_service_with_connect_info::<SocketAddr>())
             .with_graceful_shutdown(Self::shutdown_signal())

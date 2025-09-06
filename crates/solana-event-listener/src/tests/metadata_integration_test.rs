@@ -54,6 +54,7 @@ fn create_metadata_test_config() -> EventListenerConfig {
             enable_performance_monitoring: true,
             health_check_interval_secs: 30,
         },
+        backfill: None,
     }
 }
 

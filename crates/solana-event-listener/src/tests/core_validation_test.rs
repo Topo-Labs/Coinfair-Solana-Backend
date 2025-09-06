@@ -61,8 +61,8 @@ fn test_parser_registry() {
             enable_performance_monitoring: true,
             health_check_interval_secs: 10,
         },
+        backfill: None,
     };
-
     let registry = EventParserRegistry::new(&config).unwrap();
     let parser_count = registry.parser_count();
 
@@ -110,8 +110,8 @@ async fn test_metrics_collector() {
             enable_performance_monitoring: true,
             health_check_interval_secs: 10,
         },
+        backfill: None,
     };
-
     let collector = MetricsCollector::new(&config).unwrap();
 
     // 启动收集
@@ -240,8 +240,8 @@ fn test_parser_creation() -> bool {
             enable_performance_monitoring: true,
             health_check_interval_secs: 10,
         },
+        backfill: None,
     };
-
     EventParserRegistry::new(&config).is_ok()
 }
 
@@ -278,8 +278,8 @@ async fn test_metrics_creation() -> bool {
             enable_performance_monitoring: true,
             health_check_interval_secs: 10,
         },
+        backfill: None,
     };
-
     match MetricsCollector::new(&config) {
         Ok(collector) => match collector.start_collection().await {
             Ok(_) => {
