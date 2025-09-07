@@ -3,9 +3,11 @@ use crate::{
     error::{EventListenerError, Result},
     metrics::MetricsCollector,
     parser::{EventParserRegistry, EventDataSource},
-    persistence::{checkpoint_persistence::CheckpointPersistence, scan_record_persistence::ScanRecordPersistence},
-    recovery::CheckpointManager,
-    subscriber::backfill_handler::{BackfillEventConfig, BackfillEventRegistry, EventBackfillHandler},
+    recovery::{
+        backfill_handler::{BackfillEventConfig, BackfillEventRegistry, EventBackfillHandler},
+        checkpoint_persistence::CheckpointPersistence,
+        scan_record_persistence::ScanRecordPersistence,
+    },
     BatchWriter,
 };
 use anyhow::anyhow;
@@ -35,7 +37,6 @@ pub struct BackfillTaskContext {
     pub rpc_client: Arc<RpcClient>,
     pub parser_registry: Arc<EventParserRegistry>,
     pub batch_writer: Arc<BatchWriter>,
-    pub checkpoint_manager: Arc<CheckpointManager>,
     pub metrics: Arc<MetricsCollector>,
     pub checkpoint_persistence: Arc<CheckpointPersistence>,
     pub scan_record_persistence: Arc<ScanRecordPersistence>,

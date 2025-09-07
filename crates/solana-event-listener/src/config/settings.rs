@@ -259,12 +259,12 @@ impl EventListenerConfig {
         {
             // 加载事件配置列表
             let events = Self::load_backfill_event_configs();
-            
+
             // 获取默认检查间隔
             let default_check_interval_secs = std::env::var("BACKFILL_CHECK_INTERVAL_SECS")
                 .ok()
                 .and_then(|s| s.parse().ok());
-            
+
             Some(BackfillConfig {
                 enabled: true,
                 events,
@@ -296,53 +296,53 @@ impl EventListenerConfig {
     /// 加载回填事件配置列表
     fn load_backfill_event_configs() -> Vec<BackfillEventConfigItem> {
         let mut configs = Vec::new();
-        
+
         // 支持通过环境变量配置多个事件类型
         // 格式: BACKFILL_EVENT_<INDEX>_TYPE=LaunchEvent
         //      BACKFILL_EVENT_<INDEX>_PROGRAM_ID=7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1
         //      BACKFILL_EVENT_<INDEX>_ENABLED=true
         //      BACKFILL_EVENT_<INDEX>_INTERVAL=300
-        
-        for i in 1..=10 {  // 支持最多10个事件配置
+
+        for i in 1..=10 {
+            // 支持最多10个事件配置
             let event_type_key = format!("BACKFILL_EVENT_{}_TYPE", i);
             let program_id_key = format!("BACKFILL_EVENT_{}_PROGRAM_ID", i);
             let enabled_key = format!("BACKFILL_EVENT_{}_ENABLED", i);
             let interval_key = format!("BACKFILL_EVENT_{}_INTERVAL", i);
-            
+
             if let Ok(event_type) = std::env::var(&event_type_key) {
                 let program_id = std::env::var(&program_id_key)
                     .unwrap_or_else(|_| "7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1".to_string());
-                    
+
                 let enabled = std::env::var(&enabled_key)
                     .unwrap_or_else(|_| "true".to_string())
                     .parse()
                     .unwrap_or(true);
-                    
-                let check_interval_secs = std::env::var(&interval_key)
-                    .ok()
-                    .and_then(|s| s.parse().ok());
-                
+
+                let check_interval_secs = std::env::var(&interval_key).ok().and_then(|s| s.parse().ok());
+
                 configs.push(BackfillEventConfigItem {
                     event_type,
                     program_id,
                     enabled,
                     check_interval_secs,
                 });
-                
-                info!("📋 加载回填事件配置 {}: {} (程序ID: {}, 启用: {})", 
-                    i, 
+
+                info!(
+                    "📋 加载回填事件配置 {}: {} (程序ID: {}, 启用: {})",
+                    i,
                     configs.last().unwrap().event_type,
                     configs.last().unwrap().program_id,
                     configs.last().unwrap().enabled
                 );
             }
         }
-        
+
         // 如果没有任何配置，记录提示信息
         if configs.is_empty() {
             info!("ℹ️ 没有配置任何回填事件类型，回填服务将不执行任何操作");
         }
-        
+
         configs
     }
 
@@ -384,14 +384,6 @@ impl EventListenerConfig {
                     )))
                 }
             }
-        }
-
-        // 2. 向后兼容：支持单个程序ID格式
-        if let Ok(id_str) = std::env::var("SUBSCRIBED_PROGRAM_ID") {
-            let id = Pubkey::from_str(&id_str)
-                .map_err(|e| EventListenerError::Config(format!("解析SUBSCRIBED_PROGRAM_ID失败: {}", e)))?;
-            info!("📋 使用单程序ID（兼容模式）: {}", id);
-            return Ok(vec![id]);
         }
 
         Err(EventListenerError::Config(
@@ -481,39 +473,41 @@ impl EventListenerConfig {
     pub fn get_health_check_interval(&self) -> Duration {
         Duration::from_secs(self.monitoring.health_check_interval_secs)
     }
-    
+
     /// 转换回填配置为BackfillEventConfig列表
-    pub fn get_backfill_event_configs(&self) -> Result<Vec<crate::subscriber::backfill_handler::BackfillEventConfig>> {
-        use crate::subscriber::backfill_handler::BackfillEventConfig;
+    pub fn get_backfill_event_configs(&self) -> Result<Vec<crate::recovery::backfill_handler::BackfillEventConfig>> {
+        use crate::recovery::backfill_handler::BackfillEventConfig;
         use solana_sdk::pubkey::Pubkey;
         use std::str::FromStr;
-        
+
         let backfill_config = match &self.backfill {
             Some(config) => config,
             None => return Ok(Vec::new()),
         };
-        
+
         let mut configs = Vec::new();
-        
+
         for event_config in &backfill_config.events {
-            let program_id = Pubkey::from_str(&event_config.program_id)
-                .map_err(|e| crate::error::EventListenerError::Config(
-                    format!("解析回填程序ID失败: {} - {}", event_config.program_id, e)
-                ))?;
-            
-            let mut config = BackfillEventConfig::new(&event_config.event_type, program_id)
-                .with_enabled(event_config.enabled);
-            
+            let program_id = Pubkey::from_str(&event_config.program_id).map_err(|e| {
+                crate::error::EventListenerError::Config(format!(
+                    "解析回填程序ID失败: {} - {}",
+                    event_config.program_id, e
+                ))
+            })?;
+
+            let mut config =
+                BackfillEventConfig::new(&event_config.event_type, program_id).with_enabled(event_config.enabled);
+
             // 使用事件特定的间隔或默认间隔
             if let Some(interval) = event_config.check_interval_secs {
                 config = config.with_check_interval(interval);
             } else if let Some(default_interval) = backfill_config.default_check_interval_secs {
                 config = config.with_check_interval(default_interval);
             }
-            
+
             configs.push(config);
         }
-        
+
         Ok(configs)
     }
 

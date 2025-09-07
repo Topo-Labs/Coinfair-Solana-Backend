@@ -13,8 +13,9 @@ pub mod tests;
 pub use error::{EventListenerError, Result};
 
 use crate::{
-    config::EventListenerConfig, metrics::MetricsCollector, parser::EventParserRegistry, persistence::{BatchWriter, CheckpointPersistence, ScanRecordPersistence},
-    recovery::CheckpointManager, subscriber::{BackfillManager, SubscriptionManager},
+    config::EventListenerConfig, metrics::MetricsCollector, parser::EventParserRegistry, persistence::BatchWriter,
+    recovery::{BackfillManager, CheckpointPersistence, ScanRecordPersistence},
+    subscriber::SubscriptionManager,
 };
 use std::sync::Arc;
 use tokio::signal;
@@ -27,7 +28,6 @@ use utils::{MetaplexService, TokenMetadataProvider};
 /// - WebSocket订阅管理
 /// - 事件解析和路由
 /// - 批量持久化
-/// - 检查点管理
 /// - 监控指标收集
 /// - 历史事件回填
 #[derive(Clone)]
@@ -36,7 +36,6 @@ pub struct EventListenerService {
     subscription_manager: Arc<SubscriptionManager>,
     parser_registry: Arc<EventParserRegistry>,
     batch_writer: Arc<BatchWriter>,
-    checkpoint_manager: Arc<CheckpointManager>,
     metrics: Arc<MetricsCollector>,
     backfill_manager: Option<Arc<BackfillManager>>,
 }
@@ -50,7 +49,6 @@ impl EventListenerService {
 
         // 初始化各个组件
         let metrics = Arc::new(MetricsCollector::new(&config)?);
-        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await?);
         let batch_writer = Arc::new(BatchWriter::new(&config).await?);
 
         // 创建 MetaplexService 作为代币元数据提供者
@@ -109,7 +107,6 @@ impl EventListenerService {
                 &config,
                 Arc::clone(&parser_registry),
                 Arc::clone(&batch_writer),
-                Arc::clone(&checkpoint_manager),
                 Arc::clone(&metrics),
             )
             .await?,
@@ -138,7 +135,6 @@ impl EventListenerService {
                     &config,
                     Arc::clone(&parser_registry),
                     Arc::clone(&batch_writer),
-                    Arc::clone(&checkpoint_manager),
                     Arc::clone(&metrics),
                     checkpoint_persistence,
                     scan_record_persistence,
@@ -164,7 +160,6 @@ impl EventListenerService {
             subscription_manager,
             parser_registry,
             batch_writer,
-            checkpoint_manager,
             metrics,
             backfill_manager,
         })
@@ -184,14 +179,6 @@ impl EventListenerService {
             })
         };
 
-        let checkpoint_task = {
-            let manager = Arc::clone(&self.checkpoint_manager);
-            tokio::spawn(async move {
-                if let Err(e) = manager.start_periodic_save().await {
-                    error!("检查点管理器启动失败: {}", e);
-                }
-            })
-        };
 
         let batch_writer_task = {
             let writer = Arc::clone(&self.batch_writer);
@@ -232,7 +219,6 @@ impl EventListenerService {
 
         // 停止所有任务
         subscription_task.abort();
-        checkpoint_task.abort();
         batch_writer_task.abort();
         metrics_task.abort();
         
@@ -287,10 +273,7 @@ impl EventListenerService {
             warn!("刷新批量写入缓冲区时出错: {}", e);
         }
 
-        // 保存最终检查点
-        if let Err(e) = self.checkpoint_manager.save_checkpoint().await {
-            warn!("保存最终检查点时出错: {}", e);
-        }
+        // 注意：不再保存订阅服务检查点，回填服务会自动处理检查点
 
         // 停止指标收集
         if let Err(e) = self.metrics.stop().await {
@@ -314,7 +297,6 @@ impl EventListenerService {
     pub async fn health_check(&self) -> Result<HealthStatus> {
         let subscription_healthy = self.subscription_manager.is_healthy().await;
         let batch_writer_healthy = self.batch_writer.is_healthy().await;
-        let checkpoint_healthy = self.checkpoint_manager.is_healthy().await;
 
         // 如果启用回填服务，检查其健康状态，否则默认为健康
         let backfill_healthy = if self.backfill_manager.is_some() {
@@ -326,10 +308,9 @@ impl EventListenerService {
         };
 
         Ok(HealthStatus {
-            overall_healthy: subscription_healthy && batch_writer_healthy && checkpoint_healthy && backfill_healthy,
+            overall_healthy: subscription_healthy && batch_writer_healthy && backfill_healthy,
             subscription_manager: subscription_healthy,
             batch_writer: batch_writer_healthy,
-            checkpoint_manager: checkpoint_healthy,
             backfill_manager: backfill_healthy,
             metrics: self.metrics.get_stats().await?,
         })
@@ -342,7 +323,6 @@ pub struct HealthStatus {
     pub overall_healthy: bool,
     pub subscription_manager: bool,
     pub batch_writer: bool,
-    pub checkpoint_manager: bool,
     pub backfill_manager: bool,
     pub metrics: crate::metrics::MetricsStats,
 }

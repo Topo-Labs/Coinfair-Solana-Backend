@@ -4,7 +4,6 @@ use crate::{
     metrics::MetricsCollector,
     parser::{EventDataSource, EventParserRegistry},
     persistence::BatchWriter,
-    recovery::CheckpointManager,
     subscriber::{EventFilter, WebSocketManager},
 };
 use dashmap::DashMap;
@@ -32,7 +31,6 @@ pub struct SubscriptionManager {
     event_filter: Arc<EventFilter>,
     parser_registry: Arc<EventParserRegistry>,
     batch_writer: Arc<BatchWriter>,
-    checkpoint_manager: Arc<CheckpointManager>,
     metrics: Arc<MetricsCollector>,
     rpc_client: Arc<RpcClient>,
 
@@ -65,7 +63,6 @@ impl SubscriptionManager {
         config: &EventListenerConfig,
         parser_registry: Arc<EventParserRegistry>,
         batch_writer: Arc<BatchWriter>,
-        checkpoint_manager: Arc<CheckpointManager>,
         metrics: Arc<MetricsCollector>,
     ) -> Result<Self> {
         let config = Arc::new(config.clone());
@@ -92,7 +89,6 @@ impl SubscriptionManager {
             event_filter,
             parser_registry,
             batch_writer,
-            checkpoint_manager,
             metrics,
             rpc_client,
             is_running: Arc::new(AtomicBool::new(false)),
@@ -347,16 +343,7 @@ impl SubscriptionManager {
                 // 批量提交所有解析的事件到写入器
                 self.batch_writer.submit_events(parsed_events.clone()).await?;
 
-                // 更新检查点 - 使用程序特定的检查点更新
-                if let Some(ref prog_id_str) = program_id {
-                    // 如果能提取到程序ID，使用程序特定的检查点更新
-                    self.checkpoint_manager
-                        .update_last_processed_for_program(prog_id_str, signature, slot)
-                        .await?;
-                } else {
-                    // 回退到向后兼容的方法（更新第一个程序的检查点）
-                    self.checkpoint_manager.update_last_processed(signature, slot).await?;
-                }
+                // 注意：不再更新订阅服务检查点，回填服务会自动处理重复事件检测
 
                 // 更新指标 - 按实际处理的事件数量更新
                 let event_count = parsed_events.len();
@@ -510,7 +497,6 @@ impl SubscriptionManager {
         // 检查各个组件的健康状态
         let websocket_healthy = self.websocket_manager.is_healthy().await;
         let batch_writer_healthy = self.batch_writer.is_healthy().await;
-        let checkpoint_healthy = self.checkpoint_manager.is_healthy().await;
 
         // 检查最近是否有活动
         let last_activity = *self.last_activity.read().await;
@@ -519,7 +505,7 @@ impl SubscriptionManager {
             None => true,                                            // 刚启动时认为是健康的
         };
 
-        websocket_healthy && batch_writer_healthy && checkpoint_healthy && activity_healthy
+        websocket_healthy && batch_writer_healthy && activity_healthy
     }
 
     /// 获取订阅统计信息
@@ -563,7 +549,6 @@ impl Clone for SubscriptionManager {
             event_filter: Arc::clone(&self.event_filter),
             parser_registry: Arc::clone(&self.parser_registry),
             batch_writer: Arc::clone(&self.batch_writer),
-            checkpoint_manager: Arc::clone(&self.checkpoint_manager),
             metrics: Arc::clone(&self.metrics),
             rpc_client: Arc::clone(&self.rpc_client),
             is_running: Arc::clone(&self.is_running),
@@ -622,10 +607,9 @@ mod tests {
         let config = create_test_config();
         let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
         let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, metrics)
             .await
             .unwrap();
 
@@ -648,10 +632,9 @@ mod tests {
         let config = create_test_config();
         let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
         let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, metrics)
             .await
             .unwrap();
 
@@ -676,10 +659,9 @@ mod tests {
         let config = create_test_config();
         let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
         let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-        let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
         let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+        let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, metrics)
             .await
             .unwrap();
 

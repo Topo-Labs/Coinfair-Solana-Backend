@@ -9,7 +9,7 @@
 
 use crate::{
     config::EventListenerConfig, error::EventListenerError, metrics::MetricsCollector, parser::EventParserRegistry,
-    persistence::BatchWriter, recovery::CheckpointManager, subscriber::SubscriptionManager,
+    persistence::BatchWriter, subscriber::SubscriptionManager,
 };
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
@@ -61,10 +61,9 @@ async fn test_fix_1_real_slot_retrieval() {
     let config = create_integration_test_config();
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-    let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics)
+    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, metrics)
         .await
         .unwrap();
 
@@ -344,7 +343,6 @@ async fn test_comprehensive_integration() {
     // 初始化所有组件
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-    let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let _parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
 
     // 验证所有组件可以协同工作
@@ -353,7 +351,7 @@ async fn test_comprehensive_integration() {
         batch_writer.is_healthy().await == false,
         "初始状态batch_writer应该未运行"
     );
-    assert!(checkpoint_manager.is_healthy().await, "checkpoint_manager应该健康");
+    // 注意：不再测试 checkpoint_manager，因为已移除订阅服务检查点
 
     // 启动指标收集
     metrics.start_collection().await.unwrap();
