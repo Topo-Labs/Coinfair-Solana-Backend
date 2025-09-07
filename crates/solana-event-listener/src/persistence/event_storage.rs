@@ -1640,7 +1640,7 @@ mod tests {
         assert_eq!(push_request.name, event.name);
         assert_eq!(push_request.symbol, event.symbol);
         assert_eq!(push_request.decimals, event.decimals);
-        assert_eq!(push_request.logo_uri, event.metadata_uri);
+        assert_eq!(push_request.logo_uri, event.logo_uri);
         assert!(push_request
             .tags
             .as_ref()

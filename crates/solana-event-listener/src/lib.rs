@@ -67,10 +67,41 @@ impl EventListenerService {
             }
         };
 
-        // 使用带有元数据提供者的EventParserRegistry
-        let parser_registry = Arc::new(EventParserRegistry::new_with_metadata_provider(
+        // 预计算回填配置（如果启用回填功能）
+        info!("🔍 检查回填配置状态: backfill={:?}", config.backfill.as_ref().map(|c| c.enabled));
+        let backfill_parser_keys = if let Some(backfill_config) = &config.backfill {
+            info!("📋 发现回填配置，enabled={}", backfill_config.enabled);
+            if backfill_config.enabled {
+                info!("🔄 预计算回填ParserKey配置...");
+                let event_configs = config.get_backfill_event_configs()?;
+                
+                let mut keys = std::collections::HashSet::new();
+                for event_config in &event_configs {
+                    if event_config.enabled {
+                        let discriminator = crate::parser::event_parser::calculate_event_discriminator(&event_config.event_type);
+                        let parser_key = crate::parser::event_parser::ParserKey::for_program(event_config.program_id, discriminator);
+                        keys.insert(parser_key);
+                        
+                        info!("🔑 预计算回填事件 {} 的ParserKey: program={}, discriminator={:?}", 
+                            event_config.event_type, event_config.program_id, discriminator);
+                    }
+                }
+                info!("✅ 预计算完成，共 {} 个回填ParserKey", keys.len());
+                Some(keys)
+            } else {
+                info!("⚠️ 回填配置被禁用，跳过预计算");
+                None
+            }
+        } else {
+            info!("⚠️ 未找到回填配置，跳过预计算");
+            None
+        };
+
+        // 使用带有元数据提供者和回填配置的EventParserRegistry
+        let parser_registry = Arc::new(EventParserRegistry::new_with_metadata_provider_and_backfill(
             &config,
             metadata_provider,
+            backfill_parser_keys,
         )?);
 
         let subscription_manager = Arc::new(

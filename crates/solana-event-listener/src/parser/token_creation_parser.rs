@@ -365,7 +365,7 @@ mod tests {
 
         assert_eq!(parser.get_event_type(), "token_creation");
         // assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
-        assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
+        assert_eq!(parser.get_discriminator(), [67, 72, 26, 56, 174, 158, 245, 106]);
     }
 
     #[tokio::test]

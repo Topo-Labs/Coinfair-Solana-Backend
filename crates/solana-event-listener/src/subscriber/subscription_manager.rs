@@ -2,7 +2,7 @@ use crate::{
     config::EventListenerConfig,
     error::Result,
     metrics::MetricsCollector,
-    parser::EventParserRegistry,
+    parser::{EventDataSource, EventParserRegistry},
     persistence::BatchWriter,
     recovery::CheckpointManager,
     subscriber::{EventFilter, WebSocketManager},
@@ -321,10 +321,16 @@ impl SubscriptionManager {
 
         info!("🔍 事件通过过滤器，开始解析: {}", signature);
 
-        // 尝试解析所有事件（使用智能路由多事件处理）
+        // 尝试解析所有事件（使用智能路由多事件处理）- 标记为WebSocket订阅数据源
         match self
             .parser_registry
-            .parse_all_events_with_context(&log_response.logs, signature, slot, &self.config.solana.program_ids)
+            .parse_all_events_with_context(
+                &log_response.logs,
+                signature,
+                slot,
+                &self.config.solana.program_ids,
+                Some(EventDataSource::WebSocketSubscription),
+            )
             .await
         {
             Ok(parsed_events) if !parsed_events.is_empty() => {

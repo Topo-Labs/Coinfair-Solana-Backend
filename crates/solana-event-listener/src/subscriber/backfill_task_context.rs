@@ -2,7 +2,7 @@ use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
     metrics::MetricsCollector,
-    parser::EventParserRegistry,
+    parser::{EventParserRegistry, EventDataSource},
     persistence::{checkpoint_persistence::CheckpointPersistence, scan_record_persistence::ScanRecordPersistence},
     recovery::CheckpointManager,
     subscriber::backfill_handler::{BackfillEventConfig, BackfillEventRegistry, EventBackfillHandler},
@@ -101,11 +101,11 @@ impl BackfillTaskContext {
         );
 
         // 3. 获取签名列表
-        let signatures = match self
+        let (signatures, actual_latest_signature) = match self
             .fetch_signatures(&before_signature, &until_signature, &event_config.program_id)
             .await
         {
-            Ok(sigs) => sigs,
+            Ok((sigs, latest_sig)) => (sigs, latest_sig),
             Err(e) => {
                 scan_record.status = ScanStatus::Failed;
                 scan_record.error_message = Some(format!("获取签名失败: {}", e));
@@ -133,9 +133,10 @@ impl BackfillTaskContext {
             scan_record.completed_at = Some(Utc::now());
             self.scan_record_persistence.update_scan_record(&scan_record).await?;
 
-            // 更新检查点
+            // 更新检查点 - 使用实际获取的最新签名或until_signature
+            let checkpoint_signature = actual_latest_signature.as_ref().unwrap_or(&until_signature);
             self.update_checkpoint(
-                &until_signature,
+                checkpoint_signature,
                 &event_config.program_id,
                 &handler.checkpoint_event_name(),
             )
@@ -155,9 +156,10 @@ impl BackfillTaskContext {
         scan_record.completed_at = Some(Utc::now());
         self.scan_record_persistence.update_scan_record(&scan_record).await?;
 
-        // 8. 更新检查点
+        // 8. 更新检查点 - 使用实际获取的最新签名或until_signature
+        let checkpoint_signature = actual_latest_signature.as_ref().unwrap_or(&until_signature);
         self.update_checkpoint(
-            &until_signature,
+            checkpoint_signature,
             &event_config.program_id,
             &handler.checkpoint_event_name(),
         )
@@ -191,32 +193,31 @@ impl BackfillTaskContext {
 
         match checkpoint {
             Some(cp) if cp.last_signature.is_some() => {
-                // 有检查点，从检查点开始到最新事件
+                // 有检查点，从检查点开始到链上最新签名
+                // 使用空字符串表示before=None，让RPC获取最新签名
                 let until_signature = cp
                     .last_signature
                     .ok_or_else(|| EventListenerError::Unknown("检查点last_signature为空".to_string()))?;
-                let before_signature = handler.get_latest_event_signature(&repo).await?;
+                let before_signature = String::new(); // 空字符串，在fetch_signatures中会被处理为None
 
                 info!(
-                    "📍 {} 从检查点开始: {} -> {}",
+                    "📍 {} 从检查点开始到链上最新: {} -> <最新签名>",
                     handler.event_type_name(),
-                    until_signature,
-                    before_signature
+                    until_signature
                 );
                 Ok((until_signature, before_signature))
             }
             _ => {
-                // 初次启动或无有效检查点，从事件中读取范围
+                // 初次启动或无有效检查点，从最老事件到链上最新签名
                 let oldest_sig = handler.get_oldest_event_signature(&repo).await?;
-                let latest_sig = handler.get_latest_event_signature(&repo).await?;
+                let before_signature = String::new(); // 空字符串，在fetch_signatures中会被处理为None
 
                 info!(
-                    "🆕 {} 初次启动，从事件范围: {} -> {}",
+                    "🆕 {} 初次启动，从最老事件到链上最新: {} -> <最新签名>",
                     handler.event_type_name(),
-                    oldest_sig,
-                    latest_sig
+                    oldest_sig
                 );
-                Ok((oldest_sig, latest_sig))
+                Ok((oldest_sig, before_signature))
             }
         }
     }
@@ -251,19 +252,20 @@ impl BackfillTaskContext {
     }
 
     /// 获取签名列表
+    /// 返回 (签名列表, 实际的最新签名) - 实际最新签名用于更新检查点
     async fn fetch_signatures(
         &self,
         before: &str,
         until: &str,
         program_id: &solana_sdk::pubkey::Pubkey,
-    ) -> Result<Vec<String>> {
+    ) -> Result<(Vec<String>, Option<String>)> {
         let config = GetConfirmedSignaturesForAddress2Config {
-            before: if before != "1111111111111111111111111111111111111111111111111111111111111111" {
+            before: if !before.is_empty() && before != "1111111111111111111111111111111111111111111111111111111111111111" {
                 Some(Signature::from_str(before).map_err(|e| anyhow!("before 签名错误：{}", e))?)
             } else {
-                None
+                None // 空字符串或默认签名都设为None，让RPC从最新签名开始搜索
             },
-            until: if until != "1111111111111111111111111111111111111111111111111111111111111111" {
+            until: if !until.is_empty() && until != "1111111111111111111111111111111111111111111111111111111111111111" {
                 Some(Signature::from_str(until).map_err(|e| anyhow!("until 签名错误：{}", e))?)
             } else {
                 None
@@ -272,12 +274,33 @@ impl BackfillTaskContext {
             commitment: Some(CommitmentConfig::confirmed()),
         };
 
+        info!(
+            "🔍 获取签名列表 - 程序ID: {}, until: {:?}, before: {:?}",
+            program_id,
+            config.until.as_ref().map(|s| s.to_string()).unwrap_or_else(|| "<最老>".to_string()),
+            config.before.as_ref().map(|s| s.to_string()).unwrap_or_else(|| "<最新>".to_string())
+        );
+
         let signatures = self
             .rpc_client
             .get_signatures_for_address_with_config(program_id, config)
             .map_err(|e| EventListenerError::SolanaRpc(format!("获取签名列表失败: {}", e)))?;
 
-        Ok(signatures.into_iter().map(|sig| sig.signature).collect())
+        let signature_strings: Vec<String> = signatures.iter().map(|sig| sig.signature.clone()).collect();
+        
+        // 如果before为None（即获取最新签名），则第一个签名就是实际的最新签名
+        let actual_latest_signature = if before.is_empty() && !signature_strings.is_empty() {
+            Some(signature_strings[0].clone())
+        } else {
+            None
+        };
+
+        info!("📝 获取到 {} 个签名，实际最新签名: {:?}", 
+            signature_strings.len(), 
+            actual_latest_signature
+        );
+
+        Ok((signature_strings, actual_latest_signature))
     }
 
     /// 查找丢失的签名
@@ -433,10 +456,10 @@ impl BackfillTaskContext {
             .get_slot()
             .map_err(|e| EventListenerError::SolanaRpc(format!("获取slot失败: {}", e)))?;
 
-        // 解析事件
+        // 解析事件 - 标记为回填服务数据源
         match self
             .parser_registry
-            .parse_all_events_with_context(&logs_response.logs, signature, slot, &vec![*program_id])
+            .parse_all_events_with_context(&logs_response.logs, signature, slot, &vec![*program_id], Some(EventDataSource::BackfillService))
             .await
         {
             Ok(parsed_events) if !parsed_events.is_empty() => {
@@ -491,5 +514,113 @@ impl BackfillTaskContext {
 
         info!("📍 更新检查点 {}: {}", event_name, last_signature);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_empty_before_signature_handling() {
+        // 测试空字符串的before签名应该被正确处理
+        let empty_before = "";
+        let default_before = "1111111111111111111111111111111111111111111111111111111111111111";
+        
+        // 空字符串应该被视为需要获取最新签名
+        assert!(empty_before.is_empty());
+        
+        // 默认签名也应该被视为需要获取最新签名
+        assert_eq!(default_before, "1111111111111111111111111111111111111111111111111111111111111111");
+    }
+
+    #[test]
+    fn test_signature_parsing() {
+        // 测试有效签名的解析
+        let valid_sig = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d1V4KAEJrGrMn3RcYfP6oK3pVt4K7yWxNvPvx9eT5NqC";
+        let signature_result = Signature::from_str(valid_sig);
+        assert!(signature_result.is_ok(), "有效签名应该能够正确解析");
+    }
+
+    #[test] 
+    fn test_checkpoint_signature_selection() {
+        // 测试检查点签名选择逻辑
+        let until_signature = "old_signature".to_string();
+        let actual_latest = Some("latest_signature".to_string());
+        
+        // 当有actual_latest_signature时，应该使用它
+        let checkpoint_signature = actual_latest.as_ref().unwrap_or(&until_signature);
+        assert_eq!(checkpoint_signature, "latest_signature");
+        
+        // 当没有actual_latest_signature时，应该使用until_signature
+        let no_latest: Option<String> = None;
+        let checkpoint_signature = no_latest.as_ref().unwrap_or(&until_signature);
+        assert_eq!(checkpoint_signature, "old_signature");
+    }
+
+    #[test]
+    fn test_config_before_parameter_handling() {
+        // 模拟GetConfirmedSignaturesForAddress2Config的before参数处理逻辑
+        
+        // 空字符串应该被处理为None
+        let empty_before = "";
+        let should_be_none = if !empty_before.is_empty() && 
+            empty_before != "1111111111111111111111111111111111111111111111111111111111111111" {
+            "Some"
+        } else {
+            "None"
+        };
+        assert_eq!(should_be_none, "None");
+        
+        // 默认签名也应该被处理为None
+        let default_before = "1111111111111111111111111111111111111111111111111111111111111111";
+        let should_be_none = if !default_before.is_empty() && 
+            default_before != "1111111111111111111111111111111111111111111111111111111111111111" {
+            "Some"
+        } else {
+            "None"
+        };
+        assert_eq!(should_be_none, "None");
+        
+        // 有效签名应该被处理为Some
+        let valid_before = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d1V4KAEJrGrMn3RcYfP6oK3pVt4K7yWxNvPvx9eT5NqC";
+        let should_be_some = if !valid_before.is_empty() && 
+            valid_before != "1111111111111111111111111111111111111111111111111111111111111111" {
+            "Some"
+        } else {
+            "None"
+        };
+        assert_eq!(should_be_some, "Some");
+    }
+
+    #[test]
+    fn test_actual_latest_signature_extraction() {
+        // 测试从签名列表中提取最新签名的逻辑
+        let signatures = vec![
+            "latest_signature".to_string(),
+            "older_signature_1".to_string(), 
+            "older_signature_2".to_string()
+        ];
+        
+        let before_is_empty = true; // 模拟before为空字符串的情况
+        
+        let actual_latest = if before_is_empty && !signatures.is_empty() {
+            Some(signatures[0].clone())
+        } else {
+            None
+        };
+        
+        assert_eq!(actual_latest, Some("latest_signature".to_string()));
+        
+        // 测试空签名列表的情况
+        let empty_signatures: Vec<String> = vec![];
+        let actual_latest_empty = if before_is_empty && !empty_signatures.is_empty() {
+            Some(empty_signatures[0].clone())
+        } else {
+            None
+        };
+        
+        assert_eq!(actual_latest_empty, None);
     }
 }

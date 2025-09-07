@@ -8,12 +8,22 @@ use anchor_lang::pubkey;
 use async_trait::async_trait;
 use database::token_info::DataSource;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tracing::info;
 use utils::TokenMetadataProvider;
+
+/// 事件数据流来源
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventDataSource {
+    /// WebSocket实时订阅数据流
+    WebSocketSubscription,
+    /// 回填服务数据流
+    BackfillService,
+}
 
 /// 解析器复合键，用于精确路由
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,6 +66,18 @@ impl ParserKey {
 
 /// 通用程序ID，表示解析器可以处理任何程序的该discriminator事件
 pub const UNIVERSAL_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
+
+/// 从事件类型计算discriminator
+pub fn calculate_event_discriminator(event_type: &str) -> [u8; 8] {
+    let mut hasher = Sha256::new();
+    hasher.update(format!("event:{}", event_type).as_bytes());
+    let hash = hasher.finalize();
+
+    // 取前8字节作为discriminator
+    let mut discriminator = [0u8; 8];
+    discriminator.copy_from_slice(&hash[..8]);
+    discriminator
+}
 
 /// 解析后的事件数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -457,6 +479,8 @@ pub trait EventParser: Send + Sync {
 pub struct EventParserRegistry {
     /// 使用复合键映射的解析器表
     parsers: HashMap<ParserKey, Box<dyn EventParser>>,
+    /// 回填服务配置的ParserKey集合（program_id + discriminator）
+    backfill_parser_keys: HashSet<ParserKey>,
 }
 
 impl EventParserRegistry {
@@ -470,8 +494,18 @@ impl EventParserRegistry {
         config: &EventListenerConfig,
         metadata_provider: Option<Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>>>,
     ) -> Result<Self> {
+        Self::new_with_metadata_provider_and_backfill(config, metadata_provider, None)
+    }
+
+    /// 创建新的解析器注册表（支持注入元数据提供者和回填配置）
+    pub fn new_with_metadata_provider_and_backfill(
+        config: &EventListenerConfig,
+        metadata_provider: Option<Arc<tokio::sync::Mutex<dyn TokenMetadataProvider>>>,
+        backfill_parser_keys: Option<HashSet<ParserKey>>,
+    ) -> Result<Self> {
         let mut registry = Self {
             parsers: HashMap::new(),
+            backfill_parser_keys: backfill_parser_keys.unwrap_or_default(),
         };
 
         // 交换事件解析器
@@ -591,17 +625,29 @@ impl EventParserRegistry {
     /// 与 `parse_event_with_context` 不同，此方法会处理并返回所有找到的有效事件，
     /// 而不是只返回第一个有效事件。
     ///
+    /// # 参数
+    /// - `logs`: 交易日志
+    /// - `signature`: 交易签名
+    /// - `slot`: 区块高度
+    /// - `subscribed_programs`: 订阅的程序列表
+    /// - `data_source`: 数据流来源，用于选择合适的过滤策略
+    ///
     pub async fn parse_all_events_with_context(
         &self,
         logs: &[String],
         signature: &str,
         slot: u64,
         subscribed_programs: &[Pubkey],
+        data_source: Option<EventDataSource>,
     ) -> Result<Vec<ParsedEvent>> {
         // 尝试从日志中提取程序ID
         let program_id_hint = self.extract_program_id_from_logs(logs, subscribed_programs);
 
-        tracing::info!("🧠 智能路由启动（处理所有事件）- 程序ID提示: {:?}", program_id_hint);
+        tracing::info!(
+            "🧠 智能路由启动（处理所有事件）- 数据源: {:?}, 程序ID提示: {:?}, 使用ParserKey精确过滤",
+            data_source.unwrap_or(EventDataSource::WebSocketSubscription),
+            program_id_hint
+        );
 
         let mut all_valid_events = Vec::new();
         let mut program_data_count = 0;
@@ -621,7 +667,7 @@ impl EventParserRegistry {
                     );
 
                     match self
-                        .try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint)
+                        .try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint, data_source)
                         .await?
                     {
                         Some(event) => {
@@ -650,15 +696,15 @@ impl EventParserRegistry {
         }
 
         // 如果没有找到任何事件，尝试通用解析器
-        if all_valid_events.is_empty() {
-            tracing::info!("🔄 Program data解析未找到事件，尝试通用解析器");
-            for parser in self.parsers.values() {
-                if let Some(event) = parser.parse_from_logs(logs, signature, slot).await? {
-                    tracing::info!("✅ 通用解析器成功: {}", parser.get_event_type());
-                    all_valid_events.push(event);
-                }
-            }
-        }
+        // if all_valid_events.is_empty() {
+        //     tracing::info!("🔄 Program data解析未找到事件，尝试通用解析器");
+        //     for parser in self.parsers.values() {
+        //         if let Some(event) = parser.parse_from_logs(logs, signature, slot).await? {
+        //             tracing::info!("✅ 通用解析器成功: {}", parser.get_event_type());
+        //             all_valid_events.push(event);
+        //         }
+        //     }
+        // }
 
         if !all_valid_events.is_empty() {
             tracing::info!(
@@ -674,8 +720,8 @@ impl EventParserRegistry {
     }
 
     /// 从日志中提取程序ID（解析用）
-    /// 新策略：查找包含Program data的程序调用块，并验证是否在订阅列表中
-    pub fn extract_program_id_from_logs(&self, logs: &[String], subscribed_programs: &[Pubkey]) -> Option<Pubkey> {
+    /// 新策略：查找包含Program data的程序调用块，并验证是否在允许的程序列表中
+    pub fn extract_program_id_from_logs(&self, logs: &[String], allowed_programs: &[Pubkey]) -> Option<Pubkey> {
         // 首先找到所有Program data的位置
         let mut program_data_indices = Vec::new();
         for (i, log) in logs.iter().enumerate() {
@@ -720,12 +766,12 @@ impl EventParserRegistry {
                                 // 这个success/consumed在Program data之后，可能就是包含data的程序
                                 tracing::debug!("🔍 第{}行程序结束: {} (在Program data之后)", i + 1, program_id);
 
-                                // 检查是否为订阅的程序
-                                if self.is_subscribed_program(&program_id, subscribed_programs) {
-                                    tracing::info!("🎯 找到订阅的程序 (基于success日志): {}", program_id);
+                                // 检查是否为允许的程序
+                                if self.is_allowed_program(&program_id, allowed_programs) {
+                                    tracing::info!("🎯 找到允许的程序 (基于success日志): {}", program_id);
                                     return Some(program_id);
                                 } else {
-                                    tracing::debug!("🚫 程序不在订阅列表中: {}", program_id);
+                                    tracing::debug!("🚫 程序不在允许列表中: {}", program_id);
                                 }
                             }
                         }
@@ -735,12 +781,12 @@ impl EventParserRegistry {
                     if let Some(&(_, program_id)) = invoke_stack.last() {
                         tracing::debug!("🔍 Program data行{}，当前活跃程序: {}", i + 1, program_id);
 
-                        // 检查是否为订阅的程序
-                        if self.is_subscribed_program(&program_id, subscribed_programs) {
+                        // 检查是否为允许的程序
+                        if self.is_allowed_program(&program_id, allowed_programs) {
                             current_program_id = Some(program_id);
-                            tracing::debug!("✅ 找到订阅的程序 (基于调用栈): {}", program_id);
+                            tracing::debug!("✅ 找到允许的程序 (基于调用栈): {}", program_id);
                         } else {
-                            tracing::debug!("🚫 程序不在订阅列表中: {}", program_id);
+                            tracing::debug!("🚫 程序不在允许列表中: {}", program_id);
                         }
                     }
                 }
@@ -757,13 +803,31 @@ impl EventParserRegistry {
             }
         }
 
-        tracing::warn!("⚠️ 未找到Program data对应的订阅程序");
+        tracing::warn!("⚠️ 未找到Program data对应的允许程序");
         None
     }
 
-    /// 检查程序ID是否在订阅列表中
-    fn is_subscribed_program(&self, program_id: &Pubkey, subscribed_programs: &[Pubkey]) -> bool {
-        subscribed_programs.contains(program_id)
+    /// 检查程序ID是否在允许的程序列表中
+    fn is_allowed_program(&self, program_id: &Pubkey, allowed_programs: &[Pubkey]) -> bool {
+        allowed_programs.contains(program_id)
+    }
+
+    /// 设置回填服务配置的ParserKey集合
+    pub fn set_backfill_parser_keys(&mut self, parser_keys: HashSet<ParserKey>) {
+        self.backfill_parser_keys = parser_keys;
+        tracing::info!("🔑 设置回填ParserKey集合: {} 个键", self.backfill_parser_keys.len());
+        for key in &self.backfill_parser_keys {
+            tracing::info!(
+                "  - Program: {}, Discriminator: {:?}",
+                key.program_id,
+                key.discriminator
+            );
+        }
+    }
+
+    /// 获取回填服务配置的ParserKey集合
+    pub fn get_backfill_parser_keys(&self) -> &HashSet<ParserKey> {
+        &self.backfill_parser_keys
     }
 
     /// 检查程序ID是否为系统程序（辅助验证用）
@@ -870,6 +934,7 @@ impl EventParserRegistry {
         signature: &str,
         slot: u64,
         program_id_hint: Option<Pubkey>,
+        data_source: Option<EventDataSource>,
     ) -> Result<Option<ParsedEvent>> {
         // 解码Base64数据
         use base64::{engine::general_purpose, Engine as _};
@@ -887,18 +952,45 @@ impl EventParserRegistry {
             .map_err(|_| EventListenerError::EventParsing("无法提取discriminator".to_string()))?;
         info!("🔍 提取的discriminator: {:?}", discriminator);
 
-        // 白名单检查：检查是否为已注册的事件类型
+        // ParserKey集合过滤：根据数据源使用不同的精确过滤策略
         if let Some(program_id) = program_id_hint {
             let parser_key = ParserKey::for_program(program_id, discriminator);
             let universal_key = ParserKey::universal(discriminator);
 
-            // 检查是否在已注册的解析器中
-            if !self.parsers.contains_key(&parser_key) && !self.parsers.contains_key(&universal_key) {
-                tracing::info!(
-                    "⏭️ 跳过未注册事件: program={}, discriminator={:?} - 不在关心列表中",
-                    program_id,
-                    discriminator
-                );
+            let allowed_by_data_source = match data_source {
+                Some(EventDataSource::BackfillService) => {
+                    // 回填服务使用配置的ParserKey集合进行精确过滤
+                    let backfill_keys = self.get_backfill_parser_keys();
+                    let allowed = backfill_keys.contains(&parser_key)
+                        || backfill_keys
+                            .iter()
+                            .any(|key| key.discriminator == discriminator && key.is_universal());
+
+                    if !allowed {
+                        tracing::info!(
+                            "⏭️ 回填服务跳过未配置的事件: program={}, discriminator={:?} - 不在回填ParserKey集合中",
+                            program_id,
+                            discriminator
+                        );
+                    }
+                    allowed
+                }
+                Some(EventDataSource::WebSocketSubscription) | None => {
+                    // WebSocket订阅使用已注册解析器进行过滤
+                    let allowed = self.parsers.contains_key(&parser_key) || self.parsers.contains_key(&universal_key);
+
+                    if !allowed {
+                        tracing::info!(
+                            "⏭️ WebSocket订阅跳过未注册事件: program={}, discriminator={:?} - 不在已注册解析器中",
+                            program_id,
+                            discriminator
+                        );
+                    }
+                    allowed
+                }
+            };
+
+            if !allowed_by_data_source {
                 return Ok(None);
             }
         }
@@ -1235,8 +1327,8 @@ mod tests {
 
         let registry = EventParserRegistry::new(&config).unwrap();
 
-        // 应该有6个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution、launch
-        assert_eq!(registry.parser_count(), 6);
+        // 应该有7个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution、launch、deposit
+        assert_eq!(registry.parser_count(), 7);
 
         let parsers = registry.get_registered_parsers();
         let parser_types: Vec<String> = parsers.iter().map(|(name, _)| name.clone()).collect();
@@ -1248,9 +1340,105 @@ mod tests {
         assert!(parser_types.contains(&"reward_distribution".to_string()));
 
         assert!(parser_types.contains(&"launch".to_string()));
+        assert!(parser_types.contains(&"deposit".to_string()));
 
-        // 注意：现在有6个解析器
+        // 注意：现在有7个解析器
         println!("📊 解析器统计: 总数={}, 类型={:?}", parsers.len(), parser_types);
+    }
+
+    #[tokio::test]
+    async fn test_data_source_filtering() {
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![Pubkey::new_unique()],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+            backfill: None,
+        };
+
+        let mut registry = EventParserRegistry::new(&config).unwrap();
+
+        // 设置回填ParserKey集合（不同于WebSocket订阅的程序列表）
+        let websocket_program = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
+        let backfill_program = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+
+        // 创建测试用的ParserKey集合
+        let mut backfill_keys = std::collections::HashSet::new();
+        let test_discriminator = calculate_event_discriminator("TestEvent");
+        let test_parser_key = ParserKey::for_program(backfill_program, test_discriminator);
+        backfill_keys.insert(test_parser_key);
+
+        registry.set_backfill_parser_keys(backfill_keys);
+
+        // 测试数据源过滤逻辑
+        let logs = vec!["Program data: test".to_string()];
+
+        // 使用WebSocket数据源 - 应该使用websocket_program
+        let result_websocket = registry
+            .parse_all_events_with_context(
+                &logs,
+                "test_sig",
+                12345,
+                &[websocket_program],
+                Some(EventDataSource::WebSocketSubscription),
+            )
+            .await
+            .unwrap();
+
+        // 使用回填数据源 - 应该使用backfill_program
+        let result_backfill = registry
+            .parse_all_events_with_context(
+                &logs,
+                "test_sig",
+                12345,
+                &[websocket_program],
+                Some(EventDataSource::BackfillService),
+            )
+            .await
+            .unwrap();
+
+        // 不传数据源（默认WebSocket行为）
+        let result_default = registry
+            .parse_all_events_with_context(&logs, "test_sig", 12345, &[websocket_program], None)
+            .await
+            .unwrap();
+
+        // 验证结果（由于没有有效的Program data，都应该返回空，但过滤逻辑已经执行）
+        assert!(result_websocket.is_empty());
+        assert!(result_backfill.is_empty());
+        assert!(result_default.is_empty());
+
+        // 验证回填ParserKey配置已正确设置
+        let backfill_keys = registry.get_backfill_parser_keys();
+        assert_eq!(backfill_keys.len(), 1);
+        assert!(backfill_keys.contains(&test_parser_key));
     }
 
     #[tokio::test]
@@ -1296,7 +1484,7 @@ mod tests {
         ];
 
         let result = registry
-            .parse_all_events_with_context(&logs, "test_sig", 12345, &config.solana.program_ids)
+            .parse_all_events_with_context(&logs, "test_sig", 12345, &config.solana.program_ids, None)
             .await
             .unwrap();
         assert!(result.is_empty());
@@ -1308,12 +1496,124 @@ mod tests {
         ];
 
         let result = registry
-            .parse_all_events_with_context(&logs_with_invalid_data, "test_sig", 12345, &config.solana.program_ids)
+            .parse_all_events_with_context(
+                &logs_with_invalid_data,
+                "test_sig",
+                12345,
+                &config.solana.program_ids,
+                None,
+            )
             .await;
 
         match result {
             Ok(events) => assert!(events.is_empty(), "应该返回空的事件列表"),
             Err(_) => {} // 也可能因为Base64解码失败而出错
         }
+    }
+
+    #[tokio::test]
+    async fn test_parser_key_filtering_by_data_source() {
+        use solana_sdk::pubkey::Pubkey;
+        use std::collections::HashSet;
+        use std::str::FromStr;
+
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![Pubkey::new_unique()],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+            backfill: None,
+        };
+
+        let mut registry = EventParserRegistry::new(&config).unwrap();
+
+        // 设置测试用的回填ParserKey集合
+        let test_program_id = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let test_event_type = "TestEvent";
+        let test_discriminator = calculate_event_discriminator(test_event_type);
+        let test_parser_key = ParserKey::for_program(test_program_id, test_discriminator);
+
+        let mut backfill_keys = HashSet::new();
+        backfill_keys.insert(test_parser_key);
+        registry.set_backfill_parser_keys(backfill_keys);
+
+        // 获取回填ParserKey集合并验证
+        let retrieved_keys = registry.get_backfill_parser_keys();
+        assert_eq!(retrieved_keys.len(), 1);
+        assert!(retrieved_keys.contains(&test_parser_key));
+
+        println!("✅ ParserKey过滤逻辑测试通过");
+        println!("   - 测试程序ID: {}", test_program_id);
+        println!("   - 测试事件类型: {}", test_event_type);
+        println!("   - 计算的discriminator: {:?}", test_discriminator);
+        println!("   - 生成的ParserKey: {:?}", test_parser_key);
+    }
+
+    #[test]
+    fn test_calculate_event_discriminator() {
+        // 测试discriminator计算的一致性
+        let event_type = "LaunchEvent";
+        let discriminator1 = calculate_event_discriminator(event_type);
+        let discriminator2 = calculate_event_discriminator(event_type);
+
+        // 同一事件类型应该产生相同的discriminator
+        assert_eq!(discriminator1, discriminator2);
+
+        // 不同事件类型应该产生不同的discriminator
+        let discriminator3 = calculate_event_discriminator("TokenCreationEvent");
+        assert_ne!(discriminator1, discriminator3);
+
+        println!("✅ Discriminator计算测试通过");
+        println!("   - LaunchEvent discriminator: {:?}", discriminator1);
+        println!("   - TokenCreationEvent discriminator: {:?}", discriminator3);
+    }
+
+    #[test]
+    fn test_parser_key_creation_and_comparison() {
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        let program_id = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let discriminator = calculate_event_discriminator("TestEvent");
+
+        // 测试程序特定ParserKey创建
+        let parser_key1 = ParserKey::for_program(program_id, discriminator);
+        let parser_key2 = ParserKey::for_program(program_id, discriminator);
+        assert_eq!(parser_key1, parser_key2);
+
+        // 测试通用ParserKey创建
+        let universal_key1 = ParserKey::universal(discriminator);
+        let universal_key2 = ParserKey::universal(discriminator);
+        assert_eq!(universal_key1, universal_key2);
+        assert!(universal_key1.is_universal());
+
+        // 程序特定key和通用key应该不相等
+        assert_ne!(parser_key1, universal_key1);
+
+        println!("✅ ParserKey创建和比较测试通过");
     }
 }
