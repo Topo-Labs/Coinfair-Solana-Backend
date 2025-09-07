@@ -18,6 +18,7 @@ pub mod event_model;
 pub mod event_scanner;
 pub mod permission_config;
 pub mod position;
+pub mod serde_helpers;
 pub mod refer;
 pub mod reward;
 pub mod token_info;

@@ -26,6 +26,7 @@ pub struct ClmmPoolEvent {
     pub token_b_decimals: u8,
 
     /// 手续费率 (万分之一)
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u32_as_number")]
     pub fee_rate: u32,
 
     /// 手续费率百分比
@@ -59,18 +60,22 @@ pub struct ClmmPoolEvent {
     pub estimated_liquidity_usd: f64,
 
     /// 创建时间戳
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub created_at: i64,
 
     /// 交易签名
     pub signature: String,
 
     /// 区块高度
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub slot: u64,
 
     /// 处理时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub processed_at: i64,
 
     /// 最后更新时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub updated_at: i64,
 }
 
@@ -138,17 +143,21 @@ pub struct NftClaimEvent {
     pub estimated_usd_value: f64,
 
     /// 领取时间戳
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub claimed_at: i64,
 
     /// 交易签名
     pub signature: String,
 
     /// 区块高度
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub slot: u64,
 
     /// 处理时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub processed_at: i64,
 
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub updated_at: i64,
 }
 
@@ -237,18 +246,22 @@ pub struct RewardDistributionEvent {
     pub estimated_usd_value: f64,
 
     /// 发放时间戳
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub distributed_at: i64,
 
     /// 交易签名
     pub signature: String,
 
     /// 区块高度
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub slot: u64,
 
     /// 处理时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub processed_at: i64,
 
     /// 最后更新时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub updated_at: i64,
 }
 
@@ -310,6 +323,7 @@ pub struct LaunchEvent {
     /// 池子开放时间戳，0表示立即开放
     pub open_time: u64,
     /// 发射时间戳
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub launched_at: i64,
     
     // 迁移状态跟踪
@@ -338,10 +352,13 @@ pub struct LaunchEvent {
     /// 事件交易签名
     pub signature: String,
     /// 区块高度
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub slot: u64,
     /// 处理时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub processed_at: i64,
     /// 最后更新时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub updated_at: i64,
 }
 
@@ -367,6 +384,7 @@ pub struct TokenCreationEvent {
     /// 代币小数位数
     pub decimals: u8,
     /// 供应量（以最小单位计）
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub supply: u64,
     /// 创建者的钱包地址
     pub creator: String,
@@ -387,12 +405,16 @@ pub struct TokenCreationEvent {
     /// 交易签名
     pub signature: String,
     /// 区块高度
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub slot: u64,
     /// 创建时间（Unix 时间戳）
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub created_at: i64,
     /// 事件处理时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub processed_at: i64,
     /// 最后更新时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub updated_at: i64,
 }
 
@@ -410,8 +432,10 @@ pub struct DepositEvent {
     /// 项目代币mint的地址，用于区分是哪个项目，并非存款代币的mint，存款代币都是存sol
     pub token_mint: String,
     /// 存款数量（原始数量，需要根据decimals换算）
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub amount: u64,
     /// 累计筹资总额
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub total_raised: u64,
 
     // ====== 代币元数据字段 ======
@@ -444,11 +468,15 @@ pub struct DepositEvent {
     /// 交易签名（唯一标识）
     pub signature: String,
     /// 区块高度
+    #[serde(serialize_with = "crate::serde_helpers::serialize_u64_as_number")]
     pub slot: u64,
     /// 存款时间戳
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub deposited_at: i64,
     /// 事件处理时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub processed_at: i64,
     /// 最后更新时间
+    #[serde(serialize_with = "crate::serde_helpers::serialize_i64_as_number")]
     pub updated_at: i64,
 }

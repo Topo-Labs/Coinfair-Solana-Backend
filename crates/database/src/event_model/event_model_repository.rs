@@ -127,6 +127,80 @@ impl EventModelRepository {
         }
     }
 
+    /// 获取最老的DepositEvent签名 (用于回填服务)
+    pub async fn get_oldest_deposit_event(&self) -> AppResult<Option<DepositEvent>> {
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<DepositEvent>("DepositEvent")
+            .find(doc! {}, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 获取最老的NftClaimEvent签名 (用于回填服务)
+    pub async fn get_oldest_nft_claim_event(&self) -> AppResult<Option<NftClaimEvent>> {
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<NftClaimEvent>("NftClaimEvent")
+            .find(doc! {}, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 获取最老的ClmmPoolEvent签名 (用于回填服务)
+    pub async fn get_oldest_clmm_pool_event(&self) -> AppResult<Option<ClmmPoolEvent>> {
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<ClmmPoolEvent>("ClmmPoolEvent")
+            .find(doc! {}, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 获取最老的ReferralRewardEvent签名 (用于回填服务)
+    /// 推荐奖励事件是 RewardDistributionEvent 中 is_referral_reward=true 的记录
+    pub async fn get_oldest_referral_reward_event(&self) -> AppResult<Option<RewardDistributionEvent>> {
+        let filter = doc! { "is_referral_reward": true };
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<RewardDistributionEvent>("RewardDistributionEvent")
+            .find(filter, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// 查询数据库中已存在的签名集合 (用于回填服务去重)
     pub async fn get_existing_signatures(&self, signatures: &[String]) -> AppResult<Vec<String>> {
         if signatures.is_empty() {

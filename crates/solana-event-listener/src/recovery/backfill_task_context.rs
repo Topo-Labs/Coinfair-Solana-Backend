@@ -252,6 +252,22 @@ impl BackfillTaskContext {
         Ok(scan_record)
     }
 
+    /// 验证签名格式是否为有效的Solana签名
+    fn is_valid_solana_signature(signature: &str) -> bool {
+        // 空字符串或过短的字符串肯定无效
+        if signature.is_empty() || signature.len() < 80 {
+            return false;
+        }
+        
+        // 过长的字符串也无效（正常Solana签名不应该超过90字符）
+        if signature.len() > 90 {
+            return false;
+        }
+        
+        // 最终依赖Solana库的签名解析来验证
+        Signature::from_str(signature).is_ok()
+    }
+
     /// 获取签名列表
     /// 返回 (签名列表, 实际的最新签名) - 实际最新签名用于更新检查点
     async fn fetch_signatures(
@@ -260,17 +276,33 @@ impl BackfillTaskContext {
         until: &str,
         program_id: &solana_sdk::pubkey::Pubkey,
     ) -> Result<(Vec<String>, Option<String>)> {
+        // 验证和处理before签名
+        let before_signature = if !before.is_empty() && before != "1111111111111111111111111111111111111111111111111111111111111111" {
+            if Self::is_valid_solana_signature(before) {
+                Some(Signature::from_str(before).map_err(|e| anyhow!("before 签名解析错误：{}", e))?)
+            } else {
+                warn!("⚠️ before签名格式无效，忽略: {}", before);
+                None // 忽略无效签名，从最新开始搜索
+            }
+        } else {
+            None // 空字符串或默认签名都设为None，让RPC从最新签名开始搜索
+        };
+
+        // 验证和处理until签名
+        let until_signature = if !until.is_empty() && until != "1111111111111111111111111111111111111111111111111111111111111111" {
+            if Self::is_valid_solana_signature(until) {
+                Some(Signature::from_str(until).map_err(|e| anyhow!("until 签名解析错误：{}", e))?)
+            } else {
+                warn!("⚠️ until签名格式无效，忽略: {}", until);
+                None // 忽略无效签名
+            }
+        } else {
+            None
+        };
+
         let config = GetConfirmedSignaturesForAddress2Config {
-            before: if !before.is_empty() && before != "1111111111111111111111111111111111111111111111111111111111111111" {
-                Some(Signature::from_str(before).map_err(|e| anyhow!("before 签名错误：{}", e))?)
-            } else {
-                None // 空字符串或默认签名都设为None，让RPC从最新签名开始搜索
-            },
-            until: if !until.is_empty() && until != "1111111111111111111111111111111111111111111111111111111111111111" {
-                Some(Signature::from_str(until).map_err(|e| anyhow!("until 签名错误：{}", e))?)
-            } else {
-                None
-            },
+            before: before_signature,
+            until: until_signature,
             limit: Some(1000), // 一次最多获取1000个
             commitment: Some(CommitmentConfig::confirmed()),
         };
@@ -623,5 +655,43 @@ mod tests {
         };
         
         assert_eq!(actual_latest_empty, None);
+    }
+    
+    #[test]
+    fn test_signature_validation() {
+        use solana_sdk::signature::Signature;
+        use std::str::FromStr;
+        
+        // 调试：直接测试Signature::from_str
+        let test_signature = "mduy8bwIXlyVFH5wzxULUr2xfa66Z9wFWgaYCGw7VABQf71M7wvHOjfstxY0M140U6VfnccuLBMZjmbmxuUvj09V";
+        println!("测试签名长度: {}", test_signature.len());
+        
+        match Signature::from_str(test_signature) {
+            Ok(_) => println!("✅ 签名解析成功"),
+            Err(e) => println!("❌ 签名解析失败: {}", e),
+        }
+        
+        // 测试有效签名验证
+        let valid_signatures = [
+            "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d1V4KAEJrGrMn3RcYfP6oK3pVt4K7yWxNvPvx9eT5NqC",
+        ];
+        
+        for signature in valid_signatures {
+            assert!(BackfillTaskContext::is_valid_solana_signature(signature), 
+                "应该识别为有效签名: {}", signature);
+        }
+        
+        // 测试无效签名
+        let invalid_signatures = [
+            "4db6b37c932e0256a1982663ddb8c7cc6e6b71c3d273a335fdcff9d4cab4f9884a2c1879a37a68820d43240a", // 太短且格式不对
+            "", // 空字符串
+            "1111111111111111111111111111111111111111111111111111111111111111", // 默认签名
+            "invalid_signature_format", // 格式不对
+        ];
+        
+        for signature in invalid_signatures {
+            assert!(!BackfillTaskContext::is_valid_solana_signature(signature), 
+                "应该识别为无效签名: {}", signature);
+        }
     }
 }

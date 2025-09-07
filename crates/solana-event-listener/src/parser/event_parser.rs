@@ -1327,7 +1327,7 @@ mod tests {
 
         let registry = EventParserRegistry::new(&config).unwrap();
 
-        // 应该有7个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution、launch、deposit
+        // 应该有8个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution(FA1R)、launch、deposit
         assert_eq!(registry.parser_count(), 7);
 
         let parsers = registry.get_registered_parsers();
@@ -1590,6 +1590,78 @@ mod tests {
         println!("✅ Discriminator计算测试通过");
         println!("   - LaunchEvent discriminator: {:?}", discriminator1);
         println!("   - TokenCreationEvent discriminator: {:?}", discriminator3);
+    }
+
+    #[test]
+    fn test_referral_reward_event_parser_registration() {
+        use std::collections::HashSet;
+        use std::str::FromStr;
+
+        // 创建测试配置
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+            backfill: None,
+        };
+
+        // 模拟回填服务的ParserKey集合
+        let fa1r_program_id = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
+        let ref_program_id = Pubkey::from_str("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL").unwrap();
+        let discriminator = calculate_event_discriminator("ReferralRewardEvent");
+
+        let fa1r_parser_key = ParserKey::for_program(fa1r_program_id, discriminator);
+        let ref_parser_key = ParserKey::for_program(ref_program_id, discriminator);
+
+        let mut backfill_keys = HashSet::new();
+        backfill_keys.insert(fa1r_parser_key);
+        backfill_keys.insert(ref_parser_key);
+
+        // 创建注册表
+        let registry =
+            EventParserRegistry::new_with_metadata_provider_and_backfill(&config, None, Some(backfill_keys)).unwrap();
+
+        println!("🔍 测试ReferralRewardEvent解析器注册:");
+        println!("   - FA1R程序ID: {}", fa1r_program_id);
+        println!("   - REF程序ID: {}", ref_program_id);
+        println!("   - discriminator: {:?}", discriminator);
+
+        // 验证两个程序ID的解析器都能找到
+        let fa1r_parser = registry.find_best_parser(discriminator, Some(fa1r_program_id));
+        let ref_parser = registry.find_best_parser(discriminator, Some(ref_program_id));
+
+        println!("   - FA1R程序解析器找到: {}", fa1r_parser.is_some());
+        println!("   - REF程序解析器找到: {}", ref_parser.is_some());
+
+        assert!(fa1r_parser.is_some(), "应该能找到FA1R程序的RewardDistributionParser");
+        assert!(ref_parser.is_some(), "应该能找到REF程序的RewardDistributionParser");
+
+        println!("✅ 两个程序ID的ReferralRewardEvent解析器都正确注册了");
     }
 
     #[test]

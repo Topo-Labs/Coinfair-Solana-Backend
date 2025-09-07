@@ -206,11 +206,19 @@ mod tests {
         // 测试默认注册的处理器
         assert!(registry.supports_event_type("LaunchEvent"));
         assert!(registry.supports_event_type("TokenCreationEvent"));
+        assert!(registry.supports_event_type("DepositEvent"));
+        assert!(registry.supports_event_type("ClaimNFTEvent"));
+        assert!(registry.supports_event_type("PoolCreatedEvent"));
+        assert!(registry.supports_event_type("ReferralRewardEvent"));
         assert!(!registry.supports_event_type("UnsupportedEvent"));
 
         let event_types = registry.get_registered_event_types();
-        assert_eq!(event_types.len(), 2);
+        assert_eq!(event_types.len(), 6);
         assert!(event_types.contains(&"LaunchEvent".to_string()));
         assert!(event_types.contains(&"TokenCreationEvent".to_string()));
+        assert!(event_types.contains(&"DepositEvent".to_string()));
+        assert!(event_types.contains(&"ClaimNFTEvent".to_string()));
+        assert!(event_types.contains(&"PoolCreatedEvent".to_string()));
+        assert!(event_types.contains(&"ReferralRewardEvent".to_string()));
     }
 }
