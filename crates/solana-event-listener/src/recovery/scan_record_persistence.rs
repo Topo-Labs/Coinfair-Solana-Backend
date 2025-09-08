@@ -355,6 +355,8 @@ mod tests {
             completed_at: None,
             error_message: None,
             program_filters: vec!["test_program".to_string()],
+            program_id: Some("test_program".to_string()),
+            event_name: Some("test_event".to_string()),
         };
         
         // 测试创建

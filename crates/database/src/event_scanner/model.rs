@@ -58,6 +58,10 @@ pub struct ScanRecords {
     pub error_message: Option<String>,
     /// 处理的程序过滤器
     pub program_filters: Vec<String>,
+    /// 扫描的程序ID（新增字段，方便查询和显示）
+    pub program_id: Option<String>,
+    /// 扫描的事件名称（新增字段，方便查询和显示）
+    pub event_name: Option<String>,
 }
 
 /// 扫描状态枚举

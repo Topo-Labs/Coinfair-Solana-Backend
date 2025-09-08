@@ -27,6 +27,13 @@ use std::{str::FromStr, sync::Arc, time::Duration};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+/// 包含签名和对应slot的结构体，用于回填过程中维护slot信息
+#[derive(Debug, Clone)]
+pub struct SignatureWithSlot {
+    pub signature: String,
+    pub slot: u64,
+}
+
 /// 回填任务上下文
 ///
 /// 包含执行单个事件类型回填所需的所有组件
@@ -92,8 +99,9 @@ impl BackfillTaskContext {
 
         // 2. 创建扫描记录
         let scan_id = Uuid::new_v4().to_string();
+        let event_name = handler.event_type_name();
         let mut scan_record = self
-            .create_scan_record(&scan_id, &until_signature, &before_signature, &event_config.program_id)
+            .create_scan_record(&scan_id, &until_signature, None, &before_signature, None, &event_config.program_id, event_name)
             .await?;
 
         info!(
@@ -102,11 +110,11 @@ impl BackfillTaskContext {
         );
 
         // 3. 获取签名列表
-        let (signatures, actual_latest_signature) = match self
+        let (signatures, actual_latest_signature, actual_latest_slot) = match self
             .fetch_signatures(&before_signature, &until_signature, &event_config.program_id)
             .await
         {
-            Ok((sigs, latest_sig)) => (sigs, latest_sig),
+            Ok((sigs, latest_sig, latest_slot)) => (sigs, latest_sig, latest_slot),
             Err(e) => {
                 scan_record.status = ScanStatus::Failed;
                 scan_record.error_message = Some(format!("获取签名失败: {}", e));
@@ -117,6 +125,17 @@ impl BackfillTaskContext {
         };
 
         info!("📝 {} 获取到 {} 个签名", event_config.event_type, signatures.len());
+
+        // 3.1 如果获取到了实际的最新签名，更新扫描记录的before_signature字段
+        if let Some(actual_before) = &actual_latest_signature {
+            scan_record.before_signature = actual_before.clone();
+            if let Some(actual_slot) = actual_latest_slot {
+                scan_record.before_slot = Some(actual_slot);
+            }
+            // 立即更新扫描记录，保存实际获取的最新签名
+            self.scan_record_persistence.update_scan_record(&scan_record).await?;
+            info!("📍 更新扫描记录的实际签名: {}", actual_before);
+        }
 
         // 4. 去重获取丢失事件的签名
         let missing_signatures = self.find_missing_signatures(&signatures, &handler).await?;
@@ -136,8 +155,10 @@ impl BackfillTaskContext {
 
             // 更新检查点 - 使用实际获取的最新签名或until_signature
             let checkpoint_signature = actual_latest_signature.as_ref().unwrap_or(&until_signature);
+            let checkpoint_slot = actual_latest_slot.or(None);
             self.update_checkpoint(
                 checkpoint_signature,
+                checkpoint_slot,
                 &event_config.program_id,
                 &handler.checkpoint_event_name(),
             )
@@ -159,8 +180,10 @@ impl BackfillTaskContext {
 
         // 8. 更新检查点 - 使用实际获取的最新签名或until_signature
         let checkpoint_signature = actual_latest_signature.as_ref().unwrap_or(&until_signature);
+        let checkpoint_slot = actual_latest_slot.or(None);
         self.update_checkpoint(
             checkpoint_signature,
+            checkpoint_slot,
             &event_config.program_id,
             &handler.checkpoint_event_name(),
         )
@@ -228,14 +251,17 @@ impl BackfillTaskContext {
         &self,
         scan_id: &str,
         until_signature: &str,
+        until_slot: Option<u64>,
         before_signature: &str,
+        before_slot: Option<u64>,
         program_id: &solana_sdk::pubkey::Pubkey,
+        event_name: &str,
     ) -> Result<ScanRecords> {
         let scan_record = ScanRecords {
             id: None,
             scan_id: scan_id.to_string(),
-            until_slot: None,
-            before_slot: None,
+            until_slot,
+            before_slot,
             until_signature: until_signature.to_string(),
             before_signature: before_signature.to_string(),
             status: ScanStatus::Running,
@@ -246,6 +272,8 @@ impl BackfillTaskContext {
             completed_at: None,
             error_message: None,
             program_filters: vec![program_id.to_string()],
+            program_id: Some(program_id.to_string()),
+            event_name: Some(event_name.to_string()),
         };
 
         self.scan_record_persistence.create_scan_record(&scan_record).await?;
@@ -269,13 +297,13 @@ impl BackfillTaskContext {
     }
 
     /// 获取签名列表
-    /// 返回 (签名列表, 实际的最新签名) - 实际最新签名用于更新检查点
+    /// 返回 (签名列表, 实际的最新签名, 实际的最新slot) - 用于更新检查点和记录
     async fn fetch_signatures(
         &self,
         before: &str,
         until: &str,
         program_id: &solana_sdk::pubkey::Pubkey,
-    ) -> Result<(Vec<String>, Option<String>)> {
+    ) -> Result<(Vec<SignatureWithSlot>, Option<String>, Option<u64>)> {
         // 验证和处理before签名
         let before_signature = if !before.is_empty() && before != "1111111111111111111111111111111111111111111111111111111111111111" {
             if Self::is_valid_solana_signature(before) {
@@ -319,29 +347,35 @@ impl BackfillTaskContext {
             .get_signatures_for_address_with_config(program_id, config)
             .map_err(|e| EventListenerError::SolanaRpc(format!("获取签名列表失败: {}", e)))?;
 
-        let signature_strings: Vec<String> = signatures.iter().map(|sig| sig.signature.clone()).collect();
+        let signatures_with_slots: Vec<SignatureWithSlot> = signatures.iter()
+            .map(|sig| SignatureWithSlot {
+                signature: sig.signature.clone(),
+                slot: sig.slot,
+            })
+            .collect();
         
-        // 如果before为None（即获取最新签名），则第一个签名就是实际的最新签名
-        let actual_latest_signature = if before.is_empty() && !signature_strings.is_empty() {
-            Some(signature_strings[0].clone())
+        // 如果before为None（即获取最新签名），则第一个签名就是实际的最新签名和slot
+        let (actual_latest_signature, actual_latest_slot) = if before.is_empty() && !signatures_with_slots.is_empty() {
+            (Some(signatures_with_slots[0].signature.clone()), Some(signatures_with_slots[0].slot))
         } else {
-            None
+            (None, None)
         };
 
-        info!("📝 获取到 {} 个签名，实际最新签名: {:?}", 
-            signature_strings.len(), 
-            actual_latest_signature
+        info!("📝 获取到 {} 个签名，实际最新签名: {:?}, 实际最新slot: {:?}", 
+            signatures_with_slots.len(), 
+            actual_latest_signature,
+            actual_latest_slot
         );
 
-        Ok((signature_strings, actual_latest_signature))
+        Ok((signatures_with_slots, actual_latest_signature, actual_latest_slot))
     }
 
     /// 查找丢失的签名
     async fn find_missing_signatures(
         &self,
-        all_signatures: &[String],
+        all_signatures: &[SignatureWithSlot],
         handler: &Arc<dyn EventBackfillHandler>,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<SignatureWithSlot>> {
         let repo = EventModelRepository::new(&self.config.database.uri, &self.config.database.database_name)
             .await
             .map_err(|e| EventListenerError::Unknown(format!("查询EventModelRepository失败: {}", e)))?;
@@ -351,17 +385,17 @@ impl BackfillTaskContext {
         // 分批检查签名是否存在，避免一次性查询过多
         const BATCH_SIZE: usize = 50;
         for chunk in all_signatures.chunks(BATCH_SIZE) {
-            for signature in chunk {
-                match handler.signature_exists(&repo, signature).await {
+            for sig_with_slot in chunk {
+                match handler.signature_exists(&repo, &sig_with_slot.signature).await {
                     Ok(exists) => {
                         if !exists {
-                            missing.push(signature.clone());
+                            missing.push(sig_with_slot.clone());
                         }
                     }
                     Err(e) => {
-                        warn!("检查签名 {} 存在性时出错: {}", signature, e);
+                        warn!("检查签名 {} 存在性时出错: {}", sig_with_slot.signature, e);
                         // 出错时假设不存在，进行回填
-                        missing.push(signature.clone());
+                        missing.push(sig_with_slot.clone());
                     }
                 }
             }
@@ -373,19 +407,19 @@ impl BackfillTaskContext {
     /// 回填丢失的事件
     async fn backfill_missing_events(
         &self,
-        signatures: &[String],
+        signatures: &[SignatureWithSlot],
         scan_record: &mut ScanRecords,
         program_id: &solana_sdk::pubkey::Pubkey,
     ) -> Result<u64> {
         let mut backfilled_count = 0u64;
         let mut backfilled_signatures = Vec::new();
 
-        for signature in signatures {
-            match self.process_missing_transaction(signature, program_id).await {
+        for sig_with_slot in signatures {
+            match self.process_missing_transaction(&sig_with_slot.signature, program_id).await {
                 Ok(processed) => {
                     if processed {
                         backfilled_count += 1;
-                        backfilled_signatures.push(signature.clone());
+                        backfilled_signatures.push(sig_with_slot.signature.clone());
 
                         // 记录回填指标
                         if let Err(e) = self
@@ -398,7 +432,7 @@ impl BackfillTaskContext {
                     }
                 }
                 Err(e) => {
-                    warn!("⚠️ 处理交易失败 {}: {}", signature, e);
+                    warn!("⚠️ 处理交易失败 {}: {}", sig_with_slot.signature, e);
                     // 继续处理其他交易，不中断整个过程
                 }
             }
@@ -530,6 +564,7 @@ impl BackfillTaskContext {
     async fn update_checkpoint(
         &self,
         last_signature: &str,
+        last_slot: Option<u64>,
         program_id: &solana_sdk::pubkey::Pubkey,
         event_name: &str,
     ) -> Result<()> {
@@ -537,7 +572,7 @@ impl BackfillTaskContext {
             id: None,
             program_id: Some(program_id.to_string()),
             event_name: Some(event_name.to_string()),
-            slot: None,
+            slot: last_slot,
             last_signature: Some(last_signature.to_string()),
             updated_at: Utc::now(),
             created_at: Utc::now(),
@@ -693,5 +728,108 @@ mod tests {
             assert!(!BackfillTaskContext::is_valid_solana_signature(signature), 
                 "应该识别为无效签名: {}", signature);
         }
+    }
+
+    #[test]
+    fn test_signature_with_slot_structure() {
+        // 测试 SignatureWithSlot 结构体创建和访问
+        let sig_with_slot = SignatureWithSlot {
+            signature: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d1V4KAEJrGrMn3RcYfP6oK3pVt4K7yWxNvPvx9eT5NqC".to_string(),
+            slot: 123456789,
+        };
+
+        assert_eq!(sig_with_slot.signature, "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d1V4KAEJrGrMn3RcYfP6oK3pVt4K7yWxNvPvx9eT5NqC");
+        assert_eq!(sig_with_slot.slot, 123456789);
+
+        // 测试 Clone 特性
+        let cloned = sig_with_slot.clone();
+        assert_eq!(cloned.signature, sig_with_slot.signature);
+        assert_eq!(cloned.slot, sig_with_slot.slot);
+    }
+
+    #[test]
+    fn test_checkpoint_slot_handling() {
+        // 测试检查点 slot 字段的处理逻辑
+        use chrono::Utc;
+        use database::event_scanner::model::EventScannerCheckpoints;
+
+        // 测试有 slot 的检查点
+        let checkpoint_with_slot = EventScannerCheckpoints {
+            id: None,
+            program_id: Some("test_program".to_string()),
+            event_name: Some("test_event".to_string()),
+            slot: Some(123456),
+            last_signature: Some("test_signature".to_string()),
+            updated_at: Utc::now(),
+            created_at: Utc::now(),
+        };
+
+        assert_eq!(checkpoint_with_slot.slot, Some(123456));
+
+        // 测试没有 slot 的检查点 (向后兼容)
+        let checkpoint_without_slot = EventScannerCheckpoints {
+            id: None,
+            program_id: Some("test_program".to_string()),
+            event_name: Some("test_event".to_string()),
+            slot: None,
+            last_signature: Some("test_signature".to_string()),
+            updated_at: Utc::now(),
+            created_at: Utc::now(),
+        };
+
+        assert_eq!(checkpoint_without_slot.slot, None);
+    }
+
+    #[test]
+    fn test_scan_record_slot_handling() {
+        // 测试扫描记录 slot 字段的处理逻辑
+        use chrono::Utc;
+        use database::event_scanner::model::{ScanRecords, ScanStatus};
+
+        // 测试有 slot 的扫描记录
+        let scan_record_with_slots = ScanRecords {
+            id: None,
+            scan_id: "test-scan-001".to_string(),
+            until_slot: Some(100000),
+            before_slot: Some(200000),
+            until_signature: "sig1".to_string(),
+            before_signature: "sig2".to_string(),
+            status: ScanStatus::Running,
+            events_found: 10,
+            events_backfilled_count: 8,
+            events_backfilled_signatures: vec!["sig1".to_string(), "sig2".to_string()],
+            started_at: Utc::now(),
+            completed_at: None,
+            error_message: None,
+            program_filters: vec!["test_program".to_string()],
+            program_id: Some("test_program".to_string()),
+            event_name: Some("test_event".to_string()),
+        };
+
+        assert_eq!(scan_record_with_slots.until_slot, Some(100000));
+        assert_eq!(scan_record_with_slots.before_slot, Some(200000));
+
+        // 测试没有 slot 的扫描记录 (向后兼容)
+        let scan_record_without_slots = ScanRecords {
+            id: None,
+            scan_id: "test-scan-002".to_string(),
+            until_slot: None,
+            before_slot: None,
+            until_signature: "sig1".to_string(),
+            before_signature: "sig2".to_string(),
+            status: ScanStatus::Running,
+            events_found: 5,
+            events_backfilled_count: 3,
+            events_backfilled_signatures: vec!["sig1".to_string()],
+            started_at: Utc::now(),
+            completed_at: None,
+            error_message: None,
+            program_filters: vec!["test_program".to_string()],
+            program_id: Some("test_program".to_string()),
+            event_name: Some("test_event".to_string()),
+        };
+
+        assert_eq!(scan_record_without_slots.until_slot, None);
+        assert_eq!(scan_record_without_slots.before_slot, None);
     }
 }

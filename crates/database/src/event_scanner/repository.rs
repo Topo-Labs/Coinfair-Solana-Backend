@@ -245,6 +245,8 @@ impl ScanRecordRepository {
             completed_at: None,
             error_message: None,
             program_filters,
+            program_id: None,  // 新增字段
+            event_name: None,  // 新增字段
         };
 
         self.create_scan_record(record).await
@@ -473,6 +475,8 @@ mod tests {
             completed_at: None,
             error_message: None,
             program_filters: vec!["program1".to_string(), "program2".to_string()],
+            program_id: Some("test_program".to_string()),  // 新增字段
+            event_name: Some("test_event".to_string()),    // 新增字段
         };
 
         // 测试创建扫描记录
