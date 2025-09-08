@@ -1,4 +1,3 @@
-// pub mod discriminator;
 pub mod deposit_event_parser;
 pub mod event_parser;
 pub mod launch_event_parser;
@@ -8,9 +7,8 @@ pub mod reward_distribution_parser;
 pub mod swap_parser;
 pub mod token_creation_parser;
 
-// pub use discriminator::DiscriminatorManager;
 pub use deposit_event_parser::DepositEventParser;
-pub use event_parser::{EventParser, EventParserRegistry, ParsedEvent};
+pub use event_parser::{EventDataSource, EventParser, EventParserRegistry, ParsedEvent};
 pub use launch_event_parser::LaunchEventParser;
 pub use nft_claim_parser::NftClaimParser;
 pub use pool_creation_parser::PoolCreationParser;

@@ -201,8 +201,6 @@ impl Services {
 
     /// 初始化TokenInfo索引
     async fn init_token_info_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
-        info!("🔧 初始化TokenInfo数据库索引...");
-
         match self.database.token_info_repository.init_indexes().await {
             Ok(_) => {
                 info!("✅ TokenInfo数据库索引初始化完成");
@@ -219,7 +217,7 @@ impl Services {
     async fn init_permission_indexes(&self) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔧 初始化权限配置数据库索引...");
 
-        match self.database.init_permission_indexes().await {
+        match self.database.init_repository_indexes().await {
             Ok(_) => {
                 info!("✅ 权限配置数据库索引初始化完成");
                 Ok(())

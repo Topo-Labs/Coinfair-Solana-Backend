@@ -129,7 +129,6 @@ impl TokenCreationParser {
     ) -> Result<ParsedEvent> {
         // 从URI获取代币元数据
         let uri_metadata = self.fetch_uri_metadata(&event.uri).await?;
-        info!("🔍 uri_metadata: {:?}", uri_metadata);
         // 构建extensions JSON，包含项目配置和URI元数据
         let mut extensions = serde_json::json!({
             "project_config": event.project_config.to_string(),
@@ -158,7 +157,6 @@ impl TokenCreationParser {
             }
         }
 
-        info!("🔍 extensions: {}", extensions);
         Ok(ParsedEvent::TokenCreation(TokenCreationEventData {
             project_config: event.project_config.to_string(),
             mint_address: event.mint_address.to_string(),
@@ -241,7 +239,7 @@ impl TokenCreationParser {
         // 尝试从URI获取元数据
         match metaplex_service.fetch_metadata_from_uri(uri).await {
             Ok(metadata) => {
-                info!("🔍 metadata: {:?}", metadata);
+                // info!("🔍 metadata: {:?}", metadata);
                 Ok(metadata)
             }
             Err(e) => {
@@ -340,6 +338,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         }
     }
 
@@ -366,7 +365,7 @@ mod tests {
 
         assert_eq!(parser.get_event_type(), "token_creation");
         // assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
-        assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
+        assert_eq!(parser.get_discriminator(), [67, 72, 26, 56, 174, 158, 245, 106]);
     }
 
     #[tokio::test]

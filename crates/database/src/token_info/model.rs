@@ -216,7 +216,7 @@ pub struct TokenPushRequest {
 }
 
 /// 代币信息推送响应
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
 pub struct TokenPushResponse {
     /// 操作结果
     pub success: bool,
@@ -932,7 +932,10 @@ mod tests {
             creator: Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()),
             ..Default::default()
         };
-        assert_eq!(query.creator, Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()));
+        assert_eq!(
+            query.creator,
+            Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string())
+        );
 
         // 测试空creator过滤
         let query = TokenListQuery {
@@ -981,7 +984,9 @@ mod tests {
         if let serde_json::Value::Object(obj) = &token.extensions {
             assert_eq!(
                 obj.get("creator"),
-                Some(&serde_json::Value::String("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()))
+                Some(&serde_json::Value::String(
+                    "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()
+                ))
             );
             assert_eq!(
                 obj.get("project_state"),
@@ -999,14 +1004,24 @@ mod tests {
             addresses: Some("So11111111111111111111111111111111111111112".to_string()),
             ..Default::default()
         };
-        assert_eq!(query.addresses, Some("So11111111111111111111111111111111111111112".to_string()));
+        assert_eq!(
+            query.addresses,
+            Some("So11111111111111111111111111111111111111112".to_string())
+        );
 
         // 测试多个地址过滤功能
         let query = TokenListQuery {
-            addresses: Some("So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
+            addresses: Some(
+                "So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
+            ),
             ..Default::default()
         };
-        assert_eq!(query.addresses, Some("So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()));
+        assert_eq!(
+            query.addresses,
+            Some(
+                "So11111111111111111111111111111111111111112,EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()
+            )
+        );
 
         // 测试空地址过滤
         let query = TokenListQuery {
@@ -1034,15 +1049,15 @@ mod tests {
     fn test_token_list_query_addresses_validation() {
         // 测试地址格式验证逻辑（这个测试主要验证我们的过滤参数设计）
         let valid_addresses = vec![
-            "So11111111111111111111111111111111111111112", // 44字符
+            "So11111111111111111111111111111111111111112",  // 44字符
             "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // 44字符
         ];
-        
+
         let query = TokenListQuery {
             addresses: Some(valid_addresses.join(",")),
             ..Default::default()
         };
-        
+
         // 验证地址字符串被正确存储
         let addresses_str = query.addresses.unwrap();
         let parsed_addresses: Vec<&str> = addresses_str.split(',').collect();
@@ -1058,7 +1073,10 @@ mod tests {
             participate: Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()),
             ..Default::default()
         };
-        assert_eq!(query.participate, Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()));
+        assert_eq!(
+            query.participate,
+            Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string())
+        );
 
         // 测试空参与者过滤
         let query = TokenListQuery {
@@ -1093,7 +1111,10 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(query.participate, Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()));
+        assert_eq!(
+            query.participate,
+            Some("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string())
+        );
         assert_eq!(query.status, Some(TokenStatus::Active));
         assert_eq!(query.min_volume, Some(1000.0));
         assert_eq!(query.verification, Some(VerificationStatus::Verified));

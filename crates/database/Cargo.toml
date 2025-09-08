@@ -18,6 +18,7 @@ validator = { workspace = true }
 utils = { path = "../utils" }
 chrono = { version = "0.4.38", features = ["serde"] }
 anyhow = { workspace = true }
+uuid = { version = "1.10", features = ["v4"] }
 futures = "0.3.31"
 futures-util = "0.3.31"
 solana-sdk = { workspace = true }

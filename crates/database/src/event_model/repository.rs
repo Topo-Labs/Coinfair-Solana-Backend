@@ -1,5 +1,5 @@
 use crate::event_model::{
-    ClmmPoolEvent, DepositEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent,
+    ClmmPoolEvent, DepositEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent, TokenCreationEvent,
 };
 use chrono::Utc;
 use futures_util::TryStreamExt;
@@ -1196,6 +1196,262 @@ impl DepositEventRepository {
     }
 }
 
+/// 代币创建事件仓库
+#[derive(Debug, Clone)]
+pub struct TokenCreationEventRepository {
+    collection: Collection<TokenCreationEvent>,
+}
+
+impl TokenCreationEventRepository {
+    pub fn new(collection: Collection<TokenCreationEvent>) -> Self {
+        Self { collection }
+    }
+
+    /// 初始化数据库索引
+    pub async fn init_indexes(&self) -> AppResult<()> {
+        // 1. 唯一索引：防止重复处理
+        let signature_index = IndexModel::builder()
+            .keys(doc! { "signature": 1 })
+            .options(IndexOptions::builder().unique(true).build())
+            .build();
+
+        // 2. 代币地址索引（最重要的查询维度）
+        let mint_address_index = IndexModel::builder().keys(doc! { "mint_address": 1 }).build();
+
+        // 3. 创建者查询优化
+        let creator_created_at_index = IndexModel::builder()
+            .keys(doc! {
+                "creator": 1,
+                "created_at": -1
+            })
+            .build();
+
+        // 4. 项目配置查询优化
+        let project_created_at_index = IndexModel::builder()
+            .keys(doc! {
+                "project_config": 1,
+                "created_at": -1
+            })
+            .build();
+
+        // 5. 时间范围查询
+        let created_at_index = IndexModel::builder().keys(doc! { "created_at": -1 }).build();
+
+        // 6. 代币符号和名称索引（搜索功能）
+        let symbol_index = IndexModel::builder().keys(doc! { "symbol": 1 }).build();
+        
+        let name_index = IndexModel::builder().keys(doc! { "name": 1 }).build();
+
+        // 7. 供应量索引（用于统计分析）
+        let supply_index = IndexModel::builder().keys(doc! { "supply": 1 }).build();
+
+        // 8. 白名单相关索引
+        let whitelist_index = IndexModel::builder().keys(doc! { "has_whitelist": 1 }).build();
+
+        let whitelist_deadline_index = IndexModel::builder().keys(doc! { "whitelist_deadline": 1 }).build();
+
+        // 9. 数据源索引
+        let source_index = IndexModel::builder().keys(doc! { "source": 1 }).build();
+
+        // 10-11. 复合查询索引
+        let symbol_created_at_index = IndexModel::builder()
+            .keys(doc! {
+                "symbol": 1,
+                "created_at": -1
+            })
+            .build();
+
+        let whitelist_created_at_index = IndexModel::builder()
+            .keys(doc! {
+                "has_whitelist": 1,
+                "created_at": -1
+            })
+            .build();
+
+        let indexes = vec![
+            signature_index,
+            mint_address_index,
+            creator_created_at_index,
+            project_created_at_index,
+            created_at_index,
+            symbol_index,
+            name_index,
+            supply_index,
+            whitelist_index,
+            whitelist_deadline_index,
+            source_index,
+            symbol_created_at_index,
+            whitelist_created_at_index,
+        ];
+
+        self.collection.create_indexes(indexes, None).await?;
+        info!("✅ TokenCreationEvent数据库索引初始化完成");
+        Ok(())
+    }
+
+    /// 插入代币创建事件
+    pub async fn insert_token_creation_event(&self, mut event: TokenCreationEvent) -> AppResult<String> {
+        event.updated_at = Utc::now().timestamp();
+
+        let result = self.collection.insert_one(event, None).await?;
+
+        Ok(result.inserted_id.as_object_id().unwrap().to_hex())
+    }
+
+    /// 根据代币地址查找事件
+    pub async fn find_by_mint_address(&self, mint_address: &str) -> AppResult<Option<TokenCreationEvent>> {
+        let filter = doc! { "mint_address": mint_address };
+        let result = self.collection.find_one(filter, None).await?;
+        Ok(result)
+    }
+
+    /// 根据创建者查找所有代币创建事件
+    pub async fn find_by_creator(&self, creator: &str) -> AppResult<Vec<TokenCreationEvent>> {
+        let filter = doc! { "creator": creator };
+        let cursor = self.collection.find(filter, None).await?;
+
+        let events: Vec<TokenCreationEvent> = cursor.try_collect().await?;
+
+        Ok(events)
+    }
+
+    /// 根据项目配置查找代币创建事件
+    pub async fn find_by_project_config(&self, project_config: &str) -> AppResult<Vec<TokenCreationEvent>> {
+        let filter = doc! { "project_config": project_config };
+        let cursor = self.collection.find(filter, None).await?;
+
+        let events: Vec<TokenCreationEvent> = cursor.try_collect().await?;
+
+        Ok(events)
+    }
+
+    /// 根据签名查询
+    pub async fn find_by_signature(&self, signature: &str) -> AppResult<Option<TokenCreationEvent>> {
+        let filter = doc! { "signature": signature };
+        self.collection.find_one(filter, None).await.map_err(Into::into)
+    }
+
+    /// 检查事件是否存在（防重复）
+    pub async fn exists_by_signature(&self, signature: &str) -> AppResult<bool> {
+        let filter = doc! { "signature": signature };
+        let count = self.collection.count_documents(filter, None).await?;
+        Ok(count > 0)
+    }
+
+    /// 分页查询（支持多种过滤条件）
+    pub async fn find_paginated(
+        &self,
+        filter: mongodb::bson::Document,
+        options: mongodb::options::FindOptions,
+    ) -> AppResult<PaginatedResult<TokenCreationEvent>> {
+        // 查询总数
+        let total = self.collection.count_documents(filter.clone(), None).await?;
+
+        // 执行分页查询
+        let cursor = self.collection.find(filter, options).await?;
+        let items: Vec<TokenCreationEvent> = cursor.try_collect().await?;
+
+        Ok(PaginatedResult { items, total })
+    }
+
+    /// 统计查询
+    pub async fn get_token_creation_stats(&self) -> AppResult<TokenCreationStats> {
+        // 统计总代币数
+        let total_tokens = self.collection.count_documents(doc! {}, None).await?;
+
+        // 统计今日创建代币数
+        let today_start = Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        let today_tokens = self
+            .collection
+            .count_documents(doc! { "created_at": { "$gte": today_start } }, None)
+            .await?;
+
+        // 统计独特创建者数
+        let unique_creators_pipeline = vec![doc! { "$group": { "_id": "$creator", "count": { "$sum": 1 } } }];
+        let mut unique_creators_cursor = self.collection.aggregate(unique_creators_pipeline, None).await?;
+        let mut unique_creators = 0u64;
+        while let Some(_doc) = unique_creators_cursor.try_next().await? {
+            unique_creators += 1;
+        }
+
+        // 统计有白名单的代币数
+        let whitelist_tokens = self
+            .collection
+            .count_documents(doc! { "has_whitelist": true }, None)
+            .await?;
+
+        // 统计符号分布（前10）
+        let symbol_distribution_pipeline = vec![
+            doc! {
+                "$group": {
+                    "_id": "$symbol",
+                    "count": { "$sum": 1 },
+                    "total_supply": { "$sum": "$supply" }
+                }
+            },
+            doc! { "$sort": { "count": -1 } },
+            doc! { "$limit": 10 },
+        ];
+        let mut symbol_cursor = self.collection.aggregate(symbol_distribution_pipeline, None).await?;
+        let mut symbol_distribution = Vec::new();
+        while let Some(doc) = symbol_cursor.try_next().await? {
+            if let (Some(symbol), Some(count), Some(total_supply)) = (
+                doc.get_str("_id").ok(),
+                doc.get_i64("count").ok(),
+                doc.get_i64("total_supply").ok(),
+            ) {
+                symbol_distribution.push(SymbolDistribution {
+                    symbol: symbol.to_string(),
+                    count: count as u64,
+                    total_supply: total_supply as u64,
+                });
+            }
+        }
+
+        // 统计创建者分布（前10）
+        let creator_distribution_pipeline = vec![
+            doc! {
+                "$group": {
+                    "_id": "$creator",
+                    "count": { "$sum": 1 },
+                    "total_supply": { "$sum": "$supply" }
+                }
+            },
+            doc! { "$sort": { "count": -1 } },
+            doc! { "$limit": 10 },
+        ];
+        let mut creator_cursor = self.collection.aggregate(creator_distribution_pipeline, None).await?;
+        let mut creator_distribution = Vec::new();
+        while let Some(doc) = creator_cursor.try_next().await? {
+            if let (Some(creator), Some(count), Some(total_supply)) = (
+                doc.get_str("_id").ok(),
+                doc.get_i64("count").ok(),
+                doc.get_i64("total_supply").ok(),
+            ) {
+                creator_distribution.push(CreatorDistribution {
+                    creator: creator.to_string(),
+                    count: count as u64,
+                    total_supply: total_supply as u64,
+                });
+            }
+        }
+
+        Ok(TokenCreationStats {
+            total_tokens,
+            today_tokens,
+            unique_creators,
+            whitelist_tokens,
+            symbol_distribution,
+            creator_distribution,
+        })
+    }
+}
+
 /// 分页结果
 #[derive(Debug, Clone)]
 pub struct PaginatedResult<T> {
@@ -1232,6 +1488,33 @@ pub struct TokenDistribution {
     pub token_name: Option<String>,
     pub count: u64,
     pub total_volume_usd: f64,
+}
+
+/// 代币创建统计
+#[derive(Debug, Clone)]
+pub struct TokenCreationStats {
+    pub total_tokens: u64,
+    pub today_tokens: u64,
+    pub unique_creators: u64,
+    pub whitelist_tokens: u64,
+    pub symbol_distribution: Vec<SymbolDistribution>,
+    pub creator_distribution: Vec<CreatorDistribution>,
+}
+
+/// 符号分布
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SymbolDistribution {
+    pub symbol: String,
+    pub count: u64,
+    pub total_supply: u64,
+}
+
+/// 创建者分布
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CreatorDistribution {
+    pub creator: String,
+    pub count: u64,
+    pub total_supply: u64,
 }
 
 #[cfg(test)]

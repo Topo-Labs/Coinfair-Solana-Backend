@@ -845,6 +845,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         }
     }
 

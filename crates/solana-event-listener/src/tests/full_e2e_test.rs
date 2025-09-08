@@ -20,7 +20,6 @@ use crate::{
     metrics::MetricsCollector,
     parser::{EventParserRegistry, ParsedEvent},
     persistence::{BatchWriter, EventStorage},
-    recovery::CheckpointManager,
     subscriber::{SubscriptionManager, WebSocketManager},
 };
 use solana_sdk::pubkey::Pubkey;
@@ -67,6 +66,7 @@ fn create_complete_e2e_config() -> EventListenerConfig {
             enable_performance_monitoring: true,
             health_check_interval_secs: 5, // 减少健康检查间隔
         },
+        backfill: None,
     }
 }
 
@@ -137,7 +137,6 @@ async fn test_complete_e2e_flow() {
 
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-    let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
     info!("✅ 解析器注册表: 已注册{}个解析器", parser_registry.parser_count());
@@ -153,7 +152,6 @@ async fn test_complete_e2e_flow() {
         &config,
         parser_registry.clone(),
         batch_writer.clone(),
-        checkpoint_manager,
         metrics.clone(),
     )
     .await

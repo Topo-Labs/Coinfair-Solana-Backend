@@ -15,8 +15,10 @@ use utils::{AppConfig, AppResult};
 pub mod clmm_config;
 pub mod clmm_pool;
 pub mod event_model;
+pub mod event_scanner;
 pub mod permission_config;
 pub mod position;
+pub mod serde_helpers;
 pub mod refer;
 pub mod reward;
 pub mod token_info;
@@ -40,6 +42,10 @@ pub struct Database {
     pub reward_distribution_events: Collection<event_model::RewardDistributionEvent>,
     pub launch_events: Collection<event_model::LaunchEvent>,
     pub deposit_events: Collection<event_model::DepositEvent>,
+    pub token_creation_events: Collection<event_model::TokenCreationEvent>,
+    // 事件扫描器集合
+    pub event_scanner_checkpoints: Collection<event_scanner::model::EventScannerCheckpoints>,
+    pub scan_records: Collection<event_scanner::model::ScanRecords>,
     // 仓库层
     pub clmm_pool_repository: clmm_pool::repository::ClmmPoolRepository,
     pub global_permission_repository: permission_config::repository::GlobalPermissionConfigRepository,
@@ -52,21 +58,15 @@ pub struct Database {
     pub reward_distribution_event_repository: event_model::repository::RewardDistributionEventRepository,
     pub launch_event_repository: event_model::repository::LaunchEventRepository,
     pub deposit_event_repository: event_model::repository::DepositEventRepository,
+    pub token_creation_event_repository: event_model::repository::TokenCreationEventRepository,
+    // 事件扫描器仓库
+    pub event_scanner_checkpoint_repository: event_scanner::repository::EventScannerCheckpointRepository,
+    pub scan_record_repository: event_scanner::repository::ScanRecordRepository,
 }
 
 impl Database {
     pub async fn new(config: Arc<AppConfig>) -> AppResult<Self> {
         let client = Client::with_uri_str(&config.mongo_uri).await?;
-
-        // let db = match &config.cargo_env {
-        //     CargoEnv::Development => {
-        //         client.database(&config.mongo_db_test)
-        //     }
-        //     CargoEnv::Production => {
-        //         client.database(&config.mongo_db)
-        //     }
-        // };
-
         let db: mongodb::Database = client.database(&config.mongo_db);
 
         let refers = db.collection("Refer");
@@ -85,6 +85,10 @@ impl Database {
         let reward_distribution_events = db.collection("RewardDistributionEvent");
         let launch_events = db.collection("LaunchEvent");
         let deposit_events = db.collection("DepositEvent");
+        let token_creation_events = db.collection("TokenCreationEvent");
+        // 事件扫描器集合
+        let event_scanner_checkpoints = db.collection("EventScannerCheckpoints");
+        let scan_records = db.collection("ScanRecords");
 
         // 初始化仓库层
         let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
@@ -102,10 +106,14 @@ impl Database {
             event_model::repository::NftClaimEventRepository::new(nft_claim_events.clone());
         let reward_distribution_event_repository =
             event_model::repository::RewardDistributionEventRepository::new(reward_distribution_events.clone());
-        let launch_event_repository =
-            event_model::repository::LaunchEventRepository::new(launch_events.clone());
-        let deposit_event_repository =
-            event_model::repository::DepositEventRepository::new(deposit_events.clone());
+        let launch_event_repository = event_model::repository::LaunchEventRepository::new(launch_events.clone());
+        let deposit_event_repository = event_model::repository::DepositEventRepository::new(deposit_events.clone());
+        let token_creation_event_repository =
+            event_model::repository::TokenCreationEventRepository::new(token_creation_events.clone());
+        // 事件扫描器仓库
+        let event_scanner_checkpoint_repository =
+            event_scanner::repository::EventScannerCheckpointRepository::new(event_scanner_checkpoints.clone());
+        let scan_record_repository = event_scanner::repository::ScanRecordRepository::new(scan_records.clone());
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -125,6 +133,9 @@ impl Database {
             reward_distribution_events,
             launch_events,
             deposit_events,
+            token_creation_events,
+            event_scanner_checkpoints,
+            scan_records,
             clmm_pool_repository,
             global_permission_repository,
             api_permission_repository,
@@ -135,11 +146,14 @@ impl Database {
             reward_distribution_event_repository,
             launch_event_repository,
             deposit_event_repository,
+            token_creation_event_repository,
+            event_scanner_checkpoint_repository,
+            scan_record_repository,
         })
     }
 
     /// 初始化权限配置索引
-    pub async fn init_permission_indexes(&self) -> AppResult<()> {
+    pub async fn init_repository_indexes(&self) -> AppResult<()> {
         // 初始化权限配置索引
         let _result = self.api_permission_repository.init_indexes().await;
 
@@ -155,6 +169,11 @@ impl Database {
         let _result = self.reward_distribution_event_repository.init_indexes().await;
         let _result = self.launch_event_repository.init_indexes().await;
         let _result = self.deposit_event_repository.init_indexes().await;
+        let _result = self.token_creation_event_repository.init_indexes().await;
+
+        // 初始化事件扫描器索引
+        let _result = self.event_scanner_checkpoint_repository.init_indexes().await;
+        let _result = self.scan_record_repository.init_indexes().await;
 
         info!("✅ 权限配置和事件索引初始化完成");
         Ok(())
@@ -396,3 +415,6 @@ pub use position::*;
 
 // Export all from token_info with aliases to avoid conflicts
 pub use token_info::{model as token_info_model, repository as token_info_repository};
+
+// Export all from event_scanner with aliases to avoid conflicts
+pub use event_scanner::{model as event_scanner_model, repository as event_scanner_repository};

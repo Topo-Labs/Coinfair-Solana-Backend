@@ -2136,6 +2136,7 @@ dependencies = [
  "tracing",
  "utils",
  "utoipa",
+ "uuid 1.18.0",
  "validator",
 ]
 
@@ -7649,9 +7650,11 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "solana-client",
  "solana-program-pack",
  "solana-sdk",
+ "solana-transaction-status",
  "spl-token 7.0.0",
  "spl-token-2022 7.0.0",
  "sysinfo",

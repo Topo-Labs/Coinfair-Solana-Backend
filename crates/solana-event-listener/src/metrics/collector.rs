@@ -276,6 +276,37 @@ impl MetricsCollector {
         Ok(())
     }
 
+    /// 记录事件回填成功
+    pub async fn record_event_backfilled(&self) -> Result<()> {
+        // 增加回填事件计数
+        let metric = MetricData::new(
+            "events_backfilled_total".to_string(),
+            MetricType::Counter,
+            1.0,
+            "Total number of backfilled events".to_string(),
+        );
+
+        self.add_custom_metric(metric).await?;
+        debug!("🔄 记录事件回填成功");
+        Ok(())
+    }
+
+    /// 记录特定程序的事件回填成功
+    pub async fn record_event_backfilled_for_program(&self, program_id: &str) -> Result<()> {
+        // 创建带有程序ID标签的回填指标
+        let metric = MetricData::new(
+            "events_backfilled_by_program".to_string(),
+            MetricType::Counter,
+            1.0,
+            "Events backfilled by specific program".to_string(),
+        )
+        .with_label("program_id".to_string(), program_id.to_string());
+
+        self.add_custom_metric(metric).await?;
+        debug!("🔄 记录程序{}事件回填成功", program_id);
+        Ok(())
+    }
+
     /// 记录事件处理耗时
     pub async fn record_processing_duration(&self, duration: Duration) -> Result<()> {
         let mut durations = self.processing_durations.write().await;
@@ -869,6 +900,7 @@ mod tests {
                 enable_performance_monitoring: true,
                 health_check_interval_secs: 30,
             },
+            backfill: None,
         }
     }
 

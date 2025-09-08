@@ -12,7 +12,6 @@ use crate::{
     metrics::MetricsCollector,
     parser::EventParserRegistry,
     persistence::{BatchWriter, EventStorage},
-    recovery::CheckpointManager,
     subscriber::SubscriptionManager,
 };
 use anchor_lang::prelude::Pubkey;
@@ -57,6 +56,7 @@ fn create_e2e_test_config() -> EventListenerConfig {
             enable_performance_monitoring: true,
             health_check_interval_secs: 10,
         },
+        backfill: None,
     }
 }
 
@@ -67,10 +67,9 @@ async fn test_e2e_websocket_connection() {
     let config = create_e2e_test_config();
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-    let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, checkpoint_manager, metrics).await;
+    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, metrics).await;
 
     match manager {
         Ok(subscription_manager) => {
@@ -104,14 +103,12 @@ async fn test_e2e_real_event_listening() {
     let config = create_e2e_test_config();
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
-    let checkpoint_manager = Arc::new(CheckpointManager::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
     let manager = SubscriptionManager::new(
         &config,
         parser_registry,
         batch_writer,
-        checkpoint_manager,
         metrics.clone(),
     )
     .await;
