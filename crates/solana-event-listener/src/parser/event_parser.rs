@@ -565,12 +565,19 @@ impl EventParserRegistry {
         registry.register_program_parser(deposit_parser)?;
 
         // LaunchEvent解析器 - 支持Meme币发射平台 发射动作现在是在合约里处理，暂时不订阅发射事件
-        // 默认使用7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1程序ID，可以通过环境变量或配置调整
-        let launch_parser = Box::new(LaunchEventParser::new(
+        // 注册AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH程序的Launch解析器
+        let launch_parser1 = Box::new(LaunchEventParser::new(
             config,
-            pubkey!("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1"),
+            pubkey!("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH"),
         )?);
-        registry.register_program_parser(launch_parser)?;
+        registry.register_program_parser(launch_parser1)?;
+
+        // 注册FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX程序的Launch解析器
+        // let launch_parser2 = Box::new(LaunchEventParser::new(
+        //     config,
+        //     pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+        // )?);
+        // registry.register_program_parser(launch_parser2)?;
 
         Ok(registry)
     }
@@ -666,8 +673,18 @@ impl EventParserRegistry {
                         data_part
                     );
 
+                    // 为这个特定的Program data确定程序ID
+                    let specific_program_id = self.extract_program_id_for_data_index(logs, index, subscribed_programs);
+
+                    tracing::info!(
+                        "🎯 第{}个Program data (行{}) 确定的程序ID: {:?}",
+                        program_data_count,
+                        index + 1,
+                        specific_program_id
+                    );
+
                     match self
-                        .try_parse_program_data_with_hint(data_part, signature, slot, program_id_hint, data_source)
+                        .try_parse_program_data_with_hint(data_part, signature, slot, specific_program_id, data_source)
                         .await?
                     {
                         Some(event) => {
@@ -721,89 +738,88 @@ impl EventParserRegistry {
 
     /// 从日志中提取程序ID（解析用）
     /// 新策略：查找包含Program data的程序调用块，并验证是否在允许的程序列表中
+    /// 注意：这个方法只返回第一个找到的程序ID，用于兼容性
     pub fn extract_program_id_from_logs(&self, logs: &[String], allowed_programs: &[Pubkey]) -> Option<Pubkey> {
-        // 首先找到所有Program data的位置
-        let mut program_data_indices = Vec::new();
-        for (i, log) in logs.iter().enumerate() {
-            if log.starts_with("Program data: ") {
-                program_data_indices.push(i);
-            }
-        }
+        // 找到第一个Program data
+        let first_data_index = logs.iter().position(|log| log.starts_with("Program data: "))?;
 
-        if program_data_indices.is_empty() {
-            tracing::debug!("🔍 未找到Program data日志");
-            return None;
-        }
+        // 为第一个Program data确定程序ID
+        self.extract_program_id_for_data_index(logs, first_data_index, allowed_programs)
+    }
 
-        // 为每个Program data找到所属的程序调用块
-        for &data_index in &program_data_indices {
-            tracing::debug!("🔍 分析第{}行的Program data", data_index + 1);
+    /// 为特定的Program data索引确定其所属的程序ID
+    pub fn extract_program_id_for_data_index(
+        &self,
+        logs: &[String],
+        data_index: usize,
+        allowed_programs: &[Pubkey],
+    ) -> Option<Pubkey> {
+        tracing::debug!("🔍 分析第{}行的Program data", data_index + 1);
 
-            // 查找包含这个Program data的程序调用块
-            // 策略：从Program data往前查找最近的program invoke，然后往后查找对应的success/consumed
-            let mut current_program_id: Option<Pubkey> = None;
-            let mut invoke_stack: Vec<(usize, Pubkey)> = Vec::new();
+        // 策略：从Program data往前查找，找到距离最近的allowed program的invoke
+        let mut best_match: Option<(usize, Pubkey)> = None;
 
-            // 从头开始分析日志，构建调用栈
-            for (i, log) in logs.iter().enumerate().take(data_index + 5) {
-                // 包括data之后的几行
-                if log.starts_with("Program ") && log.contains(" invoke [") {
-                    // 新的程序调用
-                    let parts: Vec<&str> = log.split_whitespace().collect();
-                    if parts.len() >= 3 {
-                        if let Ok(program_id) = parts[1].parse::<Pubkey>() {
-                            invoke_stack.push((i, program_id));
-                            tracing::debug!("🔍 第{}行程序调用: {}", i + 1, program_id);
-                        }
-                    }
-                } else if log.starts_with("Program ") && (log.contains(" success") || log.contains(" consumed ")) {
-                    // 程序调用结束
-                    let parts: Vec<&str> = log.split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        if let Ok(program_id) = parts[1].parse::<Pubkey>() {
-                            // 检查这是否是我们正在寻找的Program data所属的程序
-                            if i > data_index {
-                                // 这个success/consumed在Program data之后，可能就是包含data的程序
-                                tracing::debug!("🔍 第{}行程序结束: {} (在Program data之后)", i + 1, program_id);
-
-                                // 检查是否为允许的程序
-                                if self.is_allowed_program(&program_id, allowed_programs) {
-                                    tracing::info!("🎯 找到允许的程序 (基于success日志): {}", program_id);
-                                    return Some(program_id);
-                                } else {
-                                    tracing::debug!("🚫 程序不在允许列表中: {}", program_id);
-                                }
-                            }
-                        }
-                    }
-                } else if i == data_index {
-                    // 这就是Program data行，查看当前活跃的程序调用栈
-                    if let Some(&(_, program_id)) = invoke_stack.last() {
-                        tracing::debug!("🔍 Program data行{}，当前活跃程序: {}", i + 1, program_id);
-
+        // 从Program data位置往前搜索，寻找距离最近的允许程序调用
+        for i in (0..data_index).rev() {
+            let log = &logs[i];
+            if log.starts_with("Program ") && log.contains(" invoke [") {
+                let parts: Vec<&str> = log.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    if let Ok(program_id) = parts[1].parse::<Pubkey>() {
                         // 检查是否为允许的程序
                         if self.is_allowed_program(&program_id, allowed_programs) {
-                            current_program_id = Some(program_id);
-                            tracing::debug!("✅ 找到允许的程序 (基于调用栈): {}", program_id);
-                        } else {
-                            tracing::debug!("🚫 程序不在允许列表中: {}", program_id);
+                            tracing::debug!("🔍 第{}行找到允许的程序调用: {}", i + 1, program_id);
+
+                            // 验证这个程序调用确实包含我们的Program data
+                            // 查找对应的success/consumed在Program data之后
+                            let has_success_after = logs
+                                .iter()
+                                .enumerate()
+                                .skip(data_index + 1) // 从Program data之后开始查找
+                                .any(|(j, log)| {
+                                    if log.starts_with("Program ")
+                                        && (log.contains(" success") || log.contains(" consumed "))
+                                    {
+                                        let parts: Vec<&str> = log.split_whitespace().collect();
+                                        if parts.len() >= 2 {
+                                            if let Ok(success_program_id) = parts[1].parse::<Pubkey>() {
+                                                if success_program_id == program_id {
+                                                    tracing::debug!(
+                                                        "✅ 第{}行找到对应的success: {}",
+                                                        j + 1,
+                                                        program_id
+                                                    );
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    false
+                                });
+
+                            if has_success_after {
+                                best_match = Some((i, program_id));
+                                break; // 找到最近的就退出
+                            } else {
+                                tracing::debug!("⚠️ 程序{}在Program data之后没有找到success", program_id);
+                            }
                         }
                     }
                 }
             }
-
-            // 如果找到了当前活跃的订阅程序，返回它
-            if let Some(program_id) = current_program_id {
-                tracing::info!(
-                    "🎯 基于调用栈确定第{}行Program data的程序: {}",
-                    data_index + 1,
-                    program_id
-                );
-                return Some(program_id);
-            }
         }
 
-        tracing::warn!("⚠️ 未找到Program data对应的允许程序");
+        if let Some((invoke_line, program_id)) = best_match {
+            tracing::info!(
+                "🎯 第{}行Program data属于第{}行调用的程序: {}",
+                data_index + 1,
+                invoke_line + 1,
+                program_id
+            );
+            return Some(program_id);
+        }
+
+        tracing::warn!("⚠️ 第{}行Program data未找到对应的允许程序", data_index + 1);
         None
     }
 
@@ -1327,8 +1343,8 @@ mod tests {
 
         let registry = EventParserRegistry::new(&config).unwrap();
 
-        // 应该有8个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution(FA1R)、launch、deposit
-        assert_eq!(registry.parser_count(), 7);
+        // 应该有8个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution(FA1R)、launch(AZxH)、launch(FA1R)、deposit
+        assert_eq!(registry.parser_count(), 8);
 
         let parsers = registry.get_registered_parsers();
         let parser_types: Vec<String> = parsers.iter().map(|(name, _)| name.clone()).collect();
@@ -1342,7 +1358,7 @@ mod tests {
         assert!(parser_types.contains(&"launch".to_string()));
         assert!(parser_types.contains(&"deposit".to_string()));
 
-        // 注意：现在有7个解析器
+        // 注意：现在有8个解析器（launch事件支持两个程序）
         println!("📊 解析器统计: 总数={}, 类型={:?}", parsers.len(), parser_types);
     }
 
@@ -1687,5 +1703,82 @@ mod tests {
         assert_ne!(parser_key1, universal_key1);
 
         println!("✅ ParserKey创建和比较测试通过");
+    }
+
+    #[test]
+    fn test_extract_program_id_multiple_data() {
+        use solana_sdk::pubkey::Pubkey;
+        use std::str::FromStr;
+
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![Pubkey::new_unique()],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+            backfill: None,
+        };
+
+        let registry = EventParserRegistry::new(&config).unwrap();
+
+        // 模拟实际的多Program data日志
+        let azxh_program = Pubkey::from_str("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH").unwrap();
+        let fa1r_program = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
+        let allowed_programs = vec![azxh_program, fa1r_program];
+
+        let logs = vec![
+            "Program ComputeBudget111111111111111111111111111111 invoke [1]".to_string(),
+            "Program ComputeBudget111111111111111111111111111111 success".to_string(),
+            "Program AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH invoke [1]".to_string(),
+            "Program log: Instruction: LaunchMvp".to_string(),
+            "Program data: G8EvgnNc716p/Idl/sjYHDtqSfhA7htGDXRo4ucE3uxcKePhq3AUZgabiFf+q4GE+2h/Y0YYwDXaxDncGus7VZig8AAAAAABAINxunm81YV3JKamvYB0swDg/SWx1a2ylKyPBUIu968AAAAAOoww4o55NT4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGSns7bgDQDyBSoBAAAAmpmZmZmZqT8A".to_string(),
+            "Program FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX invoke [2]".to_string(),
+            "Program log: Instruction: CreatePool".to_string(),
+            "Program data: GV5LL3BjNT8Gm4hX/quBhPtof2NGGMA12sQ53BrrO1WYoPAAAAAAAan8h2X+yNgcO2pJ+EDuG0YNdGji5wTe7Fwp4+GrcBRmPACREgOzkDtzcjYnC9HFUqZ8O6kPAFWAAvmPgDaWf3BCCp6kzAxUogQAAAAAAAAAAABUFf3/cjZ0upqxPm82geqwQJAtvneasdTpNXsSxDqy9e9IqF+9vwPdD97M+I5Iysa0yg8/w+HPaMbpMWP2gT9seAu+uQ==".to_string(),
+            "Program FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX consumed 83388 of 722486 compute units".to_string(),
+            "Program FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX success".to_string(),
+            "Program AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH consumed 169102 of 799700 compute units".to_string(),
+            "Program AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH success".to_string(),
+        ];
+
+        // 测试第一个Program data (index 4) - 应该属于AZxH程序
+        let first_program_id = registry.extract_program_id_for_data_index(&logs, 4, &allowed_programs);
+        assert_eq!(first_program_id, Some(azxh_program));
+        println!("✅ 第一个Program data正确识别为AZxH程序");
+
+        // 测试第二个Program data (index 7) - 应该属于FA1R程序
+        let second_program_id = registry.extract_program_id_for_data_index(&logs, 7, &allowed_programs);
+        assert_eq!(second_program_id, Some(fa1r_program));
+        println!("✅ 第二个Program data正确识别为FA1R程序");
+
+        // 测试原始方法只返回第一个
+        let first_found = registry.extract_program_id_from_logs(&logs, &allowed_programs);
+        assert_eq!(first_found, Some(azxh_program));
+        println!("✅ 原始方法正确返回第一个Program data的程序ID");
+
+        println!("✅ 多Program data程序ID提取测试通过");
     }
 }

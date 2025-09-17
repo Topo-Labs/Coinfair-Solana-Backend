@@ -68,7 +68,7 @@ impl MigrationClient {
             with_metadata: event.with_metadata,
         };
 
-        let url = format!("{}/api/v1/solana/launch-migration/send", self.base_url);
+        let url = format!("{}/api/v1/solana/pool/launch-migration/send", self.base_url);
         
         info!(
             "🚀 发送Launch迁移请求: {} -> {}, URL: {}",
@@ -157,7 +157,7 @@ mod tests {
         });
         
         Mock::given(method("POST"))
-            .and(path("/api/v1/solana/launch-migration/send"))
+            .and(path("/api/v1/solana/pool/launch-migration/send"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response_body))
             .mount(&mock_server)
             .await;
@@ -179,7 +179,7 @@ mod tests {
         
         // 设置错误响应
         Mock::given(method("POST"))
-            .and(path("/api/v1/solana/launch-migration/send"))
+            .and(path("/api/v1/solana/pool/launch-migration/send"))
             .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
             .mount(&mock_server)
             .await;
@@ -200,7 +200,7 @@ mod tests {
         
         // 设置无效的JSON响应
         Mock::given(method("POST"))
-            .and(path("/api/v1/solana/launch-migration/send"))
+            .and(path("/api/v1/solana/pool/launch-migration/send"))
             .respond_with(ResponseTemplate::new(200).set_body_string("invalid json"))
             .mount(&mock_server)
             .await;
