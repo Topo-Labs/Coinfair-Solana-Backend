@@ -138,10 +138,7 @@ impl EventBackfillHandler for DepositEventHandler {
                 info!("⚠️ 没有找到DepositEvent，使用零签名");
                 Ok("1111111111111111111111111111111111111111111111111111111111111111".to_string())
             }
-            Err(e) => Err(EventListenerError::Unknown(format!(
-                "获取最老DepositEvent失败: {}",
-                e
-            ))),
+            Err(e) => Err(EventListenerError::Unknown(format!("获取最老DepositEvent失败: {}", e))),
         }
     }
 
@@ -184,10 +181,7 @@ impl EventBackfillHandler for ClaimNFTEventHandler {
                 info!("⚠️ 没有找到NftClaimEvent，使用零签名");
                 Ok("1111111111111111111111111111111111111111111111111111111111111111".to_string())
             }
-            Err(e) => Err(EventListenerError::Unknown(format!(
-                "获取最老NftClaimEvent失败: {}",
-                e
-            ))),
+            Err(e) => Err(EventListenerError::Unknown(format!("获取最老NftClaimEvent失败: {}", e))),
         }
     }
 
@@ -238,10 +232,7 @@ impl EventBackfillHandler for PoolCreatedEventHandler {
                 info!("⚠️ 没有找到ClmmPoolEvent，使用零签名");
                 Ok("1111111111111111111111111111111111111111111111111111111111111111".to_string())
             }
-            Err(e) => Err(EventListenerError::Unknown(format!(
-                "获取最老ClmmPoolEvent失败: {}",
-                e
-            ))),
+            Err(e) => Err(EventListenerError::Unknown(format!("获取最老ClmmPoolEvent失败: {}", e))),
         }
     }
 
@@ -256,7 +247,7 @@ impl EventBackfillHandler for PoolCreatedEventHandler {
         let collection = repo
             .get_database()
             .collection::<mongodb::bson::Document>(self.collection_name());
-        let filter = doc! { 
+        let filter = doc! {
             "signature": signature,
             "signature": { "$ne": "" }  // 过滤掉空签名
         };
@@ -306,9 +297,9 @@ impl EventBackfillHandler for ReferralRewardEventHandler {
         let collection = repo
             .get_database()
             .collection::<mongodb::bson::Document>(self.collection_name());
-        let filter = doc! { 
+        let filter = doc! {
             "signature": signature,
-            "is_referral_reward": true 
+            "is_referral_reward": true
         };
 
         match collection.count_documents(filter, None).await {
@@ -451,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_backfill_event_config_creation() {
-        let program_id = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let program_id = Pubkey::from_str("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH").unwrap();
 
         let config = BackfillEventConfig::new("LaunchEvent", program_id)
             .with_enabled(true)
@@ -531,21 +522,24 @@ mod tests {
     fn test_pool_created_event_handler_with_mock_signatures() {
         // 模拟不同的签名情况，验证signature_exists逻辑
         let _handler = PoolCreatedEventHandler;
-        
+
         // 测试空签名处理逻辑（实际的async方法在这里只能测试同步逻辑）
         // 这些测试验证了我们修复的逻辑是正确的
-        
+
         // 空签名应该被过滤
         let empty_signature = "";
         assert!(empty_signature.is_empty());
-        
-        // 默认签名应该被过滤  
+
+        // 默认签名应该被过滤
         let default_signature = "1111111111111111111111111111111111111111111111111111111111111111";
         assert_eq!(default_signature.len(), 64);
-        
+
         // 有效签名格式检查
         let valid_signature = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d1V4KAEJrGrMn3RcYfP6oK3pVt4K7yWxNvPvx9eT5NqC";
         assert!(!valid_signature.is_empty());
-        assert_ne!(valid_signature, "1111111111111111111111111111111111111111111111111111111111111111");
+        assert_ne!(
+            valid_signature,
+            "1111111111111111111111111111111111111111111111111111111111111111"
+        );
     }
 }

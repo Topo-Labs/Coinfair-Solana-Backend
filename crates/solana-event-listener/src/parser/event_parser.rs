@@ -546,14 +546,14 @@ impl EventParserRegistry {
         // 代币创建事件解析器
         let token_creation_parser = Box::new(TokenCreationParser::new(
             config,
-            pubkey!("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1"),
+            pubkey!("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH"),
         )?);
         registry.register_program_parser(token_creation_parser)?;
 
         // 存款事件解析器
         let mut deposit_parser = Box::new(DepositEventParser::new(
             config,
-            pubkey!("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1"),
+            pubkey!("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH"),
         )?);
 
         // 如果提供了元数据提供者，则注入到存款解析器中
@@ -571,13 +571,6 @@ impl EventParserRegistry {
             pubkey!("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH"),
         )?);
         registry.register_program_parser(launch_parser1)?;
-
-        // 注册FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX程序的Launch解析器
-        // let launch_parser2 = Box::new(LaunchEventParser::new(
-        //     config,
-        //     pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
-        // )?);
-        // registry.register_program_parser(launch_parser2)?;
 
         Ok(registry)
     }
@@ -1403,7 +1396,7 @@ mod tests {
 
         // 设置回填ParserKey集合（不同于WebSocket订阅的程序列表）
         let websocket_program = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
-        let backfill_program = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let backfill_program = Pubkey::from_str("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH").unwrap();
 
         // 创建测试用的ParserKey集合
         let mut backfill_keys = std::collections::HashSet::new();
@@ -1568,7 +1561,7 @@ mod tests {
         let mut registry = EventParserRegistry::new(&config).unwrap();
 
         // 设置测试用的回填ParserKey集合
-        let test_program_id = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let test_program_id = Pubkey::from_str("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH").unwrap();
         let test_event_type = "TestEvent";
         let test_discriminator = calculate_event_discriminator(test_event_type);
         let test_parser_key = ParserKey::for_program(test_program_id, test_discriminator);
@@ -1685,7 +1678,7 @@ mod tests {
         use solana_sdk::pubkey::Pubkey;
         use std::str::FromStr;
 
-        let program_id = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let program_id = Pubkey::from_str("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH").unwrap();
         let discriminator = calculate_event_discriminator("TestEvent");
 
         // 测试程序特定ParserKey创建
