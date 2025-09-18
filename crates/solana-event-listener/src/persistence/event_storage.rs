@@ -108,7 +108,7 @@ impl EventStorage {
 
         // 创建迁移客户端
         let migration_base_url =
-            std::env::var("MIGRATION_BASE_URL").unwrap_or_else(|_| "http://localhost:8765".to_string());
+            std::env::var("MIGRATION_BASE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
         let migration_client = Arc::new(MigrationClient::new(migration_base_url));
 
         info!("✅ 事件存储初始化完成，数据库: {}", config.database.database_name);
@@ -289,6 +289,12 @@ impl EventStorage {
                     debug!("ℹ️ 池子创建事件已存在，跳过: {}", event.pool_address);
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!("ℹ️ 池子创建事件已存在（重复键），跳过: {}", event.pool_address);
+                        continue;
+                    }
+
                     error!("❌ 池子创建事件写入失败: {} - {}", event.pool_address, e);
 
                     if self.is_fatal_error(&e) {
@@ -317,6 +323,15 @@ impl EventStorage {
                     debug!("ℹ️ NFT领取事件已存在，跳过: {} by {}", event.nft_mint, event.claimer);
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ NFT领取事件已存在（重复键），跳过: {} by {}",
+                            event.nft_mint, event.claimer
+                        );
+                        continue;
+                    }
+
                     error!(
                         "❌ NFT领取事件写入失败: {} by {} - {}",
                         event.nft_mint, event.claimer, e
@@ -354,6 +369,15 @@ impl EventStorage {
                     );
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ 奖励分发事件已存在（重复键），跳过: {} to {}",
+                            event.distribution_id, event.recipient
+                        );
+                        continue;
+                    }
+
                     error!(
                         "❌ 奖励分发事件写入失败: {} to {} - {}",
                         event.distribution_id, event.recipient, e
@@ -388,6 +412,15 @@ impl EventStorage {
                     );
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ 交换事件已存在（重复键），跳过: {} in pool {}",
+                            event.signature, event.pool_address
+                        );
+                        continue;
+                    }
+
                     error!(
                         "❌ 交换事件写入失败: {} in pool {} - {}",
                         event.signature, event.pool_address, e
@@ -419,6 +452,15 @@ impl EventStorage {
                     debug!("ℹ️ 存款事件已存在，跳过: {} to {}", event.user, event.token_mint);
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ 存款事件已存在（重复键），跳过: {} to {}",
+                            event.user, event.token_mint
+                        );
+                        continue;
+                    }
+
                     error!("❌ 存款事件写入失败: {} to {} - {}", event.user, event.token_mint, e);
 
                     if self.is_fatal_error(&e) {
@@ -446,6 +488,15 @@ impl EventStorage {
                     debug!("ℹ️ 代币创建事件已存在，跳过: {} ({})", event.symbol, event.mint_address);
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ 代币创建事件已存在（重复键），跳过: {} ({})",
+                            event.symbol, event.mint_address
+                        );
+                        continue;
+                    }
+
                     error!(
                         "❌ 代币创建事件写入失败: {} ({}) - {}",
                         event.symbol, event.mint_address, e
@@ -634,6 +685,15 @@ impl EventStorage {
                     );
                 }
                 Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ Launch事件已存在（重复键），跳过: {} by {}",
+                            event.meme_token_mint, event.user_wallet
+                        );
+                        continue;
+                    }
+
                     error!(
                         "❌ Launch事件写入失败: {} by {} - {}",
                         event.meme_token_mint, event.user_wallet, e
@@ -1043,6 +1103,16 @@ impl EventStorage {
             EventListenerError::Config(_) => true,       // 配置错误是致命的
             EventListenerError::Persistence(_) => false, // 持久化错误通常可以跳过
             _ => false,
+        }
+    }
+
+    /// 检查是否为MongoDB重复键错误
+    fn is_duplicate_key_error(&self, error: &EventListenerError) -> bool {
+        if let EventListenerError::Persistence(msg) = error {
+            // 检查错误消息中是否包含MongoDB重复键错误标识
+            msg.contains("E11000") && msg.contains("duplicate key error")
+        } else {
+            false
         }
     }
 
@@ -1669,6 +1739,35 @@ mod tests {
         // 持久化错误不应该是致命的
         let persist_error = EventListenerError::Persistence("test error".to_string());
         assert!(!storage.is_fatal_error(&persist_error));
+    }
+
+    #[test]
+    fn test_is_duplicate_key_error() {
+        let config = create_test_config();
+        let storage = tokio_test::block_on(async { EventStorage::new(&config).await });
+
+        if storage.is_err() {
+            return;
+        }
+
+        let storage = storage.unwrap();
+
+        // 测试重复键错误检测
+        let duplicate_error = EventListenerError::Persistence(
+            "保存审计日志失败: Kind: An error occurred when trying to execute a write operation: WriteError(WriteError { code: 11000, code_name: None, message: \"E11000 duplicate key error collection: coinfair_development.ClmmPoolEvent index: pool_address_1_signature_1 dup key: { pool_address: \\\"test\\\", signature: \\\"test\\\" }\", details: None })".to_string()
+        );
+        assert!(storage.is_duplicate_key_error(&duplicate_error));
+
+        // 测试非重复键错误
+        let normal_error = EventListenerError::Persistence("normal error".to_string());
+        assert!(!storage.is_duplicate_key_error(&normal_error));
+
+        // 测试其他类型错误
+        let db_error = EventListenerError::Database(mongodb::error::Error::from(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "database error",
+        )));
+        assert!(!storage.is_duplicate_key_error(&db_error));
     }
 
     #[tokio::test]

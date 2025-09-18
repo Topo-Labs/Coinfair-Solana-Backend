@@ -299,7 +299,7 @@ impl EventListenerConfig {
 
         // 支持通过环境变量配置多个事件类型
         // 格式: BACKFILL_EVENT_<INDEX>_TYPE=LaunchEvent
-        //      BACKFILL_EVENT_<INDEX>_PROGRAM_ID=7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1
+        //      BACKFILL_EVENT_<INDEX>_PROGRAM_ID=AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH
         //      BACKFILL_EVENT_<INDEX>_ENABLED=true
         //      BACKFILL_EVENT_<INDEX>_INTERVAL=300
 
@@ -312,7 +312,7 @@ impl EventListenerConfig {
 
             if let Ok(event_type) = std::env::var(&event_type_key) {
                 let program_id = std::env::var(&program_id_key)
-                    .unwrap_or_else(|_| "7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1".to_string());
+                    .unwrap_or_else(|_| "AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH".to_string());
 
                 let enabled = std::env::var(&enabled_key)
                     .unwrap_or_else(|_| "true".to_string())

@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn test_backfill_manager_supports_multiple_events() {
         // Mock配置（仅用于测试结构）
-        let program_id_1 = Pubkey::from_str("7iEA3rL66H6yCY3PWJNipfys5srz3L6r9QsGPmhnLkA1").unwrap();
+        let program_id_1 = Pubkey::from_str("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH").unwrap();
         let program_id_2 = Pubkey::from_str("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX").unwrap();
 
         let event_configs = vec![
