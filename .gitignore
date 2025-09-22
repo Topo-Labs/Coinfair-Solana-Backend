@@ -81,3 +81,4 @@ script/*
 mongodb-query/*
 new-wallet*.json
 .github/*.md
+AGENTS.md

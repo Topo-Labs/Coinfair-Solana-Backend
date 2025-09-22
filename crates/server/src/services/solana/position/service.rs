@@ -130,12 +130,23 @@ impl PositionService {
             raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick_upper_adjusted)?;
 
         // 反向验证：从调整后的tick计算回实际价格
-        let actual_lower_price = position_utils.sqrt_price_x64_to_price(
+        // let actual_lower_price = position_utils.sqrt_price_x64_to_price(
+        //     sqrt_price_lower_adjusted,
+        //     pool_state.mint_decimals_0,
+        //     pool_state.mint_decimals_1,
+        // );
+
+        let actual_lower_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(
             sqrt_price_lower_adjusted,
             pool_state.mint_decimals_0,
             pool_state.mint_decimals_1,
         );
-        let actual_upper_price = position_utils.sqrt_price_x64_to_price(
+        // let actual_upper_price = position_utils.sqrt_price_x64_to_price(
+        //     sqrt_price_upper_adjusted,
+        //     pool_state.mint_decimals_0,
+        //     pool_state.mint_decimals_1,
+        // );
+        let actual_upper_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(
             sqrt_price_upper_adjusted,
             pool_state.mint_decimals_0,
             pool_state.mint_decimals_1,
@@ -649,7 +660,12 @@ impl PositionService {
         )?;
 
         // 计算当前价格和利用率
-        let current_price = position_utils.sqrt_price_x64_to_price(
+        // let current_price = position_utils.sqrt_price_x64_to_price(
+        //     pool_state.sqrt_price_x64,
+        //     pool_state.mint_decimals_0,
+        //     pool_state.mint_decimals_1,
+        // );
+        let current_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(
             pool_state.sqrt_price_x64,
             pool_state.mint_decimals_0,
             pool_state.mint_decimals_1,

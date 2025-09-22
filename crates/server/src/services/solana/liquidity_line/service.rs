@@ -95,9 +95,7 @@ impl LiquidityLineService {
         let tick_current = pool_state.tick_current;
         let tick_spacing = pool_state.tick_spacing;
         let sqrt_price_x64 = pool_state.sqrt_price_x64;
-
-        // 从sqrt_price_x64计算当前价格
-        let current_price = self.sqrt_price_x64_to_price(sqrt_price_x64)?;
+        let current_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
 
         info!(
             "📊 解析池子状态 - 当前tick: {}, tick间距: {}, 当前价格: {}",
@@ -117,13 +115,13 @@ impl LiquidityLineService {
         T::try_deserialize(&mut data).map_err(|e| anyhow!("反序列化账户失败: {}", e))
     }
 
-    /// 将sqrt_price_x64转换为价格
-    fn sqrt_price_x64_to_price(&self, sqrt_price_x64: u128) -> Result<f64> {
-        // sqrt_price_x64 = sqrt(price) * 2^64
-        let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
-        let price = sqrt_price * sqrt_price;
-        Ok(price)
-    }
+    // /// 将sqrt_price_x64转换为价格
+    // fn sqrt_price_x64_to_price(&self, sqrt_price_x64: u128) -> Result<f64> {
+    //     // sqrt_price_x64 = sqrt(price) * 2^64
+    //     let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
+    //     let price = sqrt_price * sqrt_price;
+    //     Ok(price)
+    // }
 
     /// 收集指定范围内的流动性数据
     async fn collect_liquidity_data(
@@ -293,7 +291,9 @@ impl LiquidityLineService {
             .map_err(|e| anyhow!("tick {}转换为sqrt价格失败: {:?}", tick, e))?;
 
         // 从sqrt_price_x64转换为价格
-        self.sqrt_price_x64_to_price(sqrt_price_x64)
+        // self.sqrt_price_x64_to_price(sqrt_price_x64)
+        let result = raydium_amm_v3_clent::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
+        Ok(result)
     }
 
     /// 过滤和限制数据点数量

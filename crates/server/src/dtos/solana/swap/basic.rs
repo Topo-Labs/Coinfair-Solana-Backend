@@ -131,30 +131,30 @@ pub struct PriceQuoteResponse {
     pub timestamp: i64,
 }
 
-/// 交换历史记录DTO
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct SwapHistory {
-    /// 交易签名
-    pub signature: String,
+// 交换历史记录DTO
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct SwapHistory {
+//     /// 交易签名
+//     pub signature: String,
 
-    /// 输入代币
-    pub from_token: String,
+//     /// 输入代币
+//     pub from_token: String,
 
-    /// 输出代币
-    pub to_token: String,
+//     /// 输出代币
+//     pub to_token: String,
 
-    /// 输入金额
-    pub amount_in: u64,
+//     /// 输入金额
+//     pub amount_in: u64,
 
-    /// 输出金额
-    pub amount_out: u64,
+//     /// 输出金额
+//     pub amount_out: u64,
 
-    /// 交易状态
-    pub status: TransactionStatus,
+//     /// 交易状态
+//     pub status: TransactionStatus,
 
-    /// 交易时间
-    pub timestamp: i64,
+//     /// 交易时间
+//     pub timestamp: i64,
 
-    /// Gas费用（lamports）
-    pub fee: u64,
-}
+//     /// Gas费用（lamports）
+//     pub fee: u64,
+// }
