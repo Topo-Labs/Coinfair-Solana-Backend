@@ -256,12 +256,12 @@ impl NftClaimParser {
         }
 
         // 验证推荐人不能是自己
-        if let Some(referrer) = &event.referrer {
-            if referrer == &event.claimer {
-                warn!("❌ 推荐人不能是自己: {}", event.claimer);
-                return Ok(false);
-            }
-        }
+        // if let Some(referrer) = &event.referrer {
+        //     if referrer == &event.claimer {
+        //         warn!("❌ 推荐人不能是自己: {}", event.claimer);
+        //         return Ok(false);
+        //     }
+        // }
 
         // 验证奖励金额的合理性
         if event.bonus_amount > event.claim_amount * 10 {

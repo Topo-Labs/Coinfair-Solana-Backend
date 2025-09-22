@@ -153,75 +153,74 @@ where
 {
     use serde::de::Visitor;
     use std::fmt;
-    
+
     struct FlexibleTimestampVisitor;
-    
+
     impl<'de> Visitor<'de> for FlexibleTimestampVisitor {
         type Value = Option<String>;
-        
+
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter.write_str("a string or number representing a timestamp")
         }
-        
+
         fn visit_none<E>(self) -> Result<Self::Value, E> {
             Ok(None)
         }
-        
+
         fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
         where
             D: Deserializer<'de>,
         {
-            deserializer.deserialize_any(FlexibleTimestampValueVisitor)
-                .map(Some)
+            deserializer.deserialize_any(FlexibleTimestampValueVisitor).map(Some)
         }
-        
+
         fn visit_unit<E>(self) -> Result<Self::Value, E> {
             Ok(None)
         }
     }
-    
+
     struct FlexibleTimestampValueVisitor;
-    
+
     impl<'de> Visitor<'de> for FlexibleTimestampValueVisitor {
         type Value = String;
-        
+
         fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
             formatter.write_str("a string or number representing a timestamp")
         }
-        
+
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> {
             Ok(value.to_string())
         }
-        
+
         fn visit_string<E>(self, value: String) -> Result<Self::Value, E> {
             Ok(value)
         }
-        
+
         fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E> {
             Ok(value.to_string())
         }
-        
+
         fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
             Ok(value.to_string())
         }
-        
+
         fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E> {
             Ok(value.to_string())
         }
-        
+
         fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E> {
             Ok(value.to_string())
         }
-        
+
         fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E> {
             Ok((value as i64).to_string())
         }
-        
+
         fn visit_f32<E>(self, value: f32) -> Result<Self::Value, E> {
             Ok((value as i64).to_string())
         }
     }
-    
+
     deserializer.deserialize_option(FlexibleTimestampVisitor)
 }
 
@@ -892,35 +891,45 @@ impl MetaplexService {
                             Err(json_error) => {
                                 // 如果完整解析失败，尝试 fallback 解析
                                 debug!("🔄 完整解析失败，尝试 fallback 解析: {}", json_error);
-                                
+
                                 // 重新获取响应文本进行 fallback 解析
                                 match self.client.get(uri).send().await {
                                     Ok(fallback_response) if fallback_response.status().is_success() => {
                                         match fallback_response.text().await {
-                                            Ok(text) => {
-                                                match Self::parse_metadata_fallback(&text) {
-                                                    Some(metadata) => {
-                                                        info!("✅ Fallback解析成功: {} (尝试第{}次)", uri, attempt);
-                                                        return Ok(Some(metadata));
-                                                    }
-                                                    None => {
-                                                        if attempt == 6 {
-                                                            warn!("⚠️ 解析URI元数据JSON失败: {} - {} (最终失败)", uri, json_error);
-                                                            return Ok(None);
-                                                        }
-                                                        let delay = Self::calculate_retry_delay(attempt, &status);
-                                                        warn!("⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)", uri, json_error, attempt, delay);
-                                                        tokio::time::sleep(Duration::from_secs(delay)).await;
-                                                    }
+                                            Ok(text) => match Self::parse_metadata_fallback(&text) {
+                                                Some(metadata) => {
+                                                    info!("✅ Fallback解析成功: {} (尝试第{}次)", uri, attempt);
+                                                    return Ok(Some(metadata));
                                                 }
-                                            }
+                                                None => {
+                                                    if attempt == 6 {
+                                                        warn!(
+                                                            "⚠️ 解析URI元数据JSON失败: {} - {} (最终失败)",
+                                                            uri, json_error
+                                                        );
+                                                        return Ok(None);
+                                                    }
+                                                    let delay = Self::calculate_retry_delay(attempt, &status);
+                                                    warn!(
+                                                        "⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)",
+                                                        uri, json_error, attempt, delay
+                                                    );
+                                                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                                                }
+                                            },
                                             Err(_) => {
                                                 if attempt == 6 {
-                                                    warn!("⚠️ 解析URI元数据JSON失败: {} - {} (最终失败)", uri, json_error);
+                                                    warn!(
+                                                        "⚠️ 解析URI元数据JSON失败: {} - {} (最终失败)",
+                                                        uri, json_error
+                                                    );
                                                     return Ok(None);
                                                 }
                                                 let delay = Self::calculate_retry_delay(attempt, &status);
-                                                warn!("⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)", uri, json_error, attempt, delay);
+                                                warn!(
+                                                    "⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)",
+                                                    uri, json_error, attempt, delay
+                                                );
                                                 tokio::time::sleep(Duration::from_secs(delay)).await;
                                             }
                                         }
@@ -932,7 +941,10 @@ impl MetaplexService {
                                             return Ok(None);
                                         }
                                         let delay = Self::calculate_retry_delay(attempt, &status);
-                                        warn!("⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)", uri, json_error, attempt, delay);
+                                        warn!(
+                                            "⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)",
+                                            uri, json_error, attempt, delay
+                                        );
                                         tokio::time::sleep(Duration::from_secs(delay)).await;
                                     }
                                     Err(_) => {
@@ -941,7 +953,10 @@ impl MetaplexService {
                                             return Ok(None);
                                         }
                                         let delay = Self::calculate_retry_delay(attempt, &status);
-                                        warn!("⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)", uri, json_error, attempt, delay);
+                                        warn!(
+                                            "⚠️ 解析URI元数据JSON失败: {} - {} (第{}次，{}秒后重试)",
+                                            uri, json_error, attempt, delay
+                                        );
                                         tokio::time::sleep(Duration::from_secs(delay)).await;
                                     }
                                 }
@@ -953,7 +968,10 @@ impl MetaplexService {
                             return Ok(None);
                         }
                         let delay = Self::calculate_retry_delay(attempt, &status);
-                        warn!("⚠️ URI元数据请求失败: {} - {} (第{}次，{}秒后重试)", uri, status, attempt, delay);
+                        warn!(
+                            "⚠️ URI元数据请求失败: {} - {} (第{}次，{}秒后重试)",
+                            uri, status, attempt, delay
+                        );
                         tokio::time::sleep(Duration::from_secs(delay)).await;
                     }
                 }
@@ -975,13 +993,13 @@ impl MetaplexService {
     /// Fallback 元数据解析器 - 从损坏的JSON中尽可能提取信息
     fn parse_metadata_fallback(json_text: &str) -> Option<UriMetadata> {
         use serde_json::Value;
-        
+
         // 尝试解析为任意JSON值
         let json_value: Value = match serde_json::from_str(json_text) {
             Ok(value) => value,
             Err(_) => return None,
         };
-        
+
         // 如果是对象，尝试提取可用字段
         if let Value::Object(obj) = json_value {
             let mut metadata = UriMetadata {
@@ -994,48 +1012,54 @@ impl MetaplexService {
                 purchase_limit: None,
                 crowdfunding: None,
             };
-            
+
             // 安全提取字符串字段
             if let Some(Value::String(s)) = obj.get("tokenName") {
                 metadata.token_name = Some(s.clone());
             }
-            
+
             if let Some(Value::String(s)) = obj.get("tokenSymbol") {
                 metadata.token_symbol = Some(s.clone());
             }
-            
+
             if let Some(Value::String(s)) = obj.get("description") {
                 metadata.description = Some(s.clone());
             }
-            
+
             if let Some(Value::String(s)) = obj.get("avatarUrl") {
                 metadata.avatar_url = Some(s.clone());
             }
-            
+
             // 尝试解析社交链接
             if let Some(social_obj) = obj.get("socialLinks").and_then(|v| v.as_object()) {
                 metadata.social_links = Some(SocialLinks {
-                    twitter: social_obj.get("twitter").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    telegram: social_obj.get("telegram").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                    website: social_obj.get("website").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    twitter: social_obj
+                        .get("twitter")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    telegram: social_obj
+                        .get("telegram")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    website: social_obj
+                        .get("website")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
                 });
             }
-            
+
             // 尝试解析白名单信息
             if let Some(whitelist_obj) = obj.get("whitelist").and_then(|v| v.as_object()) {
                 let enabled = whitelist_obj.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-                let addresses = whitelist_obj.get("addresses")
+                let addresses = whitelist_obj
+                    .get("addresses")
                     .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
                     .unwrap_or_default();
-                
+
                 metadata.whitelist = Some(WhitelistInfo { enabled, addresses });
             }
-            
+
             // 安全提取购买限制（可能是字符串或对象）
             if let Some(purchase_val) = obj.get("purchaseLimit") {
                 metadata.purchase_limit = match purchase_val {
@@ -1044,7 +1068,7 @@ impl MetaplexService {
                     _ => None,
                 };
             }
-            
+
             // 鲁棒地解析众筹信息（主要问题字段）
             if let Some(crowdfunding_obj) = obj.get("crowdfunding").and_then(|v| v.as_object()) {
                 let start_time = match crowdfunding_obj.get("startTime") {
@@ -1060,7 +1084,7 @@ impl MetaplexService {
                     }
                     _ => None,
                 };
-                
+
                 let end_time = match crowdfunding_obj.get("endTime") {
                     Some(Value::String(s)) => Some(s.clone()),
                     Some(Value::Number(n)) => {
@@ -1074,30 +1098,42 @@ impl MetaplexService {
                     }
                     _ => None,
                 };
-                
-                let duration = crowdfunding_obj.get("duration").and_then(|v| v.as_u64()).map(|v| v as u32);
-                
+
+                let duration = crowdfunding_obj
+                    .get("duration")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32);
+
                 metadata.crowdfunding = Some(CrowdfundingInfo {
                     start_time,
                     end_time,
                     duration,
                 });
             }
-            
-            info!("🛡️ Fallback解析提取到字段数: {}", 
-                [metadata.token_name.is_some(), metadata.token_symbol.is_some(), 
-                 metadata.description.is_some(), metadata.avatar_url.is_some(),
-                 metadata.social_links.is_some(), metadata.whitelist.is_some(),
-                 metadata.purchase_limit.is_some(), metadata.crowdfunding.is_some()]
-                .iter().filter(|&&b| b).count()
+
+            info!(
+                "🛡️ Fallback解析提取到字段数: {}",
+                [
+                    metadata.token_name.is_some(),
+                    metadata.token_symbol.is_some(),
+                    metadata.description.is_some(),
+                    metadata.avatar_url.is_some(),
+                    metadata.social_links.is_some(),
+                    metadata.whitelist.is_some(),
+                    metadata.purchase_limit.is_some(),
+                    metadata.crowdfunding.is_some()
+                ]
+                .iter()
+                .filter(|&&b| b)
+                .count()
             );
-            
+
             Some(metadata)
         } else {
             None
         }
     }
-    
+
     /// 计算重试延迟时间（线性递增策略）
     fn calculate_retry_delay(attempt: u32, status: &reqwest::StatusCode) -> u64 {
         match status {
@@ -1105,26 +1141,20 @@ impl MetaplexService {
             &reqwest::StatusCode::TOO_MANY_REQUESTS => {
                 match attempt {
                     1 => 1,
-                    2 => 3,
-                    3 => 5,
-                    4 => 7,
-                    5 => 9,
-                    6 => 11,
-                    _ => 11, // 备用，不过不应该到达这里
+                    2 => 2,
+                    3 => 3,
+                    4 => 4,
+                    5 => 5,
+                    6 => 6,
+                    _ => 10, // 备用，不过不应该到达这里
                 }
             }
             // 5xx服务器错误 - 较短延迟: 2,4,6,8,10,12秒
-            status if status.is_server_error() => {
-                (attempt * 2) as u64
-            }
+            status if status.is_server_error() => (attempt * 2) as u64,
             // 网络错误和超时 - 线性递增: 1,2,3,4,5,6秒
-            &reqwest::StatusCode::INTERNAL_SERVER_ERROR => {
-                attempt as u64
-            }
-            // 其他错误 - 线性递增: 1,2,3,4,5,6秒  
-            _ => {
-                attempt as u64
-            }
+            &reqwest::StatusCode::INTERNAL_SERVER_ERROR => attempt as u64,
+            // 其他错误 - 线性递增: 1,2,3,4,5,6秒
+            _ => attempt as u64,
         }
     }
 
@@ -1500,7 +1530,7 @@ mod tests {
     #[test]
     fn test_flexible_timestamp_deserialization() {
         // 测试自定义时间戳反序列化器处理各种格式
-        
+
         // 测试数字格式的时间戳（原始问题案例）
         let json_with_numbers = r#"{
             "tokenName": "10min",
@@ -1512,15 +1542,15 @@ mod tests {
                 "duration": 600
             }
         }"#;
-        
+
         let result: Result<UriMetadata, _> = serde_json::from_str(json_with_numbers);
         assert!(result.is_ok(), "应该能够解析数字时间戳: {:?}", result.err());
-        
+
         let metadata = result.unwrap();
         assert_eq!(metadata.token_name, Some("10min".to_string()));
         assert_eq!(metadata.token_symbol, Some("Mten".to_string()));
         assert!(metadata.crowdfunding.is_some());
-        
+
         let crowdfunding = metadata.crowdfunding.unwrap();
         assert_eq!(crowdfunding.start_time, Some("1756791015".to_string()));
         assert_eq!(crowdfunding.end_time, Some("1757391".to_string()));
@@ -1535,10 +1565,10 @@ mod tests {
                 "duration": 600
             }
         }"#;
-        
+
         let result: Result<UriMetadata, _> = serde_json::from_str(json_with_strings);
         assert!(result.is_ok(), "应该能够解析字符串时间戳");
-        
+
         let metadata = result.unwrap();
         assert!(metadata.crowdfunding.is_some());
         let crowdfunding = metadata.crowdfunding.unwrap();
@@ -1554,7 +1584,7 @@ mod tests {
                 "duration": 600
             }
         }"#;
-        
+
         let result: Result<UriMetadata, _> = serde_json::from_str(json_mixed);
         assert!(result.is_ok(), "应该能够解析混合格式");
 
@@ -1567,10 +1597,10 @@ mod tests {
                 "duration": 600
             }
         }"#;
-        
+
         let result: Result<UriMetadata, _> = serde_json::from_str(json_with_nulls);
         assert!(result.is_ok(), "应该能够处理null值");
-        
+
         let metadata = result.unwrap();
         let crowdfunding = metadata.crowdfunding.unwrap();
         assert_eq!(crowdfunding.start_time, None);
@@ -1580,7 +1610,7 @@ mod tests {
     #[test]
     fn test_fallback_metadata_parser() {
         // 测试fallback解析器能够从部分损坏的JSON中提取信息
-        
+
         // 测试完整的JSON（应该成功解析）
         let complete_json = r#"{
             "tokenName": "Complete Token",
@@ -1603,30 +1633,30 @@ mod tests {
                 "duration": 600
             }
         }"#;
-        
+
         let result = MetaplexService::parse_metadata_fallback(complete_json);
         assert!(result.is_some(), "完整JSON应该能够解析");
-        
+
         let metadata = result.unwrap();
         assert_eq!(metadata.token_name, Some("Complete Token".to_string()));
         assert_eq!(metadata.token_symbol, Some("COMPLETE".to_string()));
         assert_eq!(metadata.description, Some("A complete token".to_string()));
         assert_eq!(metadata.avatar_url, Some("https://example.com/avatar.png".to_string()));
         assert_eq!(metadata.purchase_limit, Some("100 SOL".to_string()));
-        
+
         // 检查社交链接
         assert!(metadata.social_links.is_some());
         let social_links = metadata.social_links.unwrap();
         assert_eq!(social_links.twitter, Some("https://twitter.com/token".to_string()));
         assert_eq!(social_links.telegram, Some("https://t.me/token".to_string()));
         assert_eq!(social_links.website, Some("https://token.com".to_string()));
-        
+
         // 检查白名单
         assert!(metadata.whitelist.is_some());
         let whitelist = metadata.whitelist.unwrap();
         assert_eq!(whitelist.enabled, true);
         assert_eq!(whitelist.addresses, vec!["addr1".to_string(), "addr2".to_string()]);
-        
+
         // 检查众筹信息（重点测试数字时间戳转换）
         assert!(metadata.crowdfunding.is_some());
         let crowdfunding = metadata.crowdfunding.unwrap();
@@ -1639,10 +1669,10 @@ mod tests {
             "tokenName": "Minimal Token",
             "tokenSymbol": "MIN"
         }"#;
-        
+
         let result = MetaplexService::parse_metadata_fallback(minimal_json);
         assert!(result.is_some(), "最小JSON应该能够解析");
-        
+
         let metadata = result.unwrap();
         assert_eq!(metadata.token_name, Some("Minimal Token".to_string()));
         assert_eq!(metadata.token_symbol, Some("MIN".to_string()));
@@ -1663,13 +1693,13 @@ mod tests {
     #[test]
     fn test_purchase_limit_flexible_parsing() {
         // 测试purchaseLimit字段的灵活解析（可能是字符串或对象）
-        
+
         // 字符串格式
         let json_string_limit = r#"{
             "tokenName": "StringLimit Token",
             "purchaseLimit": "100 SOL"
         }"#;
-        
+
         let result = MetaplexService::parse_metadata_fallback(json_string_limit);
         assert!(result.is_some());
         let metadata = result.unwrap();
@@ -1680,7 +1710,7 @@ mod tests {
             "tokenName": "ObjectLimit Token", 
             "purchaseLimit": { "tier1": { "max": 100, "currency": "SOL" } }
         }"#;
-        
+
         let result = MetaplexService::parse_metadata_fallback(json_object_limit);
         assert!(result.is_some());
         let metadata = result.unwrap();
@@ -1713,31 +1743,35 @@ mod tests {
                 "duration": 600
             }
         }"#;
-        
+
         // 测试标准Serde反序列化（应该成功）
         let serde_result: Result<UriMetadata, _> = serde_json::from_str(real_problem_json);
-        assert!(serde_result.is_ok(), "修复后应该能够解析实际问题数据: {:?}", serde_result.err());
-        
+        assert!(
+            serde_result.is_ok(),
+            "修复后应该能够解析实际问题数据: {:?}",
+            serde_result.err()
+        );
+
         let metadata = serde_result.unwrap();
         assert_eq!(metadata.token_name, Some("10min".to_string()));
         assert_eq!(metadata.token_symbol, Some("Mten".to_string()));
         assert_eq!(metadata.description, Some("十分钟过期测试".to_string()));
-        
+
         // 验证关键的crowdfunding数据正确解析
         assert!(metadata.crowdfunding.is_some());
         let crowdfunding = metadata.crowdfunding.unwrap();
         assert_eq!(crowdfunding.start_time, Some("1756791015".to_string())); // 数字转为字符串
         assert_eq!(crowdfunding.end_time, Some("1757391".to_string()));
         assert_eq!(crowdfunding.duration, Some(600));
-        
+
         // 测试Fallback解析器也能处理（双重保险）
         let fallback_result = MetaplexService::parse_metadata_fallback(real_problem_json);
         assert!(fallback_result.is_some(), "Fallback解析器也应该能够处理");
-        
+
         let fallback_metadata = fallback_result.unwrap();
         assert_eq!(fallback_metadata.token_name, Some("10min".to_string()));
         assert_eq!(fallback_metadata.token_symbol, Some("Mten".to_string()));
-        
+
         // 验证fallback解析的crowdfunding数据
         let fallback_crowdfunding = fallback_metadata.crowdfunding.unwrap();
         assert_eq!(fallback_crowdfunding.start_time, Some("1756791015".to_string()));

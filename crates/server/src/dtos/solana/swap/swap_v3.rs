@@ -3,10 +3,10 @@ use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 use crate::dtos::solana::{
-    common::{RoutePlan, TransactionData, TransactionStatus, TransferFeeInfo},
+    common::{RoutePlan, TransactionStatus, TransferFeeInfo},
     swap::{
         raydium::RaydiumResponse,
-        referral::{ReferralAccounts, ReferralInfo, ReferralTransactionInfo},
+        referral::{ReferralAccounts, ReferralInfo},
     },
 };
 
@@ -149,17 +149,17 @@ pub struct TransactionSwapV3Request {
     pub referral_accounts: Option<ReferralAccounts>,
 }
 
-/// SwapV3交易构建响应（继承TransactionData但可能扩展）
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct SwapV3TransactionData {
-    /// 基础交易数据
-    #[serde(flatten)]
-    pub transaction_data: TransactionData,
+// /// SwapV3交易构建响应（继承TransactionData但可能扩展）
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct SwapV3TransactionData {
+//     /// 基础交易数据
+//     #[serde(flatten)]
+//     pub transaction_data: TransactionData,
 
-    /// 推荐系统相关信息
-    #[serde(rename = "referralInfo")]
-    pub referral_info: Option<ReferralTransactionInfo>,
-}
+//     /// 推荐系统相关信息
+//     #[serde(rename = "referralInfo")]
+//     pub referral_info: Option<ReferralTransactionInfo>,
+// }
 
 /// SwapV3并发送交易响应DTO（用于本地测试）
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

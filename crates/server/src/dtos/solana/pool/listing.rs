@@ -1,57 +1,55 @@
-use database::ClmmPool;
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
-use validator::Validate;
+use utoipa::ToSchema;
 /// 池子列表查询请求参数
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Validate, IntoParams)]
-pub struct PoolListRequest {
-    /// 按池子类型过滤
-    #[serde(rename = "poolType")]
-    pub pool_type: Option<String>,
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Validate, IntoParams)]
+// pub struct PoolListRequest {
+//     /// 按池子类型过滤
+//     #[serde(rename = "poolType")]
+//     pub pool_type: Option<String>,
 
-    /// 排序字段 (default, created_at, price, open_time)
-    #[serde(rename = "poolSortField")]
-    pub pool_sort_field: Option<String>,
+//     /// 排序字段 (default, created_at, price, open_time)
+//     #[serde(rename = "poolSortField")]
+//     pub pool_sort_field: Option<String>,
 
-    /// 排序方向 (asc, desc)
-    #[serde(rename = "sortType")]
-    pub sort_type: Option<String>,
+//     /// 排序方向 (asc, desc)
+//     #[serde(rename = "sortType")]
+//     pub sort_type: Option<String>,
 
-    /// 页大小 (1-100, 默认20)
-    #[serde(rename = "pageSize")]
-    #[validate(range(min = 1, max = 100))]
-    pub page_size: Option<u64>,
+//     /// 页大小 (1-100, 默认20)
+//     #[serde(rename = "pageSize")]
+//     #[validate(range(min = 1, max = 100))]
+//     pub page_size: Option<u64>,
 
-    /// 页码 (1-based, 默认1)
-    #[validate(range(min = 1))]
-    pub page: Option<u64>,
+//     /// 页码 (1-based, 默认1)
+//     #[validate(range(min = 1))]
+//     pub page: Option<u64>,
 
-    /// 按创建者钱包地址过滤
-    #[serde(rename = "creatorWallet")]
-    pub creator_wallet: Option<String>,
+//     /// 按创建者钱包地址过滤
+//     #[serde(rename = "creatorWallet")]
+//     pub creator_wallet: Option<String>,
 
-    /// 按代币mint地址过滤
-    #[serde(rename = "mintAddress")]
-    pub mint_address: Option<String>,
+//     /// 按代币mint地址过滤
+//     #[serde(rename = "mintAddress")]
+//     pub mint_address: Option<String>,
 
-    /// 按池子状态过滤
-    pub status: Option<String>,
-}
+//     /// 按池子状态过滤
+//     pub status: Option<String>,
+// }
 
-impl Default for PoolListRequest {
-    fn default() -> Self {
-        Self {
-            pool_type: None,
-            pool_sort_field: Some("default".to_string()),
-            sort_type: Some("desc".to_string()),
-            page_size: Some(20),
-            page: Some(1),
-            creator_wallet: None,
-            mint_address: None,
-            status: None,
-        }
-    }
-}
+// impl Default for PoolListRequest {
+//     fn default() -> Self {
+//         Self {
+//             pool_type: None,
+//             pool_sort_field: Some("default".to_string()),
+//             sort_type: Some("desc".to_string()),
+//             page_size: Some(20),
+//             page: Some(1),
+//             creator_wallet: None,
+//             mint_address: None,
+//             status: None,
+//         }
+//     }
+// }
 
 /// 新的池子列表响应格式（匹配期望格式）
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -95,11 +93,11 @@ pub struct PoolListData {
 }
 
 /// 池子列表数据
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PoolListData2 {
-    /// 池子详细信息列表
-    pub data: Vec<PoolInfo>,
-}
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct PoolListData2 {
+//     /// 池子详细信息列表
+//     pub data: Vec<PoolInfo>,
+// }
 /// 池子信息（新格式）
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PoolInfo {
@@ -309,234 +307,234 @@ pub struct PoolConfigInfo {
     pub default_range_point: Vec<f64>,
 }
 
-/// 旧版池子列表响应（保持向后兼容）
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PoolListResponse {
-    /// 池子列表
-    pub pools: Vec<ClmmPool>,
+// 旧版池子列表响应（保持向后兼容）
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct PoolListResponse {
+//     /// 池子列表
+//     pub pools: Vec<ClmmPool>,
 
-    /// 分页元数据
-    pub pagination: PaginationMeta,
+//     /// 分页元数据
+//     pub pagination: PaginationMeta,
 
-    /// 过滤器摘要
-    pub filters: FilterSummary,
-}
+//     /// 过滤器摘要
+//     pub filters: FilterSummary,
+// }
 
-/// 分页元数据
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct PaginationMeta {
-    /// 当前页码
-    pub current_page: u64,
+// /// 分页元数据
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct PaginationMeta {
+//     /// 当前页码
+//     pub current_page: u64,
 
-    /// 页大小
-    pub page_size: u64,
+//     /// 页大小
+//     pub page_size: u64,
 
-    /// 符合条件的总记录数
-    pub total_count: u64,
+//     /// 符合条件的总记录数
+//     pub total_count: u64,
 
-    /// 总页数
-    pub total_pages: u64,
+//     /// 总页数
+//     pub total_pages: u64,
 
-    /// 是否有下一页
-    pub has_next: bool,
+//     /// 是否有下一页
+//     pub has_next: bool,
 
-    /// 是否有上一页
-    pub has_prev: bool,
-}
+//     /// 是否有上一页
+//     pub has_prev: bool,
+// }
 
-/// 过滤器摘要
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct FilterSummary {
-    /// 应用的池子类型过滤器
-    pub pool_type: Option<String>,
+// /// 过滤器摘要
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct FilterSummary {
+//     /// 应用的池子类型过滤器
+//     pub pool_type: Option<String>,
 
-    /// 应用的排序字段
-    pub sort_field: String,
+//     /// 应用的排序字段
+//     pub sort_field: String,
 
-    /// 应用的排序方向
-    pub sort_direction: String,
+//     /// 应用的排序方向
+//     pub sort_direction: String,
 
-    /// 按池子类型统计数量
-    pub type_counts: Vec<TypeCount>,
-}
+//     /// 按池子类型统计数量
+//     pub type_counts: Vec<TypeCount>,
+// }
 
-/// 池子类型统计
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct TypeCount {
-    /// 池子类型
-    pub pool_type: String,
+// /// 池子类型统计
+// #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+// pub struct TypeCount {
+//     /// 池子类型
+//     pub pool_type: String,
 
-    /// 数量
-    pub count: u64,
-}
-
+//     /// 数量
+//     pub count: u64,
+// }
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_pool_list_request_default() {
-        let request = PoolListRequest::default();
+        #[test]
+        fn test_pool_list_request_default() {
+            let request = PoolListRequest::default();
 
-        assert_eq!(request.pool_type, None);
-        assert_eq!(request.pool_sort_field, Some("default".to_string()));
-        assert_eq!(request.sort_type, Some("desc".to_string()));
-        assert_eq!(request.page_size, Some(20));
-        assert_eq!(request.page, Some(1));
-        assert_eq!(request.creator_wallet, None);
-        assert_eq!(request.mint_address, None);
-        assert_eq!(request.status, None);
-    }
+            assert_eq!(request.pool_type, None);
+            assert_eq!(request.pool_sort_field, Some("default".to_string()));
+            assert_eq!(request.sort_type, Some("desc".to_string()));
+            assert_eq!(request.page_size, Some(20));
+            assert_eq!(request.page, Some(1));
+            assert_eq!(request.creator_wallet, None);
+            assert_eq!(request.mint_address, None);
+            assert_eq!(request.status, None);
+        }
 
-    #[test]
-    fn test_pool_list_request_validation_valid() {
-        let request = PoolListRequest {
-            pool_type: Some("concentrated".to_string()),
-            pool_sort_field: Some("created_at".to_string()),
-            sort_type: Some("asc".to_string()),
-            page_size: Some(50),
-            page: Some(2),
-            creator_wallet: Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()),
-            mint_address: Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
-            status: Some("Active".to_string()),
-        };
+        #[test]
+        fn test_pool_list_request_validation_valid() {
+            let request = PoolListRequest {
+                pool_type: Some("concentrated".to_string()),
+                pool_sort_field: Some("created_at".to_string()),
+                sort_type: Some("asc".to_string()),
+                page_size: Some(50),
+                page: Some(2),
+                creator_wallet: Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()),
+                mint_address: Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
+                status: Some("Active".to_string()),
+            };
 
-        assert!(request.validate().is_ok());
-    }
+            assert!(request.validate().is_ok());
+        }
 
-    #[test]
-    fn test_pool_list_request_validation_invalid_page_size() {
-        let request = PoolListRequest {
-            page_size: Some(101), // 超过最大值100
-            ..Default::default()
-        };
+        #[test]
+        fn test_pool_list_request_validation_invalid_page_size() {
+            let request = PoolListRequest {
+                page_size: Some(101), // 超过最大值100
+                ..Default::default()
+            };
 
-        let validation_result = request.validate();
-        assert!(validation_result.is_err());
+            let validation_result = request.validate();
+            assert!(validation_result.is_err());
 
-        let errors = validation_result.unwrap_err();
-        assert!(errors.field_errors().contains_key("pageSize"));
-    }
+            let errors = validation_result.unwrap_err();
+            assert!(errors.field_errors().contains_key("pageSize"));
+        }
 
-    #[test]
-    fn test_pool_list_request_validation_invalid_page_size_zero() {
-        let request = PoolListRequest {
-            page_size: Some(0), // 小于最小值1
-            ..Default::default()
-        };
+        #[test]
+        fn test_pool_list_request_validation_invalid_page_size_zero() {
+            let request = PoolListRequest {
+                page_size: Some(0), // 小于最小值1
+                ..Default::default()
+            };
 
-        let validation_result = request.validate();
-        assert!(validation_result.is_err());
+            let validation_result = request.validate();
+            assert!(validation_result.is_err());
 
-        let errors = validation_result.unwrap_err();
-        assert!(errors.field_errors().contains_key("pageSize"));
-    }
+            let errors = validation_result.unwrap_err();
+            assert!(errors.field_errors().contains_key("pageSize"));
+        }
 
-    #[test]
-    fn test_pool_list_request_validation_invalid_page_zero() {
-        let request = PoolListRequest {
-            page: Some(0), // 小于最小值1
-            ..Default::default()
-        };
+        #[test]
+        fn test_pool_list_request_validation_invalid_page_zero() {
+            let request = PoolListRequest {
+                page: Some(0), // 小于最小值1
+                ..Default::default()
+            };
 
-        let validation_result = request.validate();
-        assert!(validation_result.is_err());
+            let validation_result = request.validate();
+            assert!(validation_result.is_err());
 
-        let errors = validation_result.unwrap_err();
-        assert!(errors.field_errors().contains_key("page"));
-    }
+            let errors = validation_result.unwrap_err();
+            assert!(errors.field_errors().contains_key("page"));
+        }
 
-    #[test]
-    fn test_pool_list_request_serialization() {
-        let request = PoolListRequest {
-            pool_type: Some("concentrated".to_string()),
-            pool_sort_field: Some("created_at".to_string()),
-            sort_type: Some("asc".to_string()),
-            page_size: Some(50),
-            page: Some(2),
-            creator_wallet: Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()),
-            mint_address: Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
-            status: Some("Active".to_string()),
-        };
+        #[test]
+        fn test_pool_list_request_serialization() {
+            let request = PoolListRequest {
+                pool_type: Some("concentrated".to_string()),
+                pool_sort_field: Some("created_at".to_string()),
+                sort_type: Some("asc".to_string()),
+                page_size: Some(50),
+                page: Some(2),
+                creator_wallet: Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string()),
+                mint_address: Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string()),
+                status: Some("Active".to_string()),
+            };
 
-        let json = serde_json::to_string(&request).unwrap();
-        let deserialized: PoolListRequest = serde_json::from_str(&json).unwrap();
+            let json = serde_json::to_string(&request).unwrap();
+            let deserialized: PoolListRequest = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(request.pool_type, deserialized.pool_type);
-        assert_eq!(request.pool_sort_field, deserialized.pool_sort_field);
-        assert_eq!(request.sort_type, deserialized.sort_type);
-        assert_eq!(request.page_size, deserialized.page_size);
-        assert_eq!(request.page, deserialized.page);
-        assert_eq!(request.creator_wallet, deserialized.creator_wallet);
-        assert_eq!(request.mint_address, deserialized.mint_address);
-        assert_eq!(request.status, deserialized.status);
-    }
+            assert_eq!(request.pool_type, deserialized.pool_type);
+            assert_eq!(request.pool_sort_field, deserialized.pool_sort_field);
+            assert_eq!(request.sort_type, deserialized.sort_type);
+            assert_eq!(request.page_size, deserialized.page_size);
+            assert_eq!(request.page, deserialized.page);
+            assert_eq!(request.creator_wallet, deserialized.creator_wallet);
+            assert_eq!(request.mint_address, deserialized.mint_address);
+            assert_eq!(request.status, deserialized.status);
+        }
 
-    #[test]
-    fn test_pool_list_request_serde_rename() {
-        let json = r#"{
-            "poolType": "concentrated",
-            "poolSortField": "created_at",
-            "sortType": "asc",
-            "pageSize": 50,
-            "page": 2,
-            "creatorWallet": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
-            "mintAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            "status": "Active"
-        }"#;
+        #[test]
+        fn test_pool_list_request_serde_rename() {
+            let json = r#"{
+                "poolType": "concentrated",
+                "poolSortField": "created_at",
+                "sortType": "asc",
+                "pageSize": 50,
+                "page": 2,
+                "creatorWallet": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+                "mintAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                "status": "Active"
+            }"#;
 
-        let request: PoolListRequest = serde_json::from_str(json).unwrap();
+            let request: PoolListRequest = serde_json::from_str(json).unwrap();
 
-        assert_eq!(request.pool_type, Some("concentrated".to_string()));
-        assert_eq!(request.pool_sort_field, Some("created_at".to_string()));
-        assert_eq!(request.sort_type, Some("asc".to_string()));
-        assert_eq!(request.page_size, Some(50));
-        assert_eq!(request.page, Some(2));
-        assert_eq!(
-            request.creator_wallet,
-            Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string())
-        );
-        assert_eq!(
-            request.mint_address,
-            Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string())
-        );
-        assert_eq!(request.status, Some("Active".to_string()));
-    }
+            assert_eq!(request.pool_type, Some("concentrated".to_string()));
+            assert_eq!(request.pool_sort_field, Some("created_at".to_string()));
+            assert_eq!(request.sort_type, Some("asc".to_string()));
+            assert_eq!(request.page_size, Some(50));
+            assert_eq!(request.page, Some(2));
+            assert_eq!(
+                request.creator_wallet,
+                Some("9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM".to_string())
+            );
+            assert_eq!(
+                request.mint_address,
+                Some("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string())
+            );
+            assert_eq!(request.status, Some("Active".to_string()));
+        }
 
-    #[test]
-    fn test_pool_list_request_edge_cases() {
-        // Test with minimum valid values
-        let request = PoolListRequest {
-            page_size: Some(1),
-            page: Some(1),
-            ..Default::default()
-        };
-        assert!(request.validate().is_ok());
+        #[test]
+        fn test_pool_list_request_edge_cases() {
+            // Test with minimum valid values
+            let request = PoolListRequest {
+                page_size: Some(1),
+                page: Some(1),
+                ..Default::default()
+            };
+            assert!(request.validate().is_ok());
 
-        // Test with maximum valid values
-        let request = PoolListRequest {
-            page_size: Some(100),
-            page: Some(u64::MAX),
-            ..Default::default()
-        };
-        assert!(request.validate().is_ok());
-    }
+            // Test with maximum valid values
+            let request = PoolListRequest {
+                page_size: Some(100),
+                page: Some(u64::MAX),
+                ..Default::default()
+            };
+            assert!(request.validate().is_ok());
+        }
 
-    #[test]
-    fn test_pool_list_request_optional_fields() {
-        // Test with all optional fields as None
-        let request = PoolListRequest {
-            pool_type: None,
-            pool_sort_field: None,
-            sort_type: None,
-            page_size: None,
-            page: None,
-            creator_wallet: None,
-            mint_address: None,
-            status: None,
-        };
-        assert!(request.validate().is_ok());
-    }
+        #[test]
+        fn test_pool_list_request_optional_fields() {
+            // Test with all optional fields as None
+            let request = PoolListRequest {
+                pool_type: None,
+                pool_sort_field: None,
+                sort_type: None,
+                page_size: None,
+                page: None,
+                creator_wallet: None,
+                mint_address: None,
+                status: None,
+            };
+            assert!(request.validate().is_ok());
+        }
 
     #[test]
     fn test_pagination_meta_creation() {
@@ -629,4 +627,6 @@ mod tests {
         assert_eq!(type_count.pool_type, deserialized.pool_type);
         assert_eq!(type_count.count, deserialized.count);
     }
+
 }
+    */

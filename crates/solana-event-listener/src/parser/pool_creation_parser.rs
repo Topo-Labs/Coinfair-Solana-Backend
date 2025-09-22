@@ -196,7 +196,7 @@ impl PoolCreationParser {
 
                         // 所有重试都失败后，使用默认值
                         let default_fee_rate = 3000u32; // 0.3%
-                        let default_decimals = 9u8; // 大多数SPL代币使用9位小数
+                        let default_decimals = 6u8; // 大多数SPL代币使用9位小数
                         let default_creator = Pubkey::new_from_array([0u8; 32]); // 零地址作为占位符
                         let default_clmm_config = Pubkey::new_from_array([0u8; 32]); // 零地址作为占位符
                         let current_timestamp = chrono::Utc::now().timestamp();

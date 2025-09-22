@@ -5,30 +5,30 @@ use validator::Validate;
 
 use crate::dtos::solana::common::{RoutePlan, TransferFeeInfo};
 
-/// Raydium计算交换请求参数（GET查询参数）
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
-pub struct ComputeSwapRequest {
-    /// 输入代币的mint地址
-    #[serde(rename = "inputMint")]
-    pub input_mint: String,
+// Raydium计算交换请求参数（GET查询参数）
+// #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+// pub struct ComputeSwapRequest {
+//     /// 输入代币的mint地址
+//     #[serde(rename = "inputMint")]
+//     pub input_mint: String,
 
-    /// 输出代币的mint地址
-    #[serde(rename = "outputMint")]
-    pub output_mint: String,
+//     /// 输出代币的mint地址
+//     #[serde(rename = "outputMint")]
+//     pub output_mint: String,
 
-    /// 输入或输出金额（以最小单位计算）
-    #[validate(length(min = 1))]
-    pub amount: String,
+//     /// 输入或输出金额（以最小单位计算）
+//     #[validate(length(min = 1))]
+//     pub amount: String,
 
-    /// 滑点容忍度（基点，如50表示0.5%）
-    #[serde(rename = "slippageBps")]
-    #[validate(range(min = 1, max = 10000))]
-    pub slippage_bps: u16,
+//     /// 滑点容忍度（基点，如50表示0.5%）
+//     #[serde(rename = "slippageBps")]
+//     #[validate(range(min = 1, max = 10000))]
+//     pub slippage_bps: u16,
 
-    /// 交易版本（V0或V1）
-    #[serde(rename = "txVersion")]
-    pub tx_version: String,
-}
+//     /// 交易版本（V0或V1）
+//     #[serde(rename = "txVersion")]
+//     pub tx_version: String,
+// }
 
 /// SwapV2计算交换请求参数（支持转账费）
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]

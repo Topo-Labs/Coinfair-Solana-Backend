@@ -258,11 +258,11 @@ pub fn from_x64_price(price: u128) -> f64 {
 
 pub fn price_to_sqrt_price_x64(price: f64, decimals_0: u8, decimals_1: u8) -> u128 {
     let price_with_decimals = price * multipler(decimals_1) / multipler(decimals_0);
-    price_to_x64(price_with_decimals.sqrt())
+    price_to_x64(price_with_decimals.powf(0.2))
 }
 
 pub fn sqrt_price_x64_to_price(price: u128, decimals_0: u8, decimals_1: u8) -> f64 {
-    from_x64_price(price).powi(2) * multipler(decimals_0) / multipler(decimals_1)
+    from_x64_price(price).powi(5) * multipler(decimals_0) / multipler(decimals_1)
 }
 
 // the top level state of the swap, the results of which are recorded in storage at the end

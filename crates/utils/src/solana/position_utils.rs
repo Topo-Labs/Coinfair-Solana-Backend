@@ -22,32 +22,17 @@ impl<'a> PositionUtils<'a> {
         Self { rpc_client }
     }
 
-    /// 价格转换为sqrt_price_x64
     pub fn price_to_sqrt_price_x64(&self, price: f64, decimals_0: u8, decimals_1: u8) -> u128 {
-        // 调整小数位数差异
-        let decimal_adjustment = 10_f64.powi(decimals_0 as i32 - decimals_1 as i32);
-        let adjusted_price = price / decimal_adjustment;
-
-        // 计算sqrt_price
-        let sqrt_price = adjusted_price.sqrt();
-
-        // 转换为Q64.64格式
-        (sqrt_price * (1u128 << 64) as f64) as u128
+        raydium_amm_v3_clent::price_to_sqrt_price_x64(price, decimals_0, decimals_1)
     }
 
-    /// sqrt_price_x64转换为价格
-    pub fn sqrt_price_x64_to_price(&self, sqrt_price_x64: u128, decimals_0: u8, decimals_1: u8) -> f64 {
-        let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
-        let price = sqrt_price * sqrt_price;
-
-        // 调整小数位数
-        let decimal_adjustment = 10_f64.powi(decimals_0 as i32 - decimals_1 as i32);
-        price * decimal_adjustment
+    pub fn sqrt_price_x64_to_price(&self, price: u128, decimals_0: u8, decimals_1: u8) -> f64 {
+        raydium_amm_v3_clent::sqrt_price_x64_to_price(price, decimals_0, decimals_1)
     }
 
     /// 根据价格计算tick索引
     pub fn price_to_tick(&self, price: f64, decimals_0: u8, decimals_1: u8) -> Result<i32> {
-        let sqrt_price_x64 = self.price_to_sqrt_price_x64(price, decimals_0, decimals_1);
+        let sqrt_price_x64 = raydium_amm_v3_clent::price_to_sqrt_price_x64(price, decimals_0, decimals_1);
         raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_x64)
             .map_err(|e| anyhow::anyhow!("价格转tick失败: {:?}", e))
     }
@@ -56,7 +41,11 @@ impl<'a> PositionUtils<'a> {
     pub fn tick_to_price(&self, tick: i32, decimals_0: u8, decimals_1: u8) -> Result<f64> {
         let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick)
             .map_err(|e| anyhow::anyhow!("tick转价格失败: {:?}", e))?;
-        Ok(self.sqrt_price_x64_to_price(sqrt_price_x64, decimals_0, decimals_1))
+        Ok(raydium_amm_v3_clent::sqrt_price_x64_to_price(
+            sqrt_price_x64,
+            decimals_0,
+            decimals_1,
+        ))
     }
 
     /// 根据tick spacing调整tick

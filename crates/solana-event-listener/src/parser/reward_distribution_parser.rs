@@ -364,12 +364,12 @@ impl RewardDistributionParser {
         // }
 
         // 验证推荐人不能是自己
-        if let Some(referrer) = &event.referrer {
-            if referrer == &event.recipient {
-                warn!("❌ 推荐人不能是自己: {}", event.recipient);
-                return Ok(false);
-            }
-        }
+        // if let Some(referrer) = &event.referrer {
+        //     if referrer == &event.recipient {
+        //         warn!("❌ 推荐人不能是自己: {}", event.recipient);
+        //         return Ok(false);
+        //     }
+        // }
 
         // 验证推荐奖励的逻辑一致性
         if event.is_referral_reward && event.referrer.is_none() {

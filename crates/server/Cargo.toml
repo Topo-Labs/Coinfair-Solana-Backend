@@ -47,6 +47,7 @@ raydium-amm-v3 = { path = "../solana/clmm", package = "coinfair-raydium-amm-v3",
       "no-entrypoint",
       "client",
 ] }
+raydium-amm-v3-clent = { path = "../solana/clmm-client", package = "client" }
 raydium-cp-swap = { git = "https://github.com/raydium-io/raydium-cp-swap", features = [
       "no-entrypoint",
       "client",
