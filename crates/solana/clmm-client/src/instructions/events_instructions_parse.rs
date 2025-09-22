@@ -704,28 +704,28 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", Swap::from(ix));
         }
-        instruction::SwapV2::DISCRIMINATOR => {
-            let ix = decode_instruction::<instruction::SwapV2>(&mut ix_data).unwrap();
-            #[derive(Debug)]
-            #[allow(dead_code)]
-            pub struct SwapV2 {
-                pub amount: u64,
-                pub other_amount_threshold: u64,
-                pub sqrt_price_limit_x64: u128,
-                pub is_base_input: bool,
-            }
-            impl From<instruction::SwapV2> for SwapV2 {
-                fn from(instr: instruction::SwapV2) -> SwapV2 {
-                    SwapV2 {
-                        amount: instr.amount,
-                        other_amount_threshold: instr.other_amount_threshold,
-                        sqrt_price_limit_x64: instr.sqrt_price_limit_x64,
-                        is_base_input: instr.is_base_input,
-                    }
-                }
-            }
-            println!("{:#?}", SwapV2::from(ix));
-        }
+        // instruction::SwapV2::DISCRIMINATOR => {
+        //     let ix = decode_instruction::<instruction::SwapV2>(&mut ix_data).unwrap();
+        //     #[derive(Debug)]
+        //     #[allow(dead_code)]
+        //     pub struct SwapV2 {
+        //         pub amount: u64,
+        //         pub other_amount_threshold: u64,
+        //         pub sqrt_price_limit_x64: u128,
+        //         pub is_base_input: bool,
+        //     }
+        //     impl From<instruction::SwapV2> for SwapV2 {
+        //         fn from(instr: instruction::SwapV2) -> SwapV2 {
+        //             SwapV2 {
+        //                 amount: instr.amount,
+        //                 other_amount_threshold: instr.other_amount_threshold,
+        //                 sqrt_price_limit_x64: instr.sqrt_price_limit_x64,
+        //                 is_base_input: instr.is_base_input,
+        //             }
+        //         }
+        //     }
+        //     println!("{:#?}", SwapV2::from(ix));
+        // }
         instruction::SwapRouterBaseIn::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapRouterBaseIn>(&mut ix_data).unwrap();
             #[derive(Debug)]

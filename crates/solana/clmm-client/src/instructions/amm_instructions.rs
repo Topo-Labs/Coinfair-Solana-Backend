@@ -162,6 +162,7 @@ pub fn create_pool_instr(
             pool_creator: program.payer(),
             amm_config,
             pool_state: pool_account_key,
+            base_mint: token_mint_0,
             token_mint_0,
             token_mint_1,
             token_vault_0,
@@ -612,6 +613,14 @@ pub fn swap_instr(
         .request()
         .accounts(raydium_accounts::SwapSingle {
             payer: program.payer(),
+            input_mint: input_vault,
+            payer_referral: input_vault,
+            referral: input_vault,
+            upper: None,
+            upper_referral: None,
+            upper_token_account: None,
+            upper_upper: None,
+            upper_upper_token_account: None,
             amm_config,
             pool_state: pool_account_key,
             input_token_account: user_input_token,
@@ -634,53 +643,53 @@ pub fn swap_instr(
 }
 
 pub fn swap_v2_instr(
-    config: &ClientConfig,
-    amm_config: Pubkey,
-    pool_account_key: Pubkey,
-    input_vault: Pubkey,
-    output_vault: Pubkey,
-    observation_state: Pubkey,
-    user_input_token: Pubkey,
-    user_out_put_token: Pubkey,
-    input_vault_mint: Pubkey,
-    output_vault_mint: Pubkey,
-    remaining_accounts: Vec<AccountMeta>,
-    amount: u64,
-    other_amount_threshold: u64,
-    sqrt_price_limit_x64: Option<u128>,
-    is_base_input: bool,
+    _config: &ClientConfig,
+    _amm_config: Pubkey,
+    _pool_account_key: Pubkey,
+    _input_vault: Pubkey,
+    _output_vault: Pubkey,
+    _observation_state: Pubkey,
+    _user_input_token: Pubkey,
+    _user_out_put_token: Pubkey,
+    _input_vault_mint: Pubkey,
+    _output_vault_mint: Pubkey,
+    _remaining_accounts: Vec<AccountMeta>,
+    _amount: u64,
+    _other_amount_threshold: u64,
+    _sqrt_price_limit_x64: Option<u128>,
+    _is_base_input: bool,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
-    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    // Client.
-    let client = Client::new(url, Rc::new(payer));
-    let program = client.program(config.raydium_v3_program)?;
-    let instructions = program
-        .request()
-        .accounts(raydium_accounts::SwapSingleV2 {
-            payer: program.payer(),
-            amm_config,
-            pool_state: pool_account_key,
-            input_token_account: user_input_token,
-            output_token_account: user_out_put_token,
-            input_vault,
-            output_vault,
-            observation_state,
-            token_program: spl_token::id(),
-            token_program_2022: spl_token_2022::id(),
-            memo_program: spl_memo::id(),
-            input_vault_mint,
-            output_vault_mint,
-        })
-        .accounts(remaining_accounts)
-        .args(raydium_instruction::SwapV2 {
-            amount,
-            other_amount_threshold,
-            sqrt_price_limit_x64: sqrt_price_limit_x64.unwrap_or(0u128),
-            is_base_input,
-        })
-        .instructions()?;
-    Ok(instructions)
+    // let payer = read_keypair_file(&config.payer_path)?;
+    // let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
+    // // Client.
+    // let client = Client::new(url, Rc::new(payer));
+    // let program = client.program(config.raydium_v3_program)?;
+    // let instructions = program
+    //     .request()
+    //     .accounts(raydium_accounts::SwapSingleV2 {
+    //         payer: program.payer(),
+    //         amm_config,
+    //         pool_state: pool_account_key,
+    //         input_token_account: user_input_token,
+    //         output_token_account: user_out_put_token,
+    //         input_vault,
+    //         output_vault,
+    //         observation_state,
+    //         token_program: spl_token::id(),
+    //         token_program_2022: spl_token_2022::id(),
+    //         memo_program: spl_memo::id(),
+    //         input_vault_mint,
+    //         output_vault_mint,
+    //     })
+    //     .accounts(remaining_accounts)
+    //     .args(raydium_instruction::SwapV2 {
+    //         amount,
+    //         other_amount_threshold,
+    //         sqrt_price_limit_x64: sqrt_price_limit_x64.unwrap_or(0u128),
+    //         is_base_input,
+    //     })
+    //     .instructions()?;
+    Ok(vec![Instruction::new_with_bytes(Pubkey::default(), b"swap_v2", vec![])])
 }
 
 pub fn swap_v3_instr(

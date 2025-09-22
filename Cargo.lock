@@ -1553,10 +1553,13 @@ dependencies = [
  "arrayref",
  "bytemuck",
  "coinfair-referral",
+ "mpl-token-metadata",
  "proptest",
  "quickcheck",
  "rand 0.8.5",
  "solana-security-txt",
+ "spl-memo 6.0.0",
+ "spl-token-metadata-interface 0.6.0",
  "uint 0.9.5 (git+https://github.com/raydium-io/parity-common)",
 ]
 

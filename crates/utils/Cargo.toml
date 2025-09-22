@@ -31,7 +31,7 @@ anchor-lang = { workspace = true }
 spl-token = { workspace = true }
 spl-token-2022 = { workspace = true }
 spl-associated-token-account = { workspace = true }
-raydium-amm-v3 = { path = "../solana/clmm", package = "coinfair-raydium-amm-v3", features = [
+raydium-amm-v3 = { path = "../solana/amm", package = "coinfair-raydium-amm-v3", features = [
       "no-entrypoint",
       "client",
 ] }

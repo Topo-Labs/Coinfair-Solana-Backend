@@ -1,5 +1,5 @@
 [package]
-name = "coinfair-raydium-amm-v3"  # 改为唯一的package名称
+name = "coinfair-raydium-amm-v3-old"                                            # 改为唯一的package名称
 version = "0.1.0"
 description = "Anchor client and source for Raydium concentrated liquidity AMM"
 edition = "2021"
@@ -7,7 +7,7 @@ keywords = ["solana", "anchor", "raydium"]
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "coinfair_raydium_amm_v3"  # 使用唯一名称
+name = "coinfair_raydium_amm_v3_old" # 使用唯一名称
 doctest = false
 
 [features]
@@ -28,7 +28,10 @@ uint = { git = "https://github.com/raydium-io/parity-common", package = "uint" }
 bytemuck = { version = "1.19.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
 solana-security-txt = "1.1.1"
-coinfair-referral = { path = "../referral", features = ["no-entrypoint", "cpi"] }
+coinfair-referral = { path = "../referral", package = "coinfair-referral", features = [
+      "no-entrypoint",
+      "cpi",
+] }
 
 [dev-dependencies]
 quickcheck = "0.9"

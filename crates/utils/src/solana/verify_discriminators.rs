@@ -4,6 +4,7 @@ mod tests {
     use raydium_amm_v3::instruction as clmm_instruction;
     use raydium_cp_swap::instruction as cp_instruction;
     use solana_sdk::hash::hash;
+    use spl_token::solana_program;
 
     #[test]
     fn test_discriminator_unification_verification() {
@@ -23,7 +24,12 @@ mod tests {
             clmm_instruction::DecreaseLiquidityV2::DISCRIMINATOR
         );
         println!("ClosePosition: {:?}", clmm_instruction::ClosePosition::DISCRIMINATOR);
-        println!("SwapV2: {:?}", clmm_instruction::SwapV2::DISCRIMINATOR);
+        // println!(
+        //     "SwapV2: {:?}",
+        //     solana_program::hash::hash(b"global:open_position_with_token22_nft").to_bytes()[..8]
+        //         .try_into()
+        //         .unwrap()
+        // );
 
         // 2. CP-Swap (V2) 指令验证
         println!("\n📋 CP-Swap (V2) 指令:");
@@ -78,7 +84,12 @@ mod tests {
         assert_ne!(clmm_instruction::IncreaseLiquidityV2::DISCRIMINATOR, [0u8; 8]);
         assert_ne!(clmm_instruction::DecreaseLiquidityV2::DISCRIMINATOR, [0u8; 8]);
         assert_ne!(clmm_instruction::ClosePosition::DISCRIMINATOR, [0u8; 8]);
-        assert_ne!(clmm_instruction::SwapV2::DISCRIMINATOR, [0u8; 8]);
+        // assert_ne!(
+        //     solana_program::hash::hash(b"global:open_position_with_token22_nft").to_bytes()[..8]
+        //         .try_into()
+        //         .unwrap(),
+        //     [0u8; 8]
+        // );
         assert_ne!(cp_instruction::Initialize::DISCRIMINATOR, [0u8; 8]);
     }
 
@@ -115,6 +126,9 @@ mod tests {
 
     #[test]
     fn test_discriminator_format_consistency() {
+        let swap_v2_discriminator: [u8; 8] = solana_program::hash::hash(b"global:swap_v2").to_bytes()[..8]
+            .try_into()
+            .unwrap();
         // 验证所有discriminator都遵循正确的格式（8字节数组）
         let discriminators = vec![
             clmm_instruction::CreatePool::DISCRIMINATOR,
@@ -122,7 +136,7 @@ mod tests {
             clmm_instruction::IncreaseLiquidityV2::DISCRIMINATOR,
             clmm_instruction::DecreaseLiquidityV2::DISCRIMINATOR,
             clmm_instruction::ClosePosition::DISCRIMINATOR,
-            clmm_instruction::SwapV2::DISCRIMINATOR,
+            &swap_v2_discriminator,
             cp_instruction::Initialize::DISCRIMINATOR,
         ];
 

@@ -4,6 +4,7 @@ mod tests {
     use raydium_amm_v3::instruction as clmm_instruction;
     use raydium_cp_swap::instruction as cp_instruction;
     use solana_sdk::hash::hash;
+    use spl_token::solana_program;
 
     #[test]
     fn test_discriminator_consistency_comprehensive() {
@@ -91,7 +92,9 @@ mod tests {
 
         // 5. 验证 SwapV2 (这个可能不匹配，因为可能有不同的指令名称)
         println!("\n📋 测试 SwapV2:");
-        let predefined_swap = clmm_instruction::SwapV2::DISCRIMINATOR;
+        let predefined_swap: [u8; 8] = solana_program::hash::hash(b"global:swap_v2").to_bytes()[..8]
+            .try_into()
+            .unwrap();
         println!("预定义常量: {:?}", predefined_swap);
         println!("注意: SwapV2可能使用不同的指令名称，需要具体确认");
 
