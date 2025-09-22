@@ -4,6 +4,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use raydium_amm_v3::instruction;
 use solana_sdk::pubkey::Pubkey;
+use spl_token::solana_program;
 use std::str::FromStr;
 
 use super::{constants, MathUtils};
@@ -216,7 +217,8 @@ impl SwapV2InstructionBuilder {
         LogUtils::log_operation_start("SwapV2指令构建", &format!("金额: {}", amount));
 
         // 使用预定义的discriminator常量 - SwapV2指令
-        let discriminator = instruction::SwapV2::DISCRIMINATOR;
+        // let discriminator = instruction::SwapV2::DISCRIMINATOR;
+        let discriminator: [u8; 8] = solana_program::hash::hash(b"global:swap_v2").to_bytes()[..8].try_into()?;
 
         #[derive(BorshSerialize)]
         struct SwapV2Args {

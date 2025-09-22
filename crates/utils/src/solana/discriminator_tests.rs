@@ -4,6 +4,7 @@ mod discriminator_verification_tests {
     use raydium_amm_v3::instruction as clmm_instruction;
     use raydium_cp_swap::instruction as cp_instruction;
     use solana_sdk::hash::hash;
+    use spl_token::solana_program;
 
     #[test]
     fn test_open_position_discriminator_consistency() {
@@ -112,6 +113,9 @@ mod discriminator_verification_tests {
 
     #[test]
     fn test_all_discriminators_are_unique() {
+        let swap_v2_discriminator: [u8; 8] = solana_program::hash::hash(b"global:swap_v2").to_bytes()[..8]
+            .try_into()
+            .unwrap();
         // 确保所有discriminator都是唯一的
         let discriminators = vec![
             ("CreatePool", clmm_instruction::CreatePool::DISCRIMINATOR),
@@ -125,7 +129,7 @@ mod discriminator_verification_tests {
                 clmm_instruction::DecreaseLiquidityV2::DISCRIMINATOR,
             ),
             ("ClosePosition", clmm_instruction::ClosePosition::DISCRIMINATOR),
-            ("SwapV2", clmm_instruction::SwapV2::DISCRIMINATOR),
+            ("SwapV2", &swap_v2_discriminator),
             ("CP-Initialize", cp_instruction::Initialize::DISCRIMINATOR),
         ];
 
