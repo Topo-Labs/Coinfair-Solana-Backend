@@ -95,7 +95,7 @@ impl LiquidityLineService {
         let tick_current = pool_state.tick_current;
         let tick_spacing = pool_state.tick_spacing;
         let sqrt_price_x64 = pool_state.sqrt_price_x64;
-        let current_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
+        let current_price = raydium_amm_v3_client::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
 
         info!(
             "📊 解析池子状态 - 当前tick: {}, tick间距: {}, 当前价格: {}",
@@ -292,7 +292,7 @@ impl LiquidityLineService {
 
         // 从sqrt_price_x64转换为价格
         // self.sqrt_price_x64_to_price(sqrt_price_x64)
-        let result = raydium_amm_v3_clent::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
+        let result = raydium_amm_v3_client::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
         Ok(result)
     }
 

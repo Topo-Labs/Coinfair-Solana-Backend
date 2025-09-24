@@ -1,24 +1,28 @@
 use anchor_client::ClientError;
 use anchor_lang::Discriminator;
 use anyhow::Result;
-use base64::Engine;
 use colorful::Color;
 use colorful::Colorful;
 use raydium_cp_swap::instruction;
 use raydium_cp_swap::states::*;
 use regex::Regex;
-use solana_transaction_status::{option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta};
+use solana_transaction_status::{
+    option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta,
+};
 
 const PROGRAM_LOG: &str = "Program log: ";
 const PROGRAM_DATA: &str = "Program data: ";
-
+const DISCRIMINATOR_LEN: usize = 8;
 pub enum InstructionDecodeType {
     BaseHex,
     Base64,
     Base58,
 }
 
-pub fn parse_program_event(self_program_str: &str, meta: Option<UiTransactionStatusMeta>) -> Result<(), ClientError> {
+pub fn parse_program_event(
+    self_program_str: &str,
+    meta: Option<UiTransactionStatusMeta>,
+) -> Result<(), ClientError> {
     let logs: Vec<String> = if let Some(meta_data) = meta {
         let log_messages = if let OptionSerializer::Some(log_messages) = meta_data.log_messages {
             log_messages
@@ -33,15 +37,16 @@ pub fn parse_program_event(self_program_str: &str, meta: Option<UiTransactionSta
     if !logs.is_empty() {
         if let Ok(mut execution) = Execution::new(&mut logs) {
             for l in logs {
-                let (new_program, did_pop) = if !execution.is_empty() && self_program_str == execution.program() {
-                    handle_program_log(self_program_str, &l, true).unwrap_or_else(|e| {
-                        println!("Unable to parse log: {e}");
-                        std::process::exit(1);
-                    })
-                } else {
-                    let (program, did_pop) = handle_system_log(self_program_str, l);
-                    (program, did_pop)
-                };
+                let (new_program, did_pop) =
+                    if !execution.is_empty() && self_program_str == execution.program() {
+                        handle_program_log(self_program_str, &l, true).unwrap_or_else(|e| {
+                            println!("Unable to parse log: {e}");
+                            std::process::exit(1);
+                        })
+                    } else {
+                        let (program, did_pop) = handle_system_log(self_program_str, l);
+                        (program, did_pop)
+                    };
                 // Switch program context on CPI.
                 if let Some(new_program) = new_program {
                     execution.push(new_program);
@@ -76,7 +81,9 @@ impl Execution {
             .ok_or_else(|| ClientError::LogParseError(l.to_string()))?
             .as_str()
             .to_string();
-        Ok(Self { stack: vec![program] })
+        Ok(Self {
+            stack: vec![program],
+        })
     }
 
     pub fn program(&self) -> String {
@@ -105,7 +112,8 @@ pub fn handle_program_log(
 ) -> Result<(Option<String>, bool), ClientError> {
     // Log emitted from the current program.
     if let Some(log) = if with_prefix {
-        l.strip_prefix(PROGRAM_LOG).or_else(|| l.strip_prefix(PROGRAM_DATA))
+        l.strip_prefix(PROGRAM_LOG)
+            .or_else(|| l.strip_prefix(PROGRAM_DATA))
     } else {
         Some(l)
     } {
@@ -113,26 +121,28 @@ pub fn handle_program_log(
             // not log event
             return Ok((None, false));
         }
-        let borsh_bytes = match base64::engine::general_purpose::STANDARD.decode(log) {
-            Ok(borsh_bytes) => borsh_bytes,
-            _ => {
-                println!("Could not base64 decode log: {}", log);
-                return Ok((None, false));
-            }
-        };
+        let borsh_bytes =
+            match base64::Engine::decode(&base64::engine::general_purpose::STANDARD, log) {
+                Ok(borsh_bytes) => borsh_bytes,
+                _ => {
+                    println!("Could not base64 decode log: {}", log);
+                    return Ok((None, false));
+                }
+            };
 
-        let mut slice: &[u8] = &borsh_bytes[..];
-        let disc: [u8; 8] = {
-            let mut disc = [0; 8];
-            disc.copy_from_slice(&borsh_bytes[..8]);
-            slice = &slice[8..];
-            disc
-        };
+        if borsh_bytes.len() < DISCRIMINATOR_LEN {
+            return Err(ClientError::LogParseError(
+                format!("log data is too short: {}", log).to_string(),
+            ));
+        }
+        let disc = &borsh_bytes[..DISCRIMINATOR_LEN];
+        let mut slice: &[u8] = &borsh_bytes[DISCRIMINATOR_LEN..];
+
         match disc {
-            x if x == SwapEvent::DISCRIMINATOR => {
+            SwapEvent::DISCRIMINATOR => {
                 println!("{:#?}", decode_event::<SwapEvent>(&mut slice)?);
             }
-            x if x == LpChangeEvent::DISCRIMINATOR => {
+            LpChangeEvent::DISCRIMINATOR => {
                 println!("{:#?}", decode_event::<LpChangeEvent>(&mut slice)?);
             }
             _ => {
@@ -161,9 +171,11 @@ fn handle_system_log(this_program_str: &str, log: &str) -> (Option<String>, bool
     }
 }
 
-fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(slice: &mut &[u8]) -> Result<T, ClientError> {
-    let event: T =
-        anchor_lang::AnchorDeserialize::deserialize(slice).map_err(|e| ClientError::LogParseError(e.to_string()))?;
+fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(
+    slice: &mut &[u8],
+) -> Result<T, ClientError> {
+    let event: T = anchor_lang::AnchorDeserialize::deserialize(slice)
+        .map_err(|e| ClientError::LogParseError(e.to_string()))?;
     Ok(event)
 }
 
@@ -208,14 +220,20 @@ pub fn parse_program_instruction(
             }
             _ => {}
         }
-        let program_index = account_keys.iter().position(|r| r == self_program_str).unwrap();
+        let program_index = account_keys
+            .iter()
+            .position(|r| r == self_program_str)
+            .unwrap();
         // println!("{}", program_index);
         // println!("{:#?}", account_keys);
         for (i, ui_compiled_instruction) in ui_raw_msg.instructions.iter().enumerate() {
             if (ui_compiled_instruction.program_id_index as usize) == program_index {
                 let out_put = format!("instruction #{}", i + 1);
                 println!("{}", out_put.gradient(Color::Green));
-                handle_program_instruction(&ui_compiled_instruction.data, InstructionDecodeType::Base58)?;
+                handle_program_instruction(
+                    &ui_compiled_instruction.data,
+                    InstructionDecodeType::Base58,
+                )?;
             }
         }
 
@@ -224,9 +242,14 @@ pub fn parse_program_instruction(
                 for inner in inner_instructions {
                     for (i, instruction) in inner.instructions.iter().enumerate() {
                         match instruction {
-                            solana_transaction_status::UiInstruction::Compiled(ui_compiled_instruction) => {
-                                if (ui_compiled_instruction.program_id_index as usize) == program_index {
-                                    let out_put = format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
+                            solana_transaction_status::UiInstruction::Compiled(
+                                ui_compiled_instruction,
+                            ) => {
+                                if (ui_compiled_instruction.program_id_index as usize)
+                                    == program_index
+                                {
+                                    let out_put =
+                                        format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
                                     println!("{}", out_put.gradient(Color::Green));
                                     handle_program_instruction(
                                         &ui_compiled_instruction.data,
@@ -245,14 +268,20 @@ pub fn parse_program_instruction(
     Ok(())
 }
 
-pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDecodeType) -> Result<(), ClientError> {
+pub fn handle_program_instruction(
+    instr_data: &str,
+    decode_type: InstructionDecodeType,
+) -> Result<(), ClientError> {
     let data;
     match decode_type {
         InstructionDecodeType::BaseHex => {
             data = hex::decode(instr_data).unwrap();
         }
         InstructionDecodeType::Base64 => {
-            let borsh_bytes = match base64::engine::general_purpose::STANDARD.decode(instr_data) {
+            let borsh_bytes = match base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                instr_data,
+            ) {
                 Ok(borsh_bytes) => borsh_bytes,
                 _ => {
                     println!("Could not base64 decode instruction: {}", instr_data);
@@ -273,18 +302,16 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
         }
     }
 
-    let mut ix_data: &[u8] = &data[..];
-    let disc: [u8; 8] = {
-        let mut disc = [0; 8];
-        disc.copy_from_slice(&data[..8]);
-        ix_data = &ix_data[8..];
-        disc
-    };
-    // println!("{:?}", disc);
+    if data.len() < DISCRIMINATOR_LEN {
+        return Err(ClientError::LogParseError(
+            format!("instruction data is too short: {}", instr_data).to_string(),
+        ));
+    }
+    let disc = &data[..DISCRIMINATOR_LEN];
+    let mut ix_data: &[u8] = &data[DISCRIMINATOR_LEN..];
 
     match disc {
-        // instruction::CreateAmmConfig::DISCRIMINATOR => {
-        x if x == instruction::CreateAmmConfig::DISCRIMINATOR => {
+        instruction::CreateAmmConfig::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CreateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct CreateAmmConfig {
@@ -307,7 +334,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", CreateAmmConfig::from(ix));
         }
-        x if x == instruction::UpdateAmmConfig::DISCRIMINATOR => {
+        instruction::UpdateAmmConfig::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::UpdateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct UpdateAmmConfig {
@@ -324,7 +351,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", UpdateAmmConfig::from(ix));
         }
-        x if x == instruction::Initialize::DISCRIMINATOR => {
+        instruction::Initialize::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Initialize>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct Initialize {
@@ -343,7 +370,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", Initialize::from(ix));
         }
-        x if x == instruction::UpdatePoolStatus::DISCRIMINATOR => {
+        instruction::UpdatePoolStatus::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::UpdatePoolStatus>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct UpdatePoolStatus {
@@ -351,12 +378,14 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             impl From<instruction::UpdatePoolStatus> for UpdatePoolStatus {
                 fn from(instr: instruction::UpdatePoolStatus) -> UpdatePoolStatus {
-                    UpdatePoolStatus { status: instr.status }
+                    UpdatePoolStatus {
+                        status: instr.status,
+                    }
                 }
             }
             println!("{:#?}", UpdatePoolStatus::from(ix));
         }
-        x if x == instruction::CollectProtocolFee::DISCRIMINATOR => {
+        instruction::CollectProtocolFee::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CollectProtocolFee>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct CollectProtocolFee {
@@ -373,7 +402,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", CollectProtocolFee::from(ix));
         }
-        x if x == instruction::CollectFundFee::DISCRIMINATOR => {
+        instruction::CollectFundFee::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CollectFundFee>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct CollectFundFee {
@@ -390,7 +419,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", CollectFundFee::from(ix));
         }
-        x if x == instruction::Deposit::DISCRIMINATOR => {
+        instruction::Deposit::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Deposit>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct Deposit {
@@ -409,7 +438,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", Deposit::from(ix));
         }
-        x if x == instruction::Withdraw::DISCRIMINATOR => {
+        instruction::Withdraw::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Withdraw>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct Withdraw {
@@ -428,7 +457,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", Withdraw::from(ix));
         }
-        x if x == instruction::SwapBaseInput::DISCRIMINATOR => {
+        instruction::SwapBaseInput::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapBaseInput>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct SwapBaseInput {
@@ -445,7 +474,7 @@ pub fn handle_program_instruction(instr_data: &str, decode_type: InstructionDeco
             }
             println!("{:#?}", SwapBaseInput::from(ix));
         }
-        x if x == instruction::SwapBaseOutput::DISCRIMINATOR => {
+        instruction::SwapBaseOutput::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapBaseOutput>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct SwapBaseOutput {

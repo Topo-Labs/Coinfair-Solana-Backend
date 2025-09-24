@@ -10,7 +10,7 @@ use anchor_spl::token_interface::TokenAccount;
 #[derive(Accounts)]
 pub struct CollectProtocolFee<'info> {
     /// Only admin or owner can collect fee now
-    #[account(constraint = (owner.key() == amm_config.protocol_owner || owner.key() == crate::admin::id()) @ ErrorCode::InvalidOwner)]
+    #[account(constraint = (owner.key() == amm_config.protocol_owner || owner.key() == crate::admin::ID) @ ErrorCode::InvalidOwner)]
     pub owner: Signer<'info>,
 
     /// CHECK: pool vault and lp mint authority
@@ -85,8 +85,14 @@ pub fn collect_protocol_fee(
         amount_0 = amount_0_requested.min(pool_state.protocol_fees_token_0);
         amount_1 = amount_1_requested.min(pool_state.protocol_fees_token_1);
 
-        pool_state.protocol_fees_token_0 = pool_state.protocol_fees_token_0.checked_sub(amount_0).unwrap();
-        pool_state.protocol_fees_token_1 = pool_state.protocol_fees_token_1.checked_sub(amount_1).unwrap();
+        pool_state.protocol_fees_token_0 = pool_state
+            .protocol_fees_token_0
+            .checked_sub(amount_0)
+            .unwrap();
+        pool_state.protocol_fees_token_1 = pool_state
+            .protocol_fees_token_1
+            .checked_sub(amount_1)
+            .unwrap();
 
         auth_bump = pool_state.auth_bump;
         pool_state.recent_epoch = Clock::get()?.epoch;

@@ -1481,7 +1481,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
-name = "client"
+name = "clmm-client"
 version = "0.1.0"
 dependencies = [
  "anchor-client",
@@ -1494,7 +1494,7 @@ dependencies = [
  "clap 4.5.45",
  "coinfair-raydium-amm-v3",
  "coinfair-referral",
- "colorful 0.3.2",
+ "colorful",
  "configparser",
  "hex",
  "mpl-token-metadata",
@@ -1555,28 +1555,12 @@ dependencies = [
  "coinfair-referral",
  "mpl-token-metadata",
  "proptest",
- "quickcheck",
+ "quickcheck 0.9.2",
  "rand 0.8.5",
  "solana-security-txt",
  "spl-memo 6.0.0",
  "spl-token-metadata-interface 0.6.0",
  "uint 0.9.5 (git+https://github.com/raydium-io/parity-common)",
-]
-
-[[package]]
-name = "coinfair-raydium-cp-swap"
-version = "0.1.0"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "arrayref",
- "bytemuck",
- "proptest",
- "solana-security-txt",
- "spl-math",
- "spl-memo 6.0.0",
- "spl-token 7.0.0",
- "uint 0.9.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1653,12 +1637,6 @@ checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
  "windows-sys 0.59.0",
 ]
-
-[[package]]
-name = "colorful"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97af0562545a7d7f3d9222fcf909963bec36dcb502afaacab98c6ffac8da47ce"
 
 [[package]]
 name = "colorful"
@@ -1841,26 +1819,26 @@ version = "0.1.0"
 dependencies = [
  "anchor-client",
  "anchor-lang",
+ "anchor-spl",
  "anyhow",
  "arrayref",
- "base64 0.22.1",
+ "base64 0.21.7",
  "bincode",
  "bs58",
+ "bytemuck",
  "clap 4.5.45",
- "coinfair-raydium-cp-swap",
- "colorful 0.2.2",
+ "colorful",
  "configparser",
  "hex",
+ "rand 0.9.2",
+ "raydium-cp-swap",
  "regex",
+ "serde",
  "serde_json",
+ "solana-account-decoder",
  "solana-client",
  "solana-sdk",
  "solana-transaction-status",
- "spl-associated-token-account 6.0.0",
- "spl-memo 6.0.0",
- "spl-token 7.0.0",
- "spl-token-2022 7.0.0",
- "spl-token-client",
 ]
 
 [[package]]
@@ -2635,6 +2613,16 @@ name = "env_logger"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44533bbbb3bb3c1fa17d9f2e4e38bbbaf8396ba82193c4cb1b6445d711445d36"
+dependencies = [
+ "log",
+ "regex",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
  "log",
  "regex",
@@ -5628,6 +5616,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "quickcheck"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
+dependencies = [
+ "env_logger 0.8.4",
+ "log",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5835,12 +5834,14 @@ dependencies = [
 [[package]]
 name = "raydium-cp-swap"
 version = "0.2.0"
-source = "git+https://github.com/raydium-io/raydium-cp-swap#b0b2a08ff69f3d8e999efa07e7a14b9d9f0ff02b"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
  "arrayref",
  "bytemuck",
+ "proptest",
+ "quickcheck 1.0.3",
+ "rand 0.9.2",
  "solana-security-txt",
  "spl-math",
  "spl-token-2022 7.0.0",
@@ -6820,7 +6821,7 @@ dependencies = [
  "bs58",
  "chrono",
  "clap 4.5.45",
- "client",
+ "clmm-client",
  "coinfair-raydium-amm-v3",
  "database",
  "dotenvy",
@@ -7074,7 +7075,7 @@ dependencies = [
  "anyhow",
  "base64 0.21.7",
  "bs58",
- "client",
+ "clmm-client",
  "coinfair-raydium-amm-v3",
  "hex",
  "reqwest",
@@ -10911,7 +10912,7 @@ dependencies = [
  "bincode",
  "borsh 1.5.7",
  "clap 4.5.45",
- "client",
+ "clmm-client",
  "coinfair-raydium-amm-v3",
  "dotenvy",
  "jsonwebtoken 9.3.1",

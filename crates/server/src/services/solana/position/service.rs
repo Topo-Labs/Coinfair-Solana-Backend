@@ -136,7 +136,7 @@ impl PositionService {
         //     pool_state.mint_decimals_1,
         // );
 
-        let actual_lower_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(
+        let actual_lower_price = raydium_amm_v3_client::sqrt_price_x64_to_price(
             sqrt_price_lower_adjusted,
             pool_state.mint_decimals_0,
             pool_state.mint_decimals_1,
@@ -146,7 +146,7 @@ impl PositionService {
         //     pool_state.mint_decimals_0,
         //     pool_state.mint_decimals_1,
         // );
-        let actual_upper_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(
+        let actual_upper_price = raydium_amm_v3_client::sqrt_price_x64_to_price(
             sqrt_price_upper_adjusted,
             pool_state.mint_decimals_0,
             pool_state.mint_decimals_1,
@@ -665,7 +665,7 @@ impl PositionService {
         //     pool_state.mint_decimals_0,
         //     pool_state.mint_decimals_1,
         // );
-        let current_price = raydium_amm_v3_clent::sqrt_price_x64_to_price(
+        let current_price = raydium_amm_v3_client::sqrt_price_x64_to_price(
             pool_state.sqrt_price_x64,
             pool_state.mint_decimals_0,
             pool_state.mint_decimals_1,

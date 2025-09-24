@@ -2,18 +2,14 @@ use crate::error::ErrorCode;
 use anchor_lang::{prelude::*, system_program};
 use anchor_spl::{
     token::{Token, TokenAccount},
-    token_2022::{
-        self,
-        spl_token_2022::{
-            self,
-            extension::{
-                transfer_fee::{TransferFeeConfig, MAX_FEE_BASIS_POINTS},
-                ExtensionType, StateWithExtensions,
-            },
-        },
-    },
-    token_interface::{
-        initialize_account3, spl_token_2022::extension::BaseStateWithExtensions, InitializeAccount3, Mint,
+    token_2022::{self},
+    token_interface::{initialize_account3, InitializeAccount3, Mint},
+};
+use spl_token_2022::{
+    self,
+    extension::{
+        transfer_fee::{TransferFeeConfig, MAX_FEE_BASIS_POINTS},
+        BaseStateWithExtensions, ExtensionType, StateWithExtensions,
     },
 };
 use std::collections::HashSet;
@@ -115,7 +111,11 @@ pub fn token_burn<'a>(
     token_2022::burn(
         CpiContext::new_with_signer(
             token_program.to_account_info(),
-            token_2022::Burn { from, authority, mint },
+            token_2022::Burn {
+                from,
+                authority,
+                mint,
+            },
             signer_seeds,
         ),
         amount,
@@ -140,9 +140,16 @@ pub fn get_transfer_inverse_fee(mint_info: &AccountInfo, post_fee_amount: u64) -
         if u16::from(transfer_fee.transfer_fee_basis_points) == MAX_FEE_BASIS_POINTS {
             u64::from(transfer_fee.maximum_fee)
         } else {
-            transfer_fee_config
+            let transfer_fee = transfer_fee_config
                 .calculate_inverse_epoch_fee(epoch, post_fee_amount)
-                .unwrap()
+                .unwrap();
+            let transfer_fee_for_check = transfer_fee_config
+                .calculate_epoch_fee(epoch, post_fee_amount.checked_add(transfer_fee).unwrap())
+                .unwrap();
+            if transfer_fee != transfer_fee_for_check {
+                return err!(ErrorCode::TransferFeeCalculateNotMatch);
+            }
+            transfer_fee
         }
     } else {
         0
@@ -184,6 +191,8 @@ pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>) -> Result<bool> 
         if e != ExtensionType::TransferFeeConfig
             && e != ExtensionType::MetadataPointer
             && e != ExtensionType::TokenMetadata
+            && e != ExtensionType::InterestBearingConfig
+            && e != ExtensionType::ScaledUiAmount
         {
             return Ok(false);
         }
@@ -204,10 +213,14 @@ pub fn create_token_account<'a>(
         let mint_info = mint_account.to_account_info();
         if *mint_info.owner == token_2022::Token2022::id() {
             let mint_data = mint_info.try_borrow_data()?;
-            let mint_state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+            let mint_state =
+                StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
             let mint_extensions = mint_state.get_extension_types()?;
-            let required_extensions = ExtensionType::get_required_init_account_extensions(&mint_extensions);
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&required_extensions)?
+            let required_extensions =
+                ExtensionType::get_required_init_account_extensions(&mint_extensions);
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                &required_extensions,
+            )?
         } else {
             TokenAccount::LEN
         }
@@ -255,7 +268,10 @@ pub fn create_or_allocate_account<'a>(
             program_id,
         )?;
     } else {
-        let required_lamports = rent.minimum_balance(space).max(1).saturating_sub(current_lamports);
+        let required_lamports = rent
+            .minimum_balance(space)
+            .max(1)
+            .saturating_sub(current_lamports);
         if required_lamports > 0 {
             let cpi_accounts = system_program::Transfer {
                 from: payer.to_account_info(),
@@ -268,7 +284,10 @@ pub fn create_or_allocate_account<'a>(
             account_to_allocate: target_account.clone(),
         };
         let cpi_context = CpiContext::new(system_program.clone(), cpi_accounts);
-        system_program::allocate(cpi_context.with_signer(&[siger_seed]), u64::try_from(space).unwrap())?;
+        system_program::allocate(
+            cpi_context.with_signer(&[siger_seed]),
+            u64::try_from(space).unwrap(),
+        )?;
 
         let cpi_accounts = system_program::Assign {
             account_to_assign: target_account.clone(),

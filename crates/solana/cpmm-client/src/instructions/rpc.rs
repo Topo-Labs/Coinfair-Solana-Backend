@@ -6,8 +6,8 @@ use solana_client::{
     rpc_response::{RpcResult, RpcSimulateTransactionResult},
 };
 use solana_sdk::{
-    account::Account, commitment_config::CommitmentConfig, program_pack::Pack as TokenPack, pubkey::Pubkey,
-    signature::Signature, transaction::Transaction,
+    account::Account, commitment_config::CommitmentConfig, program_pack::Pack as TokenPack,
+    pubkey::Pubkey, signature::Signature, transaction::Transaction,
 };
 use std::convert::Into;
 
@@ -49,6 +49,9 @@ pub fn get_token_account<T: TokenPack>(client: &RpcClient, addr: &Pubkey) -> Res
     T::unpack_from_slice(&account.data).map_err(Into::into)
 }
 
-pub fn get_multiple_accounts(client: &RpcClient, pubkeys: &[Pubkey]) -> Result<Vec<Option<Account>>> {
+pub fn get_multiple_accounts(
+    client: &RpcClient,
+    pubkeys: &[Pubkey],
+) -> Result<Vec<Option<Account>>> {
     Ok(client.get_multiple_accounts(pubkeys)?)
 }
