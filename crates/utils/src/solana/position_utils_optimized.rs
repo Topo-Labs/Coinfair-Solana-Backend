@@ -675,22 +675,35 @@ impl<'a> PositionUtilsOptimized<'a> {
         raydium_amm_v3_clent::sqrt_price_x64_to_price(price, decimals_0, decimals_1)
     }
 
-    /// 根据价格计算tick索引
-    pub fn price_to_tick(&self, price: f64, decimals_0: u8, decimals_1: u8) -> Result<i32> {
-        let sqrt_price_x64 = raydium_amm_v3_clent::price_to_sqrt_price_x64(price, decimals_0, decimals_1);
-        raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_x64)
-            .map_err(|e| anyhow::anyhow!("价格转tick失败: {:?}", e))
+    // /// 根据价格计算tick索引
+    // pub fn price_to_tick(&self, price: f64, decimals_0: u8, decimals_1: u8) -> Result<i32> {
+    //     let sqrt_price_x64 = raydium_amm_v3_clent::price_to_sqrt_price_x64(price, decimals_0, decimals_1);
+    //     raydium_amm_v3::libraries::tick_math::get_tick_at_sqrt_price(sqrt_price_x64)
+    //         .map_err(|e| anyhow::anyhow!("价格转tick失败: {:?}", e))
+    // }
+
+    // /// 根据tick计算价格
+    // pub fn tick_to_price(&self, tick: i32, decimals_0: u8, decimals_1: u8) -> Result<f64> {
+    //     let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick)
+    //         .map_err(|e| anyhow::anyhow!("tick转价格失败: {:?}", e))?;
+    //     Ok(raydium_amm_v3_clent::sqrt_price_x64_to_price(
+    //         sqrt_price_x64,
+    //         decimals_0,
+    //         decimals_1,
+    //     ))
+    // }
+
+    pub fn price_to_tick(&self, price: f64, _decimals_0: u8, _decimals_1: u8) -> Result<i32> {
+        // 直接使用新导出的函数，该函数已经适配了x^4*y=k曲线
+        Ok(raydium_amm_v3_clent::price_to_tick(price))
     }
 
     /// 根据tick计算价格
     pub fn tick_to_price(&self, tick: i32, decimals_0: u8, decimals_1: u8) -> Result<f64> {
-        let sqrt_price_x64 = raydium_amm_v3::libraries::tick_math::get_sqrt_price_at_tick(tick)
-            .map_err(|e| anyhow::anyhow!("tick转价格失败: {:?}", e))?;
-        Ok(raydium_amm_v3_clent::sqrt_price_x64_to_price(
-            sqrt_price_x64,
-            decimals_0,
-            decimals_1,
-        ))
+        // 直接使用新导出的函数，该函数已经适配了x^4*y=k曲线
+        let price = raydium_amm_v3_clent::tick_to_price(tick);
+        // 应用小数位调整
+        Ok(price * 10_f64.powi(decimals_1 as i32 - decimals_0 as i32))
     }
 
     /// 根据tick spacing调整tick
