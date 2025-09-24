@@ -581,8 +581,8 @@ impl From<database::event_model::repository::TokenDistribution> for TokenDistrib
     }
 }
 
-impl From<crate::services::solana::event::deposit_service::UserDepositSummary> for UserDepositSummaryResponse {
-    fn from(summary: crate::services::solana::event::deposit_service::UserDepositSummary) -> Self {
+impl From<crate::services::solana::clmm::event::deposit_service::UserDepositSummary> for UserDepositSummaryResponse {
+    fn from(summary: crate::services::solana::clmm::event::deposit_service::UserDepositSummary) -> Self {
         Self {
             user: summary.user,
             total_deposits: summary.total_deposits,
@@ -600,8 +600,10 @@ impl From<crate::services::solana::event::deposit_service::UserDepositSummary> f
     }
 }
 
-impl From<crate::services::solana::event::deposit_service::UserTokenDistribution> for UserTokenDistributionResponse {
-    fn from(dist: crate::services::solana::event::deposit_service::UserTokenDistribution) -> Self {
+impl From<crate::services::solana::clmm::event::deposit_service::UserTokenDistribution>
+    for UserTokenDistributionResponse
+{
+    fn from(dist: crate::services::solana::clmm::event::deposit_service::UserTokenDistribution) -> Self {
         Self {
             token_mint: dist.token_mint,
             token_symbol: dist.token_symbol,
@@ -612,8 +614,8 @@ impl From<crate::services::solana::event::deposit_service::UserTokenDistribution
     }
 }
 
-impl From<crate::services::solana::event::deposit_service::TokenDepositSummary> for TokenDepositSummaryResponse {
-    fn from(summary: crate::services::solana::event::deposit_service::TokenDepositSummary) -> Self {
+impl From<crate::services::solana::clmm::event::deposit_service::TokenDepositSummary> for TokenDepositSummaryResponse {
+    fn from(summary: crate::services::solana::clmm::event::deposit_service::TokenDepositSummary) -> Self {
         Self {
             token_mint: summary.token_mint,
             token_symbol: summary.token_symbol,
@@ -633,8 +635,8 @@ impl From<crate::services::solana::event::deposit_service::TokenDepositSummary> 
     }
 }
 
-impl From<crate::services::solana::event::deposit_service::DepositTrendPoint> for DepositTrendPoint {
-    fn from(point: crate::services::solana::event::deposit_service::DepositTrendPoint) -> Self {
+impl From<crate::services::solana::clmm::event::deposit_service::DepositTrendPoint> for DepositTrendPoint {
+    fn from(point: crate::services::solana::clmm::event::deposit_service::DepositTrendPoint) -> Self {
         Self {
             period: point.period,
             count: point.count,
@@ -644,13 +646,13 @@ impl From<crate::services::solana::event::deposit_service::DepositTrendPoint> fo
     }
 }
 
-impl From<crate::services::solana::event::deposit_service::TrendPeriod> for TrendPeriod {
-    fn from(period: crate::services::solana::event::deposit_service::TrendPeriod) -> Self {
+impl From<crate::services::solana::clmm::event::deposit_service::TrendPeriod> for TrendPeriod {
+    fn from(period: crate::services::solana::clmm::event::deposit_service::TrendPeriod) -> Self {
         match period {
-            crate::services::solana::event::deposit_service::TrendPeriod::Hour => TrendPeriod::Hour,
-            crate::services::solana::event::deposit_service::TrendPeriod::Day => TrendPeriod::Day,
-            crate::services::solana::event::deposit_service::TrendPeriod::Week => TrendPeriod::Week,
-            crate::services::solana::event::deposit_service::TrendPeriod::Month => TrendPeriod::Month,
+            crate::services::solana::clmm::event::deposit_service::TrendPeriod::Hour => TrendPeriod::Hour,
+            crate::services::solana::clmm::event::deposit_service::TrendPeriod::Day => TrendPeriod::Day,
+            crate::services::solana::clmm::event::deposit_service::TrendPeriod::Week => TrendPeriod::Week,
+            crate::services::solana::clmm::event::deposit_service::TrendPeriod::Month => TrendPeriod::Month,
         }
     }
 }

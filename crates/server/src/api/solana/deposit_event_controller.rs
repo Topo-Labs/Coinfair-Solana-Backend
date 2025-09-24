@@ -4,7 +4,7 @@ use crate::dtos::solana::events::deposit::{
     DepositEventResponse, DepositStatsResponse, DepositTrendQuery, DepositTrendResponse, PaginatedDepositResponse,
     TokenDepositQuery, TokenDepositSummaryResponse, TrendPeriod, UserDepositQuery, UserDepositSummaryResponse,
 };
-use crate::services::solana::event::DepositEventService;
+use crate::services::solana::clmm::event::DepositEventService;
 use crate::services::Services;
 use axum::{
     extract::{Extension, Json, Path, Query},
@@ -544,10 +544,10 @@ pub async fn get_deposit_trends(
 
     let period = query.period.unwrap_or(TrendPeriod::Day);
     let service_period = match period {
-        TrendPeriod::Hour => crate::services::solana::event::deposit_service::TrendPeriod::Hour,
-        TrendPeriod::Day => crate::services::solana::event::deposit_service::TrendPeriod::Day,
-        TrendPeriod::Week => crate::services::solana::event::deposit_service::TrendPeriod::Week,
-        TrendPeriod::Month => crate::services::solana::event::deposit_service::TrendPeriod::Month,
+        TrendPeriod::Hour => crate::services::solana::clmm::event::deposit_service::TrendPeriod::Hour,
+        TrendPeriod::Day => crate::services::solana::clmm::event::deposit_service::TrendPeriod::Day,
+        TrendPeriod::Week => crate::services::solana::clmm::event::deposit_service::TrendPeriod::Week,
+        TrendPeriod::Month => crate::services::solana::clmm::event::deposit_service::TrendPeriod::Month,
     };
 
     match deposit_service

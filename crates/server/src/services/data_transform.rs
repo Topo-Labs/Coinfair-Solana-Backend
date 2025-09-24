@@ -7,7 +7,7 @@ use crate::dtos::solana::pool::listing::{
     ExtendedMintInfo, NewPoolListResponse, NewPoolListResponse2, PeriodStats, PoolConfigInfo, PoolInfo, PoolListData,
 };
 use crate::dtos::static_dto::SaveClmmConfigRequest;
-use crate::services::solana::config::service::ClmmConfigServiceTrait;
+use crate::services::solana::clmm::config::config_service::ClmmConfigServiceTrait;
 use anyhow::Result;
 use database::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
 use database::clmm_pool::PoolType;

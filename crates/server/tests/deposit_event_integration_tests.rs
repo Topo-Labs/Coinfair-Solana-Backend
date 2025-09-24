@@ -381,7 +381,7 @@ mod database_integration_tests {
 #[cfg(test)]
 mod service_integration_tests {
     use super::*;
-    use server::services::solana::event::DepositEventService;
+    use server::services::solana::clmm::event::DepositEventService;
 
     /// 服务层集成测试 - 验证服务层与数据库的集成
     #[tokio::test(flavor = "multi_thread")]
@@ -455,7 +455,7 @@ mod service_integration_tests {
 
         let service = DepositEventService::new(Arc::new(database));
 
-        use server::services::solana::event::deposit_service::TrendPeriod;
+        use server::services::solana::clmm::event::deposit_service::TrendPeriod;
 
         let trends_result = service
             .get_deposit_trends(

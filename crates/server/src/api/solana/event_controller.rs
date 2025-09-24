@@ -1,4 +1,4 @@
-use crate::services::solana::event::EventService;
+use crate::services::solana::clmm::event::EventService;
 use crate::services::Services;
 
 use crate::dtos::solana::common::{ApiResponse, ErrorResponse, PaginationParams};
@@ -794,7 +794,7 @@ pub async fn get_user_reward_summary(
 
 /// 转换NFT领取事件分页响应
 fn convert_nft_claim_paginated_response(
-    result: crate::services::solana::event::service::PaginatedResponse<NftClaimEvent>,
+    result: crate::services::solana::clmm::event::event_service::PaginatedResponse<NftClaimEvent>,
 ) -> EventPaginatedResponse<NftClaimEventResponse> {
     EventPaginatedResponse {
         items: result.items.into_iter().map(convert_nft_claim_to_response).collect(),
@@ -824,7 +824,7 @@ fn convert_nft_claim_to_response(event: NftClaimEvent) -> NftClaimEventResponse 
 
 /// 转换奖励分发事件分页响应
 fn convert_reward_paginated_response(
-    result: crate::services::solana::event::service::PaginatedResponse<RewardDistributionEvent>,
+    result: crate::services::solana::clmm::event::event_service::PaginatedResponse<RewardDistributionEvent>,
 ) -> EventPaginatedResponse<RewardDistributionEventResponse> {
     EventPaginatedResponse {
         items: result.items.into_iter().map(convert_reward_event_to_response).collect(),

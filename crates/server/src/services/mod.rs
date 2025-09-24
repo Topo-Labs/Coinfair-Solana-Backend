@@ -7,11 +7,7 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#[cfg(test)]
-pub mod config_fix_verification_tests;
 pub mod data_transform;
-#[cfg(test)]
-pub mod data_transform_optimization_tests;
 pub mod position_storage;
 pub mod refer_service;
 pub mod reward_service;
@@ -23,8 +19,7 @@ pub mod user_service;
 use crate::services::{
     refer_service::{DynReferService, ReferService},
     reward_service::{DynRewardService, RewardService},
-    solana::launch_event::LaunchEventService,
-    solana::token::service::TokenService,
+    solana::clmm::launch_event::LaunchEventService,
     solana::{DynSolanaService, SolanaService},
     solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
     user_service::{DynUserService, UserService},
@@ -32,6 +27,7 @@ use crate::services::{
 use database::{clmm_pool::PoolTypeMigration, position::repository::PositionRepositoryTrait, Database};
 use std::sync::Arc;
 use tracing::{error, info, warn};
+use self::solana::clmm::token::token_service::TokenService;
 
 #[derive(Clone)]
 pub struct Services {

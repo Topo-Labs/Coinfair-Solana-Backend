@@ -1,15 +1,15 @@
 // Main SolanaService coordinator that delegates to specialized services
 
-use super::amm_pool::AmmPoolService;
-use super::clmm_pool::ClmmPoolService;
-use super::config::{ClmmConfigService, ClmmConfigServiceTrait};
-use super::launch_migration::LaunchMigrationService;
-use super::liquidity_line::LiquidityLineService;
-use super::nft::NftService;
-use super::position::PositionService;
-use super::referral::ReferralService;
+use super::clmm::config::{ClmmConfigService, ClmmConfigServiceTrait};
+use super::clmm::pool::ClmmPoolService;
+use super::cpmm::AmmPoolService;
+use crate::services::solana::clmm::launch_migration::LaunchMigrationService;
+use crate::services::solana::clmm::liquidity_line::LiquidityLineService;
+use crate::services::solana::clmm::nft::NftService;
+use crate::services::solana::clmm::position::PositionService;
+use crate::services::solana::clmm::referral::ReferralService;
 use super::shared::{SharedContext, SolanaHelpers};
-use super::swap::SwapService;
+use crate::services::solana::clmm::swap::SwapService;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -298,7 +298,7 @@ pub trait SolanaServiceTrait {
         &self,
         request: LaunchMigrationRequest,
     ) -> Result<LaunchMigrationAndSendTransactionResponse>;
-    
+
     // Launch Migration query operations
     async fn get_user_launch_history(
         &self,
@@ -306,9 +306,9 @@ pub trait SolanaServiceTrait {
         page: u64,
         limit: u64,
     ) -> Result<Vec<database::clmm_pool::model::ClmmPool>>;
-    
+
     async fn get_user_launch_history_count(&self, creator_wallet: &str) -> Result<u64>;
-    
+
     async fn get_launch_stats(&self) -> Result<LaunchMigrationStats>;
 }
 
@@ -325,8 +325,21 @@ impl SolanaServiceTrait for SolanaService {
         self.swap_service.swap_tokens(request).await
     }
 
+    // Basic utility operations - delegate to SolanaHelpers
+    async fn get_balance(&self) -> Result<BalanceResponse> {
+        SolanaHelpers::get_balance(&self.shared_context).await
+    }
+
     async fn get_price_quote(&self, request: PriceQuoteRequest) -> Result<PriceQuoteResponse> {
         self.swap_service.get_price_quote(request).await
+    }
+
+    async fn get_wallet_info(&self) -> Result<WalletInfo> {
+        SolanaHelpers::get_wallet_info(&self.shared_context).await
+    }
+
+    async fn health_check(&self) -> Result<String> {
+        SolanaHelpers::health_check(&self.shared_context).await
     }
 
     async fn compute_swap_v2_base_in(&self, params: ComputeSwapV2Request) -> Result<SwapComputeV2Data> {
@@ -403,6 +416,46 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn get_position_info(&self, position_key: String) -> Result<PositionInfo> {
         self.position_service.get_position_info(position_key).await
+    }
+
+    async fn check_position_exists(
+        &self,
+        pool_address: String,
+        tick_lower: i32,
+        tick_upper: i32,
+        wallet_address: Option<String>,
+    ) -> Result<Option<PositionInfo>> {
+        self.position_service
+            .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
+            .await
+    }
+
+    // IncreaseLiquidity operations - delegate to position_service
+    async fn increase_liquidity(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityResponse> {
+        self.position_service.increase_liquidity(request).await
+    }
+
+    async fn increase_liquidity_and_send_transaction(
+        &self,
+        request: IncreaseLiquidityRequest,
+    ) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
+        self.position_service
+            .increase_liquidity_and_send_transaction(request)
+            .await
+    }
+
+    // DecreaseLiquidity operations - delegate to position_service
+    async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse> {
+        self.position_service.decrease_liquidity(request).await
+    }
+
+    async fn decrease_liquidity_and_send_transaction(
+        &self,
+        request: DecreaseLiquidityRequest,
+    ) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
+        self.position_service
+            .decrease_liquidity_and_send_transaction(request)
+            .await
     }
 
     // CLMM Pool operations - delegate to clmm_pool_service
@@ -488,6 +541,12 @@ impl SolanaServiceTrait for SolanaService {
         Ok(new_response)
     }
 
+    // Pool key operations - NEW
+    async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse> {
+        // 使用共享服务来获取池子密钥信息
+        self.clmm_pool_service.get_pools_key_by_ids(pool_ids).await
+    }
+
     // AMM Pool operations - delegate to amm_pool_service
     async fn create_classic_amm_pool(
         &self,
@@ -502,59 +561,6 @@ impl SolanaServiceTrait for SolanaService {
     ) -> Result<CreateClassicAmmPoolAndSendTransactionResponse> {
         self.amm_pool_service
             .create_classic_amm_pool_and_send_transaction(request)
-            .await
-    }
-
-    // Basic utility operations - delegate to SolanaHelpers
-    async fn get_balance(&self) -> Result<BalanceResponse> {
-        SolanaHelpers::get_balance(&self.shared_context).await
-    }
-
-    async fn get_wallet_info(&self) -> Result<WalletInfo> {
-        SolanaHelpers::get_wallet_info(&self.shared_context).await
-    }
-
-    async fn health_check(&self) -> Result<String> {
-        SolanaHelpers::health_check(&self.shared_context).await
-    }
-
-    async fn check_position_exists(
-        &self,
-        pool_address: String,
-        tick_lower: i32,
-        tick_upper: i32,
-        wallet_address: Option<String>,
-    ) -> Result<Option<PositionInfo>> {
-        self.position_service
-            .check_position_exists(pool_address, tick_lower, tick_upper, wallet_address)
-            .await
-    }
-
-    // IncreaseLiquidity operations - delegate to position_service
-    async fn increase_liquidity(&self, request: IncreaseLiquidityRequest) -> Result<IncreaseLiquidityResponse> {
-        self.position_service.increase_liquidity(request).await
-    }
-
-    async fn increase_liquidity_and_send_transaction(
-        &self,
-        request: IncreaseLiquidityRequest,
-    ) -> Result<IncreaseLiquidityAndSendTransactionResponse> {
-        self.position_service
-            .increase_liquidity_and_send_transaction(request)
-            .await
-    }
-
-    // DecreaseLiquidity operations - delegate to position_service
-    async fn decrease_liquidity(&self, request: DecreaseLiquidityRequest) -> Result<DecreaseLiquidityResponse> {
-        self.position_service.decrease_liquidity(request).await
-    }
-
-    async fn decrease_liquidity_and_send_transaction(
-        &self,
-        request: DecreaseLiquidityRequest,
-    ) -> Result<DecreaseLiquidityAndSendTransactionResponse> {
-        self.position_service
-            .decrease_liquidity_and_send_transaction(request)
             .await
     }
 
@@ -604,12 +610,6 @@ impl SolanaServiceTrait for SolanaService {
         self.liquidity_line_service.get_pool_liquidity_line(request).await
     }
 
-    // Pool key operations - NEW
-    async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse> {
-        // 使用共享服务来获取池子密钥信息
-        self.clmm_pool_service.get_pools_key_by_ids(pool_ids).await
-    }
-
     // NFT operations - delegate to nft service
     async fn mint_nft(&self, request: MintNftRequest) -> Result<MintNftResponse> {
         self.nft.mint_nft(request).await
@@ -653,11 +653,15 @@ impl SolanaServiceTrait for SolanaService {
         page: u64,
         limit: u64,
     ) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
-        self.launch_migration.get_user_launch_history(creator_wallet, page, limit).await
+        self.launch_migration
+            .get_user_launch_history(creator_wallet, page, limit)
+            .await
     }
 
     async fn get_user_launch_history_count(&self, creator_wallet: &str) -> Result<u64> {
-        self.launch_migration.get_user_launch_history_count(creator_wallet).await
+        self.launch_migration
+            .get_user_launch_history_count(creator_wallet)
+            .await
     }
 
     async fn get_launch_stats(&self) -> Result<LaunchMigrationStats> {
