@@ -5,6 +5,7 @@ pub mod clmm;
 pub mod cpmm;
 pub mod service;
 pub mod shared;
+pub mod auth;
 
 // Re-export the main service and trait for external use
 pub use service::{DynSolanaService, SolanaService, SolanaServiceTrait};

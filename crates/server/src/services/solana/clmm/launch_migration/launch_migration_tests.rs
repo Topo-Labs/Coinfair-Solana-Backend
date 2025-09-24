@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana::launch::*;
+    use crate::dtos::solana::clmm::launch::*;
     use crate::services::solana::clmm::launch_migration::LaunchMigrationService;
     use crate::services::solana::shared::SharedContext;
     use anyhow::Result;

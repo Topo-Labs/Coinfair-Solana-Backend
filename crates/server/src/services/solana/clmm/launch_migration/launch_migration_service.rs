@@ -1,6 +1,6 @@
 // LaunchMigrationService handles meme token launch migration to DEX pools
 
-use crate::dtos::solana::launch::{
+use crate::dtos::solana::clmm::launch::{
     DailyLaunchCount, LaunchMigrationAndSendTransactionResponse, LaunchMigrationRequest, LaunchMigrationResponse,
     LaunchMigrationStats, MigrationAddresses,
 };

@@ -13,7 +13,7 @@ use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 use referral::{program::Referral, states::ReferralAccount};
 
 /// Memo msg for swap
-// pub const SWAP_MEMO_MSG: &'static [u8] = b"coinfair_swap";
+// pub const SWAP_MEMO_MSG: &'statics [u8] = b"coinfair_swap";
 #[derive(Accounts)]
 pub struct SwapSingleV3<'info> {
     /// The user performing the swap

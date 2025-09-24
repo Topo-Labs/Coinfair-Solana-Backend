@@ -6,7 +6,7 @@
 //     types::{InputFile, Message, MessageKind},
 // };
 
-// static MAIN_PNG: &str = "./asset/main.png";
+// statics MAIN_PNG: &str = "./asset/main.png";
 
 // pub async fn handler_invite_code(
 //     bot: Bot,

@@ -16,7 +16,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::dtos::solana::position::{
+use crate::dtos::solana::clmm::position::{
     liquidity::{
         DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
         IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,

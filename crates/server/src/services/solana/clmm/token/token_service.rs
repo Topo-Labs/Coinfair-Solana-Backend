@@ -1,4 +1,4 @@
-use crate::dtos::static_dto::{MintListResponse, TokenIdResponse, TokenInfo as DtoTokenInfo};
+use crate::dtos::statics::static_dto::{MintListResponse, TokenIdResponse, TokenInfo as DtoTokenInfo};
 use database::token_info::{
     StaticTokenInfo, TokenInfo, TokenInfoRepository, TokenListQuery, TokenListResponse, TokenPushRequest,
     TokenPushResponse, TokenStats,

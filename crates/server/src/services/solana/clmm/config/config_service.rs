@@ -5,7 +5,7 @@ use solana_sdk::signature::Signer;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::dtos::static_dto::{
+use crate::dtos::statics::static_dto::{
     ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
     CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
 };

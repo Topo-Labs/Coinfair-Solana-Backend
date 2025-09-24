@@ -7,26 +7,23 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-pub mod data_transform;
 pub mod position_storage;
-pub mod refer_service;
-pub mod reward_service;
 pub mod solana;
-pub mod solana_permission_service;
-// pub mod solana_service;
-pub mod user_service;
+pub mod user;
+pub mod docs;
+pub mod middleware;
 
 use crate::services::{
-    refer_service::{DynReferService, ReferService},
-    reward_service::{DynRewardService, RewardService},
     solana::clmm::launch_event::LaunchEventService,
     solana::{DynSolanaService, SolanaService},
-    solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
-    user_service::{DynUserService, UserService},
 };
 use database::{clmm_pool::PoolTypeMigration, position::repository::PositionRepositoryTrait, Database};
 use std::sync::Arc;
 use tracing::{error, info, warn};
+use user::user_service::{DynUserService, UserService};
+use self::solana::auth::solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService};
+use self::solana::clmm::refer::refer_service::{DynReferService, ReferService};
+use self::solana::clmm::reward::reward_service::{DynRewardService, RewardService};
 use self::solana::clmm::token::token_service::TokenService;
 
 #[derive(Clone)]

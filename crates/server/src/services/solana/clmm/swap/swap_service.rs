@@ -1,4 +1,4 @@
-use crate::dtos::solana::swap::basic::{PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse};
+use crate::dtos::solana::clmm::swap::basic::{PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse};
 
 use crate::services::solana::clmm::referral::referral_service::ReferralAccount;
 use crate::services::solana::shared::{
@@ -7,9 +7,9 @@ use crate::services::solana::shared::{
 };
 
 use crate::dtos::solana::common::{RoutePlan, TransactionData, TransactionStatus, TransferFeeInfo};
-use crate::dtos::solana::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
-use crate::dtos::solana::swap::referral::ReferralInfo;
-use crate::dtos::solana::swap::swap_v3::{
+use crate::dtos::solana::clmm::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
+use crate::dtos::solana::clmm::swap::referral::ReferralInfo;
+use crate::dtos::solana::clmm::swap::swap_v3::{
     ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
 };
 use ::utils::solana::builders::SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder;

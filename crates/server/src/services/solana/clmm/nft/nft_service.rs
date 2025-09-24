@@ -1,4 +1,4 @@
-use crate::dtos::solana::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
+use crate::dtos::solana::clmm::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
 
 use crate::services::solana::shared::{helpers::SolanaUtils, SharedContext};
 use ::utils::solana::ConfigManager;
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tracing::info;
 
 use crate::dtos::solana::common::TransactionStatus;
-use crate::dtos::solana::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
+use crate::dtos::solana::clmm::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
 use anchor_lang::prelude::AccountMeta;
 use spl_associated_token_account::get_associated_token_address;
 

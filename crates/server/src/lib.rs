@@ -1,10 +1,8 @@
 pub mod api;
 pub mod app;
 pub mod auth;
-pub mod docs;
 pub mod dtos;
 pub mod extractors;
-pub mod middleware;
 pub mod router;
 pub mod services;
 

@@ -1,6 +1,6 @@
 // ClmmPoolService handles CLMM pool creation operations
 
-use crate::dtos::solana::pool::creation::{
+use crate::dtos::solana::clmm::pool::creation::{
     CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
 };
 
@@ -10,7 +10,7 @@ use super::chain_loader::ChainPoolLoader;
 use super::storage::{ClmmPoolStorageBuilder, ClmmPoolStorageService};
 use super::sync::{ClmmPoolSyncBuilder, ClmmPoolSyncService};
 use crate::dtos::solana::common::TransactionStatus;
-use crate::dtos::solana::pool::info::{
+use crate::dtos::solana::clmm::pool::info::{
     PoolConfig, PoolKeyInfo, PoolKeyResponse, PoolRewardInfo, RaydiumMintInfo, VaultAddresses,
 };
 use anyhow::Result;
@@ -90,7 +90,7 @@ impl ClmmPoolService {
                     // 根据配置ID计算索引，这里使用基于地址的简单映射
                     let index = Self::calculate_config_index_from_id(&config_id_owned);
 
-                    let clmm_config = crate::dtos::static_dto::ClmmConfig {
+                    let clmm_config = crate::dtos::statics::static_dto::ClmmConfig {
                         id: config_id_owned.clone(),
                         index,
                         protocol_fee_rate,

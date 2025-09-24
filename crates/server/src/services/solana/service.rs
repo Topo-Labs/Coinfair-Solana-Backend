@@ -16,39 +16,43 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::dtos::solana::common::{TransactionData, WalletInfo};
-use crate::dtos::solana::launch::{
+use crate::dtos::solana::clmm::launch::{
     LaunchMigrationAndSendTransactionResponse, LaunchMigrationRequest, LaunchMigrationResponse, LaunchMigrationStats,
 };
-use crate::dtos::solana::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
-use crate::dtos::solana::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
-use crate::dtos::solana::pool::creation::{
+use crate::dtos::solana::clmm::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
+use crate::dtos::solana::clmm::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
+use crate::dtos::solana::cpmm::pool::creation::{
     CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
+
+};
+use crate::dtos::solana::clmm::pool::creation::{
     CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
 };
-use crate::dtos::solana::pool::info::PoolKeyResponse;
-use crate::dtos::solana::pool::liquidity_line::{PoolLiquidityLineData, PoolLiquidityLineRequest};
-use crate::dtos::solana::pool::listing::{NewPoolListResponse, NewPoolListResponse2};
-use crate::dtos::solana::position::liquidity::{
+
+use crate::dtos::solana::clmm::pool::info::PoolKeyResponse;
+use crate::dtos::solana::clmm::pool::liquidity_line::{PoolLiquidityLineData, PoolLiquidityLineRequest};
+use crate::dtos::solana::clmm::pool::listing::{NewPoolListResponse, NewPoolListResponse2};
+use crate::dtos::solana::clmm::position::liquidity::{
     DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
     IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
 };
-use crate::dtos::solana::position::open_position::{
+use crate::dtos::solana::clmm::position::open_position::{
     CalculateLiquidityRequest, CalculateLiquidityResponse, GetUserPositionsRequest,
     OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
     UserPositionsResponse,
 };
-use crate::dtos::solana::swap::basic::{
+use crate::dtos::solana::clmm::swap::basic::{
     BalanceResponse, PriceQuoteRequest, PriceQuoteResponse, SwapRequest, SwapResponse,
 };
-use crate::dtos::solana::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
-use crate::dtos::solana::swap::swap_v3::{
+use crate::dtos::solana::clmm::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
+use crate::dtos::solana::clmm::swap::swap_v3::{
     ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
 };
-use crate::dtos::static_dto::{
+use crate::dtos::statics::static_dto::{
     ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
     CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
 };
-use crate::services::data_transform::DataTransformService;
+use crate::services::solana::clmm::transform::data_transform::DataTransformService;
 use tokio::sync::Mutex;
 
 pub type DynSolanaService = Arc<dyn SolanaServiceTrait + Send + Sync>;
@@ -570,7 +574,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // CLMM Config operations - delegate to config_service
-    async fn get_clmm_configs(&self) -> Result<crate::dtos::static_dto::ClmmConfigResponse> {
+    async fn get_clmm_configs(&self) -> Result<crate::dtos::statics::static_dto::ClmmConfigResponse> {
         self.config_service.get_clmm_configs().await
     }
 
@@ -578,28 +582,28 @@ impl SolanaServiceTrait for SolanaService {
         self.config_service.sync_clmm_configs_from_chain().await
     }
 
-    async fn save_clmm_config(&self, config: crate::dtos::static_dto::ClmmConfig) -> Result<String> {
+    async fn save_clmm_config(&self, config: crate::dtos::statics::static_dto::ClmmConfig) -> Result<String> {
         self.config_service.save_clmm_config(config).await
     }
 
     async fn save_clmm_config_from_request(
         &self,
-        request: crate::dtos::static_dto::SaveClmmConfigRequest,
-    ) -> Result<crate::dtos::static_dto::SaveClmmConfigResponse> {
+        request: crate::dtos::statics::static_dto::SaveClmmConfigRequest,
+    ) -> Result<crate::dtos::statics::static_dto::SaveClmmConfigResponse> {
         self.config_service.save_clmm_config_from_request(request).await
     }
 
     async fn create_amm_config(
         &self,
-        request: crate::dtos::static_dto::CreateAmmConfigRequest,
-    ) -> Result<crate::dtos::static_dto::CreateAmmConfigResponse> {
+        request: crate::dtos::statics::static_dto::CreateAmmConfigRequest,
+    ) -> Result<crate::dtos::statics::static_dto::CreateAmmConfigResponse> {
         self.config_service.create_amm_config(request).await
     }
 
     async fn create_amm_config_and_send_transaction(
         &self,
-        request: crate::dtos::static_dto::CreateAmmConfigRequest,
-    ) -> Result<crate::dtos::static_dto::CreateAmmConfigAndSendTransactionResponse> {
+        request: crate::dtos::statics::static_dto::CreateAmmConfigRequest,
+    ) -> Result<crate::dtos::statics::static_dto::CreateAmmConfigAndSendTransactionResponse> {
         self.config_service
             .create_amm_config_and_send_transaction(request)
             .await

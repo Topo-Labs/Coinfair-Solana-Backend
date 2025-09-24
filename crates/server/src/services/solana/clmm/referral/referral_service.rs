@@ -1,4 +1,4 @@
-use crate::dtos::solana::referral::account::{
+use crate::dtos::solana::clmm::referral::account::{
     GetMintCounterAndVerifyResponse, GetMintCounterRequest, GetMintCounterResponse, GetUpperAndVerifyResponse,
     GetUpperRequest, GetUpperResponse, MintCounterData, ReferralAccountData,
 };

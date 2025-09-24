@@ -1,4 +1,4 @@
-use crate::dtos::solana::events::launch_event::{LaunchEventResponse, LaunchEventStatsResponse};
+use crate::dtos::solana::clmm::events::launch_event::{LaunchEventResponse, LaunchEventStatsResponse};
 use database::{event_model::repository::LaunchEventRepository, Database};
 use std::sync::Arc;
 use tracing::{debug, info};

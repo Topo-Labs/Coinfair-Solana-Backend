@@ -1,28 +1,12 @@
-pub mod clmm_config_controller;
-pub mod clmm_pool_create;
-pub mod clmm_pool_query;
-pub mod cpmm_pool_create;
-pub mod deposit_event_controller;
-pub mod event_controller;
-#[cfg(test)]
-pub mod event_controller_tests;
-pub mod launch_event_controller;
-pub mod launch_migration_controller;
-#[cfg(test)]
-pub mod launch_migration_controller_tests;
-pub mod liquidity_line_controller;
-pub mod nft_controller;
-pub mod position_controller;
-pub mod referral_controller;
-pub mod static_config_controller;
-pub mod swap_controller;
-pub mod swap_v2_controller;
-pub mod swap_v3_controller;
-pub mod token_controller;
+pub mod clmm;
+pub mod cpmm;
+pub mod statics;
 
 use crate::auth::SolanaMiddlewareBuilder;
 use axum::{middleware, Extension, Router};
 use std::sync::Arc;
+use clmm::{clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller, launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller, position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller, swap_v3_controller, token_controller};
+use cpmm::cpmm_pool_create;
 
 pub struct SolanaController;
 

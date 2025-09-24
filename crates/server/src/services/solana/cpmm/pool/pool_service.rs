@@ -1,6 +1,6 @@
 // AmmPoolService handles classic AMM pool creation operations
 
-use crate::dtos::solana::pool::creation::{
+use crate::dtos::solana::cpmm::pool::creation::{
     CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
 };
 

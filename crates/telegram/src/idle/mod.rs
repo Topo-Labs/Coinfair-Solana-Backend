@@ -20,7 +20,7 @@
 // pub mod keyboard;
 // mod message;
 
-// pub fn idle_schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+// pub fn idle_schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'statics>> {
 //     use dptree::case;
 //     let command_handler = teloxide::filter_command::<Command, _>().branch(
 //         case![BotState::Idle]

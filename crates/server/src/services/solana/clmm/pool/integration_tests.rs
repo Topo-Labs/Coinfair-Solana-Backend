@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::dtos::solana::pool::creation::CreatePoolRequest;
+    use crate::dtos::solana::clmm::pool::creation::CreatePoolRequest;
     use crate::services::solana::clmm::config::ClmmConfigService;
     use crate::services::solana::clmm::pool::pool_service::ClmmPoolService;
     use crate::services::solana::clmm::pool::storage::ClmmPoolStorageService;

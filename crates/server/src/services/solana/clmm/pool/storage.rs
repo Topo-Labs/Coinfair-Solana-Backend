@@ -2,7 +2,7 @@
 //!
 //! 负责将池子创建后的元数据存储到MongoDB数据库中
 
-use crate::dtos::solana::pool::creation::{
+use crate::dtos::solana::clmm::pool::creation::{
     CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
 };
 use database::clmm_pool::{

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana::nft::claim::ClaimNftRequest;
-    use crate::dtos::solana::nft::mint::MintNftRequest;
+    use crate::dtos::solana::clmm::nft::claim::ClaimNftRequest;
+    use crate::dtos::solana::clmm::nft::mint::MintNftRequest;
     use crate::services::solana::clmm::nft::NftService;
     use crate::services::solana::shared::SharedContext;
     use solana_sdk::pubkey::Pubkey;

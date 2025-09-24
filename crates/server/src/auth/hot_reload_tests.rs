@@ -2,7 +2,7 @@
 //! 测试权限配置的自动重载和手动重载功能
 
 use crate::auth::{AuthUser, Permission, SolanaApiAction, UserTier};
-use crate::services::solana_permission_service::{SolanaPermissionService, SolanaPermissionServiceTrait};
+use crate::services::solana::auth::solana_permission_service::{SolanaPermissionService, SolanaPermissionServiceTrait};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;

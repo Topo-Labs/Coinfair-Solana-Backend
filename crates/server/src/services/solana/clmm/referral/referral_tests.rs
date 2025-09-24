@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana::referral::account::{GetMintCounterRequest, GetUpperRequest};
+    use crate::dtos::solana::clmm::referral::account::{GetMintCounterRequest, GetUpperRequest};
     use crate::services::solana::clmm::referral::referral_service::{MintCounter, ReferralAccount};
     use crate::services::solana::clmm::referral::ReferralService;
     use crate::services::solana::shared::SharedContext;

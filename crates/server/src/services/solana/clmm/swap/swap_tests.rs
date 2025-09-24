@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::dtos::solana::swap::raydium::ComputeSwapV2Request;
-    use crate::dtos::solana::swap::swap_v3::{ComputeSwapV3Request, SwapComputeV3Data};
+    use crate::dtos::solana::clmm::swap::raydium::ComputeSwapV2Request;
+    use crate::dtos::solana::clmm::swap::swap_v3::{ComputeSwapV3Request, SwapComputeV3Data};
     use crate::services::solana::shared::{ResponseBuilder, SharedContext};
     use crate::services::solana::clmm::swap::SwapService;
     use std::sync::Arc;

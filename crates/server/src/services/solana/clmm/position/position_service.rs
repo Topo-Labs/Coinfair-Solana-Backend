@@ -1,6 +1,6 @@
 // PositionService handles all position management operations
 
-use crate::dtos::solana::position::open_position::{
+use crate::dtos::solana::clmm::position::open_position::{
     CalculateLiquidityRequest, CalculateLiquidityResponse, GetUserPositionsRequest,
     OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse, PositionInfo,
     UserPositionsResponse,
@@ -13,7 +13,7 @@ use crate::services::solana::shared::{helpers::SolanaUtils, SharedContext};
 use ::utils::solana::{ConfigManager, PositionInstructionBuilder, PositionUtilsOptimized};
 
 use crate::dtos::solana::common::TransactionStatus;
-use crate::dtos::solana::position::liquidity::{
+use crate::dtos::solana::clmm::position::liquidity::{
     DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
     IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
 };

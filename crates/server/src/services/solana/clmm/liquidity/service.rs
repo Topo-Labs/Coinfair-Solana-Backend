@@ -1,6 +1,6 @@
 // LiquidityService handles all liquidity management operations
 
-use crate::dtos::solana::position::liquidity::{
+use crate::dtos::solana::clmm::position::liquidity::{
     DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
     IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,
 };

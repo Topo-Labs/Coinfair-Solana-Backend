@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod integration_tests {
-    use crate::dtos::solana::referral::account::{GetMintCounterRequest, GetUpperRequest};
+    use crate::dtos::solana::clmm::referral::account::{GetMintCounterRequest, GetUpperRequest};
     use crate::services::solana::clmm::referral::ReferralService;
     use crate::services::solana::shared::SharedContext;
     use solana_sdk::pubkey::Pubkey;

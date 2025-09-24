@@ -48,7 +48,7 @@
 // //     bot: Bot,
 // // ) -> (
 // //     Arc<RwLock<State>>,
-// //     UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>>,
+// //     UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'statics>>,
 // // ) {
 // //     // 2. 构造初始化的State
 // //     // TODO: 思考——每个功能模块所依赖的内存数据，其实例是在该功能模块内部创建，然后向外暴露；还是将类型提供给Global，有后者创建实例
@@ -74,7 +74,7 @@
 // //     (state, schema())
 // // }
 
-// pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'static>> {
+// pub fn schema() -> UpdateHandler<Box<dyn std::error::Error + Send + Sync + 'statics>> {
 //     let message_handler = Update::filter_message()
 //         .branch(
 //             dptree::filter(|state: BotState| {

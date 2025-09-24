@@ -10,6 +10,9 @@ pub mod position;
 pub mod referral;
 pub mod swap;
 pub mod token;
+pub mod refer;
+pub mod reward;
+pub mod transform;
 
 pub use config::*;
 pub use event::*;
@@ -23,3 +26,6 @@ pub use position::*;
 pub use referral::*;
 pub use swap::*;
 pub use token::*;
+pub use refer::*;
+pub use reward::*;
+pub use transform::*;

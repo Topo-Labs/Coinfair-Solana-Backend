@@ -11,7 +11,7 @@
 // use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
 // /// Memo msg for swap
-// pub const SWAP_MEMO_MSG: &'static [u8] = b"coinfair_swap";
+// pub const SWAP_MEMO_MSG: &'statics [u8] = b"coinfair_swap";
 // #[derive(Accounts)]
 // pub struct SwapSingleV2<'info> {
 //     /// The user performing the swap

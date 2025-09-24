@@ -9,7 +9,8 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use database::{event_model::DepositEvent, Database};
-use server::{api::solana::deposit_event_controller::DepositEventController, services::Services};
+use server::services::Services;
+use server::api::solana::clmm::deposit_event_controller::DepositEventController;
 use utils::AppConfig;
 
 /// 集成测试 - 测试DepositEvent API的端到端功能
