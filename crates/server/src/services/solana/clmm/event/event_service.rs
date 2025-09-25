@@ -1,16 +1,14 @@
 use anyhow::Result;
-use database::{
-    event_model::{
-        repository::{NftClaimStats, RewardStats},
-        NftClaimEvent, RewardDistributionEvent,
-    },
-    Database,
-};
+use database::Database;
 use futures::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use std::sync::Arc;
 use tracing::info;
+use database::events::event_model::{
+    repository::{NftClaimStats, RewardStats},
+    NftClaimEvent, RewardDistributionEvent,
+};
 
 /// 事件服务 - 处理NFT领取和奖励分发事件的查询
 pub struct EventService {

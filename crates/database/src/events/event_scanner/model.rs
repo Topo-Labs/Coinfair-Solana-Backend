@@ -77,12 +77,12 @@ pub enum ScanStatus {
     Cancelled,
 }
 // MongoDB BSON DateTime 序列化辅助模块
-pub(super) mod bson_datetime {
+pub(crate) mod bson_datetime {
     use chrono::{DateTime, Utc};
     use mongodb::bson;
     use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 
-    pub(super) fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
+    pub(crate) fn serialize<S>(date: &DateTime<Utc>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -92,7 +92,7 @@ pub(super) mod bson_datetime {
         bson_dt.serialize(serializer)
     }
 
-    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -104,12 +104,12 @@ pub(super) mod bson_datetime {
     }
 }
 
-pub(super) mod bson_datetime_option {
+pub(crate) mod bson_datetime_option {
     use chrono::{DateTime, Utc};
     use mongodb::bson;
     use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 
-    pub(super) fn serialize<S>(date: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
+    pub(crate) fn serialize<S>(date: &Option<DateTime<Utc>>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -123,7 +123,7 @@ pub(super) mod bson_datetime_option {
         }
     }
 
-    pub(super) fn deserialize<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
     where
         D: Deserializer<'de>,
     {

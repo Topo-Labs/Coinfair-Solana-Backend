@@ -1,4 +1,4 @@
-use crate::{refer::model::Refer, Database};
+use crate::Database;
 use async_trait::async_trait;
 use chrono::prelude::Utc;
 use futures::stream::StreamExt;
@@ -9,6 +9,7 @@ use mongodb::{
 };
 use std::{collections::HashSet, sync::Arc};
 use utils::{AppError, AppResult};
+use crate::clmm::refer::model::Refer;
 
 pub type DynReferRepository = Arc<dyn ReferRepositoryTrait + Send + Sync>;
 

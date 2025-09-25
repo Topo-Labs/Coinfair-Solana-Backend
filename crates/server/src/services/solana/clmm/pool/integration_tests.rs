@@ -9,7 +9,7 @@ mod integration_tests {
     use crate::services::solana::clmm::pool::pool_service::ClmmPoolService;
     use crate::services::solana::clmm::pool::storage::ClmmPoolStorageService;
     use crate::services::solana::shared::SharedContext;
-    use database::clmm_pool::{
+    use database::clmm::clmm_pool::{
         ClmmPool, ExtensionInfo, PoolQueryParams, PoolStatus, PriceInfo, SyncStatus, TokenInfo, VaultInfo,
     };
     use std::sync::Arc;
@@ -337,8 +337,8 @@ mod integration_tests {
                 sync_error: None,
             },
 
-            pool_type: database::clmm_pool::model::PoolType::Concentrated,
-            data_source: database::clmm_pool::DataSource::ApiCreated,
+            pool_type: database::clmm::clmm_pool::model::PoolType::Concentrated,
+            data_source: database::clmm::clmm_pool::DataSource::ApiCreated,
             chain_confirmed: false,
         };
 

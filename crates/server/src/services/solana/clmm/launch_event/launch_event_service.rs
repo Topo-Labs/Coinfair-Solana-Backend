@@ -1,8 +1,9 @@
 use crate::dtos::solana::clmm::events::launch_event::{LaunchEventResponse, LaunchEventStatsResponse};
-use database::{event_model::repository::LaunchEventRepository, Database};
+use database::Database;
 use std::sync::Arc;
 use tracing::{debug, info};
-use utils::{AppResult, AppError};
+use database::events::event_model::repository::LaunchEventRepository;
+use utils::{AppError, AppResult};
 
 /// LaunchEvent服务，提供Launch事件的业务逻辑
 #[derive(Debug, Clone)]
@@ -144,7 +145,7 @@ impl LaunchEventService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use database::event_model::LaunchEvent;
+    use database::events::event_model::LaunchEvent;
     use chrono::Utc;
 
     fn create_mock_launch_event() -> LaunchEvent {

@@ -1,4 +1,4 @@
-use crate::permission_config::model::{
+use crate::auth::permission_config::model::{
     GlobalSolanaPermissionConfigModel, PermissionConfigLogModel, SolanaApiPermissionConfigModel,
 };
 use anyhow::{anyhow, Result};

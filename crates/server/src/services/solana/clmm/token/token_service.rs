@@ -1,5 +1,5 @@
 use crate::dtos::statics::static_dto::{MintListResponse, TokenIdResponse, TokenInfo as DtoTokenInfo};
-use database::token_info::{
+use database::clmm::token_info::{
     StaticTokenInfo, TokenInfo, TokenInfoRepository, TokenListQuery, TokenListResponse, TokenPushRequest,
     TokenPushResponse, TokenStats,
 };
@@ -155,7 +155,7 @@ impl TokenService {
                         mint_list: Vec::new(),
                         blacklist: Vec::new(),
                         white_list: Vec::new(),
-                        pagination: database::token_info::PaginationInfo {
+                        pagination: database::clmm::token_info::PaginationInfo {
                             current_page: query.page.unwrap_or(1),
                             page_size: query.page_size.unwrap_or(100),
                             total_count: 0,
@@ -163,7 +163,7 @@ impl TokenService {
                             has_next: false,
                             has_prev: false,
                         },
-                        stats: database::token_info::FilterStats {
+                        stats: database::clmm::token_info::FilterStats {
                             status_counts: Vec::new(),
                             source_counts: Vec::new(),
                             verification_counts: Vec::new(),
@@ -286,7 +286,7 @@ impl TokenService {
     pub async fn update_token_status(
         &self,
         address: &str,
-        status: database::token_info::TokenStatus,
+        status: database::clmm::token_info::TokenStatus,
     ) -> AppResult<bool> {
         info!("🔄 更新代币状态: {} -> {:?}", address, status);
 
@@ -305,7 +305,7 @@ impl TokenService {
     pub async fn update_token_verification(
         &self,
         address: &str,
-        verification: database::token_info::VerificationStatus,
+        verification: database::clmm::token_info::VerificationStatus,
     ) -> AppResult<bool> {
         info!("🔄 更新代币验证状态: {} -> {:?}", address, verification);
 

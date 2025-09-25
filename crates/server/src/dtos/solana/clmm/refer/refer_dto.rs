@@ -1,4 +1,4 @@
-use database::refer::model::Refer;
+use database::clmm::refer::model::Refer;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;

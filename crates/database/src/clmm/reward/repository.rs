@@ -1,7 +1,4 @@
-use crate::{
-    reward::model::{Reward, RewardItem, RewardItemWithTime},
-    Database,
-};
+use crate::Database;
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{NaiveDate, TimeZone, Utc};
@@ -15,6 +12,7 @@ use std::{collections::hash_map::HashMap, sync::Arc};
 use tokio_stream::StreamExt;
 use tracing::info;
 use utils::{AppError, AppResult};
+use crate::clmm::reward::model::{Reward, RewardItem, RewardItemWithTime};
 
 pub type DynRewardRepository = Arc<dyn RewardRepositoryTrait + Send + Sync>;
 

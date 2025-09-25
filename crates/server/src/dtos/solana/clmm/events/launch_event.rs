@@ -1,4 +1,4 @@
-use database::event_model::LaunchEvent;
+use database::events::event_model::LaunchEvent;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 

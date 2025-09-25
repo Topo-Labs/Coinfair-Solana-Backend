@@ -212,7 +212,7 @@ impl SolanaPermissionService {
     /// 转换数据库模型到全局配置
     fn convert_model_to_global_config(
         &self,
-        model: &database::permission_config::GlobalSolanaPermissionConfigModel,
+        model: &database::auth::permission_config::GlobalSolanaPermissionConfigModel,
     ) -> Result<GlobalSolanaPermissionConfig> {
         let default_read_policy: SolanaPermissionPolicy = serde_json::from_str(&model.default_read_policy)
             .map_err(|e| anyhow::anyhow!("解析默认读取策略失败: {}", e))?;
@@ -235,7 +235,7 @@ impl SolanaPermissionService {
     /// 转换数据库模型到API配置
     fn convert_model_to_api_config(
         &self,
-        model: &database::permission_config::SolanaApiPermissionConfigModel,
+        model: &database::auth::permission_config::SolanaApiPermissionConfigModel,
     ) -> Result<SolanaApiPermissionConfig> {
         let read_policy: SolanaPermissionPolicy =
             serde_json::from_str(&model.read_policy).map_err(|e| anyhow::anyhow!("解析读取策略失败: {}", e))?;
@@ -258,13 +258,13 @@ impl SolanaPermissionService {
     fn convert_global_config_to_model(
         &self,
         config: &GlobalSolanaPermissionConfig,
-    ) -> Result<database::permission_config::GlobalSolanaPermissionConfigModel> {
+    ) -> Result<database::auth::permission_config::GlobalSolanaPermissionConfigModel> {
         let default_read_policy = serde_json::to_string(&config.default_read_policy)
             .map_err(|e| anyhow::anyhow!("序列化默认读取策略失败: {}", e))?;
         let default_write_policy = serde_json::to_string(&config.default_write_policy)
             .map_err(|e| anyhow::anyhow!("序列化默认写入策略失败: {}", e))?;
 
-        Ok(database::permission_config::GlobalSolanaPermissionConfigModel {
+        Ok(database::auth::permission_config::GlobalSolanaPermissionConfigModel {
             id: None,
             config_type: "global".to_string(),
             global_read_enabled: config.global_read_enabled,
@@ -284,13 +284,13 @@ impl SolanaPermissionService {
     fn convert_api_config_to_model(
         &self,
         config: &SolanaApiPermissionConfig,
-    ) -> Result<database::permission_config::SolanaApiPermissionConfigModel> {
+    ) -> Result<database::auth::permission_config::SolanaApiPermissionConfigModel> {
         let read_policy =
             serde_json::to_string(&config.read_policy).map_err(|e| anyhow::anyhow!("序列化读取策略失败: {}", e))?;
         let write_policy =
             serde_json::to_string(&config.write_policy).map_err(|e| anyhow::anyhow!("序列化写入策略失败: {}", e))?;
 
-        Ok(database::permission_config::SolanaApiPermissionConfigModel {
+        Ok(database::auth::permission_config::SolanaApiPermissionConfigModel {
             id: None,
             endpoint: config.endpoint.clone(),
             name: config.name.clone(),

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::services::solana::clmm::token::TokenService;
-    use database::token_info::{DataSource, TokenPushRequest};
+    use database::clmm::token_info::{DataSource, TokenPushRequest};
     use std::sync::Arc;
 
     async fn setup_test_service() -> Arc<TokenService> {

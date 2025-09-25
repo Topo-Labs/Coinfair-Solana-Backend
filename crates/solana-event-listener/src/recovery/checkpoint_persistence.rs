@@ -1,5 +1,5 @@
 use crate::error::{EventListenerError, Result};
-use database::event_scanner::model::EventScannerCheckpoints;
+use database::events::event_scanner::model::EventScannerCheckpoints;
 use mongodb::{
     bson::{doc, from_document, to_document},
     options::UpdateOptions,

@@ -158,7 +158,7 @@ impl ClmmPoolService {
     }
 
     /// 获取或生成lookup table account地址
-    fn get_lookup_table_account(&self, _pool: &database::clmm_pool::ClmmPool) -> String {
+    fn get_lookup_table_account(&self, _pool: &database::clmm::clmm_pool::ClmmPool) -> String {
         // 优先使用池子扩展信息中的lookup table account
         // 如果没有，可以基于池子地址生成或使用通用默认值
 
@@ -416,7 +416,7 @@ impl ClmmPoolService {
     }
 
     /// 根据池子地址查询池子信息
-    pub async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>> {
+    pub async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm::clmm_pool::ClmmPool>> {
         info!("🔍 查询池子信息: {}", pool_address);
 
         match self.storage.get_pool_by_address(pool_address).await {
@@ -440,7 +440,7 @@ impl ClmmPoolService {
         &self,
         mint_address: &str,
         limit: Option<i64>,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
         info!("🔍 查询代币相关池子: {} (限制: {:?})", mint_address, limit);
 
         match self.storage.get_pools_by_mint(mint_address, limit).await {
@@ -460,7 +460,7 @@ impl ClmmPoolService {
         &self,
         creator_wallet: &str,
         limit: Option<i64>,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
         info!("🔍 查询创建者池子: {} (限制: {:?})", creator_wallet, limit);
 
         match self.storage.get_pools_by_creator(creator_wallet, limit).await {
@@ -478,8 +478,8 @@ impl ClmmPoolService {
     /// 复杂查询接口
     pub async fn query_pools(
         &self,
-        params: &database::clmm_pool::PoolQueryParams,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        params: &database::clmm::clmm_pool::PoolQueryParams,
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
         info!("🔍 执行复杂池子查询");
 
         match self.storage.query_pools(params).await {
@@ -495,7 +495,7 @@ impl ClmmPoolService {
     }
 
     /// 获取池子统计信息
-    pub async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats> {
+    pub async fn get_pool_statistics(&self) -> Result<database::clmm::clmm_pool::PoolStats> {
         info!("📊 获取池子统计信息");
 
         match self.storage.get_pool_statistics().await {
@@ -516,8 +516,8 @@ impl ClmmPoolService {
     /// 分页查询池子列表，支持链上数据fallback
     pub async fn query_pools_with_pagination(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
-    ) -> Result<database::clmm_pool::model::PoolListResponse> {
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm::clmm_pool::model::PoolListResponse> {
         info!("📋 执行分页池子查询");
         info!("  池子类型: {:?}", params.pool_type);
         info!("  排序字段: {:?}", params.pool_sort_field);
@@ -561,9 +561,9 @@ impl ClmmPoolService {
                                     combined_pools.extend(chain_pools);
 
                                     // 5. 重新构建响应
-                                    let updated_response = database::clmm_pool::model::PoolListResponse {
+                                    let updated_response = database::clmm::clmm_pool::model::PoolListResponse {
                                         pools: combined_pools,
-                                        pagination: database::clmm_pool::model::PaginationMeta {
+                                        pagination: database::clmm::clmm_pool::model::PaginationMeta {
                                             current_page: response.pagination.current_page,
                                             page_size: response.pagination.page_size,
                                             total_count: response.pagination.total_count + chain_pools_count as u64,
@@ -598,7 +598,7 @@ impl ClmmPoolService {
     async fn load_and_save_pools_from_chain(
         &self,
         pool_addresses: &[String],
-    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::model::ClmmPool>> {
         info!("🔗 开始从链上加载{}个池子", pool_addresses.len());
 
         // 1. 从链上加载池子信息

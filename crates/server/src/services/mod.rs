@@ -17,9 +17,11 @@ use crate::services::{
     solana::clmm::launch_event::LaunchEventService,
     solana::{DynSolanaService, SolanaService},
 };
-use database::{clmm_pool::PoolTypeMigration, position::repository::PositionRepositoryTrait, Database};
+use database::Database;
 use std::sync::Arc;
 use tracing::{error, info, warn};
+use database::clmm::clmm_pool::PoolTypeMigration;
+use database::clmm::position::repository::PositionRepositoryTrait;
 use user::user_service::{DynUserService, UserService};
 use self::solana::auth::solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService};
 use self::solana::clmm::refer::refer_service::{DynReferService, ReferService};
@@ -338,7 +340,7 @@ impl Services {
         info!("🔧 初始化CLMM池子数据库索引...");
 
         // 直接使用数据库连接来初始化索引
-        let repository = database::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
+        let repository = database::clmm::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
 
         match repository.init_indexes().await {
             Ok(_) => {
@@ -405,7 +407,7 @@ impl Services {
     pub async fn get_database_health(&self) -> Result<DatabaseHealthStatus, Box<dyn std::error::Error>> {
         info!("🔍 检查数据库服务健康状态...");
 
-        let repository = database::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
+        let repository = database::clmm::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
 
         // 执行基本的数据库操作来检查健康状态
         let start_time = std::time::Instant::now();

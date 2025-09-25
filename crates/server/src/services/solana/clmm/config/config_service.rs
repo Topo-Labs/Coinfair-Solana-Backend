@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use database::{clmm_config::ClmmConfigRepository, Database};
+use database::Database;
 use solana_sdk::signature::Signer;
 use std::sync::Arc;
 use tracing::{error, info, warn};
@@ -11,6 +11,7 @@ use crate::dtos::statics::static_dto::{
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
+use database::clmm::clmm_config::ClmmConfigRepository;
 
 /// CLMM配置服务trait
 #[async_trait]
@@ -192,7 +193,7 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
 
                         // 创建配置模型 - 使用统一计算的配置ID
                         let config_id = self.calculate_config_pda(index)?;
-                        let config_model = database::clmm_config::ClmmConfigModel::new(
+                        let config_model = database::clmm::clmm_config::ClmmConfigModel::new(
                             config_id,
                             index as u32,
                             amm_config.protocol_fee_rate as u64,
@@ -233,7 +234,7 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         let repository = self.get_repository();
 
         // 转换为数据库模型
-        let config_model = database::clmm_config::ClmmConfigModel::new(
+        let config_model = database::clmm::clmm_config::ClmmConfigModel::new(
             config.id.clone(),
             config.index,
             config.protocol_fee_rate,
@@ -275,7 +276,7 @@ impl ClmmConfigServiceTrait for ClmmConfigService {
         };
 
         // 创建数据库模型
-        let config_model = database::clmm_config::ClmmConfigModel::new(
+        let config_model = database::clmm::clmm_config::ClmmConfigModel::new(
             config_id.clone(),
             request.index,
             request.protocol_fee_rate,

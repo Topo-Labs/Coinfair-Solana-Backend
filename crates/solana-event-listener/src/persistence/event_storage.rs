@@ -11,24 +11,22 @@ use crate::{
     services::migration_client::MigrationClient,
 };
 use chrono::Utc;
-use database::{
-    clmm_pool::{
-        ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
-        TransactionInfo, TransactionStatus, VaultInfo,
-    },
-    event_model::{
-        repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
-        RewardDistributionEvent, TokenCreationEvent,
-    },
-    token_info::{TokenInfoRepository, TokenPushRequest},
-    Database,
-};
+use database::Database;
 use mongodb::bson::doc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
+use database::clmm::clmm_pool::{
+    ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
+    TransactionInfo, TransactionStatus, VaultInfo,
+};
+use database::clmm::token_info::{TokenInfoRepository, TokenPushRequest};
+use database::events::event_model::{
+    repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
+    RewardDistributionEvent, TokenCreationEvent,
+};
 use utils::config::{AppConfig, EventListenerDbMode};
 use utils::metaplex_service::{MetaplexConfig, MetaplexService};
 
@@ -981,12 +979,12 @@ impl EventStorage {
     }
 
     /// 将存款事件转换为数据库模型
-    fn convert_to_deposit_event(&self, event: &DepositEventData) -> Result<database::event_model::DepositEvent> {
+    fn convert_to_deposit_event(&self, event: &DepositEventData) -> Result<database::events::event_model::DepositEvent> {
         use chrono::Utc;
 
         let now = Utc::now();
 
-        Ok(database::event_model::DepositEvent {
+        Ok(database::events::event_model::DepositEvent {
             id: None,
 
             // 核心业务字段
@@ -1544,7 +1542,7 @@ impl EventStorage {
                 sync_error: None,
             },
 
-            pool_type: database::clmm_pool::PoolType::Concentrated,
+            pool_type: database::clmm::clmm_pool::PoolType::Concentrated,
         };
 
         // 插入新记录

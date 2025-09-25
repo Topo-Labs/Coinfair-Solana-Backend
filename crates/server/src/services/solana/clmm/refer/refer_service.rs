@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use database::refer::{model::Refer, repository::DynReferRepository};
+use database::clmm::refer::{model::Refer, repository::DynReferRepository};
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use std::sync::Arc;
 use utils::AppResult;

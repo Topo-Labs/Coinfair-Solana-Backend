@@ -17,7 +17,7 @@ use axum::{
     routing::get,
     Router,
 };
-use database::event_model::{NftClaimEvent, RewardDistributionEvent};
+use database::events::event_model::{NftClaimEvent, RewardDistributionEvent};
 use tracing::{error, info};
 
 pub struct EventController;

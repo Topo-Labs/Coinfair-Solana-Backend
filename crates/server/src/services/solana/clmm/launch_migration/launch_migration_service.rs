@@ -226,7 +226,7 @@ impl LaunchMigrationService {
         request: &LaunchMigrationRequest,
         response: &LaunchMigrationResponse,
     ) -> Result<()> {
-        use database::clmm_pool::model::*;
+        use database::clmm::clmm_pool::model::*;
 
         // 解析代币地址，确保mint0 < mint1的顺序
         let mut mint0_str = request.meme_token_mint.clone();
@@ -367,7 +367,7 @@ impl LaunchMigrationService {
         request: &LaunchMigrationRequest,
         response: &LaunchMigrationAndSendTransactionResponse,
     ) -> Result<()> {
-        use database::clmm_pool::model::*;
+        use database::clmm::clmm_pool::model::*;
 
         // 解析代币地址，确保mint0 < mint1的顺序
         let mut mint0_str = request.meme_token_mint.clone();
@@ -448,9 +448,9 @@ impl LaunchMigrationService {
             event_updated_at: None,
 
             // 交易信息（包含已发送的交易）
-            transaction_info: Some(database::clmm_pool::model::TransactionInfo {
+            transaction_info: Some(TransactionInfo {
                 signature: response.signature.clone(),
-                status: database::clmm_pool::model::TransactionStatus::Finalized,
+                status: TransactionStatus::Finalized,
                 explorer_url: response.explorer_url.clone(),
                 confirmed_at: response.timestamp as u64,
             }),
@@ -829,7 +829,7 @@ impl LaunchMigrationService {
         creator: &str,
         page: u64,
         limit: u64,
-    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::model::ClmmPool>> {
         // 边界检查：确保page不为0
         let safe_page = std::cmp::max(page, 1);
 

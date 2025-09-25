@@ -223,7 +223,7 @@ pub struct UserLaunchHistoryParams {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserLaunchHistoryResponse {
     /// Launch记录列表（复用ClmmPool）
-    pub launches: Vec<database::clmm_pool::model::ClmmPool>,
+    pub launches: Vec<database::clmm::clmm_pool::model::ClmmPool>,
     
     /// 总记录数
     pub total_count: u64,

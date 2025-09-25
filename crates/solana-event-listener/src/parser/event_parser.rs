@@ -6,7 +6,7 @@ use crate::parser::{
 };
 use anchor_lang::pubkey;
 use async_trait::async_trait;
-use database::token_info::DataSource;
+use database::clmm::token_info::DataSource;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solana_sdk::pubkey::Pubkey;

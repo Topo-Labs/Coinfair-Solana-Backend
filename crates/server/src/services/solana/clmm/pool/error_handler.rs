@@ -2,7 +2,7 @@
 //!
 //! 提供统一的错误处理、重试机制和数据一致性保障
 
-use database::clmm_pool::{ClmmPool, PoolStatus};
+use database::clmm::clmm_pool::{ClmmPool, PoolStatus};
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};

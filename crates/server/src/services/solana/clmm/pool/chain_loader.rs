@@ -1,6 +1,6 @@
 use crate::services::solana::shared::SharedContext;
 use anyhow::Result;
-use database::clmm_pool::model::{
+use database::clmm::clmm_pool::model::{
     ClmmPool, ExtensionInfo, PoolStatus, PoolType, PriceInfo, SyncStatus, TokenInfo, VaultInfo,
 };
 use solana_sdk::program_pack::Pack;
@@ -216,7 +216,7 @@ impl ChainPoolLoader {
             },
 
             pool_type: PoolType::Concentrated, // 当前只支持CLMM池
-            data_source: database::clmm_pool::DataSource::ChainEvent,
+            data_source: database::clmm::clmm_pool::DataSource::ChainEvent,
             chain_confirmed: true, // 从链上加载的池子已确认
         };
 

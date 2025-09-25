@@ -1,4 +1,4 @@
-use crate::event_model::{
+use crate::events::event_model::{
     ClmmPoolEvent, DepositEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent, TokenCreationEvent,
 };
 use chrono::Utc;
@@ -749,7 +749,7 @@ impl LaunchEventRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event_model::PairType;
+    use crate::events::event_model::PairType;
     use chrono::Utc;
 
     fn create_test_launch_event() -> LaunchEvent {
@@ -1520,7 +1520,7 @@ pub struct CreatorDistribution {
 #[cfg(test)]
 mod deposit_tests {
     use super::*;
-    use crate::event_model::DepositEvent;
+    use crate::events::event_model::DepositEvent;
     use chrono::Utc;
 
     /// 创建测试用的存款事件

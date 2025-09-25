@@ -4,7 +4,7 @@
 
 use super::super::super::shared::SharedContext;
 use super::storage::ClmmPoolStorageService;
-use database::clmm_pool::{ClmmPool, SyncStatus};
+use database::clmm::clmm_pool::{ClmmPool, SyncStatus};
 use solana_sdk::{program_pack::Pack, pubkey::Pubkey};
 use spl_token::state::Mint;
 use std::str::FromStr;

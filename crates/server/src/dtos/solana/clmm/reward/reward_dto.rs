@@ -1,4 +1,4 @@
-use database::reward::model::Reward;
+use database::clmm::reward::model::Reward;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;

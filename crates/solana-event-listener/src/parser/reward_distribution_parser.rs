@@ -9,16 +9,14 @@ use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, error, info, warn};
 
 // 添加元数据相关的导入
-use database::{
-    token_info::{DataSource, TokenPushRequest},
-    Database,
-};
+use database::Database;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::program_pack::Pack;
 use spl_token::state::Mint;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
+// 添加元数据相关的导入
+use database::clmm::token_info::{DataSource, TokenPushRequest};
 // 使用 utils 中的共享类型
 use utils::{ExternalTokenMetadata, TokenMetadata as UtilsTokenMetadata, TokenMetadataProvider};
 

@@ -1,4 +1,4 @@
-use crate::{position::model::Position, Database};
+use crate::Database;
 use async_trait::async_trait;
 use futures::stream::StreamExt;
 use mongodb::{
@@ -10,6 +10,7 @@ use mongodb::{
 use std::sync::Arc;
 use tracing::info;
 use utils::{AppError, AppResult};
+use crate::clmm::position::model::Position;
 
 pub type DynPositionRepository = Arc<dyn PositionRepositoryTrait + Send + Sync>;
 
@@ -523,7 +524,7 @@ impl PositionRepositoryTrait for Database {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::position::model::Position;
+    use crate::clmm::position::model::Position;
 
     fn create_test_position() -> Position {
         Position::new(

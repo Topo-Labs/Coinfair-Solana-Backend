@@ -9,8 +9,8 @@ use crate::dtos::solana::clmm::pool::listing::{
 use crate::dtos::statics::static_dto::SaveClmmConfigRequest;
 use crate::services::solana::clmm::config::config_service::ClmmConfigServiceTrait;
 use anyhow::Result;
-use database::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
-use database::clmm_pool::PoolType;
+use database::clmm::clmm_pool::model::{ClmmPool, PoolListRequest, PoolListResponse};
+use database::clmm::clmm_pool::PoolType;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -726,7 +726,7 @@ impl DataTransformService {
     /// 创建扩展的mint信息（智能版本）- 优先使用本地缓存数据
     fn create_extended_mint_info_smart(
         &self,
-        token_info: &database::clmm_pool::model::TokenInfo,
+        token_info: &database::clmm::clmm_pool::model::TokenInfo,
         metadata_map: &HashMap<String, TokenMetadata>,
     ) -> Result<ExtendedMintInfo> {
         let mint_address = &token_info.mint_address;
@@ -800,7 +800,7 @@ impl DataTransformService {
         &self,
         chain_metadata: Option<&TokenMetadata>,
         mint_address: &str,
-        token_info: &database::clmm_pool::model::TokenInfo,
+        token_info: &database::clmm::clmm_pool::model::TokenInfo,
     ) -> Vec<String> {
         let mut tags = chain_metadata.map(|m| m.tags.clone()).unwrap_or_default();
 
@@ -845,7 +845,7 @@ impl DataTransformService {
         &self,
         mint_address: &str,
         chain_metadata: Option<&TokenMetadata>,
-        token_info: &database::clmm_pool::model::TokenInfo,
+        token_info: &database::clmm::clmm_pool::model::TokenInfo,
     ) -> serde_json::Value {
         let mut extensions = serde_json::Map::new();
 
@@ -1241,10 +1241,10 @@ impl DataTransformService {
     fn calculate_default_range_from_tick_spacing(
         &self,
         tick_spacing: u16,
-        pool_type: &database::clmm_pool::model::PoolType,
+        pool_type: &database::clmm::clmm_pool::model::PoolType,
     ) -> f64 {
         match pool_type {
-            database::clmm_pool::model::PoolType::Concentrated => {
+            database::clmm::clmm_pool::model::PoolType::Concentrated => {
                 // 集中流动性池：根据真实tick间距调整范围
                 match tick_spacing {
                     1 => 0.01,  // 超窄间距，适合稳定币对
@@ -1255,7 +1255,7 @@ impl DataTransformService {
                     _ => 0.1,   // 默认
                 }
             }
-            database::clmm_pool::model::PoolType::Standard => {
+            database::clmm::clmm_pool::model::PoolType::Standard => {
                 // 标准池：固定较宽范围
                 0.5
             }
@@ -1266,11 +1266,11 @@ impl DataTransformService {
     fn generate_range_points_from_tick_spacing(
         &self,
         tick_spacing: u16,
-        pool_type: &database::clmm_pool::model::PoolType,
+        pool_type: &database::clmm::clmm_pool::model::PoolType,
         current_price: f64,
     ) -> Vec<f64> {
         match pool_type {
-            database::clmm_pool::model::PoolType::Concentrated => {
+            database::clmm::clmm_pool::model::PoolType::Concentrated => {
                 match tick_spacing {
                     // 超窄间距：稳定币对，提供精细的范围选择
                     1 => vec![0.005, 0.01, 0.02, 0.05, 0.1],
@@ -1302,7 +1302,7 @@ impl DataTransformService {
                     _ => vec![0.02, 0.05, 0.1, 0.2, 0.5],
                 }
             }
-            database::clmm_pool::model::PoolType::Standard => {
+            database::clmm::clmm_pool::model::PoolType::Standard => {
                 // 标准池：提供更宽的范围选择
                 vec![0.1, 0.3, 0.5, 1.0, 2.0]
             }
@@ -1321,10 +1321,10 @@ impl DataTransformService {
     }
 
     /// 获取奖励池类型标识
-    fn get_reward_pool_type(&self, pool_type: &database::clmm_pool::model::PoolType) -> String {
+    fn get_reward_pool_type(&self, pool_type: &database::clmm::clmm_pool::model::PoolType) -> String {
         match pool_type {
-            database::clmm_pool::model::PoolType::Concentrated => "Clmm".to_string(),
-            database::clmm_pool::model::PoolType::Standard => "Standard".to_string(),
+            database::clmm::clmm_pool::model::PoolType::Concentrated => "Clmm".to_string(),
+            database::clmm::clmm_pool::model::PoolType::Standard => "Standard".to_string(),
         }
     }
 
@@ -1334,11 +1334,11 @@ impl DataTransformService {
 
         // 基于池子类型的标签
         match pool.pool_type {
-            database::clmm_pool::model::PoolType::Concentrated => {
+            database::clmm::clmm_pool::model::PoolType::Concentrated => {
                 tags.push("CLMM".to_string());
                 tags.push("concentrated".to_string());
             }
-            database::clmm_pool::model::PoolType::Standard => {
+            database::clmm::clmm_pool::model::PoolType::Standard => {
                 tags.push("AMM".to_string());
                 tags.push("standard".to_string());
             }
@@ -1381,7 +1381,7 @@ impl DataTransformService {
 
         // 基于池子年龄和类型估算已完成的farm数量
         match pool.pool_type {
-            database::clmm_pool::model::PoolType::Concentrated => {
+            database::clmm::clmm_pool::model::PoolType::Concentrated => {
                 // CLMM池子通常有更多的激励活动
                 match pool_age_days {
                     0..=7 => 0,    // 新池子
@@ -1391,7 +1391,7 @@ impl DataTransformService {
                     _ => 8,        // 老池子
                 }
             }
-            database::clmm_pool::model::PoolType::Standard => {
+            database::clmm::clmm_pool::model::PoolType::Standard => {
                 // 标准池子的farm活动较少
                 match pool_age_days {
                     0..=30 => 0,
@@ -1448,7 +1448,7 @@ impl DataTransformService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use database::clmm_pool::model::{
+    use database::clmm::clmm_pool::model::{
         ExtensionInfo, PoolStatus, PoolType, PriceInfo, SyncStatus, TokenInfo, VaultInfo,
     };
     #[allow(dead_code)]
@@ -1518,7 +1518,7 @@ mod tests {
                 sync_error: None,
             },
             pool_type: PoolType::Concentrated,
-            data_source: database::clmm_pool::DataSource::ApiCreated,
+            data_source: database::clmm::clmm_pool::DataSource::ApiCreated,
             chain_confirmed: false,
         }
     }
@@ -1614,17 +1614,17 @@ mod tests {
 
         // 测试基于真实tick间距的范围计算
         let default_range =
-            service.calculate_default_range_from_tick_spacing(10, &database::clmm_pool::model::PoolType::Concentrated);
+            service.calculate_default_range_from_tick_spacing(10, &database::clmm::clmm_pool::model::PoolType::Concentrated);
         assert_eq!(default_range, 0.05);
 
         let default_range =
-            service.calculate_default_range_from_tick_spacing(60, &database::clmm_pool::model::PoolType::Concentrated);
+            service.calculate_default_range_from_tick_spacing(60, &database::clmm::clmm_pool::model::PoolType::Concentrated);
         assert_eq!(default_range, 0.02);
 
         // 测试基于真实tick间距的范围点计算
         let range_points = service.generate_range_points_from_tick_spacing(
             10,
-            &database::clmm_pool::model::PoolType::Concentrated,
+            &database::clmm::clmm_pool::model::PoolType::Concentrated,
             100.0,
         );
         assert!(!range_points.is_empty());

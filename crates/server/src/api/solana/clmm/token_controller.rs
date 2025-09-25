@@ -8,7 +8,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use database::token_info::{TokenListQuery, TokenListResponse, TokenPushRequest, TokenPushResponse};
+use database::clmm::token_info::{TokenListQuery, TokenListResponse, TokenPushRequest, TokenPushResponse};
 use serde::Deserialize;
 use tracing::{info, warn};
 use utils::AppResult;
@@ -603,7 +603,7 @@ pub async fn get_new_tokens(
 )]
 pub async fn get_token_stats(
     Extension(services): Extension<Services>,
-) -> AppResult<Json<database::token_info::repository::TokenStats>> {
+) -> AppResult<Json<database::clmm::token_info::repository::TokenStats>> {
     info!("📊 获取代币统计信息");
 
     let stats = services.token.get_token_stats().await?;
@@ -661,7 +661,7 @@ pub async fn update_token_status(
     Extension(services): Extension<Services>,
     Extension(user): Extension<AuthUser>,
     Path(address): Path<String>,
-    Json(status): Json<database::token_info::TokenStatus>,
+    Json(status): Json<database::clmm::token_info::TokenStatus>,
 ) -> AppResult<Json<ApiResponse<bool>>> {
     warn!(
         "🔄 管理员更新代币状态: {} -> {:?} (操作员: {})",
@@ -706,7 +706,7 @@ pub async fn update_token_verification(
     Extension(services): Extension<Services>,
     Extension(user): Extension<AuthUser>,
     Path(address): Path<String>,
-    Json(verification): Json<database::token_info::VerificationStatus>,
+    Json(verification): Json<database::clmm::token_info::VerificationStatus>,
 ) -> AppResult<Json<ApiResponse<bool>>> {
     warn!(
         "🔄 管理员更新代币验证状态: {} -> {:?} (操作员: {})",

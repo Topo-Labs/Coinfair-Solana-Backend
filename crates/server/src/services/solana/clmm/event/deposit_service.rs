@@ -1,16 +1,14 @@
 use anyhow::Result;
-use database::{
-    event_model::{
-        repository::{DepositStats, DepositTypeDistribution},
-        DepositEvent,
-    },
-    Database,
-};
+use database::Database;
 use futures::TryStreamExt;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
 use std::sync::Arc;
 use tracing::{error, info, warn};
+use database::events::event_model::{
+    repository::{DepositStats, DepositTypeDistribution},
+    DepositEvent,
+};
 
 /// 存款事件服务 - 处理存款事件的查询和统计
 pub struct DepositEventService {

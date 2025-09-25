@@ -8,7 +8,8 @@ use serde_json::Value;
 use std::sync::Arc;
 use tower::ServiceExt;
 
-use database::{event_model::DepositEvent, Database};
+use database::Database;
+use database::events::event_model::DepositEvent;
 use server::services::Services;
 use server::api::solana::clmm::deposit_event_controller::DepositEventController;
 use utils::AppConfig;

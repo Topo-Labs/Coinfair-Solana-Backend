@@ -9,7 +9,7 @@ use axum::{
     routing::get,
     Router,
 };
-use database::clmm_pool::model::PoolListRequest;
+use database::clmm::clmm_pool::model::PoolListRequest;
 use tracing::{error, info};
 
 pub struct ClmmPoolQueryController;
@@ -54,7 +54,7 @@ impl ClmmPoolQueryController {
         ("pool_address" = String, Query, description = "池子地址")
     ),
     responses(
-        (status = 200, description = "查询成功", body = ApiResponse<Option<database::clmm_pool::ClmmPool>>),
+        (status = 200, description = "查询成功", body = ApiResponse<Option<database::clmm::clmm_pool::ClmmPool>>),
         (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
         (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
     ),
@@ -63,7 +63,7 @@ impl ClmmPoolQueryController {
 pub async fn get_pool_by_address(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Option<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<Json<ApiResponse<Option<database::clmm::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     let pool_address = params.get("pool_address").ok_or_else(|| {
         let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少pool_address参数");
         (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
@@ -120,7 +120,7 @@ pub async fn get_pool_by_address(
         ("mint_address" = String, Query, description = "代币Mint地址")
     ),
     responses(
-        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm_pool::ClmmPool>>),
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm::clmm_pool::ClmmPool>>),
         (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
         (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
     ),
@@ -129,7 +129,7 @@ pub async fn get_pool_by_address(
 pub async fn get_pools_by_mint(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Vec<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<Json<ApiResponse<Vec<database::clmm::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     let mint_address = params.get("mint_address").ok_or_else(|| {
         let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少mint_address参数");
         (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
@@ -187,7 +187,7 @@ pub async fn get_pools_by_mint(
         ("offset" = Option<u32>, Query, description = "分页偏移量")
     ),
     responses(
-        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm_pool::ClmmPool>>),
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm::clmm_pool::ClmmPool>>),
         (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
         (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
     ),
@@ -196,7 +196,7 @@ pub async fn get_pools_by_mint(
 pub async fn get_pools_by_creator(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Vec<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<Json<ApiResponse<Vec<database::clmm::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     let creator_address = params.get("creator_address").ok_or_else(|| {
         let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少creator_address参数");
         (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
@@ -282,7 +282,7 @@ pub async fn get_pools_by_creator(
         ("sort_order" = Option<String>, Query, description = "排序方向")
     ),
     responses(
-        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm_pool::ClmmPool>>),
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<database::clmm::clmm_pool::ClmmPool>>),
         (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
         (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
     ),
@@ -291,19 +291,19 @@ pub async fn get_pools_by_creator(
 pub async fn query_pools(
     Extension(services): Extension<Services>,
     Query(params): Query<HashMap<String, String>>,
-) -> Result<Json<ApiResponse<Vec<database::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<Json<ApiResponse<Vec<database::clmm::clmm_pool::ClmmPool>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("🔍 执行复杂池子查询");
 
     // 构建查询参数
-    let query_params = database::clmm_pool::PoolQueryParams {
+    let query_params = database::clmm::clmm_pool::PoolQueryParams {
         pool_address: params.get("pool_address").cloned(),
         mint_address: params.get("mint_address").cloned(),
         creator_wallet: params.get("creator_wallet").cloned(),
         status: params.get("status").and_then(|s| match s.as_str() {
-            "Created" => Some(database::clmm_pool::PoolStatus::Created),
-            "Active" => Some(database::clmm_pool::PoolStatus::Active),
-            "Paused" => Some(database::clmm_pool::PoolStatus::Paused),
-            "Closed" => Some(database::clmm_pool::PoolStatus::Closed),
+            "Created" => Some(database::clmm::clmm_pool::PoolStatus::Created),
+            "Active" => Some(database::clmm::clmm_pool::PoolStatus::Active),
+            "Paused" => Some(database::clmm::clmm_pool::PoolStatus::Paused),
+            "Closed" => Some(database::clmm::clmm_pool::PoolStatus::Closed),
             _ => None,
         }),
         min_price: params.get("min_price").and_then(|s| s.parse().ok()),
@@ -361,14 +361,14 @@ pub async fn query_pools(
     get,
     path = "/api/v1/solana/pool/statistics",
     responses(
-        (status = 200, description = "查询成功", body = ApiResponse<database::clmm_pool::PoolStats>),
+        (status = 200, description = "查询成功", body = ApiResponse<database::clmm::clmm_pool::PoolStats>),
         (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
     ),
     tag = "CLMM池子查询"
 )]
 pub async fn get_pool_statistics(
     Extension(services): Extension<Services>,
-) -> Result<Json<ApiResponse<database::clmm_pool::PoolStats>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+) -> Result<Json<ApiResponse<database::clmm::clmm_pool::PoolStats>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!("📊 接收到获取池子统计信息请求");
 
     match services.solana.get_pool_statistics().await {

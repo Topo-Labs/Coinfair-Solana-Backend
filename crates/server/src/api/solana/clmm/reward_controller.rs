@@ -8,7 +8,7 @@ use axum::{
     Extension, Json, Router,
 };
 use chrono::Utc;
-use database::reward::model::{Reward, RewardItem, RewardItemWithTime};
+use database::clmm::reward::model::{Reward, RewardItem, RewardItemWithTime};
 use mongodb::results::{InsertManyResult, UpdateResult};
 use utils::{AppError, AppResult};
 use crate::dtos::solana::clmm::reward::reward_dto::{MockRewardsDto, SetRewardDto, SetRewardsDto};

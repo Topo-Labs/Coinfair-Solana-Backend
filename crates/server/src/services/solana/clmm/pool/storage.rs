@@ -5,7 +5,7 @@
 use crate::dtos::solana::clmm::pool::creation::{
     CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
 };
-use database::clmm_pool::{
+use database::clmm::clmm_pool::{
     ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
     TransactionInfo, TransactionStatus, VaultInfo,
 };
@@ -178,7 +178,7 @@ impl ClmmPoolStorageService {
                 sync_error: None,
             },
 
-            pool_type: database::clmm_pool::model::PoolType::Concentrated,
+            pool_type: database::clmm::clmm_pool::model::PoolType::Concentrated,
 
             // 新增状态字段
             data_source: DataSource::ApiCreated,
@@ -305,7 +305,7 @@ impl ClmmPoolStorageService {
                 sync_error: None,
             },
 
-            pool_type: database::clmm_pool::model::PoolType::Concentrated,
+            pool_type: database::clmm::clmm_pool::model::PoolType::Concentrated,
 
             // 状态字段
             data_source: DataSource::ApiCreated,
@@ -413,20 +413,20 @@ impl ClmmPoolStorageService {
     }
 
     /// 获取池子统计信息
-    pub async fn get_pool_statistics(&self) -> AppResult<database::clmm_pool::PoolStats> {
+    pub async fn get_pool_statistics(&self) -> AppResult<database::clmm::clmm_pool::PoolStats> {
         self.repository.get_pool_stats().await
     }
 
     /// 复杂查询接口
-    pub async fn query_pools(&self, params: &database::clmm_pool::PoolQueryParams) -> AppResult<Vec<ClmmPool>> {
+    pub async fn query_pools(&self, params: &database::clmm::clmm_pool::PoolQueryParams) -> AppResult<Vec<ClmmPool>> {
         self.repository.query_pools(params).await
     }
 
     /// 分页查询池子列表
     pub async fn query_pools_with_pagination(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
-    ) -> AppResult<database::clmm_pool::model::PoolListResponse> {
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
+    ) -> AppResult<database::clmm::clmm_pool::model::PoolListResponse> {
         self.repository.query_pools_with_pagination(params).await
     }
 

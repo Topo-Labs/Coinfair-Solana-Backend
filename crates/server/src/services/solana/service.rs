@@ -219,36 +219,36 @@ pub trait SolanaServiceTrait {
     ) -> Result<CreatePoolAndSendTransactionResponse>;
 
     // CLMM Pool query operations
-    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>>;
+    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm::clmm_pool::ClmmPool>>;
     async fn get_pools_by_mint(
         &self,
         mint_address: &str,
         limit: Option<i64>,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>>;
     async fn get_pools_by_creator(
         &self,
         creator_wallet: &str,
         limit: Option<i64>,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>>;
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>>;
     async fn query_pools(
         &self,
-        params: &database::clmm_pool::PoolQueryParams,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>>;
-    async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats>;
+        params: &database::clmm::clmm_pool::PoolQueryParams,
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>>;
+    async fn get_pool_statistics(&self) -> Result<database::clmm::clmm_pool::PoolStats>;
     async fn query_pools_with_pagination(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
-    ) -> Result<database::clmm_pool::model::PoolListResponse>;
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm::clmm_pool::model::PoolListResponse>;
 
     // New method for the expected response format
     async fn query_pools_with_new_format(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
     ) -> Result<NewPoolListResponse>;
 
     async fn query_pools_with_new_format2(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
     ) -> Result<NewPoolListResponse2>;
     // Pool key operations - NEW
     async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse>;
@@ -309,7 +309,7 @@ pub trait SolanaServiceTrait {
         creator_wallet: &str,
         page: u64,
         limit: u64,
-    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>>;
+    ) -> Result<Vec<database::clmm::clmm_pool::model::ClmmPool>>;
 
     async fn get_user_launch_history_count(&self, creator_wallet: &str) -> Result<u64>;
 
@@ -475,7 +475,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // CLMM Pool query operations - delegate to clmm_pool_service
-    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm_pool::ClmmPool>> {
+    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.get_pool_by_address(pool_address).await
     }
 
@@ -483,7 +483,7 @@ impl SolanaServiceTrait for SolanaService {
         &self,
         mint_address: &str,
         limit: Option<i64>,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.get_pools_by_mint(mint_address, limit).await
     }
 
@@ -491,31 +491,31 @@ impl SolanaServiceTrait for SolanaService {
         &self,
         creator_wallet: &str,
         limit: Option<i64>,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.get_pools_by_creator(creator_wallet, limit).await
     }
 
     async fn query_pools(
         &self,
-        params: &database::clmm_pool::PoolQueryParams,
-    ) -> Result<Vec<database::clmm_pool::ClmmPool>> {
+        params: &database::clmm::clmm_pool::PoolQueryParams,
+    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
         self.clmm_pool_service.query_pools(params).await
     }
 
-    async fn get_pool_statistics(&self) -> Result<database::clmm_pool::PoolStats> {
+    async fn get_pool_statistics(&self) -> Result<database::clmm::clmm_pool::PoolStats> {
         self.clmm_pool_service.get_pool_statistics().await
     }
 
     async fn query_pools_with_pagination(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
-    ) -> Result<database::clmm_pool::model::PoolListResponse> {
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
+    ) -> Result<database::clmm::clmm_pool::model::PoolListResponse> {
         self.clmm_pool_service.query_pools_with_pagination(params).await
     }
 
     async fn query_pools_with_new_format(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
     ) -> Result<NewPoolListResponse> {
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
@@ -531,7 +531,7 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn query_pools_with_new_format2(
         &self,
-        params: &database::clmm_pool::model::PoolListRequest,
+        params: &database::clmm::clmm_pool::model::PoolListRequest,
     ) -> Result<NewPoolListResponse2> {
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
@@ -656,7 +656,7 @@ impl SolanaServiceTrait for SolanaService {
         creator_wallet: &str,
         page: u64,
         limit: u64,
-    ) -> Result<Vec<database::clmm_pool::model::ClmmPool>> {
+    ) -> Result<Vec<database::clmm::clmm_pool::model::ClmmPool>> {
         self.launch_migration
             .get_user_launch_history(creator_wallet, page, limit)
             .await

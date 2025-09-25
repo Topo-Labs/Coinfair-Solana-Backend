@@ -518,8 +518,8 @@ fn default_page_size() -> u32 {
 
 // ==================== 转换函数 ====================
 
-impl From<database::event_model::DepositEvent> for DepositEventResponse {
-    fn from(event: database::event_model::DepositEvent) -> Self {
+impl From<database::events::event_model::DepositEvent> for DepositEventResponse {
+    fn from(event: database::events::event_model::DepositEvent) -> Self {
         Self {
             user: event.user,
             token_mint: event.token_mint,
@@ -544,8 +544,8 @@ impl From<database::event_model::DepositEvent> for DepositEventResponse {
     }
 }
 
-impl From<database::event_model::repository::DepositStats> for DepositStatsResponse {
-    fn from(stats: database::event_model::repository::DepositStats) -> Self {
+impl From<database::events::event_model::repository::DepositStats> for DepositStatsResponse {
+    fn from(stats: database::events::event_model::repository::DepositStats) -> Self {
         Self {
             total_deposits: stats.total_deposits,
             today_deposits: stats.today_deposits,
@@ -559,8 +559,8 @@ impl From<database::event_model::repository::DepositStats> for DepositStatsRespo
     }
 }
 
-impl From<database::event_model::repository::DepositTypeDistribution> for DepositTypeDistributionResponse {
-    fn from(dist: database::event_model::repository::DepositTypeDistribution) -> Self {
+impl From<database::events::event_model::repository::DepositTypeDistribution> for DepositTypeDistributionResponse {
+    fn from(dist: database::events::event_model::repository::DepositTypeDistribution) -> Self {
         Self {
             deposit_type: dist.deposit_type,
             name: dist.name,
@@ -569,8 +569,8 @@ impl From<database::event_model::repository::DepositTypeDistribution> for Deposi
     }
 }
 
-impl From<database::event_model::repository::TokenDistribution> for TokenDistributionResponse {
-    fn from(dist: database::event_model::repository::TokenDistribution) -> Self {
+impl From<database::events::event_model::repository::TokenDistribution> for TokenDistributionResponse {
+    fn from(dist: database::events::event_model::repository::TokenDistribution) -> Self {
         Self {
             token_mint: dist.token_mint,
             token_symbol: dist.token_symbol,
@@ -657,7 +657,7 @@ impl From<crate::services::solana::clmm::event::deposit_service::TrendPeriod> fo
     }
 }
 
-impl From<CreateDepositEventRequest> for database::event_model::DepositEvent {
+impl From<CreateDepositEventRequest> for database::events::event_model::DepositEvent {
     fn from(request: CreateDepositEventRequest) -> Self {
         let now = chrono::Utc::now().timestamp();
         let deposit_type = request.deposit_type.unwrap_or(0);

@@ -86,7 +86,7 @@ pub async fn create_deposit_event(
     let deposit_service = DepositEventService::new(services.database.clone());
 
     // 转换请求为数据库模型
-    let event: database::event_model::DepositEvent = request.into();
+    let event: database::events::event_model::DepositEvent = request.into();
 
     match deposit_service.create_deposit_event(event).await {
         Ok((event_id, created_event)) => {
