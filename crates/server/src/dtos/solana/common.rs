@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::Validate;
@@ -212,6 +214,22 @@ pub fn validate_sort_order(value: &str) -> Result<(), validator::ValidationError
     }
 }
 
+/// 验证Solana pubkey格式
+pub fn validate_pubkey(address: &str) -> Result<(), validator::ValidationError> {
+    match Pubkey::from_str(address) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            let mut error = validator::ValidationError::new("invalid_pubkey");
+            error.message = Some("必须是有效的Solana公钥地址".into());
+            Err(error)
+        }
+    }
+}
+
 pub fn default_slippage() -> f64 {
     0.5 // 默认0.5%滑点
+}
+
+pub fn default_slippage_option() -> Option<f64> {
+    Some(0.5) // 默认0.5%滑点
 }

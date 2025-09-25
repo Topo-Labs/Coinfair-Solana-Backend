@@ -1,0 +1,1054 @@
+use crate::dtos::solana::common::TransactionStatus;
+use crate::dtos::solana::cpmm::swap::{
+    AmmConfigInfo, CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse,
+    CpmmSwapBaseInTransactionRequest, CpmmTransactionData, PoolStateInfo,
+};
+use crate::services::solana::shared::SharedContext;
+use anyhow::Result;
+use raydium_cp_swap::curve::{CurveCalculator, TradeDirection};
+use raydium_cp_swap::states::{AmmConfig, PoolState};
+use solana_sdk::{
+    pubkey::Pubkey,
+    signature::{Keypair, Signer},
+    transaction::Transaction,
+};
+use spl_associated_token_account;
+use std::str::FromStr;
+use std::sync::Arc;
+use tracing::info;
+
+// 导入必要的Solana和SPL库
+use anchor_lang::AccountDeserialize;
+use anchor_spl::token_2022::spl_token_2022::{
+    extension::{transfer_fee::TransferFeeConfig, BaseStateWithExtensions, PodStateWithExtensions},
+    pod::{PodAccount, PodMint},
+};
+use solana_sdk::instruction::Instruction;
+
+// 本地工具函数（与CLI完全匹配）
+fn deserialize_anchor_account<T: AccountDeserialize>(account: &solana_sdk::account::Account) -> Result<T> {
+    let mut data: &[u8] = &account.data;
+    T::try_deserialize(&mut data).map_err(Into::into)
+}
+
+fn unpack_token(token_data: &[u8]) -> Result<PodStateWithExtensions<'_, PodAccount>> {
+    let token = PodStateWithExtensions::<PodAccount>::unpack(&token_data)?;
+    Ok(token)
+}
+
+fn unpack_mint(token_data: &[u8]) -> Result<PodStateWithExtensions<'_, PodMint>> {
+    let mint = PodStateWithExtensions::<PodMint>::unpack(&token_data)?;
+    Ok(mint)
+}
+
+/// 获取转账费用（Token2022支持）- 100%匹配CLI实现
+pub fn get_transfer_fee(mint: &PodStateWithExtensions<'_, PodMint>, epoch: u64, pre_fee_amount: u64) -> u64 {
+    if let Ok(transfer_fee_config) = mint.get_extension::<TransferFeeConfig>() {
+        transfer_fee_config
+            .calculate_epoch_fee(epoch, pre_fee_amount)
+            .unwrap_or(0)
+    } else {
+        0
+    }
+}
+
+/// 计算考虑滑点的金额 - 100%匹配CLI实现
+use std::ops::Mul;
+pub fn amount_with_slippage(amount: u64, slippage: f64, round_up: bool) -> u64 {
+    if round_up {
+        (amount as f64).mul(1_f64 + slippage).ceil() as u64
+    } else {
+        (amount as f64).mul(1_f64 - slippage).floor() as u64
+    }
+}
+
+/// 创建关联代币账户指令 - 100%匹配CLI实现
+pub fn create_ata_token_account_instr(
+    token_program_id: Pubkey,
+    mint: &Pubkey,
+    owner: &Pubkey,
+) -> Result<Vec<Instruction>> {
+    // 使用idempotent版本，与CLI完全一致
+    let instruction = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+        owner,             // 付费者
+        owner,             // 账户所有者
+        mint,              // mint地址
+        &token_program_id, // token程序
+    );
+
+    Ok(vec![instruction])
+}
+
+/// 创建SwapBaseInput指令 - 100%匹配CLI实现
+///
+/// 使用与CLI完全相同的账户结构和权限设置
+pub fn swap_base_input_instr(
+    cpmm_program_id: Pubkey,
+    payer: Pubkey,
+    pool_id: Pubkey,
+    amm_config: Pubkey,
+    observation_key: Pubkey,
+    input_token_account: Pubkey,
+    output_token_account: Pubkey,
+    input_vault: Pubkey,
+    output_vault: Pubkey,
+    input_token_program: Pubkey,
+    output_token_program: Pubkey,
+    input_token_mint: Pubkey,
+    output_token_mint: Pubkey,
+    amount_in: u64,
+    minimum_amount_out: u64,
+) -> Result<Vec<Instruction>> {
+    // 计算authority地址，与CLI完全一致
+    const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
+    let (authority, _bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &cpmm_program_id);
+
+    // 构造指令数据（使用swap_base_input的discriminator）
+    let mut instruction_data = Vec::new();
+    // swap_base_input方法的discriminator：sha256("global:swap_base_input")[0..8]
+    let discriminator = [0x8f, 0xbe, 0x5a, 0xda, 0xc4, 0x1e, 0x33, 0xde];
+    instruction_data.extend_from_slice(&discriminator);
+    instruction_data.extend_from_slice(&amount_in.to_le_bytes());
+    instruction_data.extend_from_slice(&minimum_amount_out.to_le_bytes());
+
+    // 构建账户元数据，顺序与CLI完全一致
+    let accounts = vec![
+        solana_sdk::instruction::AccountMeta::new(payer, true), // payer (signer)
+        solana_sdk::instruction::AccountMeta::new_readonly(authority, false), // authority
+        solana_sdk::instruction::AccountMeta::new_readonly(amm_config, false), // amm_config
+        solana_sdk::instruction::AccountMeta::new(pool_id, false), // pool_state
+        solana_sdk::instruction::AccountMeta::new(input_token_account, false), // input_token_account
+        solana_sdk::instruction::AccountMeta::new(output_token_account, false), // output_token_account
+        solana_sdk::instruction::AccountMeta::new(input_vault, false), // input_vault
+        solana_sdk::instruction::AccountMeta::new(output_vault, false), // output_vault
+        solana_sdk::instruction::AccountMeta::new_readonly(input_token_program, false), // input_token_program
+        solana_sdk::instruction::AccountMeta::new_readonly(output_token_program, false), // output_token_program
+        solana_sdk::instruction::AccountMeta::new_readonly(input_token_mint, false), // input_token_mint
+        solana_sdk::instruction::AccountMeta::new_readonly(output_token_mint, false), // output_token_mint
+        solana_sdk::instruction::AccountMeta::new(observation_key, false), // observation_state
+    ];
+
+    let instruction = Instruction {
+        program_id: cpmm_program_id,
+        accounts,
+        data: instruction_data,
+    };
+
+    Ok(vec![instruction])
+}
+
+/// CPMM交换服务
+///
+/// 提供基于Raydium恒定乘积做市商(CPMM)的代币交换功能
+pub struct CpmmSwapService {
+    shared: Arc<SharedContext>,
+}
+
+impl CpmmSwapService {
+    /// 创建新的CPMM交换服务实例
+    pub fn new(shared: Arc<SharedContext>) -> Self {
+        Self { shared }
+    }
+
+    /// 获取配置的CPMM程序ID
+    fn get_cpmm_program_id(&self) -> Result<Pubkey> {
+        Pubkey::from_str(&self.shared.app_config.raydium_cp_program_id)
+            .map_err(|e| anyhow::anyhow!("无效的CPMM程序ID: {}", e))
+    }
+
+    /// 执行CPMM SwapBaseIn交换
+    ///
+    /// 100%忠实地实现CLI的业务逻辑，包括：
+    /// 1. 加载池子状态和多个账户信息
+    /// 2. 确定交易方向和相关代币信息
+    /// 3. 计算转账费和实际输入金额
+    /// 4. 使用CurveCalculator进行交换计算
+    /// 5. 应用滑点保护
+    /// 6. 创建输出代币ATA账户
+    /// 7. 构建并发送交换交易
+    pub async fn cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInResponse> {
+        info!(
+            "执行CPMM SwapBaseIn: pool_id={}, user_input_token={}, amount={}",
+            request.pool_id, request.user_input_token, request.user_input_amount
+        );
+
+        let pool_id = Pubkey::from_str(&request.pool_id)?;
+        let user_input_token_raw = Pubkey::from_str(&request.user_input_token)?;
+        let user_input_amount = request.user_input_amount;
+        let slippage = request.slippage.unwrap_or(0.5) / 100.0; // 转换为小数
+
+        info!("📝 交换接口输入参数分析:");
+        info!("  pool_id: {}", pool_id);
+        info!("  user_input_token_raw: {}", user_input_token_raw);
+        info!("  user_input_amount: {}", user_input_amount);
+        info!("  slippage: {}%", slippage * 100.0);
+
+        // 1. 加载池子状态，添加详细验证
+        let rpc_client = &self.shared.rpc_client;
+
+        // 检查池子账户是否存在和有效
+        let pool_account = match rpc_client.get_account(&pool_id) {
+            Ok(account) => account,
+            Err(e) => {
+                info!("池子账户不存在或获取失败: pool_id={}, error={}", pool_id, e);
+                return Err(anyhow::anyhow!("池子账户不存在或无法访问: {}, 错误: {}", pool_id, e));
+            }
+        };
+
+        // 获取配置的CPMM程序ID
+        let cpmm_program_id = self.get_cpmm_program_id()?;
+
+        // 验证账户所有者
+        if pool_account.owner != cpmm_program_id {
+            return Err(anyhow::anyhow!(
+                "无效的池子地址，账户所有者不是CPMM程序: expected={}, actual={}",
+                cpmm_program_id,
+                pool_account.owner
+            ));
+        }
+
+        // 添加详细的调试信息
+        info!(
+            "池子账户调试信息: pool_id={}, data_length={}, owner={}",
+            pool_id,
+            pool_account.data.len(),
+            pool_account.owner
+        );
+
+        if pool_account.data.len() >= 8 {
+            let discriminator = &pool_account.data[0..8];
+            info!("账户discriminator: {:?}", discriminator);
+        }
+
+        // 反序列化池子状态
+        let pool_state: PoolState = match deserialize_anchor_account::<PoolState>(&pool_account) {
+            Ok(state) => {
+                info!("✅ 池子状态反序列化成功");
+                info!("🏊‍♀️ Pool详细信息:");
+                info!("  amm_config: {}", state.amm_config);
+                info!("  token_0_mint: {}", state.token_0_mint);
+                info!("  token_1_mint: {}", state.token_1_mint);
+                info!("  token_0_vault: {}", state.token_0_vault);
+                info!("  token_1_vault: {}", state.token_1_vault);
+                info!("  token_0_program: {}", state.token_0_program);
+                info!("  token_1_program: {}", state.token_1_program);
+                info!("  observation_key: {}", state.observation_key);
+                info!("  auth_bump: {}", state.auth_bump);
+                info!("  status: {}", state.status);
+                info!("  lp_mint: {}", state.lp_mint);
+                // 复制packed字段到本地变量以避免不对齐的引用
+                let lp_supply = state.lp_supply;
+                let protocol_fees_token_0 = state.protocol_fees_token_0;
+                let protocol_fees_token_1 = state.protocol_fees_token_1;
+                let fund_fees_token_0 = state.fund_fees_token_0;
+                let fund_fees_token_1 = state.fund_fees_token_1;
+                let open_time = state.open_time;
+                info!("  lp_supply: {}", lp_supply);
+                info!("  protocol_fees_token_0: {}", protocol_fees_token_0);
+                info!("  protocol_fees_token_1: {}", protocol_fees_token_1);
+                info!("  fund_fees_token_0: {}", fund_fees_token_0);
+                info!("  fund_fees_token_1: {}", fund_fees_token_1);
+                info!("  open_time: {}", open_time);
+                state
+            }
+            Err(e) => {
+                info!("❌ 池子状态反序列化失败: pool_id={}, error={}", pool_id, e);
+
+                // 输出详细的十六进制数据用于调试
+                let data_len = pool_account.data.len();
+                info!("📊 账户数据长度: {} bytes", data_len);
+                if data_len >= 8 {
+                    let discriminator_hex = hex::encode(&pool_account.data[0..8]);
+                    info!("🔍 实际discriminator (hex): {}", discriminator_hex);
+                    info!("🔍 实际discriminator (bytes): {:?}", &pool_account.data[0..8]);
+                }
+                if data_len >= 32 {
+                    let first_32_hex = hex::encode(&pool_account.data[0..32]);
+                    info!("📄 账户数据前32字节 (hex): {}", first_32_hex);
+                }
+                info!(
+                    "📄 账户数据前32字节 (bytes): {:?}",
+                    &pool_account.data[0..std::cmp::min(32, data_len)]
+                );
+
+                return Err(anyhow::anyhow!("无法反序列化池子状态，可能discriminator不匹配: {}", e));
+            }
+        };
+
+        // 🔍 智能检测并确定用户代币账户地址（与compute函数相同的逻辑）
+        let user_input_token = {
+            info!("🧠 交换接口开始智能检测用户代币账户...");
+
+            // 检查用户输入的地址是否是池子中的代币mint之一
+            let is_token_0_mint = user_input_token_raw == pool_state.token_0_mint;
+            let is_token_1_mint = user_input_token_raw == pool_state.token_1_mint;
+
+            if is_token_0_mint || is_token_1_mint {
+                // 用户输入的是mint地址，我们需要计算对应的ATA地址
+                let wallet_keypair = Keypair::from_base58_string(
+                    self.shared
+                        .app_config
+                        .private_key
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("私钥未配置"))?,
+                );
+                let wallet_pubkey = wallet_keypair.pubkey();
+
+                let ata_address =
+                    spl_associated_token_account::get_associated_token_address(&wallet_pubkey, &user_input_token_raw);
+
+                info!("✅ 交换接口检测到mint地址，已转换为ATA:");
+                info!("  mint地址: {}", user_input_token_raw);
+                info!("  钱包地址: {}", wallet_pubkey);
+                info!("  ATA地址: {}", ata_address);
+                info!("  是token_0_mint: {}", is_token_0_mint);
+                info!("  是token_1_mint: {}", is_token_1_mint);
+
+                ata_address
+            } else {
+                // 用户输入的可能已经是代币账户地址，直接使用
+                info!(
+                    "🔍 交换接口输入地址不是池子的mint，假设是代币账户地址: {}",
+                    user_input_token_raw
+                );
+                user_input_token_raw
+            }
+        };
+
+        // 2. 批量加载所有相关账户（与CLI完全相同的逻辑）
+        let load_pubkeys = vec![
+            pool_id,
+            pool_state.amm_config,
+            pool_state.token_0_vault,
+            pool_state.token_1_vault,
+            pool_state.token_0_mint,
+            pool_state.token_1_mint,
+            user_input_token,
+        ];
+
+        let accounts = rpc_client.get_multiple_accounts(&load_pubkeys)?;
+        let epoch = rpc_client.get_epoch_info()?.epoch;
+
+        // 3. 解码所有账户数据
+        let pool_account = accounts[0].as_ref().unwrap();
+        let amm_config_account = accounts[1].as_ref().unwrap();
+        let token_0_vault_account = accounts[2].as_ref().unwrap();
+        let token_1_vault_account = accounts[3].as_ref().unwrap();
+        let token_0_mint_account = accounts[4].as_ref().unwrap();
+        let token_1_mint_account = accounts[5].as_ref().unwrap();
+        let user_input_token_account = accounts[6].as_ref().unwrap();
+
+        let pool_state: PoolState = deserialize_anchor_account::<PoolState>(pool_account)?;
+        let amm_config_state: AmmConfig = deserialize_anchor_account::<AmmConfig>(amm_config_account)?;
+        let token_0_vault_info = unpack_token(&token_0_vault_account.data)?;
+        let token_1_vault_info = unpack_token(&token_1_vault_account.data)?;
+        let token_0_mint_info = unpack_mint(&token_0_mint_account.data)?;
+        let token_1_mint_info = unpack_mint(&token_1_mint_account.data)?;
+        let user_input_token_info = unpack_token(&user_input_token_account.data)?;
+
+        // 4. 计算池子中的代币总量（扣除费用后）
+        let (total_token_0_amount, total_token_1_amount) = pool_state
+            .vault_amount_without_fee(
+                token_0_vault_info.base.amount.into(),
+                token_1_vault_info.base.amount.into(),
+            )
+            .unwrap();
+
+        // 4.1. 获取私钥和钱包信息
+        let private_key = self
+            .shared
+            .app_config
+            .private_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("私钥未配置"))?;
+        let payer = Keypair::from_base58_string(private_key);
+        let payer_pubkey = payer.pubkey();
+
+        // 5. 确定交易方向和相关信息（100%匹配CLI逻辑）
+        let (
+            trade_direction,
+            total_input_token_amount,
+            total_output_token_amount,
+            user_output_token,
+            input_vault,
+            output_vault,
+            input_token_mint,
+            output_token_mint,
+            input_token_program,
+            output_token_program,
+            transfer_fee,
+        ) = if user_input_token_info.base.mint == token_0_vault_info.base.mint {
+            (
+                TradeDirection::ZeroForOne,
+                total_token_0_amount,
+                total_token_1_amount,
+                spl_associated_token_account::get_associated_token_address(&payer_pubkey, &pool_state.token_1_mint),
+                pool_state.token_0_vault,
+                pool_state.token_1_vault,
+                pool_state.token_0_mint,
+                pool_state.token_1_mint,
+                pool_state.token_0_program,
+                pool_state.token_1_program,
+                get_transfer_fee(&token_0_mint_info, epoch, user_input_amount),
+            )
+        } else {
+            (
+                TradeDirection::OneForZero,
+                total_token_1_amount,
+                total_token_0_amount,
+                spl_associated_token_account::get_associated_token_address(&payer_pubkey, &pool_state.token_0_mint),
+                pool_state.token_1_vault,
+                pool_state.token_0_vault,
+                pool_state.token_1_mint,
+                pool_state.token_0_mint,
+                pool_state.token_1_program,
+                pool_state.token_0_program,
+                get_transfer_fee(&token_1_mint_info, epoch, user_input_amount),
+            )
+        };
+
+        // 6. 计算实际输入金额（扣除转账费）
+        let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
+
+        // 7. 使用CurveCalculator计算交换结果（与CLI完全相同）
+        let curve_result = CurveCalculator::swap_base_input(
+            u128::from(actual_amount_in),
+            u128::from(total_input_token_amount),
+            u128::from(total_output_token_amount),
+            amm_config_state.trade_fee_rate,
+            amm_config_state.creator_fee_rate,
+            amm_config_state.protocol_fee_rate,
+            amm_config_state.fund_fee_rate,
+            pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+        )
+        .ok_or_else(|| anyhow::anyhow!("交换计算失败：零交易代币"))?;
+
+        let amount_out = u64::try_from(curve_result.output_amount)?;
+
+        // 8. 计算输出代币的转账费
+        let output_transfer_fee = match trade_direction {
+            TradeDirection::ZeroForOne => get_transfer_fee(&token_1_mint_info, epoch, amount_out),
+            TradeDirection::OneForZero => get_transfer_fee(&token_0_mint_info, epoch, amount_out),
+        };
+
+        let amount_received = amount_out.checked_sub(output_transfer_fee).unwrap();
+
+        // 9. 应用滑点保护计算最小输出金额
+        let minimum_amount_out = amount_with_slippage(amount_received, slippage, false);
+
+        // 10. 继续使用前面定义的payer和payer_pubkey
+
+        // 11. user_output_token已在上面的交易方向逻辑中计算完成
+
+        // 12. 构建交易指令
+        let mut instructions = Vec::new();
+
+        // 创建输出代币ATA账户指令
+        let create_user_output_token_instrs =
+            create_ata_token_account_instr(spl_token::id(), &output_token_mint, &payer_pubkey)?;
+        instructions.extend(create_user_output_token_instrs);
+
+        // 创建SwapBaseIn指令（使用从CLI逻辑推导出的正确参数）
+        let swap_base_in_instrs = swap_base_input_instr(
+            cpmm_program_id,
+            payer_pubkey,
+            pool_id,
+            pool_state.amm_config,
+            pool_state.observation_key,
+            user_input_token,
+            user_output_token,
+            input_vault,
+            output_vault,
+            input_token_program,
+            output_token_program,
+            input_token_mint,
+            output_token_mint,
+            user_input_amount,
+            minimum_amount_out,
+        )?;
+        instructions.extend(swap_base_in_instrs);
+
+        // 13. 构建并发送交易
+        let recent_blockhash = rpc_client.get_latest_blockhash()?;
+        let transaction =
+            Transaction::new_signed_with_payer(&instructions, Some(&payer_pubkey), &[&payer], recent_blockhash);
+
+        let signature = rpc_client.send_and_confirm_transaction(&transaction)?;
+
+        info!("CPMM SwapBaseIn交易成功: {}", signature);
+
+        // 14. 构建响应
+        let explorer_url = format!("https://solscan.io/tx/{}", signature);
+        let now = chrono::Utc::now().timestamp();
+
+        Ok(CpmmSwapBaseInResponse {
+            signature: signature.to_string(),
+            pool_id: request.pool_id,
+            input_token_mint: input_token_mint.to_string(),
+            output_token_mint: output_token_mint.to_string(),
+            actual_amount_in,
+            amount_out,
+            amount_received,
+            minimum_amount_out,
+            input_transfer_fee: transfer_fee,
+            output_transfer_fee,
+            status: TransactionStatus::Confirmed,
+            explorer_url,
+            timestamp: now,
+        })
+    }
+
+    /// 计算CPMM SwapBaseIn交换结果（不执行实际交换）
+    ///
+    /// 用于获取报价和预计算结果
+    pub async fn compute_cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInCompute> {
+        info!(
+            "计算CPMM SwapBaseIn: pool_id={}, amount={}",
+            request.pool_id, request.user_input_amount
+        );
+
+        let pool_id = Pubkey::from_str(&request.pool_id)?;
+        let user_input_token_raw = Pubkey::from_str(&request.user_input_token)?;
+        let user_input_amount = request.user_input_amount;
+        let slippage = request.slippage.unwrap_or(0.5) / 100.0;
+
+        info!("📝 输入参数分析:");
+        info!("  pool_id: {}", pool_id);
+        info!("  user_input_token_raw: {}", user_input_token_raw);
+        info!("  user_input_amount: {}", user_input_amount);
+        info!("  slippage: {}%", slippage * 100.0);
+
+        // 执行与swap_base_in相同的计算逻辑，但不发送交易
+        let rpc_client = &self.shared.rpc_client;
+
+        // 获取配置的CPMM程序ID
+        let cpmm_program_id = self.get_cpmm_program_id()?;
+
+        // 加载并验证池子账户
+        let pool_account = match rpc_client.get_account(&pool_id) {
+            Ok(account) => account,
+            Err(e) => {
+                info!("计算交换时池子账户不存在: pool_id={}, error={}", pool_id, e);
+                return Err(anyhow::anyhow!("池子账户不存在或无法访问: {}", e));
+            }
+        };
+
+        // 验证账户所有者
+        if pool_account.owner != cpmm_program_id {
+            return Err(anyhow::anyhow!(
+                "无效的池子地址，账户所有者不正确: expected={}, actual={}",
+                cpmm_program_id,
+                pool_account.owner
+            ));
+        }
+
+        let pool_state: PoolState = match deserialize_anchor_account::<PoolState>(&pool_account) {
+            Ok(state) => {
+                info!("✅ Compute函数池子状态反序列化成功");
+                info!("🏊‍♀️ Compute Pool详细信息:");
+                info!("  amm_config: {}", state.amm_config);
+                info!("  token_0_mint: {}", state.token_0_mint);
+                info!("  token_1_mint: {}", state.token_1_mint);
+                info!("  token_0_vault: {}", state.token_0_vault);
+                info!("  token_1_vault: {}", state.token_1_vault);
+                info!("  token_0_program: {}", state.token_0_program);
+                info!("  token_1_program: {}", state.token_1_program);
+                info!("  observation_key: {}", state.observation_key);
+                info!("  auth_bump: {}", state.auth_bump);
+                info!("  status: {}", state.status);
+                info!("  lp_mint: {}", state.lp_mint);
+                // 复制packed字段到本地变量以避免不对齐的引用
+                let lp_supply = state.lp_supply;
+                let protocol_fees_token_0 = state.protocol_fees_token_0;
+                let protocol_fees_token_1 = state.protocol_fees_token_1;
+                let fund_fees_token_0 = state.fund_fees_token_0;
+                let fund_fees_token_1 = state.fund_fees_token_1;
+                let open_time = state.open_time;
+                info!("  lp_supply: {}", lp_supply);
+                info!("  protocol_fees_token_0: {}", protocol_fees_token_0);
+                info!("  protocol_fees_token_1: {}", protocol_fees_token_1);
+                info!("  fund_fees_token_0: {}", fund_fees_token_0);
+                info!("  fund_fees_token_1: {}", fund_fees_token_1);
+                info!("  open_time: {}", open_time);
+                state
+            }
+            Err(e) => {
+                info!("计算交换时池子状态反序列化失败: pool_id={}, error={}", pool_id, e);
+                return Err(anyhow::anyhow!("无法反序列化池子状态: {}", e));
+            }
+        };
+
+        // 🔍 智能检测并确定用户代币账户地址
+        let user_input_token = {
+            info!("🧠 开始智能检测用户代币账户...");
+
+            // 检查用户输入的地址是否是池子中的代币mint之一
+            let is_token_0_mint = user_input_token_raw == pool_state.token_0_mint;
+            let is_token_1_mint = user_input_token_raw == pool_state.token_1_mint;
+
+            if is_token_0_mint || is_token_1_mint {
+                // 用户输入的是mint地址，我们需要计算对应的ATA地址
+                // 这里假设交换是由配置的钱包执行的
+                let wallet_keypair = Keypair::from_base58_string(
+                    self.shared
+                        .app_config
+                        .private_key
+                        .as_ref()
+                        .ok_or_else(|| anyhow::anyhow!("私钥未配置"))?,
+                );
+                let wallet_pubkey = wallet_keypair.pubkey();
+
+                let ata_address =
+                    spl_associated_token_account::get_associated_token_address(&wallet_pubkey, &user_input_token_raw);
+
+                info!("✅ 检测到mint地址，已转换为ATA:");
+                info!("  mint地址: {}", user_input_token_raw);
+                info!("  钱包地址: {}", wallet_pubkey);
+                info!("  ATA地址: {}", ata_address);
+                info!("  是token_0_mint: {}", is_token_0_mint);
+                info!("  是token_1_mint: {}", is_token_1_mint);
+
+                ata_address
+            } else {
+                // 用户输入的可能已经是代币账户地址，直接使用
+                info!(
+                    "🔍 输入地址不是池子的mint，假设是代币账户地址: {}",
+                    user_input_token_raw
+                );
+                user_input_token_raw
+            }
+        };
+
+        let load_pubkeys = vec![
+            pool_id,
+            pool_state.amm_config,
+            pool_state.token_0_vault,
+            pool_state.token_1_vault,
+            pool_state.token_0_mint,
+            pool_state.token_1_mint,
+            user_input_token,
+        ];
+
+        let accounts = rpc_client.get_multiple_accounts(&load_pubkeys)?;
+        let epoch = rpc_client.get_epoch_info()?.epoch;
+
+        // 解码账户数据
+        let pool_account = accounts[0].as_ref().unwrap();
+        let amm_config_account = accounts[1].as_ref().unwrap();
+        let token_0_vault_account = accounts[2].as_ref().unwrap();
+        let token_1_vault_account = accounts[3].as_ref().unwrap();
+        let token_0_mint_account = accounts[4].as_ref().unwrap();
+        let token_1_mint_account = accounts[5].as_ref().unwrap();
+        let user_input_token_account = accounts[6].as_ref().unwrap();
+
+        info!("🔍 开始逐个账户反序列化...");
+        info!("📊 账户数据详情:");
+        info!(
+            "  Pool账户: data_len={}, owner={}",
+            pool_account.data.len(),
+            pool_account.owner
+        );
+        info!(
+            "  AmmConfig账户: data_len={}, owner={}",
+            amm_config_account.data.len(),
+            amm_config_account.owner
+        );
+        info!(
+            "  Token0Vault账户: data_len={}, owner={}",
+            token_0_vault_account.data.len(),
+            token_0_vault_account.owner
+        );
+        info!(
+            "  Token1Vault账户: data_len={}, owner={}",
+            token_1_vault_account.data.len(),
+            token_1_vault_account.owner
+        );
+        info!(
+            "  Token0Mint账户: data_len={}, owner={}",
+            token_0_mint_account.data.len(),
+            token_0_mint_account.owner
+        );
+        info!(
+            "  Token1Mint账户: data_len={}, owner={}",
+            token_1_mint_account.data.len(),
+            token_1_mint_account.owner
+        );
+        info!(
+            "  UserInputToken账户: data_len={}, owner={}",
+            user_input_token_account.data.len(),
+            user_input_token_account.owner
+        );
+
+        info!("🔍 步骤1: 反序列化PoolState...");
+        let pool_state: PoolState =
+            deserialize_anchor_account(pool_account).map_err(|e| anyhow::anyhow!("PoolState反序列化失败: {}", e))?;
+        info!("✅ PoolState反序列化成功");
+
+        info!("🔍 步骤2: 反序列化AmmConfig...");
+        let amm_config_state: AmmConfig = deserialize_anchor_account(amm_config_account)
+            .map_err(|e| anyhow::anyhow!("AmmConfig反序列化失败: {}", e))?;
+        info!("✅ AmmConfig反序列化成功");
+
+        info!("🔍 步骤3: 解包Token0Vault...");
+        let token_0_vault_info =
+            unpack_token(&token_0_vault_account.data).map_err(|e| anyhow::anyhow!("Token0Vault解包失败: {}", e))?;
+        info!("✅ Token0Vault解包成功");
+
+        info!("🔍 步骤4: 解包Token1Vault...");
+        let token_1_vault_info =
+            unpack_token(&token_1_vault_account.data).map_err(|e| anyhow::anyhow!("Token1Vault解包失败: {}", e))?;
+        info!("✅ Token1Vault解包成功");
+
+        info!("🔍 步骤5: 解包Token0Mint...");
+        let token_0_mint_info =
+            unpack_mint(&token_0_mint_account.data).map_err(|e| anyhow::anyhow!("Token0Mint解包失败: {}", e))?;
+        info!("✅ Token0Mint解包成功");
+
+        info!("🔍 步骤6: 解包Token1Mint...");
+        let token_1_mint_info =
+            unpack_mint(&token_1_mint_account.data).map_err(|e| anyhow::anyhow!("Token1Mint解包失败: {}", e))?;
+        info!("✅ Token1Mint解包成功");
+
+        info!("🔍 步骤7: 解包UserInputToken...");
+        let user_input_token_info = unpack_token(&user_input_token_account.data)
+            .map_err(|e| anyhow::anyhow!("UserInputToken解包失败: {}", e))?;
+        info!("✅ UserInputToken解包成功");
+
+        info!("🎉 所有账户反序列化完成，继续后续计算...");
+
+        let (total_token_0_amount, total_token_1_amount) = pool_state
+            .vault_amount_without_fee(
+                token_0_vault_info.base.amount.into(),
+                token_1_vault_info.base.amount.into(),
+            )
+            .unwrap();
+
+        let (
+            trade_direction,
+            total_input_token_amount,
+            total_output_token_amount,
+            input_token_mint,
+            output_token_mint,
+            transfer_fee,
+        ) = if user_input_token_info.base.mint == token_0_vault_info.base.mint {
+            (
+                TradeDirection::ZeroForOne,
+                total_token_0_amount,
+                total_token_1_amount,
+                pool_state.token_0_mint,
+                pool_state.token_1_mint,
+                get_transfer_fee(&token_0_mint_info, epoch, user_input_amount),
+            )
+        } else {
+            (
+                TradeDirection::OneForZero,
+                total_token_1_amount,
+                total_token_0_amount,
+                pool_state.token_1_mint,
+                pool_state.token_0_mint,
+                get_transfer_fee(&token_1_mint_info, epoch, user_input_amount),
+            )
+        };
+
+        let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
+
+        let curve_result = CurveCalculator::swap_base_input(
+            u128::from(actual_amount_in),
+            u128::from(total_input_token_amount),
+            u128::from(total_output_token_amount),
+            amm_config_state.trade_fee_rate,
+            amm_config_state.creator_fee_rate,
+            amm_config_state.protocol_fee_rate,
+            amm_config_state.fund_fee_rate,
+            pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+        )
+        .ok_or_else(|| anyhow::anyhow!("交换计算失败：零交易代币"))?;
+
+        let amount_out = u64::try_from(curve_result.output_amount)?;
+
+        let output_transfer_fee = match trade_direction {
+            TradeDirection::ZeroForOne => get_transfer_fee(&token_1_mint_info, epoch, amount_out),
+            TradeDirection::OneForZero => get_transfer_fee(&token_0_mint_info, epoch, amount_out),
+        };
+
+        let amount_received = amount_out.checked_sub(output_transfer_fee).unwrap();
+        let minimum_amount_out = amount_with_slippage(amount_received, slippage, false);
+
+        // 计算价格比率和影响
+        let price_ratio = if actual_amount_in > 0 {
+            amount_received as f64 / actual_amount_in as f64
+        } else {
+            0.0
+        };
+
+        // 简化价格影响计算
+        let price_impact_percent = (curve_result.output_amount as f64 / total_output_token_amount as f64) * 100.0;
+        let trade_fee = u64::try_from(curve_result.trade_fee)?;
+
+        let trade_direction_str = match trade_direction {
+            TradeDirection::ZeroForOne => "ZeroForOne",
+            TradeDirection::OneForZero => "OneForZero",
+        };
+
+        Ok(CpmmSwapBaseInCompute {
+            pool_id: request.pool_id,
+            input_token_mint: input_token_mint.to_string(),
+            output_token_mint: output_token_mint.to_string(),
+            user_input_amount,
+            actual_amount_in,
+            amount_out,
+            amount_received,
+            minimum_amount_out,
+            input_transfer_fee: transfer_fee,
+            output_transfer_fee,
+            price_ratio,
+            price_impact_percent,
+            trade_fee,
+            slippage: slippage * 100.0, // 转换回百分比
+            pool_info: PoolStateInfo {
+                total_token_0_amount,
+                total_token_1_amount,
+                token_0_mint: pool_state.token_0_mint.to_string(),
+                token_1_mint: pool_state.token_1_mint.to_string(),
+                trade_direction: trade_direction_str.to_string(),
+                amm_config: AmmConfigInfo {
+                    trade_fee_rate: amm_config_state.trade_fee_rate,
+                    creator_fee_rate: amm_config_state.creator_fee_rate,
+                    protocol_fee_rate: amm_config_state.protocol_fee_rate,
+                    fund_fee_rate: amm_config_state.fund_fee_rate,
+                },
+            },
+        })
+    }
+
+    /// 构建CPMM SwapBaseIn交易（不发送）
+    ///
+    /// 基于计算结果构建交易数据，供客户端签名和发送
+    pub async fn build_cpmm_swap_base_in_transaction(
+        &self,
+        request: CpmmSwapBaseInTransactionRequest,
+    ) -> Result<CpmmTransactionData> {
+        info!(
+            "构建CPMM SwapBaseIn交易: wallet={}, pool_id={}",
+            request.wallet, request.swap_compute.pool_id
+        );
+
+        let wallet = Pubkey::from_str(&request.wallet)?;
+        let pool_id = Pubkey::from_str(&request.swap_compute.pool_id)?;
+        let swap_compute = &request.swap_compute;
+
+        // 从计算结果中提取必要信息
+        let input_token_mint = Pubkey::from_str(&swap_compute.input_token_mint)?;
+        let output_token_mint = Pubkey::from_str(&swap_compute.output_token_mint)?;
+
+        // 加载池子状态以获取必要的账户信息，添加详细的验证和错误诊断
+        let rpc_client = &self.shared.rpc_client;
+
+        // 获取配置的CPMM程序ID
+        let cpmm_program_id = self.get_cpmm_program_id()?;
+
+        // 首先检查账户是否存在
+        let pool_account = match rpc_client.get_account(&pool_id) {
+            Ok(account) => account,
+            Err(e) => {
+                info!("池子账户不存在或获取失败: pool_id={}, error={}", pool_id, e);
+                return Err(anyhow::anyhow!("池子账户不存在或无法访问: {}, 错误: {}", pool_id, e));
+            }
+        };
+
+        // 检查账户所有者是否是CPMM程序
+        if pool_account.owner != cpmm_program_id {
+            info!(
+                "池子账户所有者不正确: pool_id={}, expected_owner={}, actual_owner={}",
+                pool_id, cpmm_program_id, pool_account.owner
+            );
+            return Err(anyhow::anyhow!(
+                "无效的池子地址，账户所有者不是CPMM程序: expected={}, actual={}",
+                cpmm_program_id,
+                pool_account.owner
+            ));
+        }
+
+        // 检查账户数据长度
+        info!(
+            "池子账户信息: pool_id={}, owner={}, data_length={}, lamports={}",
+            pool_id,
+            pool_account.owner,
+            pool_account.data.len(),
+            pool_account.lamports
+        );
+
+        if pool_account.data.len() < 8 {
+            return Err(anyhow::anyhow!(
+                "池子账户数据长度不足，无法包含discriminator: length={}",
+                pool_account.data.len()
+            ));
+        }
+
+        // 检查discriminator
+        let discriminator = &pool_account.data[0..8];
+        info!("账户discriminator: {:?}", discriminator);
+
+        // 尝试反序列化池子状态
+        let pool_state: PoolState = match deserialize_anchor_account::<PoolState>(&pool_account) {
+            Ok(state) => {
+                info!("✅ 构建交易池子状态反序列化成功");
+                info!("🏊‍♀️ 构建交易 Pool详细信息:");
+                info!("  amm_config: {}", state.amm_config);
+                info!("  token_0_mint: {}", state.token_0_mint);
+                info!("  token_1_mint: {}", state.token_1_mint);
+                info!("  token_0_vault: {}", state.token_0_vault);
+                info!("  token_1_vault: {}", state.token_1_vault);
+                info!("  token_0_program: {}", state.token_0_program);
+                info!("  token_1_program: {}", state.token_1_program);
+                info!("  observation_key: {}", state.observation_key);
+                info!("  auth_bump: {}", state.auth_bump);
+                info!("  status: {}", state.status);
+                info!("  lp_mint: {}", state.lp_mint);
+                // 复制packed字段到本地变量以避免不对齐的引用
+                let lp_supply = state.lp_supply;
+                let protocol_fees_token_0 = state.protocol_fees_token_0;
+                let protocol_fees_token_1 = state.protocol_fees_token_1;
+                let fund_fees_token_0 = state.fund_fees_token_0;
+                let fund_fees_token_1 = state.fund_fees_token_1;
+                let open_time = state.open_time;
+                info!("  lp_supply: {}", lp_supply);
+                info!("  protocol_fees_token_0: {}", protocol_fees_token_0);
+                info!("  protocol_fees_token_1: {}", protocol_fees_token_1);
+                info!("  fund_fees_token_0: {}", fund_fees_token_0);
+                info!("  fund_fees_token_1: {}", fund_fees_token_1);
+                info!("  open_time: {}", open_time);
+                state
+            }
+            Err(e) => {
+                info!(
+                    "池子状态反序列化失败: pool_id={}, error={}, data_hex={}",
+                    pool_id,
+                    e,
+                    hex::encode(&pool_account.data[0..std::cmp::min(32, pool_account.data.len())])
+                );
+                return Err(anyhow::anyhow!("无法反序列化池子状态，可能不是有效的CPMM池子: {}", e));
+            }
+        };
+
+        // 计算用户代币账户地址
+        let user_input_token = spl_associated_token_account::get_associated_token_address(&wallet, &input_token_mint);
+        let user_output_token = spl_associated_token_account::get_associated_token_address(&wallet, &output_token_mint);
+
+        let mut instructions = Vec::new();
+
+        // 创建输出代币ATA账户指令
+        let create_output_ata_instrs = create_ata_token_account_instr(spl_token::id(), &output_token_mint, &wallet)?;
+        instructions.extend(create_output_ata_instrs);
+
+        // 确定交易方向和对应的vault/program（基于swap_compute的mint信息）
+        let (input_vault, output_vault, input_token_program, output_token_program) =
+            if input_token_mint == pool_state.token_0_mint {
+                // ZeroForOne方向: input=token0, output=token1
+                (
+                    pool_state.token_0_vault,
+                    pool_state.token_1_vault,
+                    pool_state.token_0_program,
+                    pool_state.token_1_program,
+                )
+            } else {
+                // OneForZero方向: input=token1, output=token0
+                (
+                    pool_state.token_1_vault,
+                    pool_state.token_0_vault,
+                    pool_state.token_1_program,
+                    pool_state.token_0_program,
+                )
+            };
+
+        // 创建SwapBaseIn指令（使用正确的参数顺序）
+        let swap_instrs = swap_base_input_instr(
+            cpmm_program_id,                 // cpmm_program_id
+            wallet,                          // payer
+            pool_id,                         // pool_id
+            pool_state.amm_config,           // amm_config
+            pool_state.observation_key,      // observation_key
+            user_input_token,                // input_token_account
+            user_output_token,               // output_token_account
+            input_vault,                     // input_vault
+            output_vault,                    // output_vault
+            input_token_program,             // input_token_program
+            output_token_program,            // output_token_program
+            input_token_mint,                // input_token_mint
+            output_token_mint,               // output_token_mint
+            swap_compute.user_input_amount,  // amount_in
+            swap_compute.minimum_amount_out, // minimum_amount_out
+        )?;
+        instructions.extend(swap_instrs);
+
+        // 构建交易
+        let recent_blockhash = rpc_client.get_latest_blockhash()?;
+        let mut transaction = Transaction::new_with_payer(&instructions, Some(&wallet));
+        transaction.message.recent_blockhash = recent_blockhash;
+
+        // 序列化交易
+        let transaction_data = bincode::serialize(&transaction)?;
+        use base64::{engine::general_purpose, Engine as _};
+        let transaction_base64 = general_purpose::STANDARD.encode(&transaction_data);
+
+        Ok(CpmmTransactionData {
+            transaction: transaction_base64,
+            transaction_size: transaction_data.len(),
+            description: "CPMM SwapBaseIn交易".to_string(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solana_sdk::account::Account;
+    use std::vec;
+
+    #[test]
+    fn test_deserialize_anchor_account_with_invalid_data() {
+        // 测试无效的账户数据处理
+        let invalid_account = Account {
+            lamports: 1000,
+            data: vec![1, 2, 3], // 无效的数据
+            owner: solana_sdk::pubkey::Pubkey::new_unique(),
+            executable: false,
+            rent_epoch: 0,
+        };
+
+        // 这应该返回错误而不是panic
+        let result = deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(&invalid_account);
+        assert!(result.is_err(), "应该返回错误而不是成功解析");
+    }
+
+    #[test]
+    fn test_unpack_token_with_invalid_data() {
+        // 测试无效的Token数据处理
+        let invalid_data = vec![1, 2, 3]; // 无效的token数据
+
+        // 这应该返回错误而不是panic
+        let result = unpack_token(&invalid_data);
+        assert!(result.is_err(), "应该返回错误而不是成功解析");
+    }
+
+    #[test]
+    fn test_unpack_mint_with_invalid_data() {
+        // 测试无效的Mint数据处理
+        let invalid_data = vec![1, 2, 3]; // 无效的mint数据
+
+        // 这应该返回错误而不是panic
+        let result = unpack_mint(&invalid_data);
+        assert!(result.is_err(), "应该返回错误而不是成功解析");
+    }
+
+    #[test]
+    fn test_get_transfer_fee_with_no_extension() {
+        // 创建最小有效的mint数据（没有transfer fee extension）
+        let minimal_mint_data = vec![0u8; 82]; // PodMint的最小大小
+
+        if let Ok(mint_info) = unpack_mint(&minimal_mint_data) {
+            let fee = get_transfer_fee(&mint_info, 100, 1000000);
+            assert_eq!(fee, 0, "没有extension的mint应该返回0费用");
+        }
+    }
+}

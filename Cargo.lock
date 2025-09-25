@@ -6810,6 +6810,7 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
+ "anchor-spl",
  "anyhow",
  "async-trait",
  "axum",
@@ -6819,6 +6820,7 @@ dependencies = [
  "bincode",
  "borsh 1.5.7",
  "bs58",
+ "bytemuck",
  "chrono",
  "clap 4.5.45",
  "clmm-client",
@@ -6829,6 +6831,7 @@ dependencies = [
  "ethers",
  "futures",
  "governor 0.10.1",
+ "hex",
  "jsonwebtoken 9.3.1",
  "lazy_static",
  "mongodb",

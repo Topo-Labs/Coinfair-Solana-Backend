@@ -3,6 +3,14 @@ name = "cpmm-client"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "cpmm-client"
+path = "src/main.rs"
+
+[lib]
+name = "cpmm_client"
+path = "src/lib.rs"
+
 [features]
 devnet = ["raydium-cp-swap/devnet"]
 

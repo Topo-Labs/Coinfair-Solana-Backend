@@ -91,8 +91,8 @@ use utoipa::OpenApi;
         crate::api::solana::clmm::clmm_pool_query::get_pool_list,
         crate::api::solana::clmm::clmm_pool_query::get_pools_by_mint_pair,
         // Solana Classic AMM Pool endpoints
-        crate::api::solana::cpmm::cpmm_pool_create::create_classic_amm_pool,
-        crate::api::solana::cpmm::cpmm_pool_create::create_classic_amm_pool_and_send_transaction,
+        crate::api::solana::cpmm::pool_create_controller::create_classic_amm_pool,
+        crate::api::solana::cpmm::pool_create_controller::create_classic_amm_pool_and_send_transaction,
         // Solana Static Configuration endpoints
         crate::api::solana::clmm::static_config_controller::get_version,
         crate::api::solana::clmm::static_config_controller::get_auto_fee,

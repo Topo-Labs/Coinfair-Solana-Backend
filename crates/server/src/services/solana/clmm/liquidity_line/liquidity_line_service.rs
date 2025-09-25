@@ -1,4 +1,6 @@
-use crate::dtos::solana::clmm::pool::liquidity_line::{LiquidityLinePoint, PoolLiquidityLineData, PoolLiquidityLineRequest};
+use crate::dtos::solana::clmm::pool::liquidity_line::{
+    LiquidityLinePoint, PoolLiquidityLineData, PoolLiquidityLineRequest,
+};
 use anchor_lang::AccountDeserialize;
 use anyhow::{anyhow, Result};
 use database::Database;
@@ -374,6 +376,7 @@ mod tests {
             cargo_env: CargoEnv::Development,
             rpc_url: "https://api.devnet.solana.com".to_string(),
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            raydium_cp_program_id: "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string(),
             private_key: None,
             amm_config_index: 0,
             rust_log: "info".to_string(),

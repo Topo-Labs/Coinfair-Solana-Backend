@@ -11,13 +11,6 @@ use crate::{
     services::migration_client::MigrationClient,
 };
 use chrono::Utc;
-use database::Database;
-use mongodb::bson::doc;
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
-use std::sync::Arc;
-use tracing::{debug, error, info, warn};
 use database::clmm::clmm_pool::{
     ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
     TransactionInfo, TransactionStatus, VaultInfo,
@@ -27,6 +20,13 @@ use database::events::event_model::{
     repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
     RewardDistributionEvent, TokenCreationEvent,
 };
+use database::Database;
+use mongodb::bson::doc;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
+use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 use utils::config::{AppConfig, EventListenerDbMode};
 use utils::metaplex_service::{MetaplexConfig, MetaplexService};
 
@@ -77,6 +77,7 @@ impl EventStorage {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             private_key: None,
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            raydium_cp_program_id: "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string(),
             amm_config_index: 0,
             rust_log: "info".to_string(),
             // 读取环境变量
@@ -979,7 +980,10 @@ impl EventStorage {
     }
 
     /// 将存款事件转换为数据库模型
-    fn convert_to_deposit_event(&self, event: &DepositEventData) -> Result<database::events::event_model::DepositEvent> {
+    fn convert_to_deposit_event(
+        &self,
+        event: &DepositEventData,
+    ) -> Result<database::events::event_model::DepositEvent> {
         use chrono::Utc;
 
         let now = Utc::now();

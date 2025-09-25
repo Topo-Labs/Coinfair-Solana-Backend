@@ -6,7 +6,7 @@ use crate::auth::SolanaMiddlewareBuilder;
 use axum::{middleware, Extension, Router};
 use std::sync::Arc;
 use clmm::{clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller, launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller, position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller, swap_v3_controller, token_controller};
-use cpmm::cpmm_pool_create;
+use cpmm::{pool_create_controller, cpmm_swap_controller};
 
 pub struct SolanaController;
 
@@ -89,10 +89,12 @@ impl SolanaController {
     /// 交易路由 - 交换操作
     fn trading_routes() -> Router {
         Router::new()
-            // 合并swap相关路由
+            // 合并CLMM swap相关路由
             .merge(swap_controller::SwapController::routes())
             .merge(swap_v2_controller::SwapV2Controller::routes())
             .merge(swap_v3_controller::SwapV3Controller::routes())
+            // 合并CPMM swap相关路由
+            .merge(cpmm_swap_controller::CpmmSwapController::routes())
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }
 
@@ -113,7 +115,7 @@ impl SolanaController {
     fn pool_management_routes() -> Router {
         Router::new()
             .merge(clmm_pool_create::ClmmPoolCreateController::routes())
-            .merge(cpmm_pool_create::CpmmPoolCreateController::routes())
+            .merge(pool_create_controller::CpmmPoolCreateController::routes())
             .merge(clmm_pool_query::ClmmPoolQueryController::routes())
             // 添加发射迁移路由
             .nest(

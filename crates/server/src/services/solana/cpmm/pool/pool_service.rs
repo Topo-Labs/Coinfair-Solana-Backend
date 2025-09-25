@@ -403,7 +403,7 @@ impl AmmPoolService {
     fn get_raydium_cp_program_id(&self) -> Result<Pubkey> {
         // 从配置中获取，或使用默认值
         let program_id_str = std::env::var("RAYDIUM_CP_PROGRAM_ID")
-            .unwrap_or_else(|_| "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".to_string());
+            .unwrap_or_else(|_| "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string());
         info!("🔍 获取CPMM程序ID: {}", program_id_str);
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }

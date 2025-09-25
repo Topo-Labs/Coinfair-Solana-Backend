@@ -314,6 +314,7 @@ pub fn handle_program_instruction(
         instruction::CreateAmmConfig::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CreateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CreateAmmConfig {
                 pub index: u16,
                 pub trade_fee_rate: u64,
@@ -337,6 +338,7 @@ pub fn handle_program_instruction(
         instruction::UpdateAmmConfig::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::UpdateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct UpdateAmmConfig {
                 pub param: u8,
                 pub value: u64,
@@ -354,6 +356,7 @@ pub fn handle_program_instruction(
         instruction::Initialize::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Initialize>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct Initialize {
                 pub init_amount_0: u64,
                 pub init_amount_1: u64,
@@ -373,6 +376,7 @@ pub fn handle_program_instruction(
         instruction::UpdatePoolStatus::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::UpdatePoolStatus>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct UpdatePoolStatus {
                 pub status: u8,
             }
@@ -388,6 +392,7 @@ pub fn handle_program_instruction(
         instruction::CollectProtocolFee::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CollectProtocolFee>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CollectProtocolFee {
                 pub amount_0_requested: u64,
                 pub amount_1_requested: u64,
@@ -405,6 +410,7 @@ pub fn handle_program_instruction(
         instruction::CollectFundFee::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::CollectFundFee>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct CollectFundFee {
                 pub amount_0_requested: u64,
                 pub amount_1_requested: u64,
@@ -422,6 +428,7 @@ pub fn handle_program_instruction(
         instruction::Deposit::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Deposit>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct Deposit {
                 pub lp_token_amount: u64,
                 pub maximum_token_0_amount: u64,
@@ -441,6 +448,7 @@ pub fn handle_program_instruction(
         instruction::Withdraw::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::Withdraw>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct Withdraw {
                 pub lp_token_amount: u64,
                 pub minimum_token_0_amount: u64,
@@ -460,6 +468,7 @@ pub fn handle_program_instruction(
         instruction::SwapBaseInput::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapBaseInput>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct SwapBaseInput {
                 pub amount_in: u64,
                 pub minimum_amount_out: u64,
@@ -477,6 +486,7 @@ pub fn handle_program_instruction(
         instruction::SwapBaseOutput::DISCRIMINATOR => {
             let ix = decode_instruction::<instruction::SwapBaseOutput>(&mut ix_data).unwrap();
             #[derive(Debug)]
+            #[allow(dead_code)]
             pub struct SwapBaseOutput {
                 pub max_amount_in: u64,
                 pub amount_out: u64,

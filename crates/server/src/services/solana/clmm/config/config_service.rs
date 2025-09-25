@@ -626,6 +626,7 @@ mod tests {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             private_key: None,
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            raydium_cp_program_id: "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string(),
             amm_config_index: 0,
             rust_log: "info".to_string(),
             enable_pool_event_insert: false,

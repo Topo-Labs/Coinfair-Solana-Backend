@@ -10,6 +10,7 @@ use crate::services::solana::clmm::position::PositionService;
 use crate::services::solana::clmm::referral::ReferralService;
 use super::shared::{SharedContext, SolanaHelpers};
 use crate::services::solana::clmm::swap::SwapService;
+use crate::services::solana::cpmm::swap::CpmmSwapService;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -48,6 +49,10 @@ use crate::dtos::solana::clmm::swap::raydium::{ComputeSwapV2Request, SwapCompute
 use crate::dtos::solana::clmm::swap::swap_v3::{
     ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
 };
+use crate::dtos::solana::cpmm::swap::{
+    CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse,
+    CpmmSwapBaseInTransactionRequest, CpmmTransactionData,
+};
 use crate::dtos::statics::static_dto::{
     ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
     CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
@@ -62,6 +67,7 @@ pub type DynSolanaService = Arc<dyn SolanaServiceTrait + Send + Sync>;
 pub struct SolanaService {
     shared_context: Arc<SharedContext>,
     swap_service: SwapService,
+    cpmm_swap_service: CpmmSwapService,
     position_service: PositionService,
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
@@ -113,6 +119,7 @@ impl SolanaService {
 
         Ok(Self {
             swap_service: SwapService::new(optimized_shared_context.clone()),
+            cpmm_swap_service: CpmmSwapService::new(optimized_shared_context.clone()),
             position_service: PositionService::with_database(
                 optimized_shared_context.clone(),
                 Arc::new(database.clone()),
@@ -179,6 +186,14 @@ pub trait SolanaServiceTrait {
         &self,
         request: TransactionSwapV3Request,
     ) -> Result<SwapV3AndSendTransactionResponse>;
+
+    // CPMM Swap operations
+    async fn cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInResponse>;
+    async fn compute_cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInCompute>;
+    async fn build_cpmm_swap_base_in_transaction(
+        &self,
+        request: CpmmSwapBaseInTransactionRequest
+    ) -> Result<CpmmTransactionData>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -396,6 +411,22 @@ impl SolanaServiceTrait for SolanaService {
         self.swap_service
             .build_and_send_transaction_swap_v3_transaction_base_out(request)
             .await
+    }
+
+    // CPMM Swap operations - delegate to cpmm_swap_service
+    async fn cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInResponse> {
+        self.cpmm_swap_service.cpmm_swap_base_in(request).await
+    }
+
+    async fn compute_cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInCompute> {
+        self.cpmm_swap_service.compute_cpmm_swap_base_in(request).await
+    }
+
+    async fn build_cpmm_swap_base_in_transaction(
+        &self,
+        request: CpmmSwapBaseInTransactionRequest
+    ) -> Result<CpmmTransactionData> {
+        self.cpmm_swap_service.build_cpmm_swap_base_in_transaction(request).await
     }
 
     // Position operations - delegate to position_service

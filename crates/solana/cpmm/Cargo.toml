@@ -26,7 +26,7 @@ spl-math = { version = "0.3", features = ["no-entrypoint"] }
 spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
 uint = "0.10.0"
 solana-security-txt = "1.1.1"
-bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }
+bytemuck = { version = "1.23.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
 
 [dev-dependencies]
