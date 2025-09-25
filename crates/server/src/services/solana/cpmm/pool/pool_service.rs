@@ -300,9 +300,13 @@ impl AmmPoolService {
             &raydium_cp_program,
         );
 
-        // 用户关联代币账户
-        let creator_token_0 = spl_associated_token_account::get_associated_token_address(user_wallet, &token_0_mint);
-        let creator_token_1 = spl_associated_token_account::get_associated_token_address(user_wallet, &token_1_mint);
+        // 用户关联代币账户（使用正确的token program）
+        let creator_token_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            user_wallet, &token_0_mint, &token_0_program
+        );
+        let creator_token_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
+            user_wallet, &token_1_mint, &token_1_program
+        );
         let creator_lp_token = spl_associated_token_account::get_associated_token_address(user_wallet, &lp_mint_key);
 
         // 创建池子费用接收者（CLI中使用的常量）
@@ -341,16 +345,45 @@ impl AmmPoolService {
             solana_sdk::instruction::AccountMeta::new_readonly(solana_sdk::sysvar::rent::id(), false),   // rent
         ];
 
-        // 构建指令数据（CLI中的raydium_cp_instructions::Initialize参数）
+        // 构建指令列表，先创建ATA账户，再初始化池子
+        let mut instructions = Vec::new();
+
+        // 1. 创建用户Token0 ATA账户（如果不存在）
+        info!("📝 确保Token0 ATA账户存在: {}", creator_token_0);
+        let create_token0_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            user_wallet,
+            user_wallet,
+            &token_0_mint,
+            &token_0_program,
+        );
+        instructions.push(create_token0_ata_ix);
+
+        // 2. 创建用户Token1 ATA账户（如果不存在）
+        info!("📝 确保Token1 ATA账户存在: {}", creator_token_1);
+        let create_token1_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            user_wallet,
+            user_wallet,
+            &token_1_mint,
+            &token_1_program,
+        );
+        instructions.push(create_token1_ata_ix);
+
+        // 注意：不需要预先创建LP Token ATA账户，因为CPMM合约在initialize指令中会自动创建
+        // 参考 initialize.rs 第97-104行的 creator_lp_token 定义，使用了 init 约束
+
+        // 4. 构建池子初始化指令
         let instruction_data = self.build_initialize_instruction_data(init_amount_0, init_amount_1, open_time)?;
 
-        let instruction = Instruction {
+        let initialize_instruction = Instruction {
             program_id: raydium_cp_program,
             accounts,
             data: instruction_data,
         };
+        instructions.push(initialize_instruction);
 
-        Ok(vec![instruction])
+        info!("✅ 构建完成，共{}条指令: 2个ATA创建 + 1个池子初始化", instructions.len());
+
+        Ok(instructions)
     }
 
     /// Build initialize instruction data - faithful to CLI logic
@@ -410,7 +443,8 @@ impl AmmPoolService {
 
     /// Get create pool fee receiver ID
     fn get_create_pool_fee_receiver_id(&self) -> Result<Pubkey> {
-        // CLI中使用的费用接收者ID
-        Pubkey::from_str("7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5").map_err(Into::into)
+        // 从配置中读取费用接收者地址（不同网络地址不同）
+        // 来自 raydium_cp_swap::create_pool_fee_reveiver::ID
+        Pubkey::from_str(&self.shared.app_config.create_pool_fee_receiver).map_err(Into::into)
     }
 }

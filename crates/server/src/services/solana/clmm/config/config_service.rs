@@ -625,8 +625,12 @@ mod tests {
             mongo_db: "test_db".to_string(),
             rpc_url: "https://api.devnet.solana.com".to_string(),
             private_key: None,
-            raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
-            raydium_cp_program_id: "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string(),
+            raydium_program_id: std::env::var("RAYDIUM_PROGRAM_ID")
+                .unwrap_or_else(|_| "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string()),
+            raydium_cp_program_id: std::env::var("RAYDIUM_CP_PROGRAM_ID")
+                .unwrap_or_else(|_| "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string()),
+            create_pool_fee_receiver: std::env::var("CREATE_POOL_FEE_RECEIVER")
+                .unwrap_or_else(|_| "3oE58BKVt8KuYkGxx8zBojugnymWmBiyafWgMrnb6eYy".to_string()),
             amm_config_index: 0,
             rust_log: "info".to_string(),
             enable_pool_event_insert: false,

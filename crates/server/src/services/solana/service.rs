@@ -51,7 +51,8 @@ use crate::dtos::solana::clmm::swap::swap_v3::{
 };
 use crate::dtos::solana::cpmm::swap::{
     CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse,
-    CpmmSwapBaseInTransactionRequest, CpmmTransactionData,
+    CpmmSwapBaseInTransactionRequest, CpmmSwapBaseOutCompute, CpmmSwapBaseOutRequest,
+    CpmmSwapBaseOutResponse, CpmmSwapBaseOutTransactionRequest, CpmmTransactionData,
 };
 use crate::dtos::statics::static_dto::{
     ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
@@ -193,6 +194,13 @@ pub trait SolanaServiceTrait {
     async fn build_cpmm_swap_base_in_transaction(
         &self,
         request: CpmmSwapBaseInTransactionRequest
+    ) -> Result<CpmmTransactionData>;
+
+    async fn cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutResponse>;
+    async fn compute_cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutCompute>;
+    async fn build_cpmm_swap_base_out_transaction(
+        &self,
+        request: CpmmSwapBaseOutTransactionRequest
     ) -> Result<CpmmTransactionData>;
 
     // Position operations
@@ -427,6 +435,21 @@ impl SolanaServiceTrait for SolanaService {
         request: CpmmSwapBaseInTransactionRequest
     ) -> Result<CpmmTransactionData> {
         self.cpmm_swap_service.build_cpmm_swap_base_in_transaction(request).await
+    }
+
+    async fn cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutResponse> {
+        self.cpmm_swap_service.cpmm_swap_base_out(request).await
+    }
+
+    async fn compute_cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutCompute> {
+        self.cpmm_swap_service.compute_cpmm_swap_base_out(request).await
+    }
+
+    async fn build_cpmm_swap_base_out_transaction(
+        &self,
+        request: CpmmSwapBaseOutTransactionRequest
+    ) -> Result<CpmmTransactionData> {
+        self.cpmm_swap_service.build_cpmm_swap_base_out_transaction(request).await
     }
 
     // Position operations - delegate to position_service
