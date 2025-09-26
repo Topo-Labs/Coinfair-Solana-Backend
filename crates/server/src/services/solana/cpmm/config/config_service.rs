@@ -126,7 +126,7 @@ mod tests {
             protocol_fee_rate: 120000,
             trade_fee_rate: 2500,
             fund_fee_rate: 40000,
-            create_pool_fee: "150000000".to_string(),
+            create_pool_fee: 150000000,
             creator_fee_rate: 0,
         };
 
@@ -135,7 +135,7 @@ mod tests {
         assert_eq!(dto_config.protocol_fee_rate, 120000);
         assert_eq!(dto_config.trade_fee_rate, 2500);
         assert_eq!(dto_config.fund_fee_rate, 40000);
-        assert_eq!(dto_config.create_pool_fee, "150000000");
+        assert_eq!(dto_config.create_pool_fee, 150000000);
         assert_eq!(dto_config.creator_fee_rate, 0);
 
         println!("✅ CPMM配置DTO转换测试通过");

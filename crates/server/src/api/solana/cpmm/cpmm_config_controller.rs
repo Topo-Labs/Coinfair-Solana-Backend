@@ -38,7 +38,7 @@ impl CpmmConfigController {
 ///       "protocolFeeRate": 120000,
 ///       "tradeFeeRate": 2500,
 ///       "fundFeeRate": 40000,
-///       "createPoolFee": "150000000",
+///       "createPoolFee": 150000000,
 ///       "creatorFeeRate": 0
 ///     },
 ///     {
@@ -47,7 +47,7 @@ impl CpmmConfigController {
 ///       "protocolFeeRate": 120000,
 ///       "tradeFeeRate": 3000,
 ///       "fundFeeRate": 40000,
-///       "createPoolFee": "150000000",
+///       "createPoolFee": 150000000,
 ///       "creatorFeeRate": 0
 ///     }
 ///   ]
@@ -93,7 +93,7 @@ pub async fn get_cpmm_configs(
 ///   "protocolFeeRate": 120000,
 ///   "tradeFeeRate": 2500,
 ///   "fundFeeRate": 40000,
-///   "createPoolFee": "150000000",
+///   "createPoolFee": 150000000,
 ///   "creatorFeeRate": 0
 /// }
 /// ```
@@ -172,7 +172,7 @@ mod tests {
             protocol_fee_rate: 120000,
             trade_fee_rate: 2500,
             fund_fee_rate: 40000,
-            create_pool_fee: "150000000".to_string(),
+            create_pool_fee: 150000000,
             creator_fee_rate: 0,
         };
 
@@ -185,7 +185,7 @@ mod tests {
             protocol_fee_rate: 120000,
             trade_fee_rate: 2500,
             fund_fee_rate: 40000,
-            create_pool_fee: "150000000".to_string(),
+            create_pool_fee: 150000000,
             creator_fee_rate: 0,
         };
 
@@ -198,7 +198,7 @@ mod tests {
             protocol_fee_rate: 2000000, // 超出最大值1000000
             trade_fee_rate: 2500,
             fund_fee_rate: 40000,
-            create_pool_fee: "150000000".to_string(),
+            create_pool_fee: 150000000,
             creator_fee_rate: 0,
         };
 
@@ -215,7 +215,7 @@ mod tests {
             protocol_fee_rate: 120000,
             trade_fee_rate: 2500,
             fund_fee_rate: 40000,
-            create_pool_fee: "150000000".to_string(),
+            create_pool_fee: 150000000,
             creator_fee_rate: 0,
         };
 
@@ -225,7 +225,7 @@ mod tests {
             protocol_fee_rate: request.protocol_fee_rate,
             trade_fee_rate: request.trade_fee_rate,
             fund_fee_rate: request.fund_fee_rate,
-            create_pool_fee: request.create_pool_fee.clone(),
+            create_pool_fee: request.create_pool_fee,
             creator_fee_rate: request.creator_fee_rate,
         };
 

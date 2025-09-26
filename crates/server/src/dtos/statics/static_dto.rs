@@ -771,9 +771,9 @@ pub struct CpmmConfig {
     #[serde(rename = "fundFeeRate")]
     pub fund_fee_rate: u64,
 
-    /// 创建池子费用
+    /// 创建池子费用（单位：lamports）
     #[serde(rename = "createPoolFee")]
-    pub create_pool_fee: String,
+    pub create_pool_fee: u64,
 
     /// 创建者费率
     #[serde(rename = "creatorFeeRate")]
@@ -809,10 +809,10 @@ pub struct CreateCpmmConfigRequest {
     #[serde(rename = "fundFeeRate")]
     pub fund_fee_rate: u64,
 
-    /// 创建池子费用
-    #[validate(length(min = 1, max = 50))]
+    /// 创建池子费用（单位：lamports）
+    #[validate(range(min = 0, max = 18446744073709551615))] // u64::MAX
     #[serde(rename = "createPoolFee")]
-    pub create_pool_fee: String,
+    pub create_pool_fee: u64,
 
     /// 创建者费率
     #[validate(range(min = 0, max = 1000000))]
@@ -830,7 +830,7 @@ impl CpmmConfig {
                 protocol_fee_rate: 120000,
                 trade_fee_rate: 2500,
                 fund_fee_rate: 40000,
-                create_pool_fee: "150000000".to_string(),
+                create_pool_fee: 150000000,
                 creator_fee_rate: 0,
             },
             CpmmConfig {
@@ -839,7 +839,7 @@ impl CpmmConfig {
                 protocol_fee_rate: 120000,
                 trade_fee_rate: 3000,
                 fund_fee_rate: 40000,
-                create_pool_fee: "150000000".to_string(),
+                create_pool_fee: 150000000,
                 creator_fee_rate: 0,
             },
         ]
