@@ -161,12 +161,7 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn initialize(
-    ctx: Context<Initialize>,
-    init_amount_0: u64,
-    init_amount_1: u64,
-    mut open_time: u64,
-) -> Result<()> {
+pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, mut open_time: u64) -> Result<()> {
     if !(is_supported_mint(&ctx.accounts.token_0_mint).unwrap()
         && is_supported_mint(&ctx.accounts.token_1_mint).unwrap())
     {
@@ -244,24 +239,14 @@ pub fn initialize(
         ctx.accounts.token_1_mint.decimals,
     )?;
 
-    let token_0_vault =
-        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-            ctx.accounts
-                .token_0_vault
-                .to_account_info()
-                .try_borrow_data()?
-                .deref(),
-        )?
-        .base;
-    let token_1_vault =
-        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-            ctx.accounts
-                .token_1_vault
-                .to_account_info()
-                .try_borrow_data()?
-                .deref(),
-        )?
-        .base;
+    let token_0_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+        ctx.accounts.token_0_vault.to_account_info().try_borrow_data()?.deref(),
+    )?
+    .base;
+    let token_1_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+        ctx.accounts.token_1_vault.to_account_info().try_borrow_data()?.deref(),
+    )?
+    .base;
 
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
@@ -304,10 +289,7 @@ pub fn initialize(
             ],
         )?;
         invoke(
-            &spl_token::instruction::sync_native(
-                ctx.accounts.token_program.key,
-                &ctx.accounts.create_pool_fee.key(),
-            )?,
+            &spl_token::instruction::sync_native(ctx.accounts.token_program.key, &ctx.accounts.create_pool_fee.key())?,
             &[
                 ctx.accounts.token_program.to_account_info(),
                 ctx.accounts.create_pool_fee.to_account_info(),
@@ -331,6 +313,22 @@ pub fn initialize(
         CreatorFeeOn::BothToken,
         false,
     );
+
+    emit!(LpChangeEvent {
+        user_wallet: ctx.accounts.creator.key(),
+        pool_id: ctx.accounts.pool_state.key(),
+        lp_mint: ctx.accounts.lp_mint.key(),
+        lp_amount_before: pool_state.lp_supply,
+        token_0_vault_before: ctx.accounts.token_0_vault.lamports(),
+        token_1_vault_before: ctx.accounts.token_1_vault.lamports(),
+        token_0_amount: init_amount_0,
+        token_1_amount: init_amount_1,
+        token_0_transfer_fee: 0,
+        token_1_transfer_fee: 0,
+        change_type: 1,
+        program_id: ctx.accounts.lp_mint.to_account_info().owner.to_owned(),
+        decimals: ctx.accounts.lp_mint.decimals,
+    });
 
     Ok(())
 }

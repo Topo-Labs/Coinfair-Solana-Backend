@@ -4,7 +4,13 @@ use anchor_lang::prelude::*;
 #[event]
 #[cfg_attr(feature = "client", derive(Debug))]
 pub struct LpChangeEvent {
+    /// user wallet address
+    pub user_wallet: Pubkey,
+    /// pool id
     pub pool_id: Pubkey,
+    /// lp mint address
+    pub lp_mint: Pubkey,
+    /// lp amount before
     pub lp_amount_before: u64,
     /// pool vault sub trade fees
     pub token_0_vault_before: u64,
@@ -16,8 +22,12 @@ pub struct LpChangeEvent {
     pub token_1_amount: u64,
     pub token_0_transfer_fee: u64,
     pub token_1_transfer_fee: u64,
-    // 0: deposit, 1: withdraw
+    // 0: deposit, 1: withdraw, 2: initialize
     pub change_type: u8,
+    /// program id of lp mint
+    pub program_id: Pubkey,
+    /// decimals of lp mint
+    pub decimals: u8,
 }
 
 /// Emitted when swap
