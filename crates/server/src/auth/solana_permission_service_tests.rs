@@ -2,7 +2,7 @@
 //! 重点测试一键启停和精细化权限配置功能
 
 use crate::auth::{AuthUser, Permission, SolanaApiAction, SolanaApiPermissionConfig, SolanaPermissionPolicy, UserTier};
-use crate::services::solana_permission_service::{SolanaPermissionService, SolanaPermissionServiceTrait};
+use crate::services::solana::auth::solana_permission_service::{SolanaPermissionService, SolanaPermissionServiceTrait};
 use std::collections::{HashMap, HashSet};
 use tokio;
 

@@ -34,7 +34,7 @@ pub fn read_keypair_file(s: &str) -> Result<Keypair> {
 // 重新导出常用的工具函数
 pub use instructions::utils::{
     amount_with_slippage, deserialize_anchor_account, get_out_put_amount_and_remaining_accounts, multipler,
-    price_to_sqrt_price_x64, sqrt_price_x64_to_price,
+    price_to_sqrt_price_x64, price_to_tick, sqrt_price_x64_to_price, tick_to_price,
 };
 
 // 重新导出其他有用的模块

@@ -2,7 +2,7 @@ use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
     metrics::MetricsCollector,
-    parser::{EventParserRegistry, EventDataSource},
+    parser::{EventDataSource, EventParserRegistry},
     recovery::{
         backfill_handler::{BackfillEventConfig, BackfillEventRegistry, EventBackfillHandler},
         checkpoint_persistence::CheckpointPersistence,
@@ -12,10 +12,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use chrono::Utc;
-use database::{
-    event_model::event_model_repository::EventModelRepository,
-    event_scanner::model::{EventScannerCheckpoints, ScanRecords, ScanStatus},
-};
+use database::events::event_scanner::model::{EventScannerCheckpoints, ScanRecords, ScanStatus};
 use solana_client::{
     rpc_client::{GetConfirmedSignaturesForAddress2Config, RpcClient},
     rpc_config::RpcTransactionConfig,
@@ -26,6 +23,7 @@ use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTra
 use std::{str::FromStr, sync::Arc, time::Duration};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+use database::events::event_model::event_model_repository::EventModelRepository;
 
 /// 包含签名和对应slot的结构体，用于回填过程中维护slot信息
 #[derive(Debug, Clone)]
@@ -751,7 +749,7 @@ mod tests {
     fn test_checkpoint_slot_handling() {
         // 测试检查点 slot 字段的处理逻辑
         use chrono::Utc;
-        use database::event_scanner::model::EventScannerCheckpoints;
+        use database::events::event_scanner::model::EventScannerCheckpoints;
 
         // 测试有 slot 的检查点
         let checkpoint_with_slot = EventScannerCheckpoints {
@@ -784,7 +782,7 @@ mod tests {
     fn test_scan_record_slot_handling() {
         // 测试扫描记录 slot 字段的处理逻辑
         use chrono::Utc;
-        use database::event_scanner::model::{ScanRecords, ScanStatus};
+        use database::events::event_scanner::model::{ScanRecords, ScanStatus};
 
         // 测试有 slot 的扫描记录
         let scan_record_with_slots = ScanRecords {

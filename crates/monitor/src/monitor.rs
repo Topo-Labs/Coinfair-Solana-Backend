@@ -1,5 +1,5 @@
 use super::util::{current_date_and_time, magic_number};
-use database::reward::model::RewardItem;
+use database::clmm::reward::model::RewardItem;
 use ethers::{abi::ParamType, prelude::*, providers::Provider, types::Address, utils::to_checksum};
 use serde::Deserialize;
 use server::services::Services;

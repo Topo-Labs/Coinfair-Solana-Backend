@@ -1,6 +1,6 @@
 use crate::error::{EventListenerError, Result};
 use async_trait::async_trait;
-use database::event_model::event_model_repository::EventModelRepository;
+use database::events::event_model::event_model_repository::EventModelRepository;
 use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, sync::Arc};
 use tracing::info;

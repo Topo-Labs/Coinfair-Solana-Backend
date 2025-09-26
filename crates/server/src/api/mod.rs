@@ -1,14 +1,12 @@
-pub mod auth_controller;
-pub mod dev_auth_controller;
-pub mod permission_management_controller;
-pub mod refer_controller;
-pub mod reward_controller;
 pub mod solana;
-// pub mod solana_controller;
-pub mod static_controller;
-pub mod user_controller;
+pub mod auth;
+pub mod user;
 
 use axum::routing::{get, Router};
+use auth::{auth_controller, dev_auth_controller, permission_management_controller};
+use user::user_controller;
+use crate::api::solana::statics::static_controller;
+use self::solana::clmm::{refer_controller, reward_controller};
 
 /// 系统健康检查
 ///

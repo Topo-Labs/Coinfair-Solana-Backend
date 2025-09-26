@@ -35,8 +35,11 @@ raydium-amm-v3 = { path = "../solana/amm", package = "coinfair-raydium-amm-v3", 
       "no-entrypoint",
       "client",
 ] }
-raydium-amm-v3-clent = { path = "../solana/clmm-client", package = "client" }
-raydium-cp-swap = { workspace = true }
+raydium-amm-v3-client = { path = "../solana/clmm-client", package = "clmm-client" }
+raydium-cp-swap = { path = "../solana/cpmm", package = "raydium-cp-swap", features = [
+      "no-entrypoint",
+      "client",
+] }
 base64 = { workspace = true }
 bincode = { workspace = true }
 borsh = { workspace = true }

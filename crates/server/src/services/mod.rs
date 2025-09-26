@@ -7,31 +7,26 @@
 //
 //////////////////////////////////////////////////////////////////////
 
-#[cfg(test)]
-pub mod config_fix_verification_tests;
-pub mod data_transform;
-#[cfg(test)]
-pub mod data_transform_optimization_tests;
 pub mod position_storage;
-pub mod refer_service;
-pub mod reward_service;
 pub mod solana;
-pub mod solana_permission_service;
-// pub mod solana_service;
-pub mod user_service;
+pub mod user;
+pub mod docs;
+pub mod middleware;
 
 use crate::services::{
-    refer_service::{DynReferService, ReferService},
-    reward_service::{DynRewardService, RewardService},
-    solana::launch_event::LaunchEventService,
-    solana::token::service::TokenService,
+    solana::clmm::launch_event::LaunchEventService,
     solana::{DynSolanaService, SolanaService},
-    solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService},
-    user_service::{DynUserService, UserService},
 };
-use database::{clmm_pool::PoolTypeMigration, position::repository::PositionRepositoryTrait, Database};
+use database::Database;
 use std::sync::Arc;
 use tracing::{error, info, warn};
+use database::clmm::clmm_pool::PoolTypeMigration;
+use database::clmm::position::repository::PositionRepositoryTrait;
+use user::user_service::{DynUserService, UserService};
+use self::solana::auth::solana_permission_service::{DynSolanaPermissionService, SolanaPermissionService};
+use self::solana::clmm::refer::refer_service::{DynReferService, ReferService};
+use self::solana::clmm::reward::reward_service::{DynRewardService, RewardService};
+use self::solana::clmm::token::token_service::TokenService;
 
 #[derive(Clone)]
 pub struct Services {
@@ -345,7 +340,7 @@ impl Services {
         info!("🔧 初始化CLMM池子数据库索引...");
 
         // 直接使用数据库连接来初始化索引
-        let repository = database::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
+        let repository = database::clmm::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
 
         match repository.init_indexes().await {
             Ok(_) => {
@@ -412,7 +407,7 @@ impl Services {
     pub async fn get_database_health(&self) -> Result<DatabaseHealthStatus, Box<dyn std::error::Error>> {
         info!("🔍 检查数据库服务健康状态...");
 
-        let repository = database::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
+        let repository = database::clmm::clmm_pool::ClmmPoolRepository::new(self.database.clmm_pools.clone());
 
         // 执行基本的数据库操作来检查健康状态
         let start_time = std::time::Instant::now();

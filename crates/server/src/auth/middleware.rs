@@ -1,5 +1,5 @@
 use crate::auth::{AuthUser, Claims, JwtManager, Permission, SolanaApiAction, TokenExtractor};
-use crate::services::solana_permission_service::DynSolanaPermissionService;
+use crate::services::solana::auth::solana_permission_service::DynSolanaPermissionService;
 use anyhow::Result as AnyhowResult;
 use axum::{
     extract::{Request, State},

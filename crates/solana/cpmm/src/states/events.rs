@@ -10,9 +10,9 @@ pub struct LpChangeEvent {
     pub token_0_vault_before: u64,
     /// pool vault sub trade fees
     pub token_1_vault_before: u64,
-    /// cacluate result without transfer fee
+    /// calculate result without transfer fee
     pub token_0_amount: u64,
-    /// cacluate result without transfer fee
+    /// calculate result without transfer fee
     pub token_1_amount: u64,
     pub token_0_transfer_fee: u64,
     pub token_1_transfer_fee: u64,
@@ -29,11 +29,17 @@ pub struct SwapEvent {
     pub input_vault_before: u64,
     /// pool vault sub trade fees
     pub output_vault_before: u64,
-    /// cacluate result without transfer fee
+    /// calculate result without transfer fee
     pub input_amount: u64,
-    /// cacluate result without transfer fee
+    /// calculate result without transfer fee
     pub output_amount: u64,
     pub input_transfer_fee: u64,
     pub output_transfer_fee: u64,
     pub base_input: bool,
+    pub input_mint: Pubkey,
+    pub output_mint: Pubkey,
+    pub trade_fee: u64,
+    /// Amount of fee tokens going to creator
+    pub creator_fee: u64,
+    pub creator_fee_on_input: bool,
 }

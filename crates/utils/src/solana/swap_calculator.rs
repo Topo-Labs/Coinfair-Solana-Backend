@@ -95,7 +95,7 @@ impl<'a> SwapCalculator<'a> {
         // 转换为价格：price = (sqrt_price_x64 / 2^64)^2
         // let sqrt_price = sqrt_price_x64 as f64 / (1u128 << 64) as f64;
         // let price = sqrt_price * sqrt_price;
-        let price = raydium_amm_v3_clent::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
+        let price = raydium_amm_v3_client::sqrt_price_x64_to_price(sqrt_price_x64, 0, 0);
         // 调整小数位数
         let decimals_factor = if zero_for_one {
             10_f64.powi(decimals_1 as i32 - decimals_0 as i32)

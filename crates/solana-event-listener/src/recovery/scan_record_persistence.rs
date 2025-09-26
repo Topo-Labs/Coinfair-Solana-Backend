@@ -1,5 +1,5 @@
 use crate::error::{EventListenerError, Result};
-use database::event_scanner::model::{ScanRecords, ScanStatus};
+use database::events::event_scanner::model::{ScanRecords, ScanStatus};
 use mongodb::{
     bson::{doc, from_document, to_document},
     options::FindOptions,

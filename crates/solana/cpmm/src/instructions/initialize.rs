@@ -10,10 +10,11 @@ use anchor_lang::{
 };
 use anchor_spl::{
     associated_token::AssociatedToken,
+    token::spl_token,
     token::Token,
-    token_2022::spl_token_2022,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
+use spl_token_2022;
 use std::ops::Deref;
 
 #[derive(Accounts)]
@@ -25,7 +26,8 @@ pub struct Initialize<'info> {
     /// Which config the pool belongs to.
     pub amm_config: Box<Account<'info, AmmConfig>>,
 
-    /// CHECK: pool vault and lp mint authority
+    /// CHECK:
+    /// pool vault and lp mint authority
     #[account(
         seeds = [
             crate::AUTH_SEED.as_bytes(),
@@ -47,7 +49,7 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub pool_state: UncheckedAccount<'info>,
 
-    /// Token_0 mint, the key must smaller then token_1 mint.
+    /// Token_0 mint, the key must smaller than token_1 mint.
     #[account(
         constraint = token_0_mint.key() < token_1_mint.key(),
         mint::token_program = token_0_program,
@@ -128,7 +130,7 @@ pub struct Initialize<'info> {
     /// create pool fee account
     #[account(
         mut,
-        address= crate::create_pool_fee_reveiver::id(),
+        address= crate::create_pool_fee_reveiver::ID,
     )]
     pub create_pool_fee: Box<InterfaceAccount<'info, TokenAccount>>,
 
@@ -159,7 +161,12 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, mut open_time: u64) -> Result<()> {
+pub fn initialize(
+    ctx: Context<Initialize>,
+    init_amount_0: u64,
+    init_amount_1: u64,
+    mut open_time: u64,
+) -> Result<()> {
     if !(is_supported_mint(&ctx.accounts.token_0_mint).unwrap()
         && is_supported_mint(&ctx.accounts.token_1_mint).unwrap())
     {
@@ -237,14 +244,24 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         ctx.accounts.token_1_mint.decimals,
     )?;
 
-    let token_0_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-        ctx.accounts.token_0_vault.to_account_info().try_borrow_data()?.deref(),
-    )?
-    .base;
-    let token_1_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-        ctx.accounts.token_1_vault.to_account_info().try_borrow_data()?.deref(),
-    )?
-    .base;
+    let token_0_vault =
+        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+            ctx.accounts
+                .token_0_vault
+                .to_account_info()
+                .try_borrow_data()?
+                .deref(),
+        )?
+        .base;
+    let token_1_vault =
+        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+            ctx.accounts
+                .token_1_vault
+                .to_account_info()
+                .try_borrow_data()?
+                .deref(),
+        )?
+        .base;
 
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
@@ -287,7 +304,10 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
             ],
         )?;
         invoke(
-            &spl_token::instruction::sync_native(ctx.accounts.token_program.key, &ctx.accounts.create_pool_fee.key())?,
+            &spl_token::instruction::sync_native(
+                ctx.accounts.token_program.key,
+                &ctx.accounts.create_pool_fee.key(),
+            )?,
             &[
                 ctx.accounts.token_program.to_account_info(),
                 ctx.accounts.create_pool_fee.to_account_info(),
@@ -305,8 +325,11 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         ctx.accounts.token_1_vault.key(),
         &ctx.accounts.token_0_mint,
         &ctx.accounts.token_1_mint,
-        &ctx.accounts.lp_mint,
+        ctx.accounts.lp_mint.key(),
+        ctx.accounts.lp_mint.decimals,
         ctx.accounts.observation_state.key(),
+        CreatorFeeOn::BothToken,
+        false,
     );
 
     Ok(())
@@ -335,7 +358,7 @@ pub fn create_pool<'info>(
     );
 
     if pool_account_info.key() != expect_pda_address {
-        require_eq!(pool_account_info.is_signer, true, ErrorCode::NotApproved);
+        require_eq!(pool_account_info.is_signer, true);
     }
 
     token::create_or_allocate_account(

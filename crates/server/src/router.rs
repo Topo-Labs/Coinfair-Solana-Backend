@@ -5,7 +5,6 @@ use crate::{
         AuthConfig, JwtManager, MultiDimensionalRateLimit, PermissionManager, RateLimitService, SolanaAuthService,
         SolanaMiddlewareBuilder,
     },
-    docs, middleware,
 };
 use axum::{
     error_handling::HandleErrorLayer,
@@ -26,6 +25,8 @@ use tower_http::{
 };
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+use crate::services::docs::docs;
+use crate::services::middleware::middleware;
 
 lazy_static! {
     static ref HTTP_TIMEOUT: u64 = 30;

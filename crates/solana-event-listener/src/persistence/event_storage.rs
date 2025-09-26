@@ -11,18 +11,16 @@ use crate::{
     services::migration_client::MigrationClient,
 };
 use chrono::Utc;
-use database::{
-    clmm_pool::{
-        ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
-        TransactionInfo, TransactionStatus, VaultInfo,
-    },
-    event_model::{
-        repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
-        RewardDistributionEvent, TokenCreationEvent,
-    },
-    token_info::{TokenInfoRepository, TokenPushRequest},
-    Database,
+use database::clmm::clmm_pool::{
+    ClmmPool, ClmmPoolRepository, DataSource, ExtensionInfo, PoolStatus, PriceInfo, SyncStatus, TokenInfo,
+    TransactionInfo, TransactionStatus, VaultInfo,
 };
+use database::clmm::token_info::{TokenInfoRepository, TokenPushRequest};
+use database::events::event_model::{
+    repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
+    RewardDistributionEvent, TokenCreationEvent,
+};
+use database::Database;
 use mongodb::bson::doc;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
@@ -78,7 +76,12 @@ impl EventStorage {
             mongo_db: config.database.database_name.clone(),
             rpc_url: "https://api.devnet.solana.com".to_string(),
             private_key: None,
-            raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            raydium_program_id: std::env::var("RAYDIUM_PROGRAM_ID")
+                .unwrap_or_else(|_| "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string()),
+            raydium_cp_program_id: std::env::var("RAYDIUM_CP_PROGRAM_ID")
+                .unwrap_or_else(|_| "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string()),
+            create_pool_fee_receiver: std::env::var("CREATE_POOL_FEE_RECEIVER")
+                .unwrap_or_else(|_| "3oE58BKVt8KuYkGxx8zBojugnymWmBiyafWgMrnb6eYy".to_string()),
             amm_config_index: 0,
             rust_log: "info".to_string(),
             // 读取环境变量
@@ -981,12 +984,15 @@ impl EventStorage {
     }
 
     /// 将存款事件转换为数据库模型
-    fn convert_to_deposit_event(&self, event: &DepositEventData) -> Result<database::event_model::DepositEvent> {
+    fn convert_to_deposit_event(
+        &self,
+        event: &DepositEventData,
+    ) -> Result<database::events::event_model::DepositEvent> {
         use chrono::Utc;
 
         let now = Utc::now();
 
-        Ok(database::event_model::DepositEvent {
+        Ok(database::events::event_model::DepositEvent {
             id: None,
 
             // 核心业务字段
@@ -1544,7 +1550,7 @@ impl EventStorage {
                 sync_error: None,
             },
 
-            pool_type: database::clmm_pool::PoolType::Concentrated,
+            pool_type: database::clmm::clmm_pool::PoolType::Concentrated,
         };
 
         // 插入新记录

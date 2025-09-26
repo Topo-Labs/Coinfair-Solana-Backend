@@ -4,19 +4,16 @@
 //     OpenPositionAndSendTransactionResponse, OpenPositionRequest, OpenPositionResponse,
 // };
 
-use database::{
-    position::{
-        model::{Position, PositionMetadata},
-        repository::{DynPositionRepository, PoolPositionStats, PositionStats},
-    },
-    Database,
-};
+use database::Database;
 
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
-
-use crate::dtos::solana::position::{
+use database::clmm::position::{
+    model::{Position, PositionMetadata},
+    repository::{DynPositionRepository, PoolPositionStats, PositionStats},
+};
+use crate::dtos::solana::clmm::position::{
     liquidity::{
         DecreaseLiquidityAndSendTransactionResponse, DecreaseLiquidityRequest, DecreaseLiquidityResponse,
         IncreaseLiquidityAndSendTransactionResponse, IncreaseLiquidityRequest, IncreaseLiquidityResponse,

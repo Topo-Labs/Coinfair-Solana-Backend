@@ -4,7 +4,7 @@ use anchor_lang::prelude::AccountMeta;
 use anyhow::{format_err, Result};
 use arrayref::array_ref;
 use clap::Parser;
-use client::{instructions::referral_instructions, ClientConfig};
+use clmm_client::{instructions::referral_instructions, ClientConfig};
 use configparser::ini::Ini;
 use referral::{instructions::MintCounter, states::ReferralAccount};
 use solana_account_decoder::{

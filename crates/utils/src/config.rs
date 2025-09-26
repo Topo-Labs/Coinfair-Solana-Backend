@@ -99,6 +99,14 @@ pub struct AppConfig {
     #[clap(long, env, default_value = "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX")]
     pub raydium_program_id: String,
 
+    /// CPMM程序ID（Constant Product Market Maker）
+    #[clap(long, env, default_value = "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb")]
+    pub raydium_cp_program_id: String,
+
+    /// CPMM池子创建费用接收者地址（不同网络地址不同）
+    #[clap(long, env, default_value = "3oE58BKVt8KuYkGxx8zBojugnymWmBiyafWgMrnb6eYy")]
+    pub create_pool_fee_receiver: String,
+
     #[clap(long, env, default_value = "0")]
     pub amm_config_index: u8,
 
@@ -132,6 +140,10 @@ impl AppConfig {
             rpc_url: "https://api.devnet.solana.com".to_string(),
             private_key: None,
             raydium_program_id: "FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX".to_string(),
+            raydium_cp_program_id: std::env::var("RAYDIUM_CP_PROGRAM_ID")
+                .unwrap_or_else(|_| "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string()),
+            create_pool_fee_receiver: std::env::var("CREATE_POOL_FEE_RECEIVER")
+                .unwrap_or_else(|_| "3oE58BKVt8KuYkGxx8zBojugnymWmBiyafWgMrnb6eYy".to_string()),
             amm_config_index: 0,
             rust_log: "info".to_string(),
             enable_pool_event_insert: std::env::var("ENABLE_POOL_EVENT_INSERT")

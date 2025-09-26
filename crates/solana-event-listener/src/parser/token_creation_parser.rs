@@ -5,7 +5,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use database::token_info::{DataSource, TokenInfo, TokenInfoRepository};
+use database::clmm::token_info::{DataSource, TokenInfo, TokenInfoRepository};
 use mongodb::Client;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
