@@ -29,9 +29,9 @@ pub struct CpmmConfigModel {
     #[serde(rename = "fundFeeRate")]
     pub fund_fee_rate: u64,
 
-    /// 创建池子费用
+    /// 创建池子费用（单位：lamports）
     #[serde(rename = "createPoolFee")]
-    pub create_pool_fee: String,
+    pub create_pool_fee: u64,
 
     /// 创建者费率
     #[serde(rename = "creatorFeeRate")]
@@ -61,7 +61,7 @@ impl CpmmConfigModel {
         protocol_fee_rate: u64,
         trade_fee_rate: u64,
         fund_fee_rate: u64,
-        create_pool_fee: String,
+        create_pool_fee: u64,
         creator_fee_rate: u64,
     ) -> Self {
         let now = Utc::now();
@@ -87,7 +87,7 @@ impl CpmmConfigModel {
         protocol_fee_rate: u64,
         trade_fee_rate: u64,
         fund_fee_rate: u64,
-        create_pool_fee: String,
+        create_pool_fee: u64,
         creator_fee_rate: u64,
     ) {
         self.protocol_fee_rate = protocol_fee_rate;

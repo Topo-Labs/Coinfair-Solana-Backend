@@ -302,10 +302,14 @@ impl AmmPoolService {
 
         // 用户关联代币账户（使用正确的token program）
         let creator_token_0 = spl_associated_token_account::get_associated_token_address_with_program_id(
-            user_wallet, &token_0_mint, &token_0_program
+            user_wallet,
+            &token_0_mint,
+            &token_0_program,
         );
         let creator_token_1 = spl_associated_token_account::get_associated_token_address_with_program_id(
-            user_wallet, &token_1_mint, &token_1_program
+            user_wallet,
+            &token_1_mint,
+            &token_1_program,
         );
         let creator_lp_token = spl_associated_token_account::get_associated_token_address(user_wallet, &lp_mint_key);
 
@@ -320,6 +324,7 @@ impl AmmPoolService {
         info!("  Token1金库: {}", token_1_vault);
         info!("  LP代币: {}", lp_mint_key);
         info!("  观察状态: {}", observation_key);
+        info!("  create_pool_fee: {}", create_pool_fee);
 
         // 构建Initialize指令的账户（按照CLI中raydium_cp_accounts::Initialize的顺序）
         let accounts = vec![
@@ -350,22 +355,24 @@ impl AmmPoolService {
 
         // 1. 创建用户Token0 ATA账户（如果不存在）
         info!("📝 确保Token0 ATA账户存在: {}", creator_token_0);
-        let create_token0_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            user_wallet,
-            user_wallet,
-            &token_0_mint,
-            &token_0_program,
-        );
+        let create_token0_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                user_wallet,
+                user_wallet,
+                &token_0_mint,
+                &token_0_program,
+            );
         instructions.push(create_token0_ata_ix);
 
         // 2. 创建用户Token1 ATA账户（如果不存在）
         info!("📝 确保Token1 ATA账户存在: {}", creator_token_1);
-        let create_token1_ata_ix = spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-            user_wallet,
-            user_wallet,
-            &token_1_mint,
-            &token_1_program,
-        );
+        let create_token1_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                user_wallet,
+                user_wallet,
+                &token_1_mint,
+                &token_1_program,
+            );
         instructions.push(create_token1_ata_ix);
 
         // 注意：不需要预先创建LP Token ATA账户，因为CPMM合约在initialize指令中会自动创建
@@ -381,7 +388,10 @@ impl AmmPoolService {
         };
         instructions.push(initialize_instruction);
 
-        info!("✅ 构建完成，共{}条指令: 2个ATA创建 + 1个池子初始化", instructions.len());
+        info!(
+            "✅ 构建完成，共{}条指令: 2个ATA创建 + 1个池子初始化",
+            instructions.len()
+        );
 
         Ok(instructions)
     }
@@ -436,7 +446,7 @@ impl AmmPoolService {
     fn get_raydium_cp_program_id(&self) -> Result<Pubkey> {
         // 从配置中获取，或使用默认值
         let program_id_str = std::env::var("RAYDIUM_CP_PROGRAM_ID")
-            .unwrap_or_else(|_| "DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb".to_string());
+            .unwrap_or_else(|_| "FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi".to_string());
         info!("🔍 获取CPMM程序ID: {}", program_id_str);
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }

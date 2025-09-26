@@ -6,7 +6,7 @@ use crate::auth::SolanaMiddlewareBuilder;
 use axum::{middleware, Extension, Router};
 use std::sync::Arc;
 use clmm::{clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller, launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller, position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller, swap_v3_controller, token_controller};
-use cpmm::{pool_create_controller, cpmm_swap_controller, cpmm_config_controller};
+use cpmm::{pool_create_controller, cpmm_swap_controller, cpmm_config_controller, deposit_controller, withdraw_controller};
 
 pub struct SolanaController;
 
@@ -28,6 +28,8 @@ impl SolanaController {
             .nest("/nft", Self::nft_routes())
             // 池子管理路由 - 使用强制权限检查和特定权限
             .nest("/pool", Self::pool_management_routes())
+            // 流动性管理路由 - 存款、提款等操作
+            .nest("/liquidity", Self::liquidity_management_routes())
     }
 
     /// 公开信息路由 - 版本、配置等基础信息
@@ -122,6 +124,17 @@ impl SolanaController {
             .nest(
                 "/launch-migration",
                 launch_migration_controller::LaunchMigrationController::routes(),
+            )
+            .layer(middleware::from_fn(Self::apply_solana_auth))
+    }
+
+    /// 流动性管理路由 - 存款、提款等流动性操作
+    fn liquidity_management_routes() -> Router {
+        Router::new()
+            .nest("/cpmm",
+                Router::new()
+                    .merge(deposit_controller::CpmmDepositController::routes())
+                    .merge(withdraw_controller::CpmmWithdrawController::routes())
             )
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }

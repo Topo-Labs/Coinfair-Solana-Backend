@@ -106,7 +106,7 @@ mod tests {
         let pool_id = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
         let amm_config = Pubkey::from_str("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU").unwrap();
 
-        let cpmm_program_id = Pubkey::from_str("DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb").unwrap();
+        let cpmm_program_id = Pubkey::from_str("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi").unwrap();
         let instructions = super::swap_service::swap_base_input_instr(
             cpmm_program_id,
             payer,
