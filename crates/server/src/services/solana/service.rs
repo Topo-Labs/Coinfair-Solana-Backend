@@ -12,6 +12,8 @@ use crate::services::solana::clmm::referral::ReferralService;
 use super::shared::{SharedContext, SolanaHelpers};
 use crate::services::solana::clmm::swap::SwapService;
 use crate::services::solana::cpmm::swap::CpmmSwapService;
+use crate::services::solana::cpmm::deposit::CpmmDepositService;
+use crate::services::solana::cpmm::CpmmWithdrawService;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -71,6 +73,8 @@ pub struct SolanaService {
     shared_context: Arc<SharedContext>,
     swap_service: SwapService,
     cpmm_swap_service: CpmmSwapService,
+    cpmm_deposit_service: CpmmDepositService,
+    cpmm_withdraw_service: CpmmWithdrawService,
     position_service: PositionService,
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
@@ -125,6 +129,8 @@ impl SolanaService {
         Ok(Self {
             swap_service: SwapService::new(optimized_shared_context.clone()),
             cpmm_swap_service: CpmmSwapService::new(optimized_shared_context.clone()),
+            cpmm_deposit_service: CpmmDepositService::new(optimized_shared_context.clone()),
+            cpmm_withdraw_service: CpmmWithdrawService::new(optimized_shared_context.clone()),
             position_service: PositionService::with_database(
                 optimized_shared_context.clone(),
                 Arc::new(database.clone()),
@@ -207,6 +213,16 @@ pub trait SolanaServiceTrait {
         &self,
         request: CpmmSwapBaseOutTransactionRequest
     ) -> Result<CpmmTransactionData>;
+
+    // CPMM Deposit operations
+    async fn cpmm_deposit_liquidity(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositResponse>;
+    async fn cpmm_deposit_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendResponse>;
+    async fn compute_cpmm_deposit(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositCompute>;
+
+    // CPMM Withdraw operations
+    async fn cpmm_withdraw_liquidity(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawResponse>;
+    async fn cpmm_withdraw_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendResponse>;
+    async fn compute_cpmm_withdraw(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawCompute>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -460,6 +476,39 @@ impl SolanaServiceTrait for SolanaService {
         request: CpmmSwapBaseOutTransactionRequest
     ) -> Result<CpmmTransactionData> {
         self.cpmm_swap_service.build_cpmm_swap_base_out_transaction(request).await
+    }
+
+    // CPMM Deposit operations - delegate to cpmm_deposit_service
+    async fn cpmm_deposit_liquidity(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositResponse> {
+        self.cpmm_deposit_service.build_cpmm_deposit_transaction(request).await
+    }
+
+    async fn cpmm_deposit_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendResponse> {
+        self.cpmm_deposit_service.cpmm_deposit_and_send_transaction(request).await
+    }
+
+    async fn compute_cpmm_deposit(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositCompute> {
+        let request = crate::dtos::solana::cpmm::deposit::CpmmDepositRequest {
+            pool_id: pool_id.to_string(),
+            lp_token_amount,
+            slippage,
+            user_token_0: "".to_string(), // 这些在compute中不需要，服务会自动处理
+            user_token_1: "".to_string(),
+        };
+        self.cpmm_deposit_service.compute_cpmm_deposit(request).await
+    }
+
+    // CPMM Withdraw operations - delegate to cpmm_withdraw_service
+    async fn cpmm_withdraw_liquidity(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawResponse> {
+        self.cpmm_withdraw_service.withdraw_liquidity(request).await
+    }
+
+    async fn cpmm_withdraw_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendResponse> {
+        self.cpmm_withdraw_service.withdraw_liquidity_and_send_transaction(request).await
+    }
+
+    async fn compute_cpmm_withdraw(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawCompute> {
+        self.cpmm_withdraw_service.compute_withdraw(pool_id, lp_token_amount, slippage).await
     }
 
     // Position operations - delegate to position_service

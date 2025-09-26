@@ -96,10 +96,8 @@ pub fn deposit(
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit) {
         return err!(ErrorCode::NotApproved);
     }
-    let (total_token_0_amount, total_token_1_amount) = pool_state.vault_amount_without_fee(
-        ctx.accounts.token_0_vault.amount,
-        ctx.accounts.token_1_vault.amount,
-    )?;
+    let (total_token_0_amount, total_token_1_amount) =
+        pool_state.vault_amount_without_fee(ctx.accounts.token_0_vault.amount, ctx.accounts.token_1_vault.amount)?;
     let results = CurveCalculator::lp_tokens_to_trading_tokens(
         u128::from(lp_token_amount),
         u128::from(pool_state.lp_supply),
@@ -113,22 +111,14 @@ pub fn deposit(
     }
     let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
     let (transfer_token_0_amount, transfer_token_0_fee) = {
-        let transfer_fee =
-            get_transfer_inverse_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
-        (
-            token_0_amount.checked_add(transfer_fee).unwrap(),
-            transfer_fee,
-        )
+        let transfer_fee = get_transfer_inverse_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
+        (token_0_amount.checked_add(transfer_fee).unwrap(), transfer_fee)
     };
 
     let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
     let (transfer_token_1_amount, transfer_token_1_fee) = {
-        let transfer_fee =
-            get_transfer_inverse_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
-        (
-            token_1_amount.checked_add(transfer_fee).unwrap(),
-            transfer_fee,
-        )
+        let transfer_fee = get_transfer_inverse_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
+        (token_1_amount.checked_add(transfer_fee).unwrap(), transfer_fee)
     };
 
     #[cfg(feature = "enable-log")]
@@ -155,9 +145,7 @@ pub fn deposit(
         change_type: 0
     });
 
-    if transfer_token_0_amount > maximum_token_0_amount
-        || transfer_token_1_amount > maximum_token_1_amount
-    {
+    if transfer_token_0_amount > maximum_token_0_amount || transfer_token_1_amount > maximum_token_1_amount {
         return Err(ErrorCode::ExceededSlippage.into());
     }
 

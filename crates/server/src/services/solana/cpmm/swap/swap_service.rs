@@ -7,6 +7,7 @@ use crate::dtos::solana::cpmm::swap::{
 use crate::services::solana::shared::SharedContext;
 use anyhow::Result;
 use raydium_cp_swap::curve::{CurveCalculator, TradeDirection};
+use raydium_cp_swap::instruction;
 use raydium_cp_swap::states::{AmmConfig, PoolState};
 use solana_sdk::{
     pubkey::Pubkey,
@@ -19,7 +20,7 @@ use std::sync::Arc;
 use tracing::info;
 
 // 导入必要的Solana和SPL库
-use anchor_lang::AccountDeserialize;
+use anchor_lang::{AccountDeserialize, Discriminator};
 use anchor_spl::token_2022::spl_token_2022::{
     extension::{transfer_fee::TransferFeeConfig, BaseStateWithExtensions, PodStateWithExtensions},
     pod::{PodAccount, PodMint},
@@ -125,7 +126,7 @@ pub fn swap_base_input_instr(
     // 构造指令数据（使用swap_base_input的discriminator）
     let mut instruction_data = Vec::new();
     // swap_base_input方法的discriminator：sha256("global:swap_base_input")[0..8]
-    let discriminator = [0x8f, 0xbe, 0x5a, 0xda, 0xc4, 0x1e, 0x33, 0xde];
+    let discriminator = instruction::SwapBaseInput::DISCRIMINATOR;
     instruction_data.extend_from_slice(&discriminator);
     instruction_data.extend_from_slice(&amount_in.to_le_bytes());
     instruction_data.extend_from_slice(&minimum_amount_out.to_le_bytes());
@@ -183,7 +184,7 @@ pub fn swap_base_output_instr(
     // 构造指令数据（使用swap_base_output的discriminator）
     let mut instruction_data = Vec::new();
     // swap_base_output方法的discriminator：sha256("global:swap_base_output")[0..8]
-    let discriminator = [0x37, 0xd9, 0x62, 0x56, 0xa3, 0x4a, 0xb4, 0xad];
+    let discriminator = instruction::SwapBaseOutput::DISCRIMINATOR;
     instruction_data.extend_from_slice(&discriminator);
     instruction_data.extend_from_slice(&max_amount_in.to_le_bytes());
     instruction_data.extend_from_slice(&amount_out.to_le_bytes());
@@ -1048,7 +1049,8 @@ impl CpmmSwapService {
 
         // 创建输出代币ATA账户指令
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token);
-        let create_output_ata_instrs = create_ata_token_account_instr(output_token_program, &output_token_mint, &wallet)?;
+        let create_output_ata_instrs =
+            create_ata_token_account_instr(output_token_program, &output_token_mint, &wallet)?;
         instructions.extend(create_output_ata_instrs);
 
         // 创建SwapBaseIn指令（使用正确的参数顺序）
@@ -1710,7 +1712,8 @@ impl CpmmSwapService {
 
         // 创建输出代币ATA账户指令
         info!("📝 确保输出代币ATA账户存在: {}", user_output_token);
-        let create_output_ata_instrs = create_ata_token_account_instr(output_token_program, &output_token_mint, &wallet)?;
+        let create_output_ata_instrs =
+            create_ata_token_account_instr(output_token_program, &output_token_mint, &wallet)?;
         instructions.extend(create_output_ata_instrs);
 
         // 创建SwapBaseOutput指令（使用正确的参数顺序）

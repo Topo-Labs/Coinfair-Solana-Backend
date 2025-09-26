@@ -6812,6 +6812,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "anyhow",
+ "arrayref",
  "async-trait",
  "axum",
  "axum-extra",
