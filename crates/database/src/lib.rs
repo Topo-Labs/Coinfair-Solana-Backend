@@ -12,11 +12,13 @@ use std::sync::Arc;
 use tracing::{error, info};
 use auth::permission_config;
 use clmm::{clmm_config, clmm_pool, position, refer, reward, token_info};
+use cpmm::cpmm_config;
 use utils::{AppConfig, AppResult};
 
 pub mod serde_helpers;
 pub mod user;
 pub mod clmm;
+pub mod cpmm;
 pub mod events;
 pub mod auth;
 
@@ -27,6 +29,7 @@ pub struct Database {
     pub rewards: Collection<reward::model::Reward>,
     pub clmm_pools: Collection<clmm_pool::model::ClmmPool>,
     pub clmm_configs: Collection<clmm_config::model::ClmmConfigModel>,
+    pub cpmm_configs: Collection<cpmm_config::model::CpmmConfigModel>,
     pub positions: Collection<position::model::Position>,
     pub global_permission_configs: Collection<permission_config::model::GlobalSolanaPermissionConfigModel>,
     pub api_permission_configs: Collection<permission_config::model::SolanaApiPermissionConfigModel>,
@@ -44,6 +47,7 @@ pub struct Database {
     pub scan_records: Collection<event_scanner::model::ScanRecords>,
     // 仓库层
     pub clmm_pool_repository: clmm_pool::repository::ClmmPoolRepository,
+    pub cpmm_config_repository: cpmm_config::repository::CpmmConfigRepository,
     pub global_permission_repository: permission_config::repository::GlobalPermissionConfigRepository,
     pub api_permission_repository: permission_config::repository::ApiPermissionConfigRepository,
     pub permission_log_repository: permission_config::repository::PermissionConfigLogRepository,
@@ -70,6 +74,7 @@ impl Database {
         let rewards = db.collection("Reward");
         let clmm_pools = db.collection("ClmmPool");
         let clmm_configs = db.collection("ClmmConfig");
+        let cpmm_configs = db.collection("CpmmConfig");
         let positions = db.collection("Position");
         let global_permission_configs = db.collection("GlobalSolanaPermissionConfig");
         let api_permission_configs = db.collection("SolanaApiPermissionConfig");
@@ -88,6 +93,7 @@ impl Database {
 
         // 初始化仓库层
         let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
+        let cpmm_config_repository = cpmm_config::repository::CpmmConfigRepository::new(cpmm_configs.clone());
         let global_permission_repository =
             permission_config::repository::GlobalPermissionConfigRepository::new(global_permission_configs.clone());
         let api_permission_repository =
@@ -119,6 +125,7 @@ impl Database {
             rewards,
             clmm_pools,
             clmm_configs,
+            cpmm_configs,
             positions,
             global_permission_configs,
             api_permission_configs,
@@ -133,6 +140,7 @@ impl Database {
             event_scanner_checkpoints,
             scan_records,
             clmm_pool_repository,
+            cpmm_config_repository,
             global_permission_repository,
             api_permission_repository,
             permission_log_repository,
@@ -150,6 +158,9 @@ impl Database {
 
     /// 初始化权限配置索引
     pub async fn init_repository_indexes(&self) -> AppResult<()> {
+        // 初始化CPMM配置索引
+        let _result = self.cpmm_config_repository.init_indexes().await;
+
         // 初始化权限配置索引
         let _result = self.api_permission_repository.init_indexes().await;
 
@@ -389,6 +400,9 @@ impl Database {
 // Re-export specific items to avoid naming conflicts
 // Export specific items from clmm_config
 pub use clmm::clmm_config::{model as clmm_config_model, repository as clmm_config_repository};
+
+// Export specific items from cpmm_config
+pub use cpmm::cpmm_config::{model as cpmm_config_model, repository as cpmm_config_repository};
 
 // Export specific items from clmm_pool, excluding TokenInfo to avoid conflict
 pub use clmm::clmm_pool::{

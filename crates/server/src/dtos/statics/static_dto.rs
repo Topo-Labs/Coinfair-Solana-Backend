@@ -749,3 +749,99 @@ impl ClmmConfig {
         ]
     }
 }
+
+/// CPMM配置项
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct CpmmConfig {
+    /// 配置ID
+    pub id: String,
+
+    /// 索引
+    pub index: u32,
+
+    /// 协议费率
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u64,
+
+    /// 交易费率
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u64,
+
+    /// 基金费率
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u64,
+
+    /// 创建池子费用
+    #[serde(rename = "createPoolFee")]
+    pub create_pool_fee: String,
+
+    /// 创建者费率
+    #[serde(rename = "creatorFeeRate")]
+    pub creator_fee_rate: u64,
+}
+
+/// CPMM配置响应类型
+pub type CpmmConfigResponse = Vec<CpmmConfig>;
+
+/// 创建CPMM配置请求
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, validator::Validate)]
+pub struct CreateCpmmConfigRequest {
+    /// 配置ID
+    #[validate(length(min = 1, max = 100))]
+    pub id: String,
+
+    /// 索引
+    #[validate(range(min = 0, max = 4294967295))]
+    pub index: u32,
+
+    /// 协议费率
+    #[validate(range(min = 0, max = 1000000))]
+    #[serde(rename = "protocolFeeRate")]
+    pub protocol_fee_rate: u64,
+
+    /// 交易费率
+    #[validate(range(min = 0, max = 1000000))]
+    #[serde(rename = "tradeFeeRate")]
+    pub trade_fee_rate: u64,
+
+    /// 基金费率
+    #[validate(range(min = 0, max = 1000000))]
+    #[serde(rename = "fundFeeRate")]
+    pub fund_fee_rate: u64,
+
+    /// 创建池子费用
+    #[validate(length(min = 1, max = 50))]
+    #[serde(rename = "createPoolFee")]
+    pub create_pool_fee: String,
+
+    /// 创建者费率
+    #[validate(range(min = 0, max = 1000000))]
+    #[serde(rename = "creatorFeeRate")]
+    pub creator_fee_rate: u64,
+}
+
+impl CpmmConfig {
+    /// 创建默认的CPMM配置数据
+    pub fn default_configs() -> Vec<CpmmConfig> {
+        vec![
+            CpmmConfig {
+                id: "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2".to_string(),
+                index: 0,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 2500,
+                fund_fee_rate: 40000,
+                create_pool_fee: "150000000".to_string(),
+                creator_fee_rate: 0,
+            },
+            CpmmConfig {
+                id: "BgxH5ifebqHDuiADWKhLjXGP5hWZeZLoCdmeWJLkRqLP".to_string(),
+                index: 5,
+                protocol_fee_rate: 120000,
+                trade_fee_rate: 3000,
+                fund_fee_rate: 40000,
+                create_pool_fee: "150000000".to_string(),
+                creator_fee_rate: 0,
+            },
+        ]
+    }
+}

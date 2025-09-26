@@ -6,7 +6,7 @@ use crate::auth::SolanaMiddlewareBuilder;
 use axum::{middleware, Extension, Router};
 use std::sync::Arc;
 use clmm::{clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller, launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller, position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller, swap_v3_controller, token_controller};
-use cpmm::{pool_create_controller, cpmm_swap_controller};
+use cpmm::{pool_create_controller, cpmm_swap_controller, cpmm_config_controller};
 
 pub struct SolanaController;
 
@@ -42,6 +42,7 @@ impl SolanaController {
             )
             .route("/info", axum::routing::get(static_config_controller::get_info))
             .nest("/clmm-config", clmm_config_controller::ClmmConfigController::routes())
+            .nest("/cpmm-config", cpmm_config_controller::CpmmConfigController::routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 

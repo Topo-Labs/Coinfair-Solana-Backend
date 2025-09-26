@@ -3,6 +3,7 @@
 use super::clmm::config::{ClmmConfigService, ClmmConfigServiceTrait};
 use super::clmm::pool::ClmmPoolService;
 use super::cpmm::AmmPoolService;
+use super::cpmm::config::{CpmmConfigService, CpmmConfigServiceTrait};
 use crate::services::solana::clmm::launch_migration::LaunchMigrationService;
 use crate::services::solana::clmm::liquidity_line::LiquidityLineService;
 use crate::services::solana::clmm::nft::NftService;
@@ -57,6 +58,7 @@ use crate::dtos::solana::cpmm::swap::{
 use crate::dtos::statics::static_dto::{
     ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
     CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
+    CpmmConfig, CpmmConfigResponse,
 };
 use crate::services::solana::clmm::transform::data_transform::DataTransformService;
 use tokio::sync::Mutex;
@@ -73,6 +75,7 @@ pub struct SolanaService {
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
     config_service: ClmmConfigService,
+    cpmm_config_service: CpmmConfigService,
     liquidity_line_service: LiquidityLineService,
     pub launch_migration: LaunchMigrationService,
     pub nft: NftService,
@@ -97,6 +100,7 @@ impl SolanaService {
         let shared_context = Arc::new(SharedContext::new()?);
         let config_service = ClmmConfigService::new(Arc::new(database.clone()), shared_context.rpc_client.clone());
         let config_service_arc = Arc::new(config_service);
+        let cpmm_config_service = CpmmConfigService::new(Arc::new(database.clone()));
 
         // 创建优化版本的 DataTransformService，注入 ClmmConfigService
         let optimized_transform_service = DataTransformService::new_optimized(
@@ -135,6 +139,7 @@ impl SolanaService {
                 Arc::new(database.clone()),
                 optimized_shared_context.rpc_client.clone(),
             ),
+            cpmm_config_service,
             liquidity_line_service: LiquidityLineService::new(
                 optimized_shared_context.rpc_client.clone(),
                 Arc::new(database.clone()),
@@ -303,6 +308,11 @@ pub trait SolanaServiceTrait {
         &self,
         request: CreateAmmConfigRequest,
     ) -> Result<CreateAmmConfigAndSendTransactionResponse>;
+
+    // CPMM Config operations
+    async fn get_cpmm_configs(&self) -> Result<CpmmConfigResponse>;
+    async fn sync_cpmm_configs_from_chain(&self) -> Result<u64>;
+    async fn save_cpmm_config(&self, config: CpmmConfig) -> Result<String>;
 
     // Liquidity line operations
     async fn get_pool_liquidity_line(&self, request: &PoolLiquidityLineRequest) -> Result<PoolLiquidityLineData>;
@@ -661,6 +671,19 @@ impl SolanaServiceTrait for SolanaService {
         self.config_service
             .create_amm_config_and_send_transaction(request)
             .await
+    }
+
+    // CPMM Config operations - delegate to cpmm_config_service
+    async fn get_cpmm_configs(&self) -> Result<CpmmConfigResponse> {
+        self.cpmm_config_service.get_cpmm_configs().await
+    }
+
+    async fn sync_cpmm_configs_from_chain(&self) -> Result<u64> {
+        self.cpmm_config_service.sync_cpmm_configs_from_chain().await
+    }
+
+    async fn save_cpmm_config(&self, config: CpmmConfig) -> Result<String> {
+        self.cpmm_config_service.save_cpmm_config(config).await
     }
 
     // Liquidity line operations - delegate to liquidity_line_service
