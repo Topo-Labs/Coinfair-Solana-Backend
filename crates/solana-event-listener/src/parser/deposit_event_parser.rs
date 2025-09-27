@@ -62,8 +62,8 @@ pub struct DepositEventParser {
 impl DepositEventParser {
     /// 创建新的存款事件解析器
     pub fn new(config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        // 从环境变量或配置中获取discriminator，默认使用示例值
-        let discriminator = [120, 248, 61, 83, 31, 142, 107, 144];
+        // 根据设计文档，使用事件类型名称计算discriminator
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("DepositEvent");
 
         // 初始化RPC客户端
         let rpc_client = if !config.solana.rpc_url.is_empty() {
@@ -726,7 +726,10 @@ mod tests {
 
         assert_eq!(parser.get_event_type(), "deposit");
         // 测试discriminator（需要从实际IDL获取）
-        assert_eq!(parser.get_discriminator(), [120, 248, 61, 83, 31, 142, 107, 144]);
+        assert_eq!(
+            parser.get_discriminator(),
+            crate::parser::event_parser::calculate_event_discriminator("DepositEvent")
+        );
     }
 
     #[test]

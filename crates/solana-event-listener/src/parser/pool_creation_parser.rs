@@ -46,8 +46,8 @@ pub struct PoolCreationParser {
 impl PoolCreationParser {
     /// 创建新的池子创建事件解析器
     pub fn new(config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        // Coinfair合约PoolCreatedEvent的discriminator
-        let discriminator = [25, 94, 75, 47, 112, 99, 53, 63];
+        // 根据设计文档，使用事件类型名称计算discriminator
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("PoolCreatedEvent");
 
         // 创建RPC客户端
         let rpc_client = RpcClient::new(config.solana.rpc_url.clone());
@@ -520,7 +520,10 @@ mod tests {
         let parser = PoolCreationParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "pool_creation");
-        assert_eq!(parser.get_discriminator(), [25, 94, 75, 47, 112, 99, 53, 63]);
+        assert_eq!(
+            parser.get_discriminator(),
+            crate::parser::event_parser::calculate_event_discriminator("PoolCreatedEvent")
+        );
     }
 
     #[tokio::test]

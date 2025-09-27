@@ -72,6 +72,8 @@ pub struct ApiResponse<T> {
     /// 是否成功
     pub success: bool,
 
+    pub error: Option<ErrorResponse>,
+
     /// 响应数据
     pub data: Option<T>,
 }
@@ -81,14 +83,16 @@ impl<T> ApiResponse<T> {
         Self {
             id: Uuid::new_v4().to_string(),
             success: true,
+            error: None,
             data: Some(data),
         }
     }
 
-    pub fn error(_error: ErrorResponse) -> Self {
+    pub fn error(error: ErrorResponse) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             success: false,
+            error: Some(error),
             data: None,
         }
     }

@@ -67,7 +67,10 @@ fn test_parser_registry() {
     let parser_count = registry.parser_count();
 
     println!("✅ 解析器注册表创建成功，包含{}个解析器", parser_count);
-    assert_eq!(parser_count, 7, "应该有7个解析器");
+    assert_eq!(
+        parser_count, 8,
+        "应该有8个解析器（包括新增的LP变更解析器和REF程序的奖励分发解析器）"
+    );
 
     let parsers = registry.get_registered_parsers();
     for (parser_type, discriminator) in parsers {

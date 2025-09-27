@@ -7,20 +7,20 @@
 //
 //////////////////////////////////////////////////////////////////////
 
+use auth::permission_config;
+use clmm::{clmm_config, clmm_pool, position, refer, reward, token_info};
+use cpmm::{cpmm_config, lp_change_event};
 use mongodb::{Client, Collection}; // 源码中集成了mongodb，因此数据是直接存储在这个程序中的(此处的是driver还是mongodb本身?)
 use std::sync::Arc;
 use tracing::{error, info};
-use auth::permission_config;
-use clmm::{clmm_config, clmm_pool, position, refer, reward, token_info};
-use cpmm::cpmm_config;
 use utils::{AppConfig, AppResult};
 
-pub mod serde_helpers;
-pub mod user;
+pub mod auth;
 pub mod clmm;
 pub mod cpmm;
 pub mod events;
-pub mod auth;
+pub mod serde_helpers;
+pub mod user;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -42,6 +42,8 @@ pub struct Database {
     pub launch_events: Collection<event_model::LaunchEvent>,
     pub deposit_events: Collection<event_model::DepositEvent>,
     pub token_creation_events: Collection<event_model::TokenCreationEvent>,
+    // LP变更事件集合
+    pub lp_change_events: Collection<lp_change_event::model::LpChangeEvent>,
     // 事件扫描器集合
     pub event_scanner_checkpoints: Collection<event_scanner::model::EventScannerCheckpoints>,
     pub scan_records: Collection<event_scanner::model::ScanRecords>,
@@ -59,6 +61,8 @@ pub struct Database {
     pub launch_event_repository: event_model::repository::LaunchEventRepository,
     pub deposit_event_repository: event_model::repository::DepositEventRepository,
     pub token_creation_event_repository: event_model::repository::TokenCreationEventRepository,
+    // LP变更事件仓库
+    pub lp_change_event_repository: lp_change_event::repository::LpChangeEventRepository,
     // 事件扫描器仓库
     pub event_scanner_checkpoint_repository: event_scanner::repository::EventScannerCheckpointRepository,
     pub scan_record_repository: event_scanner::repository::ScanRecordRepository,
@@ -87,6 +91,8 @@ impl Database {
         let launch_events = db.collection("LaunchEvent");
         let deposit_events = db.collection("DepositEvent");
         let token_creation_events = db.collection("TokenCreationEvent");
+        // LP变更事件集合
+        let lp_change_events = db.collection("LpChangeEvent");
         // 事件扫描器集合
         let event_scanner_checkpoints = db.collection("EventScannerCheckpoints");
         let scan_records = db.collection("ScanRecords");
@@ -112,6 +118,8 @@ impl Database {
         let deposit_event_repository = event_model::repository::DepositEventRepository::new(deposit_events.clone());
         let token_creation_event_repository =
             event_model::repository::TokenCreationEventRepository::new(token_creation_events.clone());
+        // LP变更事件仓库
+        let lp_change_event_repository = lp_change_event::repository::LpChangeEventRepository::new(&db);
         // 事件扫描器仓库
         let event_scanner_checkpoint_repository =
             event_scanner::repository::EventScannerCheckpointRepository::new(event_scanner_checkpoints.clone());
@@ -137,6 +145,7 @@ impl Database {
             launch_events,
             deposit_events,
             token_creation_events,
+            lp_change_events,
             event_scanner_checkpoints,
             scan_records,
             clmm_pool_repository,
@@ -151,6 +160,7 @@ impl Database {
             launch_event_repository,
             deposit_event_repository,
             token_creation_event_repository,
+            lp_change_event_repository,
             event_scanner_checkpoint_repository,
             scan_record_repository,
         })
@@ -177,6 +187,9 @@ impl Database {
         let _result = self.launch_event_repository.init_indexes().await;
         let _result = self.deposit_event_repository.init_indexes().await;
         let _result = self.token_creation_event_repository.init_indexes().await;
+
+        // 初始化LP变更事件索引
+        let _result = self.lp_change_event_repository.init_indexes().await;
 
         // 初始化事件扫描器索引
         let _result = self.event_scanner_checkpoint_repository.init_indexes().await;

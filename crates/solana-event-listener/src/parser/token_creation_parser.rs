@@ -52,8 +52,8 @@ pub struct TokenCreationParser {
 impl TokenCreationParser {
     /// 创建新的代币创建事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        // 代币创建事件的discriminator
-        let discriminator = [67, 72, 26, 56, 174, 158, 245, 106];
+        // 根据设计文档，使用事件类型名称计算discriminator
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("TokenCreationEvent");
 
         Ok(Self {
             discriminator,
@@ -365,7 +365,10 @@ mod tests {
 
         assert_eq!(parser.get_event_type(), "token_creation");
         // assert_eq!(parser.get_discriminator(), [142, 175, 175, 21, 74, 229, 126, 116]);
-        assert_eq!(parser.get_discriminator(), [67, 72, 26, 56, 174, 158, 245, 106]);
+        assert_eq!(
+            parser.get_discriminator(),
+            crate::parser::event_parser::calculate_event_discriminator("TokenCreationEvent")
+        );
     }
 
     #[tokio::test]

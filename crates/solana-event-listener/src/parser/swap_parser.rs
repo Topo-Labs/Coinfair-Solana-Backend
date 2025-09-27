@@ -49,8 +49,8 @@ pub struct SwapParser {
 impl SwapParser {
     /// 创建新的交换事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        // 交换事件的discriminator（与TokenCreationEvent相同）
-        let discriminator = [64, 198, 205, 232, 38, 8, 113, 226];
+        // 根据设计文档，使用事件类型名称计算discriminator
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("SwapEvent");
 
         Ok(Self {
             discriminator,
@@ -255,7 +255,7 @@ mod tests {
             "QMbN6CYIceLMGVG4MU+4ATrjvnYksJMPuMJgCPDP1rdRiKjoj6HsZW5rIlaQU+bQ2trw/mEw5Ts8MT5LpaWvcjF+jxy32bzweGbf5NhXXDsAo6eSe6tqrro9sQFopURaKkodvL3GGqAbpd/JYbZV98UXob/ADOEQw+2rDIEszGzDveqoHB9EswjsDgAAAAAAAAAAAAAAAABAQg8AAAAAAAAAAAAAAAAAAOBhVPT8qoQCAQAAAAAAAABPO8PfAAAAAAAAAAAAAAAAwwAAAA==",
         ];
 
-        let expected_swap_discriminator = [64, 198, 205, 232, 38, 8, 113, 226];
+        let expected_swap_discriminator = crate::parser::event_parser::calculate_event_discriminator("SwapEvent");
 
         for (i, data_str) in program_data_samples.iter().enumerate() {
             println!("=== 测试 Program data {} ===", i + 1);
@@ -330,7 +330,10 @@ mod tests {
         let parser = SwapParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "swap");
-        assert_eq!(parser.get_discriminator(), [64, 198, 205, 232, 38, 8, 113, 226]);
+        assert_eq!(
+            parser.get_discriminator(),
+            crate::parser::event_parser::calculate_event_discriminator("SwapEvent")
+        );
     }
 
     #[test]

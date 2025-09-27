@@ -1,8 +1,9 @@
 use crate::config::EventListenerConfig;
 use crate::error::{EventListenerError, Result};
+use crate::parser::cpmm_lp_change_parser::LpChangeEventData;
 use crate::parser::{
-    DepositEventParser, LaunchEventParser, NftClaimParser, PoolCreationParser, RewardDistributionParser, SwapParser,
-    TokenCreationParser,
+    DepositEventParser, LaunchEventParser, LpChangeParser, NftClaimParser, PoolCreationParser,
+    RewardDistributionParser, SwapParser, TokenCreationParser,
 };
 use anchor_lang::pubkey;
 use async_trait::async_trait;
@@ -96,6 +97,8 @@ pub enum ParsedEvent {
     Launch(LaunchEventData),
     /// 存款事件
     Deposit(DepositEventData),
+    /// LP变更事件
+    LpChange(LpChangeEventData),
 }
 
 impl ParsedEvent {
@@ -109,6 +112,7 @@ impl ParsedEvent {
             ParsedEvent::Swap(_) => "swap",
             ParsedEvent::Launch(_) => "launch",
             ParsedEvent::Deposit(_) => "deposit",
+            ParsedEvent::LpChange(_) => "lp_change",
         }
     }
 
@@ -122,6 +126,7 @@ impl ParsedEvent {
             ParsedEvent::Swap(data) => format!("{}_{}", data.pool_address, data.signature),
             ParsedEvent::Launch(data) => format!("{}_{}", data.meme_token_mint, data.signature),
             ParsedEvent::Deposit(data) => format!("{}_{}_{}", data.user, data.token_mint, data.signature),
+            ParsedEvent::LpChange(data) => data.signature.clone(), // 使用signature作为唯一标识
         }
     }
 }
@@ -571,6 +576,13 @@ impl EventParserRegistry {
             pubkey!("AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH"),
         )?);
         registry.register_program_parser(launch_parser1)?;
+
+        // 使用默认的Raydium CPMM程序ID
+        let lp_change_parser = Box::new(LpChangeParser::new(
+            config,
+            pubkey!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"),
+        )?);
+        registry.register_program_parser(lp_change_parser)?;
 
         Ok(registry)
     }

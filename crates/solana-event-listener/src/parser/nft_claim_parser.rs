@@ -33,9 +33,8 @@ pub struct NftClaimParser {
 impl NftClaimParser {
     /// 创建新的NFT领取事件解析器
     pub fn new(_config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        // NFT领取事件的discriminator
-        // let discriminator = [92, 29, 201, 154, 132, 203, 150, 105];
-        let discriminator = [0, 164, 135, 76, 199, 190, 102, 78];
+        // 根据设计文档，使用事件类型名称计算discriminator
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("ClaimNFTEvent");
 
         Ok(Self {
             discriminator,
@@ -256,12 +255,12 @@ impl NftClaimParser {
         }
 
         // 验证推荐人不能是自己
-        // if let Some(referrer) = &event.referrer {
-        //     if referrer == &event.claimer {
-        //         warn!("❌ 推荐人不能是自己: {}", event.claimer);
-        //         return Ok(false);
-        //     }
-        // }
+        if let Some(referrer) = &event.referrer {
+            if referrer == &event.claimer {
+                warn!("❌ 推荐人不能是自己: {}", event.claimer);
+                return Ok(false);
+            }
+        }
 
         // 验证奖励金额的合理性
         if event.bonus_amount > event.claim_amount * 10 {
@@ -394,7 +393,10 @@ mod tests {
         let parser = NftClaimParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "nft_claim");
-        assert_eq!(parser.get_discriminator(), [0, 164, 135, 76, 199, 190, 102, 78]);
+        assert_eq!(
+            parser.get_discriminator(),
+            crate::parser::event_parser::calculate_event_discriminator("ClaimNFTEvent")
+        );
     }
 
     #[test]
