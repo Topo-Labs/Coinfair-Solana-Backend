@@ -10,6 +10,10 @@ pub struct LpChangeEvent {
     pub pool_id: Pubkey,
     /// lp mint address
     pub lp_mint: Pubkey,
+    /// token_0 mint address
+    pub token_0_mint: Pubkey,
+    /// token_1 mint address
+    pub token_1_mint: Pubkey,
     /// lp amount before
     pub lp_amount_before: u64,
     /// pool vault sub trade fees
@@ -25,9 +29,17 @@ pub struct LpChangeEvent {
     // 0: deposit, 1: withdraw, 2: initialize
     pub change_type: u8,
     /// program id of lp mint
-    pub program_id: Pubkey,
+    pub lp_mint_program_id: Pubkey,
+    /// token_0 program id
+    pub token_0_program_id: Pubkey,
+    /// token_1 program id
+    pub token_1_program_id: Pubkey,
     /// decimals of lp mint
-    pub decimals: u8,
+    pub lp_mint_decimals: u8,
+    /// token_0 decimals
+    pub token_0_decimals: u8,
+    /// token_1 decimals
+    pub token_1_decimals: u8,
 }
 
 /// Emitted when swap

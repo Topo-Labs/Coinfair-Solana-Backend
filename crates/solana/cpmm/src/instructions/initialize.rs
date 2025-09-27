@@ -318,6 +318,8 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         user_wallet: ctx.accounts.creator.key(),
         pool_id: ctx.accounts.pool_state.key(),
         lp_mint: ctx.accounts.lp_mint.key(),
+        token_0_mint: ctx.accounts.token_0_mint.key(),
+        token_1_mint: ctx.accounts.token_1_mint.key(),
         lp_amount_before: pool_state.lp_supply,
         token_0_vault_before: ctx.accounts.token_0_vault.lamports(),
         token_1_vault_before: ctx.accounts.token_1_vault.lamports(),
@@ -326,8 +328,12 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         token_0_transfer_fee: 0,
         token_1_transfer_fee: 0,
         change_type: 1,
-        program_id: ctx.accounts.lp_mint.to_account_info().owner.to_owned(),
-        decimals: ctx.accounts.lp_mint.decimals,
+        lp_mint_program_id: ctx.accounts.lp_mint.to_account_info().owner.to_owned(),
+        token_0_program_id: ctx.accounts.token_0_mint.to_account_info().owner.to_owned(),
+        token_1_program_id: ctx.accounts.token_1_mint.to_account_info().owner.to_owned(),
+        lp_mint_decimals: ctx.accounts.lp_mint.decimals,
+        token_0_decimals: ctx.accounts.token_0_mint.decimals,
+        token_1_decimals: ctx.accounts.token_1_mint.decimals,
     });
 
     Ok(())
