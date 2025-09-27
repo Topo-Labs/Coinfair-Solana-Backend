@@ -1,13 +1,13 @@
-use crate::dtos::solana::cpmm::lp_change_event::{
+use crate::dtos::solana::cpmm::lp::lp_change_event::{
     CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
 };
 use crate::services::solana::cpmm::lp_change_event::lp_change_event_error::LpChangeEventError;
 use anyhow::Result;
 use database::cpmm::lp_change_event::{model::LpChangeEvent, repository::LpChangeEventRepository};
 use database::Database;
+use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{doc, Document};
 use mongodb::options::FindOptions;
-use mongodb::bson::oid::ObjectId;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
@@ -29,7 +29,10 @@ impl LpChangeEventService {
     }
 
     /// 创建新的LP变更事件
-    pub async fn create_event(&self, request: CreateLpChangeEventRequest) -> Result<LpChangeEventResponse, LpChangeEventError> {
+    pub async fn create_event(
+        &self,
+        request: CreateLpChangeEventRequest,
+    ) -> Result<LpChangeEventResponse, LpChangeEventError> {
         info!("创建LP变更事件，signature: {}", request.signature);
 
         // 检查事件是否已存在（通过signature去重）
@@ -79,9 +82,8 @@ impl LpChangeEventService {
         debug!("根据ID查询事件: {}", id);
 
         // 解析ObjectId
-        let object_id = ObjectId::parse_str(id).map_err(|_| {
-            LpChangeEventError::ValidationError(format!("无效的事件ID格式: {}", id))
-        })?;
+        let object_id = ObjectId::parse_str(id)
+            .map_err(|_| LpChangeEventError::ValidationError(format!("无效的事件ID格式: {}", id)))?;
 
         // 查询事件
         match self.get_repository().find_by_id(&object_id).await {
@@ -105,9 +107,7 @@ impl LpChangeEventService {
         debug!("根据signature查询事件: {}", signature);
 
         if signature.is_empty() {
-            return Err(LpChangeEventError::ValidationError(
-                "signature不能为空".to_string(),
-            ));
+            return Err(LpChangeEventError::ValidationError("signature不能为空".to_string()));
         }
 
         match self.get_repository().find_by_signature(signature).await {
@@ -127,7 +127,10 @@ impl LpChangeEventService {
     }
 
     /// 分页查询事件
-    pub async fn query_events(&self, request: QueryLpChangeEventsRequest) -> Result<LpChangeEventsPageResponse, LpChangeEventError> {
+    pub async fn query_events(
+        &self,
+        request: QueryLpChangeEventsRequest,
+    ) -> Result<LpChangeEventsPageResponse, LpChangeEventError> {
         info!("分页查询LP变更事件，参数: {:?}", request);
 
         // 验证分页参数
@@ -136,9 +139,7 @@ impl LpChangeEventService {
         let skip = request.get_skip();
 
         if page_size > 100 {
-            return Err(LpChangeEventError::PaginationError(
-                "每页大小不能超过100".to_string(),
-            ));
+            return Err(LpChangeEventError::PaginationError("每页大小不能超过100".to_string()));
         }
 
         // 构建查询过滤器
@@ -152,7 +153,10 @@ impl LpChangeEventService {
             .build();
 
         // 执行查询
-        let events_result = self.get_repository().find_with_filter(filter.clone(), find_options).await;
+        let events_result = self
+            .get_repository()
+            .find_with_filter(filter.clone(), find_options)
+            .await;
         let total_result = self.get_repository().count_with_filter(filter).await;
 
         match (events_result, total_result) {
@@ -172,9 +176,8 @@ impl LpChangeEventService {
         info!("删除LP变更事件，ID: {}", id);
 
         // 解析ObjectId
-        let object_id = ObjectId::parse_str(id).map_err(|_| {
-            LpChangeEventError::ValidationError(format!("无效的事件ID格式: {}", id))
-        })?;
+        let object_id = ObjectId::parse_str(id)
+            .map_err(|_| LpChangeEventError::ValidationError(format!("无效的事件ID格式: {}", id)))?;
 
         // 检查事件是否存在
         match self.get_repository().find_by_id(&object_id).await {
@@ -292,15 +295,16 @@ impl LpChangeEventService {
         debug!("获取用户事件统计信息: {}", user_wallet);
 
         if user_wallet.is_empty() {
-            return Err(LpChangeEventError::ValidationError(
-                "用户钱包地址不能为空".to_string(),
-            ));
+            return Err(LpChangeEventError::ValidationError("用户钱包地址不能为空".to_string()));
         }
 
         let filter = doc! { "user_wallet": user_wallet };
 
         // 获取总数量
-        let total_events = self.get_repository().count_with_filter(filter.clone()).await
+        let total_events = self
+            .get_repository()
+            .count_with_filter(filter.clone())
+            .await
             .map_err(LpChangeEventError::DatabaseError)?;
 
         // 按类型统计
@@ -308,11 +312,20 @@ impl LpChangeEventService {
         let withdraw_filter = doc! { "user_wallet": user_wallet, "change_type": 1 };
         let initialize_filter = doc! { "user_wallet": user_wallet, "change_type": 2 };
 
-        let deposit_count = self.get_repository().count_with_filter(deposit_filter).await
+        let deposit_count = self
+            .get_repository()
+            .count_with_filter(deposit_filter)
+            .await
             .map_err(LpChangeEventError::DatabaseError)?;
-        let withdraw_count = self.get_repository().count_with_filter(withdraw_filter).await
+        let withdraw_count = self
+            .get_repository()
+            .count_with_filter(withdraw_filter)
+            .await
             .map_err(LpChangeEventError::DatabaseError)?;
-        let initialize_count = self.get_repository().count_with_filter(initialize_filter).await
+        let initialize_count = self
+            .get_repository()
+            .count_with_filter(initialize_filter)
+            .await
             .map_err(LpChangeEventError::DatabaseError)?;
 
         Ok(UserEventStats {
@@ -460,21 +473,55 @@ mod tests {
             lp_change_events: mock_mongodb.collection("LpChangeEvent"),
             event_scanner_checkpoints: mock_mongodb.collection("EventScannerCheckpoints"),
             scan_records: mock_mongodb.collection("ScanRecords"),
-            clmm_pool_repository: database::clmm::clmm_pool::repository::ClmmPoolRepository::new(mock_mongodb.collection("ClmmPool")),
-            cpmm_config_repository: database::cpmm::cpmm_config::repository::CpmmConfigRepository::new(mock_mongodb.collection("CpmmConfig")),
-            global_permission_repository: database::auth::permission_config::repository::GlobalPermissionConfigRepository::new(mock_mongodb.collection("GlobalSolanaPermissionConfig")),
-            api_permission_repository: database::auth::permission_config::repository::ApiPermissionConfigRepository::new(mock_mongodb.collection("SolanaApiPermissionConfig")),
-            permission_log_repository: database::auth::permission_config::repository::PermissionConfigLogRepository::new(mock_mongodb.collection("PermissionConfigLog")),
-            token_info_repository: database::clmm::token_info::repository::TokenInfoRepository::new(mock_mongodb.collection("TokenInfo")),
-            clmm_pool_event_repository: database::events::event_model::repository::ClmmPoolEventRepository::new(mock_mongodb.collection("ClmmPoolEvent")),
-            nft_claim_event_repository: database::events::event_model::repository::NftClaimEventRepository::new(mock_mongodb.collection("NftClaimEvent")),
-            reward_distribution_event_repository: database::events::event_model::repository::RewardDistributionEventRepository::new(mock_mongodb.collection("RewardDistributionEvent")),
-            launch_event_repository: database::events::event_model::repository::LaunchEventRepository::new(mock_mongodb.collection("LaunchEvent")),
-            deposit_event_repository: database::events::event_model::repository::DepositEventRepository::new(mock_mongodb.collection("DepositEvent")),
-            token_creation_event_repository: database::events::event_model::repository::TokenCreationEventRepository::new(mock_mongodb.collection("TokenCreationEvent")),
+            clmm_pool_repository: database::clmm::clmm_pool::repository::ClmmPoolRepository::new(
+                mock_mongodb.collection("ClmmPool"),
+            ),
+            cpmm_config_repository: database::cpmm::cpmm_config::repository::CpmmConfigRepository::new(
+                mock_mongodb.collection("CpmmConfig"),
+            ),
+            global_permission_repository:
+                database::auth::permission_config::repository::GlobalPermissionConfigRepository::new(
+                    mock_mongodb.collection("GlobalSolanaPermissionConfig"),
+                ),
+            api_permission_repository:
+                database::auth::permission_config::repository::ApiPermissionConfigRepository::new(
+                    mock_mongodb.collection("SolanaApiPermissionConfig"),
+                ),
+            permission_log_repository:
+                database::auth::permission_config::repository::PermissionConfigLogRepository::new(
+                    mock_mongodb.collection("PermissionConfigLog"),
+                ),
+            token_info_repository: database::clmm::token_info::repository::TokenInfoRepository::new(
+                mock_mongodb.collection("TokenInfo"),
+            ),
+            clmm_pool_event_repository: database::events::event_model::repository::ClmmPoolEventRepository::new(
+                mock_mongodb.collection("ClmmPoolEvent"),
+            ),
+            nft_claim_event_repository: database::events::event_model::repository::NftClaimEventRepository::new(
+                mock_mongodb.collection("NftClaimEvent"),
+            ),
+            reward_distribution_event_repository:
+                database::events::event_model::repository::RewardDistributionEventRepository::new(
+                    mock_mongodb.collection("RewardDistributionEvent"),
+                ),
+            launch_event_repository: database::events::event_model::repository::LaunchEventRepository::new(
+                mock_mongodb.collection("LaunchEvent"),
+            ),
+            deposit_event_repository: database::events::event_model::repository::DepositEventRepository::new(
+                mock_mongodb.collection("DepositEvent"),
+            ),
+            token_creation_event_repository:
+                database::events::event_model::repository::TokenCreationEventRepository::new(
+                    mock_mongodb.collection("TokenCreationEvent"),
+                ),
             lp_change_event_repository: LpChangeEventRepository::new(&mock_mongodb),
-            event_scanner_checkpoint_repository: database::events::event_scanner::repository::EventScannerCheckpointRepository::new(mock_mongodb.collection("EventScannerCheckpoints")),
-            scan_record_repository: database::events::event_scanner::repository::ScanRecordRepository::new(mock_mongodb.collection("ScanRecords")),
+            event_scanner_checkpoint_repository:
+                database::events::event_scanner::repository::EventScannerCheckpointRepository::new(
+                    mock_mongodb.collection("EventScannerCheckpoints"),
+                ),
+            scan_record_repository: database::events::event_scanner::repository::ScanRecordRepository::new(
+                mock_mongodb.collection("ScanRecords"),
+            ),
         };
 
         LpChangeEventService::new(Arc::new(mock_database))

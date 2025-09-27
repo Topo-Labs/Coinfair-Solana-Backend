@@ -1,5 +1,5 @@
 use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
-use crate::dtos::solana::cpmm::lp_change_event::{
+use crate::dtos::solana::cpmm::lp::lp_change_event::{
     CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
 };
 use crate::extractors::validation_extractor::ValidationExtractor;
@@ -56,8 +56,12 @@ pub async fn create_lp_change_event(
         }
         Err(e) => {
             error!("创建LP变更事件失败: {}", e);
-            let error_response = ErrorResponse::new("LP_CHANGE_EVENT_CREATE_FAILED", &format!("创建LP变更事件失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            let error_response =
+                ErrorResponse::new("LP_CHANGE_EVENT_CREATE_FAILED", &format!("创建LP变更事件失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -124,7 +128,10 @@ pub async fn get_event_by_signature(
         }
         Err(e) => {
             error!("根据signature查询LP变更事件失败: {}", e);
-            let error_response = ErrorResponse::new("LP_CHANGE_EVENT_NOT_FOUND", &format!("根据signature查询LP变更事件失败: {}", e));
+            let error_response = ErrorResponse::new(
+                "LP_CHANGE_EVENT_NOT_FOUND",
+                &format!("根据signature查询LP变更事件失败: {}", e),
+            );
             Err((StatusCode::NOT_FOUND, Json(ApiResponse::error(error_response))))
         }
     }
@@ -158,8 +165,12 @@ pub async fn query_lp_change_events(
         }
         Err(e) => {
             error!("查询LP变更事件失败: {}", e);
-            let error_response = ErrorResponse::new("LP_CHANGE_EVENT_QUERY_FAILED", &format!("查询LP变更事件失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            let error_response =
+                ErrorResponse::new("LP_CHANGE_EVENT_QUERY_FAILED", &format!("查询LP变更事件失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -197,14 +208,19 @@ pub async fn delete_lp_change_event(
                 Ok(Json(ApiResponse::success(success_data)))
             } else {
                 error!("删除LP变更事件失败，事件可能不存在: id={}", id);
-                let error_response = ErrorResponse::new("LP_CHANGE_EVENT_NOT_FOUND", &format!("LP变更事件未找到: {}", id));
+                let error_response =
+                    ErrorResponse::new("LP_CHANGE_EVENT_NOT_FOUND", &format!("LP变更事件未找到: {}", id));
                 Err((StatusCode::NOT_FOUND, Json(ApiResponse::error(error_response))))
             }
         }
         Err(e) => {
             error!("删除LP变更事件失败: {}", e);
-            let error_response = ErrorResponse::new("LP_CHANGE_EVENT_DELETE_FAILED", &format!("删除LP变更事件失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            let error_response =
+                ErrorResponse::new("LP_CHANGE_EVENT_DELETE_FAILED", &format!("删除LP变更事件失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }
@@ -246,8 +262,12 @@ pub async fn get_user_event_stats(
         }
         Err(e) => {
             error!("获取用户事件统计失败: {}", e);
-            let error_response = ErrorResponse::new("LP_CHANGE_EVENT_STATS_FAILED", &format!("获取用户事件统计失败: {}", e));
-            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::error(error_response))))
+            let error_response =
+                ErrorResponse::new("LP_CHANGE_EVENT_STATS_FAILED", &format!("获取用户事件统计失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
         }
     }
 }

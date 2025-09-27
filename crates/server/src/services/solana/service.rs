@@ -8,7 +8,7 @@ use super::shared::{SharedContext, SolanaHelpers};
 use crate::dtos::solana::cpmm::deposit::{
     CpmmDepositAndSendRequest, CpmmDepositAndSendResponse, CpmmDepositCompute, CpmmDepositRequest, CpmmDepositResponse,
 };
-use crate::dtos::solana::cpmm::lp_change_event::{
+use crate::dtos::solana::cpmm::lp::lp_change_event::{
     CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
 };
 use crate::dtos::solana::cpmm::withdraw::{
@@ -846,12 +846,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // Launch Migration query operations - delegate to launch_migration service
-    async fn get_user_launch_history(
-        &self,
-        creator_wallet: &str,
-        page: u64,
-        limit: u64,
-    ) -> Result<Vec<ClmmPool>> {
+    async fn get_user_launch_history(&self, creator_wallet: &str, page: u64, limit: u64) -> Result<Vec<ClmmPool>> {
         self.launch_migration
             .get_user_launch_history(creator_wallet, page, limit)
             .await
