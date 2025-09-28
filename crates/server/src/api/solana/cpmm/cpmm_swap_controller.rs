@@ -1,17 +1,11 @@
 use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
 use crate::dtos::solana::cpmm::swap::{
-    CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse,
-    CpmmSwapBaseInTransactionRequest, CpmmSwapBaseOutCompute, CpmmSwapBaseOutRequest,
-    CpmmSwapBaseOutResponse, CpmmSwapBaseOutTransactionRequest, CpmmTransactionData,
+    CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse, CpmmSwapBaseInTransactionRequest,
+    CpmmSwapBaseOutCompute, CpmmSwapBaseOutRequest, CpmmSwapBaseOutResponse, CpmmSwapBaseOutTransactionRequest,
+    CpmmTransactionData,
 };
 use crate::{extractors::validation_extractor::ValidationExtractor, services::Services};
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::Json,
-    routing::post,
-    Router,
-};
+use axum::{extract::Extension, http::StatusCode, response::Json, routing::post, Router};
 use tracing::{error, info};
 
 /// CPMM交换控制器
@@ -21,12 +15,12 @@ impl CpmmSwapController {
     /// 创建CPMM交换相关路由
     pub fn routes() -> Router {
         Router::new()
-            .route("/cpmm/swap/base-in", post(swap_base_in))
-            .route("/cpmm/swap/base-in/compute", post(compute_swap_base_in))
-            .route("/cpmm/swap/base-in/transaction", post(build_swap_base_in_transaction))
-            .route("/cpmm/swap/base-out", post(swap_base_out))
-            .route("/cpmm/swap/base-out/compute", post(compute_swap_base_out))
-            .route("/cpmm/swap/base-out/transaction", post(build_swap_base_out_transaction))
+            .route("/cpmm/compute/swap-base-in", post(compute_swap_base_in))
+            .route("/cpmm/transaction/swap-base-in", post(build_swap_base_in))
+            .route("/cpmm/local-send/swap-base-in", post(send_swap_base_in))
+            .route("/cpmm/compute/swap-base-out", post(compute_swap_base_out))
+            .route("/cpmm/transaction/swap-base-out", post(build_swap_base_out))
+            .route("/cpmm/local-send/swap-base-out", post(send_swap_base_out))
     }
 }
 
@@ -67,7 +61,7 @@ impl CpmmSwapController {
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/cpmm/swap/base-in",
+    path = "/api/v1/solana/cpmm/local-send/swap-base-in",
     request_body = CpmmSwapBaseInRequest,
     responses(
         (status = 200, description = "交换成功", body = ApiResponse<CpmmSwapBaseInResponse>),
@@ -76,7 +70,7 @@ impl CpmmSwapController {
     ),
     tag = "CPMM交换"
 )]
-pub async fn swap_base_in(
+pub async fn send_swap_base_in(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CpmmSwapBaseInRequest>,
 ) -> Result<Json<ApiResponse<CpmmSwapBaseInResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
@@ -145,7 +139,7 @@ pub async fn swap_base_in(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/cpmm/swap/base-in/compute",
+    path = "/api/v1/solana/cpmm/compute/swap-base-in/",
     request_body = CpmmSwapBaseInRequest,
     responses(
         (status = 200, description = "计算成功", body = ApiResponse<CpmmSwapBaseInCompute>),
@@ -213,7 +207,7 @@ pub async fn compute_swap_base_in(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/cpmm/swap/base-in/transaction",
+    path = "/api/v1/solana/cpmm/transaction/swap-base-in/",
     request_body = CpmmSwapBaseInTransactionRequest,
     responses(
         (status = 200, description = "交易构建成功", body = ApiResponse<CpmmTransactionData>),
@@ -222,7 +216,7 @@ pub async fn compute_swap_base_in(
     ),
     tag = "CPMM交换"
 )]
-pub async fn build_swap_base_in_transaction(
+pub async fn build_swap_base_in(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CpmmSwapBaseInTransactionRequest>,
 ) -> Result<Json<ApiResponse<CpmmTransactionData>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
@@ -241,7 +235,10 @@ pub async fn build_swap_base_in_transaction(
         }
         Err(e) => {
             error!("❌ CPMM SwapBaseIn交易构建失败: {:?}", e);
-            let error_response = ErrorResponse::new("CPMM_TRANSACTION_BUILD_FAILED", &format!("CPMM SwapBaseIn交易构建失败: {}", e));
+            let error_response = ErrorResponse::new(
+                "CPMM_TRANSACTION_BUILD_FAILED",
+                &format!("CPMM SwapBaseIn交易构建失败: {}", e),
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(error_response)),
@@ -288,7 +285,7 @@ pub async fn build_swap_base_in_transaction(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/cpmm/swap/base-out",
+    path = "/api/v1/solana/cpmm/local-send/swap-base-out",
     request_body = CpmmSwapBaseOutRequest,
     responses(
         (status = 200, description = "交换成功", body = ApiResponse<CpmmSwapBaseOutResponse>),
@@ -297,7 +294,7 @@ pub async fn build_swap_base_in_transaction(
     ),
     tag = "CPMM交换"
 )]
-pub async fn swap_base_out(
+pub async fn send_swap_base_out(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CpmmSwapBaseOutRequest>,
 ) -> Result<Json<ApiResponse<CpmmSwapBaseOutResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
@@ -313,7 +310,8 @@ pub async fn swap_base_out(
         }
         Err(e) => {
             error!("❌ CPMM SwapBaseOut失败: {:?}", e);
-            let error_response = ErrorResponse::new("CPMM_SWAP_BASE_OUT_FAILED", &format!("CPMM SwapBaseOut失败: {}", e));
+            let error_response =
+                ErrorResponse::new("CPMM_SWAP_BASE_OUT_FAILED", &format!("CPMM SwapBaseOut失败: {}", e));
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(error_response)),
@@ -435,7 +433,7 @@ pub async fn compute_swap_base_out(
 /// ```
 #[utoipa::path(
     post,
-    path = "/api/v1/solana/cpmm/swap/base-out/transaction",
+    path = "/api/v1/solana/cpmm/transaction/swap-base-out/",
     request_body = CpmmSwapBaseOutTransactionRequest,
     responses(
         (status = 200, description = "交易构建成功", body = ApiResponse<CpmmTransactionData>),
@@ -444,7 +442,7 @@ pub async fn compute_swap_base_out(
     ),
     tag = "CPMM交换"
 )]
-pub async fn build_swap_base_out_transaction(
+pub async fn build_swap_base_out(
     Extension(services): Extension<Services>,
     ValidationExtractor(request): ValidationExtractor<CpmmSwapBaseOutTransactionRequest>,
 ) -> Result<Json<ApiResponse<CpmmTransactionData>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
@@ -463,7 +461,10 @@ pub async fn build_swap_base_out_transaction(
         }
         Err(e) => {
             error!("❌ CPMM SwapBaseOut交易构建失败: {:?}", e);
-            let error_response = ErrorResponse::new("CPMM_TRANSACTION_BUILD_FAILED", &format!("CPMM SwapBaseOut交易构建失败: {}", e));
+            let error_response = ErrorResponse::new(
+                "CPMM_TRANSACTION_BUILD_FAILED",
+                &format!("CPMM SwapBaseOut交易构建失败: {}", e),
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(error_response)),

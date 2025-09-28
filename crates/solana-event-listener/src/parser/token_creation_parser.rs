@@ -5,11 +5,9 @@ use crate::{
 };
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use database::clmm::token_info::{DataSource, TokenInfo, TokenInfoRepository};
-use mongodb::Client;
+use database::clmm::token_info::DataSource;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
-use std::sync::Arc;
 use tracing::{info, warn};
 
 /// 代币创建事件的原始数据结构（与智能合约保持一致）
@@ -45,8 +43,8 @@ pub struct TokenCreationParser {
     discriminator: [u8; 8],
     /// 目标程序ID，指定此解析器处理哪个程序的事件
     target_program_id: Pubkey,
-    /// 数据库仓库
-    token_repository: Option<Arc<TokenInfoRepository>>,
+    // 数据库仓库
+    // token_repository: Option<Arc<TokenInfoRepository>>,
 }
 
 impl TokenCreationParser {
@@ -58,30 +56,30 @@ impl TokenCreationParser {
         Ok(Self {
             discriminator,
             target_program_id: program_id,
-            token_repository: None,
+            // token_repository: None,
         })
     }
 
     /// 初始化数据库连接
-    pub async fn init_database(&mut self, config: &EventListenerConfig) -> Result<()> {
-        let client = Client::with_uri_str(&config.database.uri)
-            .await
-            .map_err(|e| EventListenerError::Database(e))?;
+    // pub async fn init_database(&mut self, config: &EventListenerConfig) -> Result<()> {
+    //     let client = Client::with_uri_str(&config.database.uri)
+    //         .await
+    //         .map_err(|e| EventListenerError::Database(e))?;
 
-        let database = client.database(&config.database.database_name);
-        let collection = database.collection::<TokenInfo>("token_info");
-        let repository = Arc::new(TokenInfoRepository::new(collection));
+    //     let database = client.database(&config.database.database_name);
+    //     let collection = database.collection::<TokenInfo>("token_info");
+    //     let repository = Arc::new(TokenInfoRepository::new(collection));
 
-        // 初始化数据库索引
-        repository
-            .init_indexes()
-            .await
-            .map_err(|e| EventListenerError::Persistence(format!("初始化数据库索引失败: {}", e)))?;
+    //     // 初始化数据库索引
+    //     repository
+    //         .init_indexes()
+    //         .await
+    //         .map_err(|e| EventListenerError::Persistence(format!("初始化数据库索引失败: {}", e)))?;
 
-        self.token_repository = Some(repository);
-        info!("✅ 代币创建解析器数据库初始化完成");
-        Ok(())
-    }
+    //     self.token_repository = Some(repository);
+    //     info!("✅ 代币创建解析器数据库初始化完成");
+    //     Ok(())
+    // }
 
     /// 从程序数据解析代币创建事件
     fn parse_program_data(&self, data_str: &str) -> Result<TokenCreationEvent> {
