@@ -6,7 +6,7 @@ use crate::auth::SolanaMiddlewareBuilder;
 use axum::{middleware, Extension, Router};
 use std::sync::Arc;
 use clmm::{clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller, launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller, position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller, swap_v3_controller, token_controller};
-use cpmm::{pool_create_controller, cpmm_swap_controller, cpmm_config_controller, deposit_controller, withdraw_controller};
+use cpmm::{pool_create_controller, cpmm_swap_controller, cpmm_config_controller, deposit_controller, withdraw_controller, lp_change_event_controller};
 
 pub struct SolanaController;
 
@@ -77,7 +77,7 @@ impl SolanaController {
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 
-    /// 事件查询路由 - NFT领取和奖励分发事件、Launch事件、存款事件
+    /// 事件查询路由 - NFT领取和奖励分发事件、Launch事件、存款事件、LP变更事件
     fn event_routes() -> Router {
         Router::new()
             // 基础事件路由 - NFT领取和奖励分发事件
@@ -86,6 +86,8 @@ impl SolanaController {
             .merge(deposit_event_controller::DepositEventController::routes())
             // Launch事件路由
             .nest("/launch", launch_event_controller::LaunchEventController::routes())
+            // LP变更事件路由
+            .nest("/cpmm", lp_change_event_controller::lp_change_event_routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 

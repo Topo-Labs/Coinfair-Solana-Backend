@@ -106,7 +106,7 @@ async fn test_simple_e2e_flow() {
 
     let parser_registry = Arc::new(EventParserRegistry::new(&config).unwrap());
     info!("✅ 解析器注册表: 已注册{}个解析器", parser_registry.parser_count());
-    assert_eq!(parser_registry.parser_count(), 6, "应该有6个解析器");
+    assert_eq!(parser_registry.parser_count(), 8, "应该有8个解析器");
 
     // === 步骤4：初始化指标收集 ===
     info!("📈 步骤4：初始化指标收集");

@@ -1,2 +1,2 @@
-pub mod cpmm_config;
 pub mod lp_change_event;
+pub mod query_lp_mint;

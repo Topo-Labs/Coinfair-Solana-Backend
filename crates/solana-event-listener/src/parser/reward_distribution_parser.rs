@@ -65,8 +65,8 @@ pub struct RewardDistributionParser {
 impl RewardDistributionParser {
     /// 创建新的奖励发放事件解析器
     pub fn new(config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        // 奖励发放事件的discriminator
-        let discriminator = [47, 6, 18, 225, 99, 16, 211, 7];
+        // 根据设计文档，使用事件类型名称计算discriminator
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("ReferralRewardEvent");
 
         // 初始化RPC客户端
         let rpc_client = if !config.solana.rpc_url.is_empty() {
@@ -362,12 +362,12 @@ impl RewardDistributionParser {
         // }
 
         // 验证推荐人不能是自己
-        // if let Some(referrer) = &event.referrer {
-        //     if referrer == &event.recipient {
-        //         warn!("❌ 推荐人不能是自己: {}", event.recipient);
-        //         return Ok(false);
-        //     }
-        // }
+        if let Some(referrer) = &event.referrer {
+            if referrer == &event.recipient {
+                warn!("❌ 推荐人不能是自己: {}", event.recipient);
+                return Ok(false);
+            }
+        }
 
         // 验证推荐奖励的逻辑一致性
         if event.is_referral_reward && event.referrer.is_none() {
@@ -863,7 +863,10 @@ mod tests {
         let parser = RewardDistributionParser::new(&config, Pubkey::new_unique()).unwrap();
 
         assert_eq!(parser.get_event_type(), "reward_distribution");
-        assert_eq!(parser.get_discriminator(), [47, 6, 18, 225, 99, 16, 211, 7]);
+        assert_eq!(
+            parser.get_discriminator(),
+            crate::parser::event_parser::calculate_event_discriminator("ReferralRewardEvent")
+        );
     }
 
     #[test]

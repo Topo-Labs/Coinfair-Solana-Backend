@@ -72,6 +72,8 @@ pub struct ApiResponse<T> {
     /// 是否成功
     pub success: bool,
 
+    pub error: Option<ErrorResponse>,
+
     /// 响应数据
     pub data: Option<T>,
 }
@@ -81,17 +83,36 @@ impl<T> ApiResponse<T> {
         Self {
             id: Uuid::new_v4().to_string(),
             success: true,
+            error: None,
             data: Some(data),
         }
     }
 
-    pub fn error(_error: ErrorResponse) -> Self {
+    pub fn error(error: ErrorResponse) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             success: false,
+            error: Some(error),
             data: None,
         }
     }
+}
+
+/// 代币信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TokenInfo {
+    #[serde(rename = "chainId")]
+    pub chain_id: u32,
+    pub address: String,
+    #[serde(rename = "programId")]
+    pub program_id: String,
+    #[serde(rename = "logoURI")]
+    pub logo_uri: String,
+    pub symbol: String,
+    pub name: String,
+    pub decimals: u8,
+    pub tags: Vec<String>,
+    pub extensions: serde_json::Value,
 }
 
 /// 交易数据响应

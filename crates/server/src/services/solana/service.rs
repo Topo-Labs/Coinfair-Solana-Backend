@@ -2,35 +2,49 @@
 
 use super::clmm::config::{ClmmConfigService, ClmmConfigServiceTrait};
 use super::clmm::pool::ClmmPoolService;
-use super::cpmm::AmmPoolService;
 use super::cpmm::config::{CpmmConfigService, CpmmConfigServiceTrait};
+use super::cpmm::AmmPoolService;
+use super::shared::{SharedContext, SolanaHelpers};
+use crate::dtos::solana::cpmm::deposit::{
+    CpmmDepositAndSendRequest, CpmmDepositAndSendResponse, CpmmDepositCompute, CpmmDepositRequest, CpmmDepositResponse,
+};
+use crate::dtos::solana::cpmm::lp::lp_change_event::{
+    CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
+};
+use crate::dtos::solana::cpmm::lp::query_lp_mint::{LpMintPoolInfo, QueryLpMintRequest};
+use crate::dtos::solana::cpmm::withdraw::{
+    CpmmWithdrawAndSendRequest, CpmmWithdrawAndSendResponse, CpmmWithdrawCompute, CpmmWithdrawRequest,
+    CpmmWithdrawResponse,
+};
 use crate::services::solana::clmm::launch_migration::LaunchMigrationService;
 use crate::services::solana::clmm::liquidity_line::LiquidityLineService;
 use crate::services::solana::clmm::nft::NftService;
 use crate::services::solana::clmm::position::PositionService;
 use crate::services::solana::clmm::referral::ReferralService;
-use super::shared::{SharedContext, SolanaHelpers};
 use crate::services::solana::clmm::swap::SwapService;
-use crate::services::solana::cpmm::swap::CpmmSwapService;
 use crate::services::solana::cpmm::deposit::CpmmDepositService;
-use crate::services::solana::cpmm::CpmmWithdrawService;
+use crate::services::solana::cpmm::lp_change_event::lp_change_event_service::UserEventStats;
+use crate::services::solana::cpmm::lp_change_event::LpMintQueryService;
+use crate::services::solana::cpmm::swap::CpmmSwapService;
+use crate::services::solana::cpmm::{CpmmWithdrawService, LpChangeEventService};
 
 use anyhow::Result;
 use async_trait::async_trait;
+use database::clmm::clmm_pool::{PoolListRequest, PoolListResponse};
+use database::{ClmmPool, PoolQueryParams, PoolStats};
 use std::sync::Arc;
 
-use crate::dtos::solana::common::{TransactionData, WalletInfo};
 use crate::dtos::solana::clmm::launch::{
     LaunchMigrationAndSendTransactionResponse, LaunchMigrationRequest, LaunchMigrationResponse, LaunchMigrationStats,
 };
 use crate::dtos::solana::clmm::nft::claim::{ClaimNftAndSendTransactionResponse, ClaimNftRequest, ClaimNftResponse};
 use crate::dtos::solana::clmm::nft::mint::{MintNftAndSendTransactionResponse, MintNftRequest, MintNftResponse};
-use crate::dtos::solana::cpmm::pool::creation::{
-    CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
-
-};
 use crate::dtos::solana::clmm::pool::creation::{
     CreatePoolAndSendTransactionResponse, CreatePoolRequest, CreatePoolResponse,
+};
+use crate::dtos::solana::common::{TransactionData, WalletInfo};
+use crate::dtos::solana::cpmm::pool::creation::{
+    CreateClassicAmmPoolAndSendTransactionResponse, CreateClassicAmmPoolRequest, CreateClassicAmmPoolResponse,
 };
 
 use crate::dtos::solana::clmm::pool::info::PoolKeyResponse;
@@ -53,17 +67,17 @@ use crate::dtos::solana::clmm::swap::swap_v3::{
     ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
 };
 use crate::dtos::solana::cpmm::swap::{
-    CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse,
-    CpmmSwapBaseInTransactionRequest, CpmmSwapBaseOutCompute, CpmmSwapBaseOutRequest,
-    CpmmSwapBaseOutResponse, CpmmSwapBaseOutTransactionRequest, CpmmTransactionData,
+    CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInResponse, CpmmSwapBaseInTransactionRequest,
+    CpmmSwapBaseOutCompute, CpmmSwapBaseOutRequest, CpmmSwapBaseOutResponse, CpmmSwapBaseOutTransactionRequest,
+    CpmmTransactionData,
 };
 use crate::dtos::statics::static_dto::{
-    ClmmConfig, ClmmConfigResponse, CreateAmmConfigAndSendTransactionResponse, CreateAmmConfigRequest,
-    CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
-    CpmmConfig, CpmmConfigResponse,
+    ClmmConfig, ClmmConfigResponse, CpmmConfig, CpmmConfigResponse, CreateAmmConfigAndSendTransactionResponse,
+    CreateAmmConfigRequest, CreateAmmConfigResponse, SaveClmmConfigRequest, SaveClmmConfigResponse,
 };
 use crate::services::solana::clmm::transform::data_transform::DataTransformService;
 use tokio::sync::Mutex;
+use tracing::{info, warn};
 
 pub type DynSolanaService = Arc<dyn SolanaServiceTrait + Send + Sync>;
 
@@ -75,6 +89,8 @@ pub struct SolanaService {
     cpmm_swap_service: CpmmSwapService,
     cpmm_deposit_service: CpmmDepositService,
     cpmm_withdraw_service: CpmmWithdrawService,
+    lp_change_event_service: LpChangeEventService,
+    lp_mint_query_service: LpMintQueryService,
     position_service: PositionService,
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
@@ -131,6 +147,28 @@ impl SolanaService {
             cpmm_swap_service: CpmmSwapService::new(optimized_shared_context.clone()),
             cpmm_deposit_service: CpmmDepositService::new(optimized_shared_context.clone()),
             cpmm_withdraw_service: CpmmWithdrawService::new(optimized_shared_context.clone()),
+            lp_change_event_service: super::cpmm::lp_change_event::LpChangeEventService::new(Arc::new(
+                database.clone(),
+            )),
+            lp_mint_query_service: {
+                let mut lp_service =
+                    LpMintQueryService::new(Arc::new(database.clone())).expect("Failed to create LpMintQueryService");
+
+                // 创建并注入MetaplexService
+                match utils::metaplex_service::MetaplexService::new(None) {
+                    Ok(metaplex_service) => {
+                        let provider: Arc<Mutex<dyn utils::TokenMetadataProvider>> =
+                            Arc::new(Mutex::new(metaplex_service));
+                        lp_service.set_metadata_provider(provider);
+                        info!("✅ LpMintQueryService MetaplexService 提供者已注入");
+                    }
+                    Err(e) => {
+                        warn!("⚠️ 创建MetaplexService失败: {}，LpMintQueryService将使用默认值", e);
+                    }
+                }
+
+                lp_service
+            },
             position_service: PositionService::with_database(
                 optimized_shared_context.clone(),
                 Arc::new(database.clone()),
@@ -204,25 +242,51 @@ pub trait SolanaServiceTrait {
     async fn compute_cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInCompute>;
     async fn build_cpmm_swap_base_in_transaction(
         &self,
-        request: CpmmSwapBaseInTransactionRequest
+        request: CpmmSwapBaseInTransactionRequest,
     ) -> Result<CpmmTransactionData>;
 
     async fn cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutResponse>;
     async fn compute_cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutCompute>;
     async fn build_cpmm_swap_base_out_transaction(
         &self,
-        request: CpmmSwapBaseOutTransactionRequest
+        request: CpmmSwapBaseOutTransactionRequest,
     ) -> Result<CpmmTransactionData>;
 
     // CPMM Deposit operations
-    async fn cpmm_deposit_liquidity(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositResponse>;
-    async fn cpmm_deposit_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendResponse>;
-    async fn compute_cpmm_deposit(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositCompute>;
+    async fn cpmm_deposit_liquidity(&self, request: CpmmDepositRequest) -> Result<CpmmDepositResponse>;
+    async fn cpmm_deposit_liquidity_and_send(
+        &self,
+        request: CpmmDepositAndSendRequest,
+    ) -> Result<CpmmDepositAndSendResponse>;
+    async fn compute_cpmm_deposit(
+        &self,
+        pool_id: &str,
+        lp_token_amount: u64,
+        slippage: Option<f64>,
+    ) -> Result<CpmmDepositCompute>;
 
     // CPMM Withdraw operations
-    async fn cpmm_withdraw_liquidity(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawResponse>;
-    async fn cpmm_withdraw_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendResponse>;
-    async fn compute_cpmm_withdraw(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawCompute>;
+    async fn cpmm_withdraw_liquidity(&self, request: CpmmWithdrawRequest) -> Result<CpmmWithdrawResponse>;
+    async fn cpmm_withdraw_liquidity_and_send(
+        &self,
+        request: CpmmWithdrawAndSendRequest,
+    ) -> Result<CpmmWithdrawAndSendResponse>;
+    async fn compute_cpmm_withdraw(
+        &self,
+        pool_id: &str,
+        lp_token_amount: u64,
+        slippage: Option<f64>,
+    ) -> Result<CpmmWithdrawCompute>;
+
+    // CPMM LP Change Event operations
+    async fn create_lp_change_event(&self, request: CreateLpChangeEventRequest) -> Result<LpChangeEventResponse>;
+    async fn get_lp_change_event_by_id(&self, id: &str) -> Result<LpChangeEventResponse>;
+    async fn get_lp_change_event_by_signature(&self, signature: &str) -> Result<LpChangeEventResponse>;
+    async fn query_lp_change_events(&self, request: QueryLpChangeEventsRequest) -> Result<LpChangeEventsPageResponse>;
+    async fn delete_lp_change_event(&self, id: &str) -> Result<bool>;
+    async fn get_user_lp_change_event_stats(&self, user_wallet: &str) -> Result<UserEventStats>;
+    // LP mint query operations
+    async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -263,37 +327,17 @@ pub trait SolanaServiceTrait {
     ) -> Result<CreatePoolAndSendTransactionResponse>;
 
     // CLMM Pool query operations
-    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm::clmm_pool::ClmmPool>>;
-    async fn get_pools_by_mint(
-        &self,
-        mint_address: &str,
-        limit: Option<i64>,
-    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>>;
-    async fn get_pools_by_creator(
-        &self,
-        creator_wallet: &str,
-        limit: Option<i64>,
-    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>>;
-    async fn query_pools(
-        &self,
-        params: &database::clmm::clmm_pool::PoolQueryParams,
-    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>>;
-    async fn get_pool_statistics(&self) -> Result<database::clmm::clmm_pool::PoolStats>;
-    async fn query_pools_with_pagination(
-        &self,
-        params: &database::clmm::clmm_pool::model::PoolListRequest,
-    ) -> Result<database::clmm::clmm_pool::model::PoolListResponse>;
+    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<ClmmPool>>;
+    async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<ClmmPool>>;
+    async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<ClmmPool>>;
+    async fn query_pools(&self, params: &PoolQueryParams) -> Result<Vec<ClmmPool>>;
+    async fn get_pool_statistics(&self) -> Result<PoolStats>;
+    async fn query_pools_with_pagination(&self, params: &PoolListRequest) -> Result<PoolListResponse>;
 
     // New method for the expected response format
-    async fn query_pools_with_new_format(
-        &self,
-        params: &database::clmm::clmm_pool::model::PoolListRequest,
-    ) -> Result<NewPoolListResponse>;
+    async fn query_pools_with_new_format(&self, params: &PoolListRequest) -> Result<NewPoolListResponse>;
 
-    async fn query_pools_with_new_format2(
-        &self,
-        params: &database::clmm::clmm_pool::model::PoolListRequest,
-    ) -> Result<NewPoolListResponse2>;
+    async fn query_pools_with_new_format2(&self, params: &PoolListRequest) -> Result<NewPoolListResponse2>;
     // Pool key operations - NEW
     async fn get_pools_key_by_ids(&self, pool_ids: Vec<String>) -> Result<PoolKeyResponse>;
 
@@ -353,12 +397,7 @@ pub trait SolanaServiceTrait {
     ) -> Result<LaunchMigrationAndSendTransactionResponse>;
 
     // Launch Migration query operations
-    async fn get_user_launch_history(
-        &self,
-        creator_wallet: &str,
-        page: u64,
-        limit: u64,
-    ) -> Result<Vec<database::clmm::clmm_pool::model::ClmmPool>>;
+    async fn get_user_launch_history(&self, creator_wallet: &str, page: u64, limit: u64) -> Result<Vec<ClmmPool>>;
 
     async fn get_user_launch_history_count(&self, creator_wallet: &str) -> Result<u64>;
 
@@ -458,9 +497,11 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn build_cpmm_swap_base_in_transaction(
         &self,
-        request: CpmmSwapBaseInTransactionRequest
+        request: CpmmSwapBaseInTransactionRequest,
     ) -> Result<CpmmTransactionData> {
-        self.cpmm_swap_service.build_cpmm_swap_base_in_transaction(request).await
+        self.cpmm_swap_service
+            .build_cpmm_swap_base_in_transaction(request)
+            .await
     }
 
     async fn cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutResponse> {
@@ -473,21 +514,36 @@ impl SolanaServiceTrait for SolanaService {
 
     async fn build_cpmm_swap_base_out_transaction(
         &self,
-        request: CpmmSwapBaseOutTransactionRequest
+        request: CpmmSwapBaseOutTransactionRequest,
     ) -> Result<CpmmTransactionData> {
-        self.cpmm_swap_service.build_cpmm_swap_base_out_transaction(request).await
+        self.cpmm_swap_service
+            .build_cpmm_swap_base_out_transaction(request)
+            .await
     }
 
     // CPMM Deposit operations - delegate to cpmm_deposit_service
-    async fn cpmm_deposit_liquidity(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositResponse> {
+    async fn cpmm_deposit_liquidity(
+        &self,
+        request: crate::dtos::solana::cpmm::deposit::CpmmDepositRequest,
+    ) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositResponse> {
         self.cpmm_deposit_service.build_cpmm_deposit_transaction(request).await
     }
 
-    async fn cpmm_deposit_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendRequest) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendResponse> {
-        self.cpmm_deposit_service.cpmm_deposit_and_send_transaction(request).await
+    async fn cpmm_deposit_liquidity_and_send(
+        &self,
+        request: crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendRequest,
+    ) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositAndSendResponse> {
+        self.cpmm_deposit_service
+            .cpmm_deposit_and_send_transaction(request)
+            .await
     }
 
-    async fn compute_cpmm_deposit(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositCompute> {
+    async fn compute_cpmm_deposit(
+        &self,
+        pool_id: &str,
+        lp_token_amount: u64,
+        slippage: Option<f64>,
+    ) -> Result<crate::dtos::solana::cpmm::deposit::CpmmDepositCompute> {
         let request = crate::dtos::solana::cpmm::deposit::CpmmDepositRequest {
             pool_id: pool_id.to_string(),
             lp_token_amount,
@@ -499,16 +555,82 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // CPMM Withdraw operations - delegate to cpmm_withdraw_service
-    async fn cpmm_withdraw_liquidity(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawResponse> {
+    async fn cpmm_withdraw_liquidity(
+        &self,
+        request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawRequest,
+    ) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawResponse> {
         self.cpmm_withdraw_service.withdraw_liquidity(request).await
     }
 
-    async fn cpmm_withdraw_liquidity_and_send(&self, request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendRequest) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendResponse> {
-        self.cpmm_withdraw_service.withdraw_liquidity_and_send_transaction(request).await
+    async fn cpmm_withdraw_liquidity_and_send(
+        &self,
+        request: crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendRequest,
+    ) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawAndSendResponse> {
+        self.cpmm_withdraw_service
+            .withdraw_liquidity_and_send_transaction(request)
+            .await
     }
 
-    async fn compute_cpmm_withdraw(&self, pool_id: &str, lp_token_amount: u64, slippage: Option<f64>) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawCompute> {
-        self.cpmm_withdraw_service.compute_withdraw(pool_id, lp_token_amount, slippage).await
+    async fn compute_cpmm_withdraw(
+        &self,
+        pool_id: &str,
+        lp_token_amount: u64,
+        slippage: Option<f64>,
+    ) -> Result<crate::dtos::solana::cpmm::withdraw::CpmmWithdrawCompute> {
+        self.cpmm_withdraw_service
+            .compute_withdraw(pool_id, lp_token_amount, slippage)
+            .await
+    }
+
+    // CPMM LP Change Event operations - delegate to lp_change_event_service
+    async fn create_lp_change_event(&self, request: CreateLpChangeEventRequest) -> Result<LpChangeEventResponse> {
+        self.lp_change_event_service
+            .create_event(request)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_lp_change_event_by_id(&self, id: &str) -> Result<LpChangeEventResponse> {
+        self.lp_change_event_service
+            .get_event_by_id(id)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_lp_change_event_by_signature(&self, signature: &str) -> Result<LpChangeEventResponse> {
+        self.lp_change_event_service
+            .get_event_by_signature(signature)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn query_lp_change_events(&self, request: QueryLpChangeEventsRequest) -> Result<LpChangeEventsPageResponse> {
+        self.lp_change_event_service
+            .query_events(request)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn delete_lp_change_event(&self, id: &str) -> Result<bool> {
+        self.lp_change_event_service
+            .delete_event(id)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_user_lp_change_event_stats(&self, user_wallet: &str) -> Result<UserEventStats> {
+        self.lp_change_event_service
+            .get_user_event_stats(user_wallet)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    // LP mint query operations
+    async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>> {
+        self.lp_mint_query_service
+            .query_pools_by_lp_mints(request)
+            .await
+            .map_err(anyhow::Error::from)
     }
 
     // Position operations - delegate to position_service
@@ -588,48 +710,31 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // CLMM Pool query operations - delegate to clmm_pool_service
-    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<database::clmm::clmm_pool::ClmmPool>> {
+    async fn get_pool_by_address(&self, pool_address: &str) -> Result<Option<ClmmPool>> {
         self.clmm_pool_service.get_pool_by_address(pool_address).await
     }
 
-    async fn get_pools_by_mint(
-        &self,
-        mint_address: &str,
-        limit: Option<i64>,
-    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
+    async fn get_pools_by_mint(&self, mint_address: &str, limit: Option<i64>) -> Result<Vec<ClmmPool>> {
         self.clmm_pool_service.get_pools_by_mint(mint_address, limit).await
     }
 
-    async fn get_pools_by_creator(
-        &self,
-        creator_wallet: &str,
-        limit: Option<i64>,
-    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
+    async fn get_pools_by_creator(&self, creator_wallet: &str, limit: Option<i64>) -> Result<Vec<ClmmPool>> {
         self.clmm_pool_service.get_pools_by_creator(creator_wallet, limit).await
     }
 
-    async fn query_pools(
-        &self,
-        params: &database::clmm::clmm_pool::PoolQueryParams,
-    ) -> Result<Vec<database::clmm::clmm_pool::ClmmPool>> {
+    async fn query_pools(&self, params: &PoolQueryParams) -> Result<Vec<ClmmPool>> {
         self.clmm_pool_service.query_pools(params).await
     }
 
-    async fn get_pool_statistics(&self) -> Result<database::clmm::clmm_pool::PoolStats> {
+    async fn get_pool_statistics(&self) -> Result<PoolStats> {
         self.clmm_pool_service.get_pool_statistics().await
     }
 
-    async fn query_pools_with_pagination(
-        &self,
-        params: &database::clmm::clmm_pool::model::PoolListRequest,
-    ) -> Result<database::clmm::clmm_pool::model::PoolListResponse> {
+    async fn query_pools_with_pagination(&self, params: &PoolListRequest) -> Result<PoolListResponse> {
         self.clmm_pool_service.query_pools_with_pagination(params).await
     }
 
-    async fn query_pools_with_new_format(
-        &self,
-        params: &database::clmm::clmm_pool::model::PoolListRequest,
-    ) -> Result<NewPoolListResponse> {
+    async fn query_pools_with_new_format(&self, params: &PoolListRequest) -> Result<NewPoolListResponse> {
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
 
@@ -642,10 +747,7 @@ impl SolanaServiceTrait for SolanaService {
         Ok(new_response)
     }
 
-    async fn query_pools_with_new_format2(
-        &self,
-        params: &database::clmm::clmm_pool::model::PoolListRequest,
-    ) -> Result<NewPoolListResponse2> {
+    async fn query_pools_with_new_format2(&self, params: &PoolListRequest) -> Result<NewPoolListResponse2> {
         // 先获取传统格式的响应
         let old_response = self.clmm_pool_service.query_pools_with_pagination(params).await?;
 
@@ -777,12 +879,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     // Launch Migration query operations - delegate to launch_migration service
-    async fn get_user_launch_history(
-        &self,
-        creator_wallet: &str,
-        page: u64,
-        limit: u64,
-    ) -> Result<Vec<database::clmm::clmm_pool::model::ClmmPool>> {
+    async fn get_user_launch_history(&self, creator_wallet: &str, page: u64, limit: u64) -> Result<Vec<ClmmPool>> {
         self.launch_migration
             .get_user_launch_history(creator_wallet, page, limit)
             .await

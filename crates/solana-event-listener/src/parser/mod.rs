@@ -1,3 +1,4 @@
+pub mod cpmm_lp_change_parser;
 pub mod deposit_event_parser;
 pub mod event_parser;
 pub mod launch_event_parser;
@@ -7,6 +8,7 @@ pub mod reward_distribution_parser;
 pub mod swap_parser;
 pub mod token_creation_parser;
 
+pub use cpmm_lp_change_parser::LpChangeParser;
 pub use deposit_event_parser::DepositEventParser;
 pub use event_parser::{EventDataSource, EventParser, EventParserRegistry, ParsedEvent};
 pub use launch_event_parser::LaunchEventParser;

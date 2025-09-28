@@ -58,7 +58,7 @@ pub struct LaunchEventParser {
 impl LaunchEventParser {
     /// 创建新的LaunchEvent解析器
     pub fn new(config: &EventListenerConfig, program_id: Pubkey) -> Result<Self> {
-        let discriminator = [27, 193, 47, 130, 115, 92, 239, 94];
+        let discriminator = crate::parser::event_parser::calculate_event_discriminator("LaunchEvent");
 
         // 创建RPC客户端
         let rpc_client = RpcClient::new(config.solana.rpc_url.clone());

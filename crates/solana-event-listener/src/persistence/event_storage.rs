@@ -2,6 +2,7 @@ use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
     parser::{
+        cpmm_lp_change_parser::LpChangeEventData,
         event_parser::{
             DepositEventData, LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData,
             SwapEventData, TokenCreationEventData,
@@ -16,6 +17,7 @@ use database::clmm::clmm_pool::{
     TransactionInfo, TransactionStatus, VaultInfo,
 };
 use database::clmm::token_info::{TokenInfoRepository, TokenPushRequest};
+use database::cpmm::lp_change_event::{LpChangeEvent, LpChangeEventRepository};
 use database::events::event_model::{
     repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
     RewardDistributionEvent, TokenCreationEvent,
@@ -40,6 +42,7 @@ pub struct EventStorage {
     token_repository: Arc<TokenInfoRepository>,
     clmm_pool_repository: Arc<ClmmPoolRepository>,
     token_creation_event_repository: Arc<TokenCreationEventRepository>,
+    lp_change_event_repository: Arc<LpChangeEventRepository>,
     app_config: Arc<AppConfig>,
     migration_client: Arc<MigrationClient>,
 }
@@ -109,6 +112,9 @@ impl EventStorage {
         // 创建代币创建事件仓库
         let token_creation_event_repository = Arc::new(database.token_creation_event_repository.clone());
 
+        // 创建LP变更事件仓库
+        let lp_change_event_repository = Arc::new(database.lp_change_event_repository.clone());
+
         // 创建迁移客户端
         let migration_base_url =
             std::env::var("MIGRATION_BASE_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
@@ -126,6 +132,7 @@ impl EventStorage {
             token_repository,
             clmm_pool_repository,
             token_creation_event_repository,
+            lp_change_event_repository,
             app_config,
             migration_client,
         })
@@ -149,6 +156,7 @@ impl EventStorage {
         let mut launch_events = Vec::new();
         let mut swap_events = Vec::new();
         let mut deposit_events = Vec::new();
+        let mut lp_change_events = Vec::new();
 
         for event in events {
             match event {
@@ -172,6 +180,9 @@ impl EventStorage {
                 }
                 ParsedEvent::Deposit(deposit_event) => {
                     deposit_events.push(deposit_event);
+                }
+                ParsedEvent::LpChange(lp_change_event) => {
+                    lp_change_events.push(lp_change_event);
                 }
             }
         }
@@ -269,6 +280,20 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ 存款事件批量写入失败: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 批量处理LP变更事件
+        if !lp_change_events.is_empty() {
+            match self.write_lp_change_batch(&lp_change_events).await {
+                Ok(count) => {
+                    written_count += count;
+                    info!("✅ 成功写入 {} 个LP变更事件", count);
+                }
+                Err(e) => {
+                    error!("❌ LP变更事件批量写入失败: {}", e);
                     return Err(e);
                 }
             }
@@ -471,6 +496,62 @@ impl EventStorage {
                     }
 
                     warn!("⚠️ 跳过失败的事件: {} to {}", event.user, event.token_mint);
+                }
+            }
+        }
+
+        Ok(written_count)
+    }
+
+    /// 批量写入LP变更事件
+    async fn write_lp_change_batch(&self, events: &[&LpChangeEventData]) -> Result<u64> {
+        let mut written_count = 0u64;
+
+        for event in events {
+            match self.write_single_lp_change(event).await {
+                Ok(true) => {
+                    written_count += 1;
+                    debug!(
+                        "✅ LP变更事件已写入: 用户={}, 池子={}, 类型={}",
+                        event.user_wallet,
+                        event.pool_id,
+                        match event.change_type {
+                            0 => "deposit",
+                            1 => "withdraw",
+                            2 => "initialize",
+                            _ => "unknown",
+                        }
+                    );
+                }
+                Ok(false) => {
+                    debug!(
+                        "ℹ️ LP变更事件已存在，跳过: 用户={}, 池子={}, 签名={}",
+                        event.user_wallet, event.pool_id, event.signature
+                    );
+                }
+                Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!(
+                            "ℹ️ LP变更事件已存在（重复键），跳过: 用户={}, 池子={}, 签名={}",
+                            event.user_wallet, event.pool_id, event.signature
+                        );
+                        continue;
+                    }
+
+                    error!(
+                        "❌ LP变更事件写入失败: 用户={}, 池子={}, 签名={} - {}",
+                        event.user_wallet, event.pool_id, event.signature, e
+                    );
+
+                    if self.is_fatal_error(&e) {
+                        return Err(e);
+                    }
+
+                    warn!(
+                        "⚠️ 跳过失败的LP变更事件: 用户={}, 池子={}, 签名={}",
+                        event.user_wallet, event.pool_id, event.signature
+                    );
                 }
             }
         }
@@ -983,6 +1064,40 @@ impl EventStorage {
         })
     }
 
+    /// 将LP变更事件转换为数据库模型
+    fn convert_to_lp_change_event(&self, event: &LpChangeEventData) -> Result<LpChangeEvent> {
+        Ok(LpChangeEvent {
+            id: None,
+            user_wallet: event.user_wallet.clone(),
+            pool_id: event.pool_id.clone(),
+            lp_mint: event.lp_mint.clone(),
+            token_0_mint: event.token_0_mint.clone(),
+            token_1_mint: event.token_1_mint.clone(),
+            change_type: event.change_type,
+            lp_amount_before: event.lp_amount_before,
+            lp_amount_after: event.lp_amount_after,
+            lp_amount_change: event.lp_amount_change,
+            token_0_amount: event.token_0_amount,
+            token_1_amount: event.token_1_amount,
+            token_0_transfer_fee: event.token_0_transfer_fee,
+            token_1_transfer_fee: event.token_1_transfer_fee,
+            token_0_vault_before: event.token_0_vault_before,
+            token_1_vault_before: event.token_1_vault_before,
+            token_0_vault_after: event.token_0_vault_after,
+            token_1_vault_after: event.token_1_vault_after,
+            lp_mint_program_id: event.lp_mint_program_id.clone(),
+            token_0_program_id: event.token_0_program_id.clone(),
+            token_1_program_id: event.token_1_program_id.clone(),
+            lp_mint_decimals: event.lp_mint_decimals,
+            token_0_decimals: event.token_0_decimals,
+            token_1_decimals: event.token_1_decimals,
+            signature: event.signature.clone(),
+            slot: event.slot,
+            block_time: Some(Utc::now().timestamp()),
+            created_at: Utc::now(),
+        })
+    }
+
     /// 将存款事件转换为数据库模型
     fn convert_to_deposit_event(
         &self,
@@ -1319,6 +1434,45 @@ impl EventStorage {
         Ok(true)
     }
 
+    /// 写入单个LP变更事件
+    async fn write_single_lp_change(&self, event: &LpChangeEventData) -> Result<bool> {
+        // 检查是否已存在（根据交易签名去重）
+        let existing = self
+            .lp_change_event_repository
+            .find_by_signature(&event.signature)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("查询现有LP变更事件失败: {}", e)))?;
+
+        if existing.is_some() {
+            debug!("LP变更事件已存在，跳过: {}", event.signature);
+            return Ok(false);
+        }
+
+        // 转换为数据库模型
+        let lp_change_event = self.convert_to_lp_change_event(event)?;
+
+        // 插入数据库
+        self.lp_change_event_repository
+            .insert(lp_change_event)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("插入LP变更事件失败: {}", e)))?;
+
+        info!(
+            "✅ LP变更事件已写入: 用户={}, 池子={}, 类型={}, 签名={}",
+            event.user_wallet,
+            event.pool_id,
+            match event.change_type {
+                0 => "deposit",
+                1 => "withdraw",
+                2 => "initialize",
+                _ => "unknown",
+            },
+            event.signature
+        );
+
+        Ok(true)
+    }
+
     /// 写入单个事件（非批量）
     pub async fn write_event(&self, event: &ParsedEvent) -> Result<bool> {
         match event {
@@ -1329,6 +1483,7 @@ impl EventStorage {
             ParsedEvent::Launch(launch_event) => self.write_single_launch_event(launch_event).await,
             ParsedEvent::Swap(swap_event) => self.write_single_swap(swap_event).await,
             ParsedEvent::Deposit(deposit_event) => self.write_single_deposit(deposit_event).await,
+            ParsedEvent::LpChange(lp_change_event) => self.write_single_lp_change(lp_change_event).await,
         }
     }
 
