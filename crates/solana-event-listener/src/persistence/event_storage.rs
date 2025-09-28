@@ -1199,7 +1199,7 @@ impl EventStorage {
         // 创建TokenPushRequest
         Ok(TokenPushRequest {
             address: event.mint_address.to_string(),
-            program_id: Some("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string()),
+            program_id: Some("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string()),
             name: event.name.clone(),
             symbol: event.symbol.clone(),
             decimals: event.decimals,
