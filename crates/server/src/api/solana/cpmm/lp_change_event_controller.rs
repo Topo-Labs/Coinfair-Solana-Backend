@@ -2,14 +2,16 @@ use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
 use crate::dtos::solana::cpmm::lp::lp_change_event::{
     CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
 };
+use crate::dtos::solana::cpmm::lp::query_lp_mint::{LpMintPoolInfo, QueryLpMintRequest};
 use crate::extractors::validation_extractor::ValidationExtractor;
 use crate::services::Services;
-use axum::extract::{Extension, Path};
+use axum::extract::{Extension, Path, Query};
 use axum::http::StatusCode;
 use axum::response::Json;
 use axum::routing::{delete, get, post};
 use axum::Router;
 use serde_json::json;
+use std::collections::HashMap;
 use tracing::{error, info};
 
 /// 构建LP变更事件相关的路由
@@ -25,6 +27,8 @@ pub fn lp_change_event_routes() -> Router {
         .route("/lp-change-events/signature/:signature", get(get_event_by_signature))
         // 用户统计信息
         .route("/lp-change-events/stats/:user_wallet", get(get_user_event_stats))
+        // 新的LP mint查询接口
+        .route("/query-lp-mint/query", get(query_lp_mint_pools))
 }
 
 /// 创建LP变更事件
@@ -58,6 +62,88 @@ pub async fn create_lp_change_event(
             error!("创建LP变更事件失败: {}", e);
             let error_response =
                 ErrorResponse::new("LP_CHANGE_EVENT_CREATE_FAILED", &format!("创建LP变更事件失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
+        }
+    }
+}
+
+/// 根据LP mint查询池子信息
+#[utoipa::path(
+    get,
+    path = "/api/v1/solana/events/cpmm/query-lp-mint/query",
+    params(
+        ("lps" = String, Query, description = "多个LP mint地址，用英文逗号分隔"),
+        ("page" = Option<u64>, Query, description = "页码，默认1"),
+        ("page_size" = Option<u64>, Query, description = "每页数量，默认20，最大100")
+    ),
+    responses(
+        (status = 200, description = "查询成功", body = ApiResponse<Vec<LpMintPoolInfo>>),
+        (status = 400, description = "参数错误", body = ApiResponse<ErrorResponse>),
+        (status = 500, description = "查询失败", body = ApiResponse<ErrorResponse>)
+    ),
+    tag = "LP Change Events"
+)]
+pub async fn query_lp_mint_pools(
+    Extension(services): Extension<Services>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<Option<LpMintPoolInfo>>>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
+    info!("🔍 接收到LP mint池子查询请求");
+
+    // 提取并验证参数
+    let lps = params.get("lps").ok_or_else(|| {
+        let error_response = ErrorResponse::new("MISSING_PARAMETER", "缺少lps参数");
+        (StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response)))
+    })?;
+
+    if lps.trim().is_empty() {
+        let error_response = ErrorResponse::new("INVALID_PARAMETER", "lps参数不能为空");
+        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+    }
+
+    info!("  LP地址: {}", lps);
+
+    // 构建请求对象
+    let request = QueryLpMintRequest {
+        lps: lps.clone(),
+        page: params.get("page").and_then(|p| p.parse::<u64>().ok()),
+        page_size: params.get("page_size").and_then(|p| p.parse::<u64>().ok()),
+    };
+
+    // 验证LP地址格式
+    let lp_addresses: Vec<&str> = lps.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+
+    if lp_addresses.is_empty() {
+        let error_response = ErrorResponse::new("INVALID_PARAMETER", "解析到的LP地址为空");
+        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+    }
+
+    // 限制一次查询的LP数量
+    if lp_addresses.len() > 100 {
+        let error_response = ErrorResponse::new("PARAMETER_LIMIT_EXCEEDED", "一次查询的LP地址数量不能超过100个");
+        return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+    }
+
+    // 验证每个地址的格式（基本长度检查）
+    for addr in &lp_addresses {
+        if addr.len() < 32 || addr.len() > 44 {
+            let error_response = ErrorResponse::new("INVALID_ADDRESS_FORMAT", &format!("无效的LP地址格式: {}", addr));
+            return Err((StatusCode::BAD_REQUEST, Json(ApiResponse::error(error_response))));
+        }
+    }
+
+    // 调用服务层
+    match services.solana.query_lp_mint_pools(request).await {
+        Ok(pool_infos) => {
+            info!("✅ LP mint池子查询成功，返回{}个池子", pool_infos.len());
+            Ok(Json(ApiResponse::success(pool_infos)))
+        }
+        Err(e) => {
+            error!("❌ LP mint池子查询失败: {:?}", e);
+            let error_response =
+                ErrorResponse::new("QUERY_LP_MINT_POOLS_FAILED", &format!("查询LP mint池子失败: {}", e));
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(error_response)),

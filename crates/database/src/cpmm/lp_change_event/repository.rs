@@ -255,4 +255,43 @@ impl LpChangeEventRepository {
             }
         }
     }
+
+    /// 根据多个lp_mint查询事件（用于新的query-lp-mint接口）
+    pub async fn find_by_lp_mints(&self, lp_mints: Vec<String>, limit: Option<i64>) -> Result<Vec<LpChangeEvent>> {
+        if lp_mints.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let filter = if lp_mints.len() == 1 {
+            doc! { "lp_mint": &lp_mints[0] }
+        } else {
+            doc! { "lp_mint": { "$in": lp_mints } }
+        };
+
+        let options = if let Some(limit_value) = limit {
+            FindOptions::builder()
+                .sort(doc! { "created_at": -1 })
+                .limit(limit_value)
+                .build()
+        } else {
+            FindOptions::builder()
+                .sort(doc! { "created_at": -1 })
+                .build()
+        };
+
+        match self.collection.find(filter, options).await {
+            Ok(mut cursor) => {
+                let mut events = Vec::new();
+                while let Ok(Some(event)) = cursor.try_next().await {
+                    events.push(event);
+                }
+                debug!("✅ 根据lp_mints查询成功，返回{}条记录", events.len());
+                Ok(events)
+            }
+            Err(e) => {
+                error!("❌ 根据lp_mints查询失败: {}", e);
+                Err(e.into())
+            }
+        }
+    }
 }

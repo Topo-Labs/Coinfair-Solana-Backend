@@ -11,6 +11,7 @@ use crate::dtos::solana::cpmm::deposit::{
 use crate::dtos::solana::cpmm::lp::lp_change_event::{
     CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
 };
+use crate::dtos::solana::cpmm::lp::query_lp_mint::{LpMintPoolInfo, QueryLpMintRequest};
 use crate::dtos::solana::cpmm::withdraw::{
     CpmmWithdrawAndSendRequest, CpmmWithdrawAndSendResponse, CpmmWithdrawCompute, CpmmWithdrawRequest,
     CpmmWithdrawResponse,
@@ -23,6 +24,7 @@ use crate::services::solana::clmm::referral::ReferralService;
 use crate::services::solana::clmm::swap::SwapService;
 use crate::services::solana::cpmm::deposit::CpmmDepositService;
 use crate::services::solana::cpmm::lp_change_event::lp_change_event_service::UserEventStats;
+use crate::services::solana::cpmm::lp_change_event::LpMintQueryService;
 use crate::services::solana::cpmm::swap::CpmmSwapService;
 use crate::services::solana::cpmm::{CpmmWithdrawService, LpChangeEventService};
 
@@ -75,6 +77,7 @@ use crate::dtos::statics::static_dto::{
 };
 use crate::services::solana::clmm::transform::data_transform::DataTransformService;
 use tokio::sync::Mutex;
+use tracing::{info, warn};
 
 pub type DynSolanaService = Arc<dyn SolanaServiceTrait + Send + Sync>;
 
@@ -87,6 +90,7 @@ pub struct SolanaService {
     cpmm_deposit_service: CpmmDepositService,
     cpmm_withdraw_service: CpmmWithdrawService,
     lp_change_event_service: LpChangeEventService,
+    lp_mint_query_service: LpMintQueryService,
     position_service: PositionService,
     clmm_pool_service: ClmmPoolService,
     amm_pool_service: AmmPoolService,
@@ -146,6 +150,25 @@ impl SolanaService {
             lp_change_event_service: super::cpmm::lp_change_event::LpChangeEventService::new(Arc::new(
                 database.clone(),
             )),
+            lp_mint_query_service: {
+                let mut lp_service =
+                    LpMintQueryService::new(Arc::new(database.clone())).expect("Failed to create LpMintQueryService");
+
+                // 创建并注入MetaplexService
+                match utils::metaplex_service::MetaplexService::new(None) {
+                    Ok(metaplex_service) => {
+                        let provider: Arc<Mutex<dyn utils::TokenMetadataProvider>> =
+                            Arc::new(Mutex::new(metaplex_service));
+                        lp_service.set_metadata_provider(provider);
+                        info!("✅ LpMintQueryService MetaplexService 提供者已注入");
+                    }
+                    Err(e) => {
+                        warn!("⚠️ 创建MetaplexService失败: {}，LpMintQueryService将使用默认值", e);
+                    }
+                }
+
+                lp_service
+            },
             position_service: PositionService::with_database(
                 optimized_shared_context.clone(),
                 Arc::new(database.clone()),
@@ -262,6 +285,8 @@ pub trait SolanaServiceTrait {
     async fn query_lp_change_events(&self, request: QueryLpChangeEventsRequest) -> Result<LpChangeEventsPageResponse>;
     async fn delete_lp_change_event(&self, id: &str) -> Result<bool>;
     async fn get_user_lp_change_event_stats(&self, user_wallet: &str) -> Result<UserEventStats>;
+    // LP mint query operations
+    async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -596,6 +621,14 @@ impl SolanaServiceTrait for SolanaService {
     async fn get_user_lp_change_event_stats(&self, user_wallet: &str) -> Result<UserEventStats> {
         self.lp_change_event_service
             .get_user_event_stats(user_wallet)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    // LP mint query operations
+    async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>> {
+        self.lp_mint_query_service
+            .query_pools_by_lp_mints(request)
             .await
             .map_err(anyhow::Error::from)
     }

@@ -98,6 +98,23 @@ impl<T> ApiResponse<T> {
     }
 }
 
+/// 代币信息DTO
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct TokenInfo {
+    #[serde(rename = "chainId")]
+    pub chain_id: u32,
+    pub address: String,
+    #[serde(rename = "programId")]
+    pub program_id: String,
+    #[serde(rename = "logoURI")]
+    pub logo_uri: String,
+    pub symbol: String,
+    pub name: String,
+    pub decimals: u8,
+    pub tags: Vec<String>,
+    pub extensions: serde_json::Value,
+}
+
 /// 交易数据响应
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TransactionData {

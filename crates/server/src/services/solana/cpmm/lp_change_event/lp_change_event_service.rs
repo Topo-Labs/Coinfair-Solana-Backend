@@ -231,6 +231,33 @@ impl LpChangeEventService {
         }
     }
 
+    /// 根据多个LP mint查询事件列表（用于新的query-lp-mint接口）
+    pub async fn query_events_by_lp_mints(&self, lp_mints: Vec<String>, limit: Option<i64>) -> Result<Vec<LpChangeEvent>, LpChangeEventError> {
+        info!("根据LP mints查询事件，mint数量: {}, 限制: {:?}", lp_mints.len(), limit);
+
+        if lp_mints.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // 限制一次查询的LP mint数量，防止过大查询
+        if lp_mints.len() > 100 {
+            return Err(LpChangeEventError::QueryParameterError(
+                "一次查询的LP mint数量不能超过100个".to_string()
+            ));
+        }
+
+        match self.get_repository().find_by_lp_mints(lp_mints, limit).await {
+            Ok(events) => {
+                info!("根据LP mints查询事件成功，返回{}条记录", events.len());
+                Ok(events)
+            }
+            Err(e) => {
+                error!("根据LP mints查询事件失败: {}", e);
+                Err(LpChangeEventError::DatabaseError(e))
+            }
+        }
+    }
+
     /// 构建查询过滤器
     fn build_query_filter(&self, request: &QueryLpChangeEventsRequest) -> Result<Document, LpChangeEventError> {
         let mut filter = doc! {};
