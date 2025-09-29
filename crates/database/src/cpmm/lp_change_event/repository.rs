@@ -5,7 +5,7 @@ use futures::stream::TryStreamExt;
 use mongodb::{
     bson::{doc, oid::ObjectId, Document},
     options::{FindOptions, IndexOptions, InsertManyOptions},
-    Collection, Database, IndexModel,
+    Collection, IndexModel,
 };
 use tracing::{debug, error, info, warn};
 
@@ -16,13 +16,11 @@ pub struct LpChangeEventRepository {
 }
 
 impl LpChangeEventRepository {
-    /// 创建新的Repository实例
-    pub fn new(db: &Database) -> Self {
-        Self {
-            collection: db.collection("LpChangeEvent"),
-        }
+    pub fn new(collection: Collection<LpChangeEvent>) -> Self {
+        Self { collection }
     }
 
+    /// 获取集合引用（用于直接数据库操作）
     /// 初始化数据库索引
     pub async fn init_indexes(&self) -> Result<()> {
         let indexes = vec![
@@ -274,9 +272,7 @@ impl LpChangeEventRepository {
                 .limit(limit_value)
                 .build()
         } else {
-            FindOptions::builder()
-                .sort(doc! { "created_at": -1 })
-                .build()
+            FindOptions::builder().sort(doc! { "created_at": -1 }).build()
         };
 
         match self.collection.find(filter, options).await {

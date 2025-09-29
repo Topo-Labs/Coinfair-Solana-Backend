@@ -24,7 +24,10 @@ pub fn lp_change_event_routes() -> Router {
         // 查询接口
         .route("/lp-change-events/query", post(query_lp_change_events))
         // 根据signature查询（防重）
-        .route("/lp-change-events/signature/:signature", get(get_event_by_signature))
+        .route(
+            "/lp-change-events/signature/:signature",
+            get(get_lp_change_event_by_signature),
+        )
         // 用户统计信息
         .route("/lp-change-events/stats/:user_wallet", get(get_user_event_stats))
         // 新的LP mint查询接口
@@ -201,7 +204,7 @@ pub async fn get_lp_change_event(
     ),
     tag = "LP Change Events"
 )]
-pub async fn get_event_by_signature(
+pub async fn get_lp_change_event_by_signature(
     Extension(services): Extension<Services>,
     Path(signature): Path<String>,
 ) -> Result<Json<ApiResponse<LpChangeEventResponse>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
