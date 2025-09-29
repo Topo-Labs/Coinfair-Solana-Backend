@@ -90,6 +90,17 @@ pub struct MintReferralNFT<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
+#[event]
+pub struct MintNFTEvent {
+    pub minter: Pubkey,           // 铸造者地址
+    pub nft_mint: Pubkey,         // NFT mint 地址
+    pub amount: u64,              // 铸造数量
+    pub total_mint: u64,          // 用户累计铸造总数
+    pub remain_mint: u64,         // 剩余可claim数量
+    pub nft_pool_account: Pubkey, // NFT存放的池子账户
+    pub timestamp: i64,           // 铸造时间戳
+}
+
 pub fn mint_nft(ctx: Context<MintReferralNFT>, amount: u64) -> Result<()> {
     require!(amount > 0, ReferralError::InvalidMintAmount); // 防止乱mint 0个
 
@@ -123,6 +134,16 @@ pub fn mint_nft(ctx: Context<MintReferralNFT>, amount: u64) -> Result<()> {
         ),
         amount,
     )?;
+
+    emit!(MintNFTEvent {
+        minter: ctx.accounts.authority.key(),
+        nft_mint: ctx.accounts.official_mint.key(),
+        amount,
+        total_mint: counter.total_mint,
+        remain_mint: counter.remain_mint,
+        nft_pool_account: ctx.accounts.nft_pool_account.key(),
+        timestamp: Clock::get()?.unix_timestamp,
+    });
 
     Ok(())
 }

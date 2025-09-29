@@ -490,6 +490,7 @@ impl CpmmSwapService {
 
         // 7. 使用CurveCalculator计算交换结果（与CLI完全相同）
         let curve_result = CurveCalculator::swap_base_input(
+            trade_direction,
             u128::from(actual_amount_in),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
@@ -838,6 +839,7 @@ impl CpmmSwapService {
         let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
 
         let curve_result = CurveCalculator::swap_base_input(
+            trade_direction,
             u128::from(actual_amount_in),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
@@ -1299,6 +1301,7 @@ impl CpmmSwapService {
 
         // 7. 使用CurveCalculator::swap_base_output计算交换结果（与CLI完全相同）
         let curve_result = CurveCalculator::swap_base_output(
+            trade_direction,
             u128::from(actual_amount_out),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
@@ -1552,6 +1555,7 @@ impl CpmmSwapService {
         let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
 
         let curve_result = CurveCalculator::swap_base_output(
+            trade_direction,
             u128::from(actual_amount_out),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),

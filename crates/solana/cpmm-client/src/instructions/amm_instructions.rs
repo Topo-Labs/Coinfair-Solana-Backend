@@ -1,7 +1,7 @@
 use anchor_client::{Client, Cluster};
+use anchor_lang::pubkey;
 use anchor_spl::{
-    associated_token::spl_associated_token_account, memo::spl_memo, token::spl_token,
-    token_2022::spl_token_2022,
+    associated_token::spl_associated_token_account, memo::spl_memo, token::spl_token, token_2022::spl_token_2022,
 };
 use anyhow::Result;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
@@ -75,17 +75,11 @@ pub fn initialize_pool_instr(
         &program.id(),
     );
     let (lp_mint_key, __bump) = Pubkey::find_program_address(
-        &[
-            POOL_LP_MINT_SEED.as_bytes(),
-            pool_account_key.to_bytes().as_ref(),
-        ],
+        &[POOL_LP_MINT_SEED.as_bytes(), pool_account_key.to_bytes().as_ref()],
         &program.id(),
     );
     let (observation_key, __bump) = Pubkey::find_program_address(
-        &[
-            OBSERVATION_SEED.as_bytes(),
-            pool_account_key.to_bytes().as_ref(),
-        ],
+        &[OBSERVATION_SEED.as_bytes(), pool_account_key.to_bytes().as_ref()],
         &program.id(),
     );
 
@@ -273,6 +267,17 @@ pub fn swap_base_input_instr(
             input_token_mint,
             output_token_mint,
             observation_state: observation_account,
+            reward_mint: Pubkey::default(),
+            payer_referral: Option::<Pubkey>::default(),
+            upper: Option::<Pubkey>::default(),
+            upper_token_account: Option::<Pubkey>::default(),
+            upper_referral: Option::<Pubkey>::default(),
+            upper_upper: Option::<Pubkey>::default(),
+            upper_upper_token_account: Option::<Pubkey>::default(),
+            project_token_account: Pubkey::default(),
+            system_program: system_program::id(),
+            associated_token_program: spl_associated_token_account::id(),
+            referral: pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
         })
         .args(raydium_cp_instructions::SwapBaseInput {
             amount_in,
@@ -322,6 +327,17 @@ pub fn swap_base_output_instr(
             input_token_mint,
             output_token_mint,
             observation_state: observation_account,
+            reward_mint: Pubkey::default(),
+            payer_referral: Option::<Pubkey>::default(),
+            upper: Option::<Pubkey>::default(),
+            upper_token_account: Option::<Pubkey>::default(),
+            upper_referral: Option::<Pubkey>::default(),
+            upper_upper: Option::<Pubkey>::default(),
+            upper_upper_token_account: Option::<Pubkey>::default(),
+            project_token_account: Pubkey::default(),
+            system_program: system_program::id(),
+            associated_token_program: spl_associated_token_account::id(),
+            referral: pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
         })
         .args(raydium_cp_instructions::SwapBaseOutput {
             max_amount_in,

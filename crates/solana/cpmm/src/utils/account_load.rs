@@ -23,7 +23,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         }
     }
 
-    /// Constructs a new `Loader` from a previously initialized account.
+    /// 从先前初始化的账户构造一个新的 `Loader`。
     #[inline(never)]
     pub fn try_from(acc_info: &AccountInfo<'info>) -> Result<AccountLoad<'info, T>> {
         if acc_info.owner != &T::owner() {
@@ -33,7 +33,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         if data.len() < T::DISCRIMINATOR.len() {
             return Err(ErrorCode::AccountDiscriminatorNotFound.into());
         }
-        // Discriminator must match.
+        // 鉴别器必须匹配。
         let disc_bytes = array_ref![data, 0, 8];
         if disc_bytes != &T::DISCRIMINATOR {
             return Err(ErrorCode::AccountDiscriminatorMismatch.into());
@@ -42,7 +42,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         Ok(AccountLoad::new(acc_info.clone()))
     }
 
-    /// Constructs a new `Loader` from an uninitialized account.
+    /// 从未初始化的账户构造一个新的 `Loader`。
     #[inline(never)]
     pub fn try_from_unchecked(_program_id: &Pubkey, acc_info: &AccountInfo<'info>) -> Result<AccountLoad<'info, T>> {
         if acc_info.owner != &T::owner() {
@@ -51,18 +51,18 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         Ok(AccountLoad::new(acc_info.clone()))
     }
 
-    /// Returns a `RefMut` to the account data structure for reading or writing.
-    /// Should only be called once, when the account is being initialized.
+    /// 返回用于读取或写入账户数据结构的 `RefMut`。
+    /// 应该只在账户被初始化时调用一次。
     pub fn load_init(&self) -> Result<RefMut<'_, T>> {
-        // AccountInfo api allows you to borrow mut even if the account isn't
-        // writable, so add this check for a better dev experience.
+        // AccountInfo API 允许您在账户不可写时借用可变引用，
+        // 因此添加此检查以提供更好的开发体验。
         if !self.acc_info.is_writable {
             return Err(ErrorCode::AccountNotMutable.into());
         }
 
         let mut data = self.acc_info.try_borrow_mut_data()?;
 
-        // The discriminator should be zero, since we're initializing.
+        // 鉴别器应该为零，因为我们正在初始化。
         let mut disc_bytes = [0u8; 8];
         disc_bytes.copy_from_slice(&data[..8]);
         let discriminator = u64::from_le_bytes(disc_bytes);
@@ -70,7 +70,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
             return Err(ErrorCode::AccountDiscriminatorAlreadySet.into());
         }
 
-        // write discriminator
+        // 写入鉴别器
         data[..8].copy_from_slice(&T::DISCRIMINATOR);
 
         Ok(RefMut::map(data, |data| {
@@ -78,9 +78,9 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         }))
     }
 
-    /// Returns a `RefMut` to the account data structure for reading or writing directly.
-    /// There is no need to convert AccountInfo to AccountLoad.
-    /// So it is necessary to check the owner
+    /// 直接返回用于读取或写入账户数据结构的 `RefMut`。
+    /// 无需将 AccountInfo 转换为 AccountLoad。
+    /// 因此需要检查所有者
     pub fn load_data_mut<'a>(acc_info: &'a AccountInfo) -> Result<RefMut<'a, T>> {
         if acc_info.owner != &T::owner() {
             return Err(Error::from(ErrorCode::AccountOwnedByWrongProgram).with_pubkeys((*acc_info.owner, T::owner())));
@@ -104,7 +104,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         }))
     }
 
-    /// Returns a Ref to the account data structure for reading.
+    /// 返回用于读取账户数据结构的 Ref。
     pub fn load(&self) -> Result<Ref<'_, T>> {
         let data = self.acc_info.try_borrow_data()?;
         if data.len() < T::DISCRIMINATOR.len() {
@@ -121,10 +121,10 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
         }))
     }
 
-    /// Returns a `RefMut` to the account data structure for reading or writing.
+    /// 返回用于读取或写入账户数据结构的 `RefMut`。
     pub fn load_mut(&self) -> Result<RefMut<'_, T>> {
-        // AccountInfo api allows you to borrow mut even if the account isn't
-        // writable, so add this check for a better dev experience.
+        // AccountInfo API 允许您在账户不可写时借用可变引用，
+        // 因此添加此检查以提供更好的开发体验。
         if !self.acc_info.is_writable {
             return Err(ErrorCode::AccountNotMutable.into());
         }

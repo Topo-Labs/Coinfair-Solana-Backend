@@ -1,5 +1,5 @@
-///! 128 and 256 bit numbers
-///! U128 is more efficient that u128
+///! 128 和 256 位数字
+///! U128 比 u128 更高效
 ///! https://github.com/solana-labs/solana/issues/19549
 use uint::construct_uint;
 construct_uint! {
@@ -11,7 +11,7 @@ construct_uint! {
 }
 
 pub trait CheckedCeilDiv: Sized {
-    /// Perform ceiling division
+    /// 执行向上取整除法
     fn checked_ceil_div(&self, rhs: Self) -> Option<Self>;
 }
 

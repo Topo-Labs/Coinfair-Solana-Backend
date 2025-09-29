@@ -8,11 +8,11 @@ use anchor_spl::token_interface::TokenAccount;
 use anchor_spl::token_interface::TokenInterface;
 #[derive(Accounts)]
 pub struct CollectCreatorFee<'info> {
-    /// Only pool creator can collect fee
+    /// 只有池子创建者可以收取费用
     #[account(mut, address = pool_state.load()?.pool_creator)]
     pub creator: Signer<'info>,
 
-    /// CHECK: pool vault and lp mint authority
+    /// CHECK: 池子金库和LP铸币权限
     #[account(
         seeds = [
             crate::AUTH_SEED.as_bytes(),
@@ -21,41 +21,41 @@ pub struct CollectCreatorFee<'info> {
     )]
     pub authority: UncheckedAccount<'info>,
 
-    /// Pool state stores accumulated protocol fee amount
+    /// 池子状态存储累积的协议费用金额
     #[account(mut)]
     pub pool_state: AccountLoader<'info, PoolState>,
 
-    /// Amm config account stores fund_owner
+    /// Amm配置账户存储资金所有者
     #[account(address = pool_state.load()?.amm_config)]
     pub amm_config: Account<'info, AmmConfig>,
 
-    /// The address that holds pool tokens for token_0
+    /// 持有token_0池子代币的地址
     #[account(
         mut,
         constraint = token_0_vault.key() == pool_state.load()?.token_0_vault
     )]
     pub token_0_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The address that holds pool tokens for token_1
+    /// 持有token_1池子代币的地址
     #[account(
         mut,
         constraint = token_1_vault.key() == pool_state.load()?.token_1_vault
     )]
     pub token_1_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The mint of token_0 vault
+    /// token_0金库的铸币
     #[account(
         address = token_0_vault.mint
     )]
     pub vault_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// The mint of token_1 vault
+    /// token_1金库的铸币
     #[account(
         address = token_1_vault.mint
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// The address that receives the collected token_0 fund fees
+    /// 接收收集的token_0资金费用的地址
     #[account(
         init_if_needed,
         associated_token::mint = vault_0_mint,
@@ -65,7 +65,7 @@ pub struct CollectCreatorFee<'info> {
     )]
     pub creator_token_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The address that receives the collected token_1 fund fees
+    /// 接收收集的token_1资金费用的地址
     #[account(
         init_if_needed,
         associated_token::mint = vault_1_mint,
@@ -75,13 +75,13 @@ pub struct CollectCreatorFee<'info> {
     )]
     pub creator_token_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// Spl token program or token program 2022
+    /// Spl代币程序或代币程序2022
     pub token_0_program: Interface<'info, TokenInterface>,
-    /// Spl token program or token program 2022
+    /// Spl代币程序或代币程序2022
     pub token_1_program: Interface<'info, TokenInterface>,
-    /// Program to create an ATA for receiving position NFT
+    /// 创建用于接收仓位NFT的ATA的程序
     pub associated_token_program: Program<'info, AssociatedToken>,
-    /// To create a new program account
+    /// 创建新程序账户
     pub system_program: Program<'info, System>,
 }
 
@@ -93,8 +93,7 @@ pub fn collect_creator_fee(ctx: Context<CollectCreatorFee>) -> Result<()> {
         return err!(ErrorCode::NoFeeCollect);
     }
 
-    let (_auth_pda, auth_bump) =
-        Pubkey::find_program_address(&[crate::AUTH_SEED.as_bytes()], &crate::id());
+    let (_auth_pda, auth_bump) = Pubkey::find_program_address(&[crate::AUTH_SEED.as_bytes()], &crate::id());
     let signer_seeds: &[&[u8]] = &[crate::AUTH_SEED.as_bytes(), &[auth_bump]];
 
     transfer_from_pool_vault_to_user(

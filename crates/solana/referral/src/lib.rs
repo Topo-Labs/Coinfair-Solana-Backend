@@ -4,21 +4,14 @@ pub mod instructions;
 pub mod states;
 pub mod utils;
 
-// Re-export commonly used types
-pub use states::*;
-
 use anchor_lang::prelude::*;
 use instructions::*;
 
-// #[cfg(feature = "localnet")]
-// declare_id!("NFTqT8aVmB4WjzFkyKX9h5sEhhbTowNpuwbKNi2CZXs");
-
-// #[cfg(not(feature = "localnet"))]
-declare_id!("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL");
+declare_id!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku");
 
 pub mod admin {
     use anchor_lang::prelude::declare_id;
-    declare_id!("adMAyHzh8f3budnNayPU4Nb8faYZDZdGU1GXMB1Jt4Z");
+    declare_id!("AdmnrQJtt4vRN969ayudxfNDqiNa2AAQ1ErnUPTMYRgJ");
 }
 
 #[program]
@@ -47,7 +40,7 @@ pub mod referral {
         get_upper::get_upper(ctx)
     }
 
-    pub fn get_upper_for_idl(ctx: Context<GetUpper>) -> Result<()> {
+    pub fn get_upper_for_cpi(ctx: Context<GetUpper>) -> Result<()> {
         get_upper::get_upper_for_cpi(ctx)
     }
 

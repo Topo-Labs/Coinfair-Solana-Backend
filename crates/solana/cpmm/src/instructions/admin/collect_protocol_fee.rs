@@ -9,11 +9,11 @@ use anchor_spl::token_interface::TokenAccount;
 
 #[derive(Accounts)]
 pub struct CollectProtocolFee<'info> {
-    /// Only admin or owner can collect fee now
+    /// 目前只有管理员或所有者可以收取费用
     #[account(constraint = (owner.key() == amm_config.protocol_owner || owner.key() == crate::admin::ID) @ ErrorCode::InvalidOwner)]
     pub owner: Signer<'info>,
 
-    /// CHECK: pool vault and lp mint authority
+    /// CHECK: 池子金库和LP铸币权限
     #[account(
         seeds = [
             crate::AUTH_SEED.as_bytes(),
@@ -22,52 +22,52 @@ pub struct CollectProtocolFee<'info> {
     )]
     pub authority: UncheckedAccount<'info>,
 
-    /// Pool state stores accumulated protocol fee amount
+    /// 池子状态存储累积的协议费用金额
     #[account(mut)]
     pub pool_state: AccountLoader<'info, PoolState>,
 
-    /// Amm config account stores owner
+    /// AMM配置账户存储所有者
     #[account(address = pool_state.load()?.amm_config)]
     pub amm_config: Account<'info, AmmConfig>,
 
-    /// The address that holds pool tokens for token_0
+    /// 持有token_0池子代币的地址
     #[account(
         mut,
         constraint = token_0_vault.key() == pool_state.load()?.token_0_vault
     )]
     pub token_0_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The address that holds pool tokens for token_1
+    /// 持有token_1池子代币的地址
     #[account(
         mut,
         constraint = token_1_vault.key() == pool_state.load()?.token_1_vault
     )]
     pub token_1_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The mint of token_0 vault
+    /// token_0金库的铸币
     #[account(
         address = token_0_vault.mint
     )]
     pub vault_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// The mint of token_1 vault
+    /// token_1金库的铸币
     #[account(
         address = token_1_vault.mint
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// The address that receives the collected token_0 protocol fees
+    /// 接收收集的token_0协议费用的地址
     #[account(mut)]
     pub recipient_token_0_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The address that receives the collected token_1 protocol fees
+    /// 接收收集的token_1协议费用的地址
     #[account(mut)]
     pub recipient_token_1_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The SPL program to perform token transfers
+    /// 执行代币转账的SPL程序
     pub token_program: Program<'info, Token>,
 
-    /// The SPL program 2022 to perform token transfers
+    /// 执行代币转账的SPL程序2022
     pub token_program_2022: Program<'info, Token2022>,
 }
 
@@ -85,14 +85,8 @@ pub fn collect_protocol_fee(
         amount_0 = amount_0_requested.min(pool_state.protocol_fees_token_0);
         amount_1 = amount_1_requested.min(pool_state.protocol_fees_token_1);
 
-        pool_state.protocol_fees_token_0 = pool_state
-            .protocol_fees_token_0
-            .checked_sub(amount_0)
-            .unwrap();
-        pool_state.protocol_fees_token_1 = pool_state
-            .protocol_fees_token_1
-            .checked_sub(amount_1)
-            .unwrap();
+        pool_state.protocol_fees_token_0 = pool_state.protocol_fees_token_0.checked_sub(amount_0).unwrap();
+        pool_state.protocol_fees_token_1 = pool_state.protocol_fees_token_1.checked_sub(amount_1).unwrap();
 
         auth_bump = pool_state.auth_bump;
         pool_state.recent_epoch = Clock::get()?.epoch;

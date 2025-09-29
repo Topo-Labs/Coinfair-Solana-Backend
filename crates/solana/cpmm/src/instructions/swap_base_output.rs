@@ -46,6 +46,7 @@ pub fn swap_base_output(
     let creator_fee_rate =
         pool_state.adjust_creator_fee_rate(ctx.accounts.amm_config.creator_fee_rate);
     let result = CurveCalculator::swap_base_output(
+        trade_direction,
         u128::from(amount_out_with_transfer_fee),
         u128::from(total_input_token_amount),
         u128::from(total_output_token_amount),
@@ -74,7 +75,7 @@ pub fn swap_base_output(
         result.creator_fee,
     );
 
-    // Re-calculate the source amount swapped based on what the curve says
+    // 根据曲线结果重新计算源交换金额
     let (input_transfer_amount, input_transfer_fee) = {
         let input_amount = u64::try_from(result.input_amount).unwrap();
         require_gt!(input_amount, 0);
@@ -142,7 +143,7 @@ pub fn swap_base_output(
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
 
-    // update the previous price to the observation
+    // 更新上一个价格到观察数据
     ctx.accounts.observation_state.load_mut()?.update(
         oracle::block_timestamp(),
         token_0_price_x64,

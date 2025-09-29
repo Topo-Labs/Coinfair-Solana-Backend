@@ -2,13 +2,13 @@ use anchor_lang::prelude::*;
 
 pub const PERMISSION_SEED: &str = "permission";
 
-/// Holds the current owner of the factory
+/// 保存工厂的当前所有者
 #[account]
 #[derive(Default, Debug)]
 pub struct Permission {
-    /// authority
+    /// 权限
     pub authority: Pubkey,
-    /// padding
+    /// 填充
     pub padding: [u64; 30],
 }
 

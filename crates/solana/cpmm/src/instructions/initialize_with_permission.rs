@@ -17,20 +17,22 @@ use anchor_spl::{
 use spl_token_2022;
 use std::ops::Deref;
 
+/// 池子创建：权限模式
+/// 作用：需要特殊权限才能创建的池子，支持代付模式（付费者和创建者可以是不同人），适用于特殊用途、需要管控的池子
 #[derive(Accounts)]
 pub struct InitializeWithPermission<'info> {
-    /// Address paying to create the pool. Can be anyone
+    /// 支付创建池子费用的地址。可以是任何人
     #[account(mut)]
     pub payer: Signer<'info>,
 
-    /// CHECK: creator of pool
+    /// CHECK: 池子创建者
     pub creator: UncheckedAccount<'info>,
 
-    /// Which config the pool belongs to.
+    /// 池子所属的配置。
     pub amm_config: Box<Account<'info, AmmConfig>>,
 
     /// CHECK:
-    /// pool vault and lp mint authority
+    /// 池子金库和LP铸币权限
     #[account(
         seeds = [
             crate::AUTH_SEED.as_bytes(),
@@ -42,30 +44,30 @@ pub struct InitializeWithPermission<'info> {
     /// CHECK: Initialize an account to store the pool state
     /// PDA account:
     /// seeds = [
-    ///     POOL_SEED.as_bytes(),
-    ///     amm_config.key().as_ref(),
-    ///     token_0_mint.key().as_ref(),
-    ///     token_1_mint.key().as_ref(),
+    /// POOL_SEED.as_bytes(),
+    /// amm_config.key().as_ref(),
+    /// token_0_mint.key().as_ref(),
+    /// token_1_mint.key().as_ref(),
     /// ],
     ///
     /// Or random account: must be signed by cli
     #[account(mut)]
     pub pool_state: UncheckedAccount<'info>,
 
-    /// Token_0 mint, the key must smaller than token_1 mint.
+    /// Token_0铸币，键值必须小于token_1铸币。
     #[account(
         constraint = token_0_mint.key() < token_1_mint.key(),
         mint::token_program = token_0_program,
     )]
     pub token_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// Token_1 mint, the key must grater then token_0 mint.
+    /// Token_1铸币，键值必须大于token_0铸币。
     #[account(
         mint::token_program = token_1_program,
     )]
     pub token_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// pool lp mint
+    /// 池子LP铸币
     #[account(
         init,
         seeds = [
@@ -80,7 +82,7 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// payer token0 account
+    /// 付款人token0账户
     #[account(
         mut,
         token::mint = token_0_mint,
@@ -88,7 +90,7 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub payer_token_0: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// payer token1 account
+    /// 付款人token1账户
     #[account(
         mut,
         token::mint = token_1_mint,
@@ -96,7 +98,7 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub payer_token_1: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// payer lp token account
+    /// 付款人LP代币账户
     #[account(
         init,
         associated_token::mint = lp_mint,
@@ -106,7 +108,7 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub payer_lp_token: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: Token_0 vault for the pool, created by contract
+    /// CHECK: 池子的Token_0金库，由合约创建
     #[account(
         mut,
         seeds = [
@@ -118,7 +120,7 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub token_0_vault: UncheckedAccount<'info>,
 
-    /// CHECK: Token_1 vault for the pool, created by contract
+    /// CHECK: 池子的Token_1金库，由合约创建
     #[account(
         mut,
         seeds = [
@@ -130,14 +132,14 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub token_1_vault: UncheckedAccount<'info>,
 
-    /// create pool fee account
+    /// 创建池子费用账户
     #[account(
         mut,
         address= crate::create_pool_fee_reveiver::ID,
     )]
     pub create_pool_fee: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// an account to store oracle observations
+    /// 存储预言机观察数据的账户
     #[account(
         init,
         seeds = [
@@ -150,7 +152,7 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub observation_state: AccountLoader<'info, ObservationState>,
 
-    /// CHECK: PDA account used for permission verification.
+    /// CHECK: 用于权限验证的PDA账户。
     #[account(
         seeds = [
             PERMISSION_SEED.as_bytes(),
@@ -160,15 +162,15 @@ pub struct InitializeWithPermission<'info> {
     )]
     pub permission: Box<Account<'info, Permission>>,
 
-    /// Program to create mint account and mint tokens
+    /// 创建铸币账户和铸造代币的程序
     pub token_program: Program<'info, Token>,
-    /// Spl token program or token program 2022
+    /// Spl代币程序或代币程序2022
     pub token_0_program: Interface<'info, TokenInterface>,
-    /// Spl token program or token program 2022
+    /// Spl代币程序或代币程序2022
     pub token_1_program: Interface<'info, TokenInterface>,
-    /// Program to create an ATA for receiving position NFT
+    /// 创建用于接收仓位NFT的ATA的程序
     pub associated_token_program: Program<'info, AssociatedToken>,
-    /// To create a new program account
+    /// 创建新程序账户
     pub system_program: Program<'info, System>,
 }
 
@@ -193,7 +195,7 @@ pub fn initialize_with_permission(
     if open_time <= block_timestamp {
         open_time = block_timestamp + 1;
     }
-    // due to stack/heap limitations, we have to create redundant new accounts ourselves.
+    // 由于栈/堆限制，我们必须自己创建冗余的新账户。
     create_token_account(
         &ctx.accounts.authority.to_account_info(),
         &ctx.accounts.payer.to_account_info(),
@@ -257,24 +259,14 @@ pub fn initialize_with_permission(
         ctx.accounts.token_1_mint.decimals,
     )?;
 
-    let token_0_vault =
-        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-            ctx.accounts
-                .token_0_vault
-                .to_account_info()
-                .try_borrow_data()?
-                .deref(),
-        )?
-        .base;
-    let token_1_vault =
-        spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
-            ctx.accounts
-                .token_1_vault
-                .to_account_info()
-                .try_borrow_data()?
-                .deref(),
-        )?
-        .base;
+    let token_0_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+        ctx.accounts.token_0_vault.to_account_info().try_borrow_data()?.deref(),
+    )?
+    .base;
+    let token_1_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
+        ctx.accounts.token_1_vault.to_account_info().try_borrow_data()?.deref(),
+    )?
+    .base;
 
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
@@ -302,7 +294,7 @@ pub fn initialize_with_permission(
         &[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]],
     )?;
 
-    // Charge the fee to create a pool
+    // 收取创建池子的费用
     if ctx.accounts.amm_config.create_pool_fee != 0 {
         invoke(
             &system_instruction::transfer(
@@ -317,10 +309,7 @@ pub fn initialize_with_permission(
             ],
         )?;
         invoke(
-            &spl_token::instruction::sync_native(
-                ctx.accounts.token_program.key,
-                &ctx.accounts.create_pool_fee.key(),
-            )?,
+            &spl_token::instruction::sync_native(ctx.accounts.token_program.key, &ctx.accounts.create_pool_fee.key())?,
             &[
                 ctx.accounts.token_program.to_account_info(),
                 ctx.accounts.create_pool_fee.to_account_info(),

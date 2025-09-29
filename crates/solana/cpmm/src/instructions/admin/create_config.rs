@@ -6,14 +6,14 @@ use std::ops::DerefMut;
 #[derive(Accounts)]
 #[instruction(index: u16)]
 pub struct CreateAmmConfig<'info> {
-    /// Address to be set as protocol owner.
+    /// 要设置为协议所有者的地址。
     #[account(
         mut,
         address = crate::admin::ID @ ErrorCode::InvalidOwner
     )]
     pub owner: Signer<'info>,
 
-    /// Initialize config state account to store protocol owner address and fee rates.
+    /// 初始化配置状态账户来存储协议所有者地址和费率。
     #[account(
         init,
         seeds = [

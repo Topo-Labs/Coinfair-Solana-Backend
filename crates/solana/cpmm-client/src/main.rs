@@ -77,8 +77,7 @@ fn load_cfg(client_config: &String) -> Result<ClientConfig> {
 }
 
 fn read_keypair_file(s: &str) -> Result<Keypair> {
-    solana_sdk::signature::read_keypair_file(s)
-        .map_err(|_| format_err!("failed to read keypair from {}", s))
+    solana_sdk::signature::read_keypair_file(s).map_err(|_| format_err!("failed to read keypair from {}", s))
 }
 
 #[derive(Debug, Parser)]
@@ -222,14 +221,11 @@ fn main() -> Result<()> {
             // pool_account and token vault0, token vault1 must be obtained together to ensure data consistency.
             let load_pubkeys = vec![pool_id, pool_state.token_0_vault, pool_state.token_1_vault];
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
-            let [pool_account, token_0_vault_account, token_1_vault_account] =
-                array_ref![rsps, 0, 3];
+            let [pool_account, token_0_vault_account, token_1_vault_account] = array_ref![rsps, 0, 3];
             // docode account
             let pool_state =
-                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(
-                    pool_account.as_ref().unwrap(),
-                )
-                .unwrap();
+                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(pool_account.as_ref().unwrap())
+                    .unwrap();
             let token_0_vault_info = unpack_token(&token_0_vault_account.as_ref().unwrap().data)?;
             let token_1_vault_info = unpack_token(&token_1_vault_account.as_ref().unwrap().data)?;
 
@@ -276,17 +272,10 @@ fn main() -> Result<()> {
             let amount_1_max = (amount_1_with_slippage as u64)
                 .checked_add(transfer_fee.1.transfer_fee)
                 .unwrap();
-            println!(
-                "amount_0_max:{}, amount_1_max:{}",
-                amount_0_max, amount_1_max
-            );
+            println!("amount_0_max:{}, amount_1_max:{}", amount_0_max, amount_1_max);
             let mut instructions = Vec::new();
-            let create_user_lp_token_instr = create_ata_token_account_instr(
-                &pool_config,
-                spl_token::id(),
-                &pool_state.lp_mint,
-                &payer.pubkey(),
-            )?;
+            let create_user_lp_token_instr =
+                create_ata_token_account_instr(&pool_config, spl_token::id(), &pool_state.lp_mint, &payer.pubkey())?;
             instructions.extend(create_user_lp_token_instr);
             let deposit_instr = deposit_instr(
                 &pool_config,
@@ -298,10 +287,7 @@ fn main() -> Result<()> {
                 pool_state.token_1_vault,
                 user_token_0,
                 user_token_1,
-                spl_associated_token_account::get_associated_token_address(
-                    &payer.pubkey(),
-                    &pool_state.lp_mint,
-                ),
+                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &pool_state.lp_mint),
                 lp_token_amount,
                 amount_0_max,
                 amount_1_max,
@@ -309,12 +295,7 @@ fn main() -> Result<()> {
             instructions.extend(deposit_instr);
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -328,14 +309,11 @@ fn main() -> Result<()> {
             // pool_account and token vault0, token vault1 must be obtained together to ensure data consistency.
             let load_pubkeys = vec![pool_id, pool_state.token_0_vault, pool_state.token_1_vault];
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
-            let [pool_account, token_0_vault_account, token_1_vault_account] =
-                array_ref![rsps, 0, 3];
+            let [pool_account, token_0_vault_account, token_1_vault_account] = array_ref![rsps, 0, 3];
             // docode account
             let pool_state =
-                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(
-                    pool_account.as_ref().unwrap(),
-                )
-                .unwrap();
+                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(pool_account.as_ref().unwrap())
+                    .unwrap();
             let token_0_vault_info = unpack_token(&token_0_vault_account.as_ref().unwrap().data)?;
             let token_1_vault_info = unpack_token(&token_1_vault_account.as_ref().unwrap().data)?;
 
@@ -377,16 +355,9 @@ fn main() -> Result<()> {
                 "transfer_fee_0:{}, transfer_fee_1:{}",
                 transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
             );
-            let amount_0_min = amount_0_with_slippage
-                .checked_sub(transfer_fee.0.transfer_fee)
-                .unwrap();
-            let amount_1_min = amount_1_with_slippage
-                .checked_sub(transfer_fee.1.transfer_fee)
-                .unwrap();
-            println!(
-                "amount_0_min:{}, amount_1_min:{}",
-                amount_0_min, amount_1_min
-            );
+            let amount_0_min = amount_0_with_slippage.checked_sub(transfer_fee.0.transfer_fee).unwrap();
+            let amount_1_min = amount_1_with_slippage.checked_sub(transfer_fee.1.transfer_fee).unwrap();
+            println!("amount_0_min:{}, amount_1_min:{}", amount_0_min, amount_1_min);
             let mut instructions = Vec::new();
             let create_user_token_0_instr = create_ata_token_account_instr(
                 &pool_config,
@@ -410,14 +381,8 @@ fn main() -> Result<()> {
                 pool_state.lp_mint,
                 pool_state.token_0_vault,
                 pool_state.token_1_vault,
-                spl_associated_token_account::get_associated_token_address(
-                    &payer.pubkey(),
-                    &pool_state.token_0_mint,
-                ),
-                spl_associated_token_account::get_associated_token_address(
-                    &payer.pubkey(),
-                    &pool_state.token_1_mint,
-                ),
+                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &pool_state.token_0_mint),
+                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &pool_state.token_1_mint),
                 user_lp_token,
                 lp_token_amount,
                 amount_0_min,
@@ -426,12 +391,7 @@ fn main() -> Result<()> {
             instructions.extend(withdraw_instr);
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -458,19 +418,15 @@ fn main() -> Result<()> {
                 array_ref![rsps, 0, 7];
             // docode account
             let pool_state =
-                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(
-                    pool_account.as_ref().unwrap(),
-                )
-                .unwrap();
-            let amm_config_state = deserialize_anchor_account::<raydium_cp_swap::states::AmmConfig>(
-                amm_config_account.as_ref().unwrap(),
-            )?;
+                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(pool_account.as_ref().unwrap())
+                    .unwrap();
+            let amm_config_state =
+                deserialize_anchor_account::<raydium_cp_swap::states::AmmConfig>(amm_config_account.as_ref().unwrap())?;
             let token_0_vault_info = unpack_token(&token_0_vault_account.as_ref().unwrap().data)?;
             let token_1_vault_info = unpack_token(&token_1_vault_account.as_ref().unwrap().data)?;
             let token_0_mint_info = unpack_mint(&token_0_mint_account.as_ref().unwrap().data)?;
             let token_1_mint_info = unpack_mint(&token_1_mint_account.as_ref().unwrap().data)?;
-            let user_input_token_info =
-                unpack_token(&user_input_token_account.as_ref().unwrap().data)?;
+            let user_input_token_info = unpack_token(&user_input_token_account.as_ref().unwrap().data)?;
 
             let (total_token_0_amount, total_token_1_amount) = pool_state
                 .vault_amount_without_fee(
@@ -532,6 +488,7 @@ fn main() -> Result<()> {
             // Take transfer fees into account for actual amount transferred in
             let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
             let result = raydium_cp_swap::curve::CurveCalculator::swap_base_input(
+                trade_direction,
                 u128::from(actual_amount_in),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
@@ -554,16 +511,11 @@ fn main() -> Result<()> {
             };
             let amount_received = amount_out.checked_sub(transfer_fee).unwrap();
             // calc mint out amount with slippage
-            let minimum_amount_out =
-                amount_with_slippage(amount_received, pool_config.slippage, false);
+            let minimum_amount_out = amount_with_slippage(amount_received, pool_config.slippage, false);
 
             let mut instructions = Vec::new();
-            let create_user_output_token_instr = create_ata_token_account_instr(
-                &pool_config,
-                spl_token::id(),
-                &output_token_mint,
-                &payer.pubkey(),
-            )?;
+            let create_user_output_token_instr =
+                create_ata_token_account_instr(&pool_config, spl_token::id(), &output_token_mint, &payer.pubkey())?;
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_input_instr(
                 &pool_config,
@@ -584,12 +536,7 @@ fn main() -> Result<()> {
             instructions.extend(swap_base_in_instr);
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -616,19 +563,15 @@ fn main() -> Result<()> {
                 array_ref![rsps, 0, 7];
             // docode account
             let pool_state =
-                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(
-                    pool_account.as_ref().unwrap(),
-                )
-                .unwrap();
-            let amm_config_state = deserialize_anchor_account::<raydium_cp_swap::states::AmmConfig>(
-                amm_config_account.as_ref().unwrap(),
-            )?;
+                utils::deserialize_anchor_account::<raydium_cp_swap::states::PoolState>(pool_account.as_ref().unwrap())
+                    .unwrap();
+            let amm_config_state =
+                deserialize_anchor_account::<raydium_cp_swap::states::AmmConfig>(amm_config_account.as_ref().unwrap())?;
             let token_0_vault_info = unpack_token(&token_0_vault_account.as_ref().unwrap().data)?;
             let token_1_vault_info = unpack_token(&token_1_vault_account.as_ref().unwrap().data)?;
             let token_0_mint_info = unpack_mint(&token_0_mint_account.as_ref().unwrap().data)?;
             let token_1_mint_info = unpack_mint(&token_1_mint_account.as_ref().unwrap().data)?;
-            let user_input_token_info =
-                unpack_token(&user_input_token_account.as_ref().unwrap().data)?;
+            let user_input_token_info = unpack_token(&user_input_token_account.as_ref().unwrap().data)?;
 
             let (total_token_0_amount, total_token_1_amount) = pool_state
                 .vault_amount_without_fee(
@@ -690,6 +633,7 @@ fn main() -> Result<()> {
             let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
 
             let result = raydium_cp_swap::curve::CurveCalculator::swap_base_output(
+                trade_direction,
                 u128::from(actual_amount_out),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
@@ -712,19 +656,12 @@ fn main() -> Result<()> {
                 }
             };
 
-            let input_transfer_amount = source_amount_swapped
-                .checked_add(amount_in_transfer_fee)
-                .unwrap();
+            let input_transfer_amount = source_amount_swapped.checked_add(amount_in_transfer_fee).unwrap();
             // calc max in with slippage
-            let max_amount_in =
-                amount_with_slippage(input_transfer_amount, pool_config.slippage, true);
+            let max_amount_in = amount_with_slippage(input_transfer_amount, pool_config.slippage, true);
             let mut instructions = Vec::new();
-            let create_user_output_token_instr = create_ata_token_account_instr(
-                &pool_config,
-                spl_token::id(),
-                &output_token_mint,
-                &payer.pubkey(),
-            )?;
+            let create_user_output_token_instr =
+                create_ata_token_account_instr(&pool_config, spl_token::id(), &output_token_mint, &payer.pubkey())?;
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_output_instr(
                 &pool_config,
@@ -745,12 +682,7 @@ fn main() -> Result<()> {
             instructions.extend(swap_base_in_instr);
             let signers = vec![&payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
+            let txn = Transaction::new_signed_with_payer(&instructions, Some(&payer.pubkey()), &signers, recent_hash);
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
@@ -758,11 +690,7 @@ fn main() -> Result<()> {
             handle_program_instruction(&instr_hex_data, InstructionDecodeType::BaseHex)?;
         }
         RaydiumCpCommands::DecodeEvent { log_event } => {
-            handle_program_log(
-                &pool_config.raydium_cp_program.to_string(),
-                &log_event,
-                false,
-            )?;
+            handle_program_log(&pool_config.raydium_cp_program.to_string(), &log_event, false)?;
         }
         RaydiumCpCommands::DecodeTxLog { tx_id } => {
             let signature = Signature::from_str(&tx_id)?;

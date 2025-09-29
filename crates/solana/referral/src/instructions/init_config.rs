@@ -38,6 +38,8 @@ pub fn init_config(
     Ok(())
 }
 
+// TODO: Add update_config
+
 #[derive(Accounts)]
 pub struct UpdateAdmin<'info> {
     #[account(mut, has_one = admin @ ReferralError::NotApproved)]

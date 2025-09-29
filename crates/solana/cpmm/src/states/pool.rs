@@ -2,7 +2,7 @@ use crate::{curve::TradeDirection, error::ErrorCode};
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
 use std::ops::{BitAnd, BitOr, BitXor};
-/// Seed to derive account address and signature
+/// 用于派生账户地址和签名的种子
 pub const POOL_SEED: &str = "pool";
 pub const POOL_LP_MINT_SEED: &str = "pool_lp_mint";
 pub const POOL_VAULT_SEED: &str = "pool_vault";
@@ -23,12 +23,12 @@ pub enum PoolStatusBitFlag {
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq, Eq)]
 pub enum CreatorFeeOn {
-    /// Both token0 and token1 can be used as trade fees.
-    /// It depends on what the input token is.
+    /// token0和token1都可以用作交易费。
+    /// 这取决于输入代币是什么。
     BothToken,
-    /// Only token0 can be used as trade fees.
+    /// 只有token0可以用作交易费。
     OnlyToken0,
-    /// Only token1 can be used as trade fees.
+    /// 只有token1可以用作交易费。
     OnlyToken1,
 }
 
@@ -64,67 +64,67 @@ pub struct SwapParams {
 #[repr(C, packed)]
 #[derive(Default, Debug)]
 pub struct PoolState {
-    /// Which config the pool belongs
+    /// 池所属的配置
     pub amm_config: Pubkey,
-    /// pool creator
+    /// 池创建者
     pub pool_creator: Pubkey,
-    /// Token A
+    /// 代币A
     pub token_0_vault: Pubkey,
-    /// Token B
+    /// 代币B
     pub token_1_vault: Pubkey,
 
-    /// Pool tokens are issued when A or B tokens are deposited.
-    /// Pool tokens can be withdrawn back to the original A or B token.
+    /// 当存入A或B代币时会发行池代币。
+    /// 池代币可以提取回原始的A或B代币。
     pub lp_mint: Pubkey,
-    /// Mint information for token A
+    /// 代币A的铸币信息
     pub token_0_mint: Pubkey,
-    /// Mint information for token B
+    /// 代币B的铸币信息
     pub token_1_mint: Pubkey,
 
-    /// token_0 program
+    /// token_0程序
     pub token_0_program: Pubkey,
-    /// token_1 program
+    /// token_1程序
     pub token_1_program: Pubkey,
 
-    /// observation account to store oracle data
+    /// 存储预言机数据的观察账户
     pub observation_key: Pubkey,
 
     pub auth_bump: u8,
-    /// Bitwise representation of the state of the pool
-    /// bit0, 1: disable deposit(value is 1), 0: normal
-    /// bit1, 1: disable withdraw(value is 2), 0: normal
-    /// bit2, 1: disable swap(value is 4), 0: normal
+    /// 池状态的位表示
+    /// bit0, 1: 禁用存款(值为1), 0: 正常
+    /// bit1, 1: 禁用提取(值为2), 0: 正常
+    /// bit2, 1: 禁用交换(值为4), 0: 正常
     pub status: u8,
 
     pub lp_mint_decimals: u8,
-    /// mint0 and mint1 decimals
+    /// mint0和mint1的小数位数
     pub mint_0_decimals: u8,
     pub mint_1_decimals: u8,
 
-    /// True circulating supply without burns and lock ups
+    /// 不包括销毁和锁定的真实流通供应量
     pub lp_supply: u64,
-    /// The amounts of token_0 and token_1 that are owed to the liquidity provider.
+    /// 欠流动性提供者的token_0和token_1数量。
     pub protocol_fees_token_0: u64,
     pub protocol_fees_token_1: u64,
 
     pub fund_fees_token_0: u64,
     pub fund_fees_token_1: u64,
 
-    /// The timestamp allowed for swap in the pool.
+    /// 池中允许交换的时间戳。
     pub open_time: u64,
-    /// recent epoch
+    /// 最近的纪元
     pub recent_epoch: u64,
 
-    /// Creator fee collect mode
-    /// 0: both token_0 and token_1 can be used as trade fees. It depends on what the input token is when swapping
-    /// 1: only token_0 as trade fee
-    /// 2: only token_1 as trade fee
+    /// 创建者费用收取模式
+    /// 0: token_0和token_1都可以用作交易费。这取决于交换时的输入代币
+    /// 1: 仅token_0作为交易费
+    /// 2: 仅token_1作为交易费
     pub creator_fee_on: u8,
     pub enable_creator_fee: bool,
     pub padding1: [u8; 6],
     pub creator_fees_token_0: u64,
     pub creator_fees_token_1: u64,
-    /// padding for future updates
+    /// 为未来更新预留的填充
     pub padding: [u64; 28],
 }
 
@@ -191,7 +191,7 @@ impl PoolState {
         }
     }
 
-    /// Get status by bit, if it is `noraml` status, return true
+    /// 按位获取状态，如果是`正常`状态，返回true
     pub fn get_status_by_bit(&self, bit: PoolStatusBitIndex) -> bool {
         let status = u8::from(1) << (bit as u8);
         self.status.bitand(status) == 0
@@ -211,12 +211,8 @@ impl PoolState {
             .checked_add(self.creator_fees_token_1)
             .ok_or(ErrorCode::MathOverflow)?;
         Ok((
-            vault_0
-                .checked_sub(fees_token_0)
-                .ok_or(ErrorCode::InsufficientVault)?,
-            vault_1
-                .checked_sub(fees_token_1)
-                .ok_or(ErrorCode::InsufficientVault)?,
+            vault_0.checked_sub(fees_token_0).ok_or(ErrorCode::InsufficientVault)?,
+            vault_1.checked_sub(fees_token_1).ok_or(ErrorCode::InsufficientVault)?,
         ))
     }
 
@@ -228,12 +224,7 @@ impl PoolState {
         ))
     }
 
-    pub fn update_lp_supply(
-        &mut self,
-        liquidity_delta: u64,
-        add: bool,
-        recent_epoch: u64,
-    ) -> Result<()> {
+    pub fn update_lp_supply(&mut self, liquidity_delta: u64, add: bool, recent_epoch: u64) -> Result<()> {
         if add {
             self.lp_supply = self
                 .lp_supply
@@ -249,7 +240,7 @@ impl PoolState {
         Ok(())
     }
 
-    // Determine the method used by the creator to calculate transaction fees
+    // 确定创建者用于计算交易费的方法
     pub fn is_creator_fee_on_input(&self, direction: TradeDirection) -> Result<bool> {
         let fee_on = CreatorFeeOn::from_u8(self.creator_fee_on)?;
         Ok(match (fee_on, direction) {
@@ -336,32 +327,22 @@ impl PoolState {
         let is_creator_fee_on_input = self.is_creator_fee_on_input(direction)?;
         match direction {
             TradeDirection::ZeroForOne => {
-                self.protocol_fees_token_0 = self
-                    .protocol_fees_token_0
-                    .checked_add(protocol_fee)
-                    .unwrap();
+                self.protocol_fees_token_0 = self.protocol_fees_token_0.checked_add(protocol_fee).unwrap();
                 self.fund_fees_token_0 = self.fund_fees_token_0.checked_add(fund_fee).unwrap();
 
                 if is_creator_fee_on_input {
-                    self.creator_fees_token_0 =
-                        self.creator_fees_token_0.checked_add(creator_fee).unwrap();
+                    self.creator_fees_token_0 = self.creator_fees_token_0.checked_add(creator_fee).unwrap();
                 } else {
-                    self.creator_fees_token_1 =
-                        self.creator_fees_token_1.checked_add(creator_fee).unwrap();
+                    self.creator_fees_token_1 = self.creator_fees_token_1.checked_add(creator_fee).unwrap();
                 }
             }
             TradeDirection::OneForZero => {
-                self.protocol_fees_token_1 = self
-                    .protocol_fees_token_1
-                    .checked_add(protocol_fee)
-                    .unwrap();
+                self.protocol_fees_token_1 = self.protocol_fees_token_1.checked_add(protocol_fee).unwrap();
                 self.fund_fees_token_1 = self.fund_fees_token_1.checked_add(fund_fee).unwrap();
                 if is_creator_fee_on_input {
-                    self.creator_fees_token_1 =
-                        self.creator_fees_token_1.checked_add(creator_fee).unwrap();
+                    self.creator_fees_token_1 = self.creator_fees_token_1.checked_add(creator_fee).unwrap();
                 } else {
-                    self.creator_fees_token_0 =
-                        self.creator_fees_token_0.checked_add(creator_fee).unwrap();
+                    self.creator_fees_token_0 = self.creator_fees_token_0.checked_add(creator_fee).unwrap();
                 }
             }
         };
@@ -385,25 +366,13 @@ pub mod pool_test {
         fn get_set_status_by_bit() {
             let mut pool_state = PoolState::default();
             pool_state.set_status(4); // 0000100
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                true
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                true
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), true);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), true);
 
             // disable -> disable, nothing to change
             pool_state.set_status_by_bit(PoolStatusBitIndex::Swap, PoolStatusBitFlag::Disable);
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
 
             // disable -> enable
             pool_state.set_status_by_bit(PoolStatusBitIndex::Swap, PoolStatusBitFlag::Enable);
@@ -414,49 +383,22 @@ pub mod pool_test {
             assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), true);
             // enable -> disable
             pool_state.set_status_by_bit(PoolStatusBitIndex::Swap, PoolStatusBitFlag::Disable);
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
 
             pool_state.set_status(5); // 0000101
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                true
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), true);
 
             pool_state.set_status(7); // 0000111
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Swap),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), false);
 
             pool_state.set_status(3); // 0000011
             assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Swap), true);
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit),
-                false
-            );
-            assert_eq!(
-                pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw),
-                false
-            );
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit), false);
+            assert_eq!(pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw), false);
         }
     }
 }

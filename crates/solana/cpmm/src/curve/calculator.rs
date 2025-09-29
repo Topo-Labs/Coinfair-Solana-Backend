@@ -1,10 +1,10 @@
-//! Swap calculations
+//! 交换计算
 
 use crate::curve::{constant_product::ConstantProductCurve, fees::Fees};
 use anchor_lang::prelude::*;
 use {crate::error::ErrorCode, std::fmt::Debug};
 
-/// Helper function for mapping to ErrorCode::CalculationFailure
+/// 用于映射到ErrorCode::CalculationFailure的辅助函数
 pub fn map_zero_to_none(x: u128) -> Option<u128> {
     if x == 0 {
         None
@@ -13,30 +13,30 @@ pub fn map_zero_to_none(x: u128) -> Option<u128> {
     }
 }
 
-/// The direction of a trade, since curves can be specialized to treat each
-/// token differently (by adding offsets or weights)
+/// 交易方向，因为曲线可以专门化处理每个代币
+/// （通过添加偏移量或权重）
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TradeDirection {
-    /// Input token 0, output token 1
+    /// 输入token 0，输出token 1
     ZeroForOne,
-    /// Input token 1, output token 0
+    /// 输入token 1，输出token 0
     OneForZero,
 }
 
-/// The direction to round.  Used for pool token to trading token conversions to
-/// avoid losing value on any deposit or withdrawal.
+/// 四舍五入方向。用于池代币到交易代币的转换，
+/// 以避免在任何存款或提取中损失价值。
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RoundDirection {
-    /// Floor the value, ie. 1.9 => 1, 1.1 => 1, 1.5 => 1
+    /// 向下舍入，即 1.9 => 1, 1.1 => 1, 1.5 => 1
     Floor,
-    /// Ceiling the value, ie. 1.9 => 2, 1.1 => 2, 1.5 => 2
+    /// 向上舍入，即 1.9 => 2, 1.1 => 2, 1.5 => 2
     Ceiling,
 }
 
 impl TradeDirection {
-    /// Given a trade direction, gives the opposite direction of the trade, so
-    /// A to B becomes B to A, and vice versa
+    /// 给定交易方向，给出交易的相反方向，因此
+    /// A到B变成B到A，反之亦然
     pub fn opposite(&self) -> TradeDirection {
         match self {
             TradeDirection::ZeroForOne => TradeDirection::OneForZero,
@@ -45,37 +45,37 @@ impl TradeDirection {
     }
 }
 
-/// Encodes results of depositing both sides at once
+/// 编码同时存入双方的结果
 #[derive(Debug, PartialEq)]
 pub struct TradingTokenResult {
-    /// Amount of token A
+    /// 代币A的数量
     pub token_0_amount: u128,
-    /// Amount of token B
+    /// 代币B的数量
     pub token_1_amount: u128,
 }
 
-/// Encodes all results of swapping from a source token to a destination token
+/// 编码从源代币到目标代币交换的所有结果
 #[derive(Debug, PartialEq)]
 pub struct SwapResult {
-    /// The new amount in the input token vault, excluding  trade fees
+    /// 输入代币库中的新数量，不包括交易费
     pub new_input_vault_amount: u128,
-    /// The new amount in the output token vault, excluding trade fees
+    /// 输出代币库中的新数量，不包括交易费
     pub new_output_vault_amount: u128,
-    /// User's input amount, including trade fees, excluding transfer fees
+    /// 用户输入数量，包括交易费，不包括转账费
     pub input_amount: u128,
-    /// The amount to be transfer to user, including transfer fees
+    /// 要转给用户的数量，包括转账费
     pub output_amount: u128,
-    /// Amount of input tokens going to pool holders
+    /// 进入池持有者的输入代币数量
     pub trade_fee: u128,
-    /// Amount of input tokens going to protocol
+    /// 进入协议的输入代币数量
     pub protocol_fee: u128,
-    /// Amount of input tokens going to protocol team
+    /// 进入协议团队的输入代币数量
     pub fund_fee: u128,
-    /// Amount of fee tokens going to creator
+    /// 进入创建者的费用代币数量
     pub creator_fee: u128,
 }
 
-/// Concrete struct to wrap around the trait object which performs calculation.
+/// 用于包装执行计算的trait对象的具体结构体。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CurveCalculator {}
 
@@ -90,9 +90,9 @@ impl CurveCalculator {
         Ok(())
     }
 
-    /// Subtract fees and calculate how much destination token will be provided
-    /// given an amount of source token.
+    /// 减去费用并计算给定源代币数量将提供多少目标代币。
     pub fn swap_base_input(
+        trade_direction: TradeDirection,
         input_amount: u128,
         input_vault_amount: u128,
         output_vault_amount: u128,
@@ -107,20 +107,31 @@ impl CurveCalculator {
         let trade_fee = Fees::trading_fee(input_amount, trade_fee_rate)?;
         let input_amount_less_fees = if is_creator_fee_on_input {
             creator_fee = Fees::creator_fee(input_amount, creator_fee_rate)?;
-            input_amount
-                .checked_sub(trade_fee)?
-                .checked_sub(creator_fee)?
+            input_amount.checked_sub(trade_fee)?.checked_sub(creator_fee)?
         } else {
             input_amount.checked_sub(trade_fee)?
         };
         let protocol_fee = Fees::protocol_fee(trade_fee, protocol_fee_rate)?;
         let fund_fee = Fees::fund_fee(trade_fee, fund_fee_rate)?;
 
-        let output_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
-            input_amount_less_fees,
-            input_vault_amount,
-            output_vault_amount,
-        );
+        // let output_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
+        //     input_amount_less_fees,
+        //     input_vault_amount,
+        //     output_vault_amount,
+        // );
+
+        let output_amount_swapped = match trade_direction {
+            TradeDirection::ZeroForOne => ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
+                input_amount_less_fees,
+                input_vault_amount,
+                output_vault_amount,
+            ),
+            TradeDirection::OneForZero => ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
+                input_amount_less_fees,
+                input_vault_amount,
+                output_vault_amount,
+            ),
+        };
 
         let output_amount = if is_creator_fee_on_input {
             output_amount_swapped
@@ -142,6 +153,7 @@ impl CurveCalculator {
     }
 
     pub fn swap_base_output(
+        trade_direction: TradeDirection,
         output_amount: u128,
         input_vault_amount: u128,
         output_vault_amount: u128,
@@ -157,31 +169,39 @@ impl CurveCalculator {
         let actual_output_amount = if is_creator_fee_on_input {
             output_amount
         } else {
-            let out_amount_with_creator_fee =
-                Fees::calculate_pre_fee_amount(output_amount, creator_fee_rate)?;
+            let out_amount_with_creator_fee = Fees::calculate_pre_fee_amount(output_amount, creator_fee_rate)?;
             creator_fee = out_amount_with_creator_fee - output_amount;
             out_amount_with_creator_fee
         };
 
-        let input_amount_swapped = ConstantProductCurve::swap_base_output_without_fees(
-            actual_output_amount,
-            input_vault_amount,
-            output_vault_amount,
-        );
+        // let input_amount_swapped = ConstantProductCurve::swap_base_output_without_fees(
+        //     actual_output_amount,
+        //     input_vault_amount,
+        //     output_vault_amount,
+        // );
+
+        let input_amount_swapped = match trade_direction {
+            TradeDirection::ZeroForOne => ConstantProductCurve::swap_base_output_without_fees_zero_to_one(
+                actual_output_amount,
+                input_vault_amount,
+                output_vault_amount,
+            ),
+            TradeDirection::OneForZero => ConstantProductCurve::swap_base_output_without_fees_one_to_zero(
+                actual_output_amount,
+                input_vault_amount,
+                output_vault_amount,
+            ),
+        };
 
         let input_amount = if is_creator_fee_on_input {
-            let input_amount_with_fee = Fees::calculate_pre_fee_amount(
-                input_amount_swapped,
-                trade_fee_rate + creator_fee_rate,
-            )
-            .unwrap();
+            let input_amount_with_fee =
+                Fees::calculate_pre_fee_amount(input_amount_swapped, trade_fee_rate + creator_fee_rate).unwrap();
             let total_fee = input_amount_with_fee - input_amount_swapped;
             creator_fee = Fees::split_creator_fee(total_fee, trade_fee_rate, creator_fee_rate)?;
             trade_fee = total_fee - creator_fee;
             input_amount_with_fee
         } else {
-            let input_amount_with_fee =
-                Fees::calculate_pre_fee_amount(input_amount_swapped, trade_fee_rate).unwrap();
+            let input_amount_with_fee = Fees::calculate_pre_fee_amount(input_amount_swapped, trade_fee_rate).unwrap();
             trade_fee = input_amount_with_fee - input_amount_swapped;
             input_amount_with_fee
         };
@@ -199,8 +219,8 @@ impl CurveCalculator {
         })
     }
 
-    /// Get the amount of trading tokens for the given amount of pool tokens,
-    /// provided the total trading tokens and supply of pool tokens.
+    /// 给定池代币数量获取交易代币数量，
+    /// 提供总交易代币和池代币供应量。
     pub fn lp_tokens_to_trading_tokens(
         lp_token_amount: u128,
         lp_token_supply: u128,
@@ -218,50 +238,38 @@ impl CurveCalculator {
     }
 }
 
-/// Test helpers for curves
+/// 曲线的测试辅助函数
 #[cfg(test)]
 pub mod test {
-    use {
-        super::*, proptest::prelude::*, spl_math::precise_number::PreciseNumber,
-        spl_math::uint::U256,
-    };
+    use {super::*, proptest::prelude::*, spl_math::precise_number::PreciseNumber, spl_math::uint::U256};
 
-    /// The epsilon for most curves when performing the conversion test,
-    /// comparing a one-sided deposit to a swap + deposit.
+    /// 大多数曲线执行转换测试时的ε值，
+    /// 比较单侧存款与交换+存款。
     pub const CONVERSION_BASIS_POINTS_GUARANTEE: u128 = 50;
 
-    /// Calculates the total normalized value of the curve given the liquidity
-    /// parameters.
+    /// 给定流动性参数计算曲线的总归一化值。
     ///
-    /// The constant product implementation for this function gives the square root
-    /// of the Uniswap invariant.
-    pub fn normalized_value(
-        swap_token_a_amount: u128,
-        swap_token_b_amount: u128,
-    ) -> Option<PreciseNumber> {
+    /// 此函数的常数产品实现给出Uniswap不变量的平方根。
+    pub fn normalized_value(swap_token_a_amount: u128, swap_token_b_amount: u128) -> Option<PreciseNumber> {
         let swap_token_a_amount = PreciseNumber::new(swap_token_a_amount)?;
         let swap_token_b_amount = PreciseNumber::new(swap_token_b_amount)?;
-        swap_token_a_amount
-            .checked_mul(&swap_token_b_amount)?
-            .sqrt()
+        swap_token_a_amount.checked_mul(&swap_token_b_amount)?.sqrt()
     }
 
-    /// Test function checking that a swap never reduces the overall value of
-    /// the pool.
+    /// 测试函数检查交换从不会减少池的整体价值。
     ///
-    /// Since curve calculations use unsigned integers, there is potential for
-    /// truncation at some point, meaning a potential for value to be lost in
-    /// either direction if too much is given to the swapper.
+    /// 由于曲线计算使用无符号整数，在某些点可能发生截断，
+    /// 意味着如果给交换者太多，可能在任一方向损失价值。
     ///
-    /// This test guarantees that the relative change in value will be at most
-    /// 1 normalized token, and that the value will never decrease from a trade.
+    /// 此测试保证价值的相对变化最多为1个归一化代币，
+    /// 并且价值从不会因交易而减少。
     pub fn check_curve_value_from_swap(
         source_token_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
         trade_direction: TradeDirection,
     ) {
-        let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
+        let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
             source_token_amount,
             swap_source_amount,
             swap_destination_amount,
@@ -271,31 +279,23 @@ pub mod test {
             TradeDirection::ZeroForOne => (swap_source_amount, swap_destination_amount),
             TradeDirection::OneForZero => (swap_destination_amount, swap_source_amount),
         };
-        let previous_value = swap_token_0_amount
-            .checked_mul(swap_token_1_amount)
-            .unwrap();
+        let previous_value = swap_token_0_amount.checked_mul(swap_token_1_amount).unwrap();
 
         let new_swap_source_amount = swap_source_amount.checked_add(source_token_amount).unwrap();
-        let new_swap_destination_amount = swap_destination_amount
-            .checked_sub(destination_amount_swapped)
-            .unwrap();
+        let new_swap_destination_amount = swap_destination_amount.checked_sub(destination_amount_swapped).unwrap();
         let (swap_token_0_amount, swap_token_1_amount) = match trade_direction {
             TradeDirection::ZeroForOne => (new_swap_source_amount, new_swap_destination_amount),
             TradeDirection::OneForZero => (new_swap_destination_amount, new_swap_source_amount),
         };
 
-        let new_value = swap_token_0_amount
-            .checked_mul(swap_token_1_amount)
-            .unwrap();
+        let new_value = swap_token_0_amount.checked_mul(swap_token_1_amount).unwrap();
         assert!(new_value >= previous_value);
     }
 
-    /// Test function checking that a deposit never reduces the value of pool
-    /// tokens.
+    /// 测试函数检查存款从不会减少池代币的价值。
     ///
-    /// Since curve calculations use unsigned integers, there is potential for
-    /// truncation at some point, meaning a potential for value to be lost if
-    /// too much is given to the depositor.
+    /// 由于曲线计算使用无符号整数，在某些点可能发生截断，
+    /// 意味着如果给存款者太多，可能损失价值。
     pub fn check_pool_value_from_deposit(
         lp_token_amount: u128,
         lp_token_supply: u128,
@@ -329,12 +329,8 @@ pub mod test {
         let swap_token_b_amount = U256::from(swap_token_1_amount);
         let new_swap_token_b_amount = U256::from(new_swap_token_1_amount);
 
-        assert!(
-            new_swap_token_0_amount * lp_token_supply >= swap_token_0_amount * new_lp_token_supply
-        );
-        assert!(
-            new_swap_token_b_amount * lp_token_supply >= swap_token_b_amount * new_lp_token_supply
-        );
+        assert!(new_swap_token_0_amount * lp_token_supply >= swap_token_0_amount * new_lp_token_supply);
+        assert!(new_swap_token_b_amount * lp_token_supply >= swap_token_b_amount * new_lp_token_supply);
     }
 
     /// Test function checking that a withdraw never reduces the value of pool
