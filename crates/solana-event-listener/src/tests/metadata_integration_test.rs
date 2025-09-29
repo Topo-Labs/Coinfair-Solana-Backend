@@ -10,7 +10,7 @@
 
 use crate::{
     config::EventListenerConfig,
-    parser::{event_parser::RewardDistributionEventData, EventParserRegistry, ParsedEvent},
+    parser::{reward_distribution_parser::RewardDistributionEventData, EventParserRegistry, ParsedEvent},
     EventListenerService,
 };
 use std::sync::Arc;

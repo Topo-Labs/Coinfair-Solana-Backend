@@ -4,9 +4,17 @@ pub mod statics;
 
 use crate::auth::SolanaMiddlewareBuilder;
 use axum::{middleware, Extension, Router};
+use clmm::{
+    clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller,
+    launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller,
+    position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller,
+    swap_v3_controller, token_controller,
+};
+use cpmm::{
+    cpmm_config_controller, cpmm_swap_controller, deposit_controller, init_pool_event_controller,
+    lp_change_event_controller, pool_create_controller, withdraw_controller,
+};
 use std::sync::Arc;
-use clmm::{clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller, launch_event_controller, launch_migration_controller, liquidity_line_controller, nft_controller, position_controller, referral_controller, static_config_controller, swap_controller, swap_v2_controller, swap_v3_controller, token_controller};
-use cpmm::{pool_create_controller, cpmm_swap_controller, cpmm_config_controller, deposit_controller, withdraw_controller, lp_change_event_controller};
 
 pub struct SolanaController;
 
@@ -88,6 +96,8 @@ impl SolanaController {
             .nest("/launch", launch_event_controller::LaunchEventController::routes())
             // LP变更事件路由
             .nest("/cpmm", lp_change_event_controller::lp_change_event_routes())
+            // 池子初始化事件路由
+            .nest("/cpmm", init_pool_event_controller::init_pool_event_routes())
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 
@@ -133,10 +143,11 @@ impl SolanaController {
     /// 流动性管理路由 - 存款、提款等流动性操作
     fn liquidity_management_routes() -> Router {
         Router::new()
-            .nest("/cpmm",
+            .nest(
+                "/cpmm",
                 Router::new()
                     .merge(deposit_controller::CpmmDepositController::routes())
-                    .merge(withdraw_controller::CpmmWithdrawController::routes())
+                    .merge(withdraw_controller::CpmmWithdrawController::routes()),
             )
             .layer(middleware::from_fn(Self::apply_solana_auth))
     }

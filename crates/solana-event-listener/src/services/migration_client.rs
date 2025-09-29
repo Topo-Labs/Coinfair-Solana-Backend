@@ -1,5 +1,4 @@
-use crate::error::Result;
-use crate::parser::event_parser::LaunchEventData;
+use crate::{error::Result, parser::launch_event_parser::LaunchEventData};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

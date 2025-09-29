@@ -6,7 +6,11 @@
 use crate::{
     config::EventListenerConfig,
     metrics::MetricsCollector,
-    parser::{EventParserRegistry, ParsedEvent},
+    parser::{
+        nft_claim_parser::NftClaimEventData, pool_creation_parser::PoolCreatedEventData,
+        reward_distribution_parser::RewardDistributionEventData, token_creation_parser::TokenCreationEventData,
+        EventParserRegistry, ParsedEvent,
+    },
     persistence::EventStorage,
 };
 use solana_sdk::pubkey::Pubkey;
@@ -251,7 +255,7 @@ async fn test_simple_e2e_flow() {
 /// 创建测试事件数据
 fn create_test_events() -> Vec<ParsedEvent> {
     vec![
-        ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+        ParsedEvent::TokenCreation(TokenCreationEventData {
             project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Simple E2E Test Token".to_string(),
@@ -275,8 +279,8 @@ fn create_test_events() -> Vec<ParsedEvent> {
     ]
 }
 
-fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
-    crate::parser::event_parser::PoolCreatedEventData {
+fn create_test_pool_event() -> PoolCreatedEventData {
+    PoolCreatedEventData {
         pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(), // SOL
         token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse().unwrap(), // USDC
@@ -300,8 +304,8 @@ fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData
     }
 }
 
-fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
-    crate::parser::event_parser::NftClaimEventData {
+fn create_test_nft_event() -> NftClaimEventData {
+    NftClaimEventData {
         nft_mint: Pubkey::new_unique().to_string(),
         claimer: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),
@@ -328,9 +332,9 @@ fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
     }
 }
 
-fn create_test_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
+fn create_test_reward_event() -> RewardDistributionEventData {
     let now = chrono::Utc::now();
-    crate::parser::event_parser::RewardDistributionEventData {
+    RewardDistributionEventData {
         distribution_id: now.timestamp_millis(),
         reward_pool: Pubkey::new_unique().to_string(),
         recipient: Pubkey::new_unique().to_string(),

@@ -1,13 +1,20 @@
 use crate::config::EventListenerConfig;
 use crate::error::{EventListenerError, Result};
+use crate::parser::cpmm_init_pool_parser::InitPoolEventData;
 use crate::parser::cpmm_lp_change_parser::LpChangeEventData;
+use crate::parser::deposit_event_parser::DepositEventData;
+use crate::parser::launch_event_parser::LaunchEventData;
+use crate::parser::nft_claim_parser::NftClaimEventData;
+use crate::parser::pool_creation_parser::PoolCreatedEventData;
+use crate::parser::reward_distribution_parser::RewardDistributionEventData;
+use crate::parser::swap_parser::SwapEventData;
+use crate::parser::token_creation_parser::TokenCreationEventData;
 use crate::parser::{
-    DepositEventParser, LaunchEventParser, LpChangeParser, NftClaimParser, PoolCreationParser,
+    DepositEventParser, InitPoolParser, LaunchEventParser, LpChangeParser, NftClaimParser, PoolCreationParser,
     RewardDistributionParser, SwapParser, TokenCreationParser,
 };
 use anchor_lang::pubkey;
 use async_trait::async_trait;
-use database::clmm::token_info::DataSource;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solana_sdk::pubkey::Pubkey;
@@ -99,6 +106,8 @@ pub enum ParsedEvent {
     Deposit(DepositEventData),
     /// LP变更事件
     LpChange(LpChangeEventData),
+    /// 池子初始化事件
+    InitPool(InitPoolEventData),
 }
 
 impl ParsedEvent {
@@ -113,6 +122,7 @@ impl ParsedEvent {
             ParsedEvent::Launch(_) => "launch",
             ParsedEvent::Deposit(_) => "deposit",
             ParsedEvent::LpChange(_) => "lp_change",
+            ParsedEvent::InitPool(_) => "init_pool",
         }
     }
 
@@ -127,323 +137,9 @@ impl ParsedEvent {
             ParsedEvent::Launch(data) => format!("{}_{}", data.meme_token_mint, data.signature),
             ParsedEvent::Deposit(data) => format!("{}_{}_{}", data.user, data.token_mint, data.signature),
             ParsedEvent::LpChange(data) => data.signature.clone(), // 使用signature作为唯一标识
+            ParsedEvent::InitPool(data) => data.pool_id.clone(),   // 使用pool_id作为唯一标识
         }
     }
-}
-
-/// 代币创建事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenCreationEventData {
-    /// 项目配置地址
-    pub project_config: String,
-    /// 代币的 Mint 地址
-    pub mint_address: String,
-    /// 代币名称
-    pub name: String,
-    /// 代币符号
-    pub symbol: String,
-    /// 代币元数据的 URI（如 IPFS 链接）
-    pub metadata_uri: String,
-    /// 代币logo的URI
-    pub logo_uri: String,
-    /// 代币小数位数
-    pub decimals: u8,
-    /// 供应量（以最小单位计）
-    pub supply: u64,
-    /// 创建者的钱包地址
-    pub creator: String,
-    /// 是否支持白名单（true 表示有白名单机制）
-    pub has_whitelist: bool,
-    /// 白名单资格检查的时间戳（Unix 时间戳，0 表示无时间限制）
-    pub whitelist_deadline: i64,
-    /// 创建时间（Unix 时间戳）
-    pub created_at: i64,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 扩展信息 (可选)
-    pub extensions: Option<serde_json::Value>,
-    /// 数据来源 (可选，默认为external_push)
-    pub source: Option<DataSource>,
-}
-
-/// 池子创建事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PoolCreatedEventData {
-    /// CLMM池子地址
-    pub pool_address: String,
-    /// 代币A的mint地址
-    pub token_a_mint: String,
-    /// 代币B的mint地址
-    pub token_b_mint: String,
-    /// 代币A的小数位数
-    pub token_a_decimals: u8,
-    /// 代币B的小数位数
-    pub token_b_decimals: u8,
-    /// 手续费率 (单位: 万分之一)
-    pub fee_rate: u32,
-    /// 手续费率百分比
-    pub fee_rate_percentage: f64,
-    /// 年化手续费率
-    pub annual_fee_rate: f64,
-    /// 池子类型
-    pub pool_type: String,
-    /// 初始sqrt价格
-    pub sqrt_price_x64: String,
-    /// 初始价格比率
-    pub initial_price: f64,
-    /// 初始tick
-    pub initial_tick: i32,
-    /// 池子创建者
-    pub creator: String,
-    /// CLMM配置地址
-    pub clmm_config: String,
-    /// 是否为稳定币对
-    pub is_stable_pair: bool,
-    /// 预估流动性价值(USD)
-    pub estimated_liquidity_usd: f64,
-    /// 创建时间戳
-    pub created_at: i64,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 处理时间
-    pub processed_at: String,
-}
-
-/// NFT领取事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NftClaimEventData {
-    /// NFT的mint地址
-    pub nft_mint: String,
-    /// 领取者钱包地址
-    pub claimer: String,
-    /// 推荐人地址（可选）
-    pub referrer: Option<String>,
-    /// NFT等级 (1-5级)
-    pub tier: u8,
-    /// 等级名称
-    pub tier_name: String,
-    /// 等级奖励倍率
-    pub tier_bonus_rate: f64,
-    /// 领取的代币数量
-    pub claim_amount: u64,
-    /// 代币mint地址
-    pub token_mint: String,
-    /// 奖励倍率 (基点)
-    pub reward_multiplier: u16,
-    /// 奖励倍率百分比
-    pub reward_multiplier_percentage: f64,
-    /// 实际奖励金额（包含倍率）
-    pub bonus_amount: u64,
-    /// 领取类型
-    pub claim_type: u8,
-    /// 领取类型名称
-    pub claim_type_name: String,
-    /// 累计领取量
-    pub total_claimed: u64,
-    /// 领取进度百分比
-    pub claim_progress_percentage: f64,
-    /// NFT所属的池子地址（可选）
-    pub pool_address: Option<String>,
-    /// 是否有推荐人
-    pub has_referrer: bool,
-    /// 是否为紧急领取
-    pub is_emergency_claim: bool,
-    /// 预估USD价值
-    pub estimated_usd_value: f64,
-    /// 领取时间戳
-    pub claimed_at: i64,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 处理时间
-    pub processed_at: String,
-}
-
-/// 奖励分发事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RewardDistributionEventData {
-    /// 奖励分发ID
-    pub distribution_id: i64,
-    /// 奖励池地址
-    pub reward_pool: String,
-    /// 接收者钱包地址
-    pub recipient: String,
-    /// 推荐人地址（可选）
-    pub referrer: Option<String>,
-    /// 奖励代币mint地址
-    pub reward_token_mint: String,
-    /// 奖励代币小数位数
-    pub reward_token_decimals: Option<u8>,
-    /// 奖励代币名称
-    pub reward_token_name: Option<String>,
-    /// 奖励代币符号
-    pub reward_token_symbol: Option<String>,
-    /// 奖励代币Logo URI
-    pub reward_token_logo_uri: Option<String>,
-    /// 奖励数量
-    pub reward_amount: u64,
-    /// 基础奖励金额
-    pub base_reward_amount: u64,
-    /// 额外奖励金额
-    pub bonus_amount: u64,
-    /// 奖励类型
-    pub reward_type: u8,
-    /// 奖励类型名称
-    pub reward_type_name: String,
-    /// 奖励来源
-    pub reward_source: u8,
-    /// 奖励来源名称
-    pub reward_source_name: String,
-    /// 相关地址
-    pub related_address: Option<String>,
-    /// 奖励倍率 (基点)
-    pub multiplier: u16,
-    /// 奖励倍率百分比
-    pub multiplier_percentage: f64,
-    /// 是否已锁定
-    pub is_locked: bool,
-    /// 锁定期结束时间戳
-    pub unlock_timestamp: Option<i64>,
-    /// 锁定天数
-    pub lock_days: u64,
-    /// 是否有推荐人
-    pub has_referrer: bool,
-    /// 是否为推荐奖励
-    pub is_referral_reward: bool,
-    /// 是否为高价值奖励
-    pub is_high_value_reward: bool,
-    /// 预估USD价值
-    pub estimated_usd_value: f64,
-    /// 发放时间戳
-    pub distributed_at: i64,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 处理时间
-    pub processed_at: String,
-}
-
-/// 交换事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SwapEventData {
-    /// 池子地址
-    pub pool_address: String,
-    /// 交换发起者
-    pub sender: String,
-    /// 代币0账户
-    pub token_account_0: String,
-    /// 代币1账户
-    pub token_account_1: String,
-    /// 代币0数量
-    pub amount_0: u64,
-    /// 代币0手续费
-    pub transfer_fee_0: u64,
-    /// 代币1数量
-    pub amount_1: u64,
-    /// 代币1手续费
-    pub transfer_fee_1: u64,
-    /// 是否从0到1的交换
-    pub zero_for_one: bool,
-    /// 新的sqrt价格
-    pub sqrt_price_x64: String,
-    /// 流动性
-    pub liquidity: String,
-    /// tick位置
-    pub tick: i32,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 处理时间
-    pub processed_at: String,
-}
-
-/// Meme币发射事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LaunchEventData {
-    /// meme币合约地址
-    pub meme_token_mint: String,
-    /// 配对代币地址(通常是SOL或USDC)
-    pub base_token_mint: String,
-    /// 用户钱包地址
-    pub user_wallet: String,
-    /// CLMM配置索引
-    pub config_index: u32,
-    /// 初始价格
-    pub initial_price: f64,
-    /// 池子开放时间戳，0表示立即开放
-    pub open_time: u64,
-    /// 价格下限
-    pub tick_lower_price: f64,
-    /// 价格上限  
-    pub tick_upper_price: f64,
-    /// meme币数量
-    pub meme_token_amount: u64,
-    /// 配对代币数量
-    pub base_token_amount: u64,
-    /// 最大滑点百分比
-    pub max_slippage_percent: f64,
-    /// 是否包含NFT元数据
-    pub with_metadata: bool,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 处理时间
-    pub processed_at: String,
-}
-
-/// 存款事件数据
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DepositEventData {
-    /// 用户钱包地址
-    pub user: String,
-    /// 项目配置地址
-    pub project_config: String,
-    /// 项目状态（来自链上/事件）
-    pub project_state: u8,
-    /// 存款代币mint地址
-    pub token_mint: String,
-    /// 存款数量
-    pub amount: u64,
-    /// 累计筹资总额
-    pub total_raised: u64,
-    /// 代币小数位数
-    pub token_decimals: Option<u8>,
-    /// 代币名称
-    pub token_name: Option<String>,
-    /// 代币符号
-    pub token_symbol: Option<String>,
-    /// 代币Logo URI
-    pub token_logo_uri: Option<String>,
-    /// 实际存款金额（考虑decimals）
-    pub actual_amount: f64,
-    /// 实际累计筹资总额（考虑decimals）
-    pub actual_total_raised: f64,
-    /// USD价值估算
-    pub estimated_usd_value: f64,
-    /// 存款类型：0=初始存款，1=追加存款，2=应急存款
-    pub deposit_type: u8,
-    /// 存款类型名称
-    pub deposit_type_name: String,
-    /// 是否为高价值存款
-    pub is_high_value_deposit: bool,
-    /// 关联的流动性池地址
-    pub related_pool: Option<String>,
-    /// 交易签名
-    pub signature: String,
-    /// 区块高度
-    pub slot: u64,
-    /// 存款时间戳
-    pub deposited_at: i64,
-    /// 处理时间
-    pub processed_at: String,
 }
 
 /// 事件解析器接口
@@ -583,6 +279,13 @@ impl EventParserRegistry {
             pubkey!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"),
         )?);
         registry.register_program_parser(lp_change_parser)?;
+
+        // 池子初始化事件解析器 - 使用配置中的CPMM程序ID
+        let init_pool_parser = Box::new(InitPoolParser::new(
+            config,
+            pubkey!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"),
+        )?);
+        registry.register_program_parser(init_pool_parser)?;
 
         Ok(registry)
     }
@@ -1156,6 +859,8 @@ pub struct ParserRegistryStats {
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::token_creation_parser::TokenCreationEventData;
+
     use super::*;
     use solana_sdk::pubkey::Pubkey;
 
@@ -1348,8 +1053,8 @@ mod tests {
 
         let registry = EventParserRegistry::new(&config).unwrap();
 
-        // 应该有8个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution(FA1R)、launch(AZxH)、launch(FA1R)、deposit
-        assert_eq!(registry.parser_count(), 8);
+        // 应该有9个解析器：swap、token_creation、pool_creation、nft_claim、reward_distribution、launch、deposit、lp_change、init_pool
+        assert_eq!(registry.parser_count(), 9);
 
         let parsers = registry.get_registered_parsers();
         let parser_types: Vec<String> = parsers.iter().map(|(name, _)| name.clone()).collect();
@@ -1359,11 +1064,12 @@ mod tests {
         assert!(parser_types.contains(&"pool_creation".to_string()));
         assert!(parser_types.contains(&"nft_claim".to_string()));
         assert!(parser_types.contains(&"reward_distribution".to_string()));
-
         assert!(parser_types.contains(&"launch".to_string()));
         assert!(parser_types.contains(&"deposit".to_string()));
+        assert!(parser_types.contains(&"lp_change".to_string()));
+        assert!(parser_types.contains(&"init_pool".to_string()));
 
-        // 注意：现在有8个解析器（launch事件支持两个程序）
+        // 注意：现在有9个解析器（新增了init_pool解析器）
         println!("📊 解析器统计: 总数={}, 类型={:?}", parsers.len(), parser_types);
     }
 
@@ -1672,7 +1378,7 @@ mod tests {
         println!("   - REF程序ID: {}", ref_program_id);
         println!("   - discriminator: {:?}", discriminator);
 
-        // 验证两个程序ID的解析器都能找到
+        // 验证FA1R程序ID的解析器能找到，REF程序没有对应的奖励分发解析器
         let fa1r_parser = registry.find_best_parser(discriminator, Some(fa1r_program_id));
         let ref_parser = registry.find_best_parser(discriminator, Some(ref_program_id));
 
@@ -1680,9 +1386,9 @@ mod tests {
         println!("   - REF程序解析器找到: {}", ref_parser.is_some());
 
         assert!(fa1r_parser.is_some(), "应该能找到FA1R程序的RewardDistributionParser");
-        assert!(ref_parser.is_some(), "应该能找到REF程序的RewardDistributionParser");
+        assert!(ref_parser.is_none(), "REF程序不应该有ReferralRewardEvent解析器");
 
-        println!("✅ 两个程序ID的ReferralRewardEvent解析器都正确注册了");
+        println!("✅ FA1R程序的ReferralRewardEvent解析器正确注册，REF程序没有该解析器");
     }
 
     #[test]
@@ -1708,6 +1414,133 @@ mod tests {
         assert_ne!(parser_key1, universal_key1);
 
         println!("✅ ParserKey创建和比较测试通过");
+    }
+
+    #[tokio::test]
+    async fn test_init_pool_parser_registration() {
+        // 测试InitPoolParser是否正确注册到EventParserRegistry
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+            backfill: None,
+        };
+
+        let registry = EventParserRegistry::new(&config).unwrap();
+
+        // 验证init_pool解析器已注册
+        let parsers = registry.get_registered_parsers();
+        let parser_types: Vec<String> = parsers.iter().map(|(name, _)| name.clone()).collect();
+
+        assert!(
+            parser_types.contains(&"init_pool".to_string()),
+            "InitPoolParser should be registered in EventParserRegistry"
+        );
+
+        // 验证解析器的详细信息
+        let detailed_parsers = registry.get_registered_parsers_detailed();
+        let init_pool_parser = detailed_parsers
+            .iter()
+            .find(|(event_type, _, _)| event_type == "init_pool");
+
+        assert!(init_pool_parser.is_some(), "InitPoolParser details should be available");
+
+        let (_, discriminator, program_id) = init_pool_parser.unwrap();
+
+        // 验证discriminator是正确计算的
+        let expected_discriminator = calculate_event_discriminator("InitPoolEvent");
+        assert_eq!(*discriminator, expected_discriminator, "Discriminator should match");
+
+        // 验证程序ID
+        assert!(program_id.is_some(), "Program ID should be set for InitPoolParser");
+
+        println!("✅ InitPoolParser注册测试通过");
+        println!("   - Event Type: init_pool");
+        println!("   - Discriminator: {:?}", discriminator);
+        println!("   - Program ID: {:?}", program_id);
+    }
+
+    #[test]
+    fn test_get_cpmm_program_id_config() {
+        use std::env;
+
+        // 测试默认值
+        env::remove_var("CPMM_PROGRAM_ID");
+        let config = crate::config::EventListenerConfig {
+            solana: crate::config::settings::SolanaConfig {
+                rpc_url: "https://api.devnet.solana.com".to_string(),
+                ws_url: "wss://api.devnet.solana.com".to_string(),
+                commitment: "confirmed".to_string(),
+                program_ids: vec![],
+                private_key: None,
+            },
+            database: crate::config::settings::DatabaseConfig {
+                uri: "mongodb://localhost:27017".to_string(),
+                database_name: "test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            listener: crate::config::settings::ListenerConfig {
+                batch_size: 100,
+                sync_interval_secs: 30,
+                max_retries: 3,
+                retry_delay_ms: 1000,
+                signature_cache_size: 10000,
+                checkpoint_save_interval_secs: 60,
+                backoff: crate::config::settings::BackoffConfig::default(),
+                batch_write: crate::config::settings::BatchWriteConfig::default(),
+            },
+            monitoring: crate::config::settings::MonitoringConfig {
+                metrics_interval_secs: 60,
+                enable_performance_monitoring: true,
+                health_check_interval_secs: 30,
+            },
+            backfill: None,
+        };
+
+        let default_program_id = config.get_cpmm_program_id().unwrap();
+        assert_eq!(
+            default_program_id.to_string(),
+            "FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"
+        );
+
+        // 测试环境变量覆盖
+        env::set_var("CPMM_PROGRAM_ID", "AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH");
+        let env_program_id = config.get_cpmm_program_id().unwrap();
+        assert_eq!(
+            env_program_id.to_string(),
+            "AZxHQhxgjENmx8x9CQ8r86Eodo8Qg6H9wYiuRqbonaoH"
+        );
+
+        // 清理环境变量
+        env::remove_var("CPMM_PROGRAM_ID");
+
+        println!("✅ get_cpmm_program_id配置测试通过");
     }
 
     #[test]

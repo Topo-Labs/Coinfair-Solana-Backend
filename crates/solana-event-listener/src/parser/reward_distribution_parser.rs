@@ -1,10 +1,11 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::RewardDistributionEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, error, info, warn};
 
@@ -44,6 +45,71 @@ pub struct ReferralRewardEvent {
     pub amount: u64,
     /// 时间戳
     pub timestamp: i64,
+}
+
+/// 奖励分发事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RewardDistributionEventData {
+    /// 奖励分发ID
+    pub distribution_id: i64,
+    /// 奖励池地址
+    pub reward_pool: String,
+    /// 接收者钱包地址
+    pub recipient: String,
+    /// 推荐人地址（可选）
+    pub referrer: Option<String>,
+    /// 奖励代币mint地址
+    pub reward_token_mint: String,
+    /// 奖励代币小数位数
+    pub reward_token_decimals: Option<u8>,
+    /// 奖励代币名称
+    pub reward_token_name: Option<String>,
+    /// 奖励代币符号
+    pub reward_token_symbol: Option<String>,
+    /// 奖励代币Logo URI
+    pub reward_token_logo_uri: Option<String>,
+    /// 奖励数量
+    pub reward_amount: u64,
+    /// 基础奖励金额
+    pub base_reward_amount: u64,
+    /// 额外奖励金额
+    pub bonus_amount: u64,
+    /// 奖励类型
+    pub reward_type: u8,
+    /// 奖励类型名称
+    pub reward_type_name: String,
+    /// 奖励来源
+    pub reward_source: u8,
+    /// 奖励来源名称
+    pub reward_source_name: String,
+    /// 相关地址
+    pub related_address: Option<String>,
+    /// 奖励倍率 (基点)
+    pub multiplier: u16,
+    /// 奖励倍率百分比
+    pub multiplier_percentage: f64,
+    /// 是否已锁定
+    pub is_locked: bool,
+    /// 锁定期结束时间戳
+    pub unlock_timestamp: Option<i64>,
+    /// 锁定天数
+    pub lock_days: u64,
+    /// 是否有推荐人
+    pub has_referrer: bool,
+    /// 是否为推荐奖励
+    pub is_referral_reward: bool,
+    /// 是否为高价值奖励
+    pub is_high_value_reward: bool,
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+    /// 发放时间戳
+    pub distributed_at: i64,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: String,
 }
 
 /// 奖励发放事件解析器

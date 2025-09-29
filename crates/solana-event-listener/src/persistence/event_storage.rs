@@ -2,12 +2,11 @@ use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
     parser::{
-        cpmm_lp_change_parser::LpChangeEventData,
-        event_parser::{
-            DepositEventData, LaunchEventData, NftClaimEventData, PoolCreatedEventData, RewardDistributionEventData,
-            SwapEventData, TokenCreationEventData,
-        },
-        ParsedEvent,
+        cpmm_init_pool_parser::InitPoolEventData, cpmm_lp_change_parser::LpChangeEventData,
+        deposit_event_parser::DepositEventData, launch_event_parser::LaunchEventData,
+        nft_claim_parser::NftClaimEventData, pool_creation_parser::PoolCreatedEventData,
+        reward_distribution_parser::RewardDistributionEventData, swap_parser::SwapEventData,
+        token_creation_parser::TokenCreationEventData, ParsedEvent,
     },
     services::migration_client::MigrationClient,
 };
@@ -17,6 +16,7 @@ use database::clmm::clmm_pool::{
     TransactionInfo, TransactionStatus, VaultInfo,
 };
 use database::clmm::token_info::{TokenInfoRepository, TokenPushRequest};
+use database::cpmm::init_pool_event::InitPoolEvent;
 use database::cpmm::lp_change_event::{LpChangeEvent, LpChangeEventRepository};
 use database::events::event_model::{
     repository::TokenCreationEventRepository, ClmmPoolEvent, LaunchEvent, MigrationStatus, NftClaimEvent,
@@ -157,6 +157,7 @@ impl EventStorage {
         let mut swap_events = Vec::new();
         let mut deposit_events = Vec::new();
         let mut lp_change_events = Vec::new();
+        let mut init_pool_events = Vec::new();
 
         for event in events {
             match event {
@@ -183,6 +184,9 @@ impl EventStorage {
                 }
                 ParsedEvent::LpChange(lp_change_event) => {
                     lp_change_events.push(lp_change_event);
+                }
+                ParsedEvent::InitPool(init_pool_event) => {
+                    init_pool_events.push(init_pool_event);
                 }
             }
         }
@@ -294,6 +298,20 @@ impl EventStorage {
                 }
                 Err(e) => {
                     error!("❌ LP变更事件批量写入失败: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+
+        // 批量处理池子初始化事件
+        if !init_pool_events.is_empty() {
+            match self.write_init_pool_batch(&init_pool_events).await {
+                Ok(count) => {
+                    written_count += count;
+                    info!("✅ 成功写入 {} 个池子初始化事件", count);
+                }
+                Err(e) => {
+                    error!("❌ 池子初始化事件批量写入失败: {}", e);
                     return Err(e);
                 }
             }
@@ -552,6 +570,40 @@ impl EventStorage {
                         "⚠️ 跳过失败的LP变更事件: 用户={}, 池子={}, 签名={}",
                         event.user_wallet, event.pool_id, event.signature
                     );
+                }
+            }
+        }
+
+        Ok(written_count)
+    }
+
+    /// 批量写入池子初始化事件
+    async fn write_init_pool_batch(&self, events: &[&InitPoolEventData]) -> Result<u64> {
+        let mut written_count = 0u64;
+
+        for event in events {
+            match self.write_single_init_pool(event).await {
+                Ok(true) => {
+                    written_count += 1;
+                    debug!("✅ 池子初始化事件已写入: {}", event.pool_id);
+                }
+                Ok(false) => {
+                    debug!("ℹ️ 池子初始化事件已存在，跳过: {}", event.pool_id);
+                }
+                Err(e) => {
+                    // 检查是否为重复键错误
+                    if self.is_duplicate_key_error(&e) {
+                        debug!("ℹ️ 池子初始化事件已存在（重复键），跳过: {}", event.pool_id);
+                        continue;
+                    }
+
+                    error!("❌ 池子初始化事件写入失败: {} - {}", event.pool_id, e);
+
+                    if self.is_fatal_error(&e) {
+                        return Err(e);
+                    }
+
+                    warn!("⚠️ 跳过失败的池子初始化事件: {}", event.pool_id);
                 }
             }
         }
@@ -1098,6 +1150,30 @@ impl EventStorage {
         })
     }
 
+    /// 将池子初始化事件转换为数据库模型
+    fn convert_to_init_pool_event(&self, event: &InitPoolEventData) -> Result<InitPoolEvent> {
+        Ok(InitPoolEvent {
+            id: None,
+            pool_id: event.pool_id.clone(),
+            pool_creator: event.pool_creator.clone(),
+            token_0_mint: event.token_0_mint.clone(),
+            token_1_mint: event.token_1_mint.clone(),
+            token_0_vault: event.token_0_vault.clone(),
+            token_1_vault: event.token_1_vault.clone(),
+            lp_mint: event.lp_mint.clone(),
+            lp_program_id: event.lp_program_id.clone(),
+            token_0_program_id: event.token_0_program_id.clone(),
+            token_1_program_id: event.token_1_program_id.clone(),
+            lp_mint_decimals: event.lp_mint_decimals,
+            token_0_decimals: event.token_0_decimals,
+            token_1_decimals: event.token_1_decimals,
+            signature: event.signature.clone(),
+            slot: event.slot,
+            block_time: Some(Utc::now().timestamp()), // TODO: 可以从RPC获取实际的block_time
+            created_at: Utc::now(),
+        })
+    }
+
     /// 将存款事件转换为数据库模型
     fn convert_to_deposit_event(
         &self,
@@ -1473,6 +1549,39 @@ impl EventStorage {
         Ok(true)
     }
 
+    /// 写入单个池子初始化事件
+    async fn write_single_init_pool(&self, event: &InitPoolEventData) -> Result<bool> {
+        // 检查是否已存在（根据pool_id去重）
+        let existing = self
+            .database
+            .init_pool_event_repository
+            .find_by_pool_id(&event.pool_id)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("查询现有池子初始化事件失败: {}", e)))?;
+
+        if existing.is_some() {
+            debug!("池子初始化事件已存在，跳过: {}", event.pool_id);
+            return Ok(false);
+        }
+
+        // 转换为数据库模型
+        let init_pool_event = self.convert_to_init_pool_event(event)?;
+
+        // 插入数据库
+        self.database
+            .init_pool_event_repository
+            .insert(init_pool_event)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("插入池子初始化事件失败: {}", e)))?;
+
+        info!(
+            "✅ 池子初始化事件已写入: pool_id={}, creator={}, signature={}",
+            event.pool_id, event.pool_creator, event.signature
+        );
+
+        Ok(true)
+    }
+
     /// 写入单个事件（非批量）
     pub async fn write_event(&self, event: &ParsedEvent) -> Result<bool> {
         match event {
@@ -1484,6 +1593,7 @@ impl EventStorage {
             ParsedEvent::Swap(swap_event) => self.write_single_swap(swap_event).await,
             ParsedEvent::Deposit(deposit_event) => self.write_single_deposit(deposit_event).await,
             ParsedEvent::LpChange(lp_change_event) => self.write_single_lp_change(lp_change_event).await,
+            ParsedEvent::InitPool(init_pool_event) => self.write_single_init_pool(init_pool_event).await,
         }
     }
 
@@ -1991,8 +2101,8 @@ mod tests {
         }
     }
 
-    fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
-        use crate::parser::event_parser::PoolCreatedEventData;
+    fn create_test_pool_event() -> PoolCreatedEventData {
+        use PoolCreatedEventData;
         PoolCreatedEventData {
             pool_address: Pubkey::new_unique().to_string(),
             token_a_mint: Pubkey::new_unique().to_string(),
@@ -2055,8 +2165,7 @@ mod tests {
         );
     }
 
-    fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
-        use crate::parser::event_parser::NftClaimEventData;
+    fn create_test_nft_event() -> NftClaimEventData {
         NftClaimEventData {
             nft_mint: Pubkey::new_unique().to_string(),
             claimer: Pubkey::new_unique().to_string(),
@@ -2084,8 +2193,7 @@ mod tests {
         }
     }
 
-    fn create_test_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
-        use crate::parser::event_parser::RewardDistributionEventData;
+    fn create_test_reward_event() -> RewardDistributionEventData {
         RewardDistributionEventData {
             distribution_id: 12345,
             reward_pool: Pubkey::new_unique().to_string(),

@@ -1,12 +1,13 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::PoolCreatedEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
@@ -31,6 +32,51 @@ pub struct PoolCreatedEvent {
     pub token_vault_0: Pubkey,
     /// token_1的金库地址
     pub token_vault_1: Pubkey,
+}
+
+/// 池子创建事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolCreatedEventData {
+    /// CLMM池子地址
+    pub pool_address: String,
+    /// 代币A的mint地址
+    pub token_a_mint: String,
+    /// 代币B的mint地址
+    pub token_b_mint: String,
+    /// 代币A的小数位数
+    pub token_a_decimals: u8,
+    /// 代币B的小数位数
+    pub token_b_decimals: u8,
+    /// 手续费率 (单位: 万分之一)
+    pub fee_rate: u32,
+    /// 手续费率百分比
+    pub fee_rate_percentage: f64,
+    /// 年化手续费率
+    pub annual_fee_rate: f64,
+    /// 池子类型
+    pub pool_type: String,
+    /// 初始sqrt价格
+    pub sqrt_price_x64: String,
+    /// 初始价格比率
+    pub initial_price: f64,
+    /// 初始tick
+    pub initial_tick: i32,
+    /// 池子创建者
+    pub creator: String,
+    /// CLMM配置地址
+    pub clmm_config: String,
+    /// 是否为稳定币对
+    pub is_stable_pair: bool,
+    /// 预估流动性价值(USD)
+    pub estimated_liquidity_usd: f64,
+    /// 创建时间戳
+    pub created_at: i64,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: String,
 }
 
 /// 池子创建事件解析器

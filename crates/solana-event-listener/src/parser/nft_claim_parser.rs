@@ -1,11 +1,12 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::NftClaimEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
@@ -20,6 +21,57 @@ pub struct ClaimNFTEvent {
     pub nft_pool_account: Pubkey, // NFT池子账户
     pub user_ata: Pubkey,         // 用户接收NFT的ATA账户
     pub timestamp: i64,           // 领取时间戳
+}
+
+/// NFT领取事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NftClaimEventData {
+    /// NFT的mint地址
+    pub nft_mint: String,
+    /// 领取者钱包地址
+    pub claimer: String,
+    /// 推荐人地址（可选）
+    pub referrer: Option<String>,
+    /// NFT等级 (1-5级)
+    pub tier: u8,
+    /// 等级名称
+    pub tier_name: String,
+    /// 等级奖励倍率
+    pub tier_bonus_rate: f64,
+    /// 领取的代币数量
+    pub claim_amount: u64,
+    /// 代币mint地址
+    pub token_mint: String,
+    /// 奖励倍率 (基点)
+    pub reward_multiplier: u16,
+    /// 奖励倍率百分比
+    pub reward_multiplier_percentage: f64,
+    /// 实际奖励金额（包含倍率）
+    pub bonus_amount: u64,
+    /// 领取类型
+    pub claim_type: u8,
+    /// 领取类型名称
+    pub claim_type_name: String,
+    /// 累计领取量
+    pub total_claimed: u64,
+    /// 领取进度百分比
+    pub claim_progress_percentage: f64,
+    /// NFT所属的池子地址（可选）
+    pub pool_address: Option<String>,
+    /// 是否有推荐人
+    pub has_referrer: bool,
+    /// 是否为紧急领取
+    pub is_emergency_claim: bool,
+    /// 预估USD价值
+    pub estimated_usd_value: f64,
+    /// 领取时间戳
+    pub claimed_at: i64,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: String,
 }
 
 /// NFT领取事件解析器

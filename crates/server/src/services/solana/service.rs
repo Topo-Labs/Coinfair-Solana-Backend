@@ -12,6 +12,10 @@ use crate::dtos::solana::cpmm::lp::lp_change_event::{
     CreateLpChangeEventRequest, LpChangeEventResponse, LpChangeEventsPageResponse, QueryLpChangeEventsRequest,
 };
 use crate::dtos::solana::cpmm::lp::query_lp_mint::{LpMintPoolInfo, QueryLpMintRequest};
+use crate::dtos::solana::cpmm::pool::init_pool_event::{
+    CreateInitPoolEventRequest, InitPoolEventResponse, InitPoolEventsPageResponse, QueryInitPoolEventsRequest,
+    UserPoolStats,
+};
 use crate::dtos::solana::cpmm::withdraw::{
     CpmmWithdrawAndSendRequest, CpmmWithdrawAndSendResponse, CpmmWithdrawCompute, CpmmWithdrawRequest,
     CpmmWithdrawResponse,
@@ -26,7 +30,7 @@ use crate::services::solana::cpmm::deposit::CpmmDepositService;
 use crate::services::solana::cpmm::lp_change_event::lp_change_event_service::UserEventStats;
 use crate::services::solana::cpmm::lp_change_event::LpMintQueryService;
 use crate::services::solana::cpmm::swap::CpmmSwapService;
-use crate::services::solana::cpmm::{CpmmWithdrawService, LpChangeEventService};
+use crate::services::solana::cpmm::{CpmmWithdrawService, InitPoolEventService, LpChangeEventService};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -90,6 +94,7 @@ pub struct SolanaService {
     cpmm_deposit_service: CpmmDepositService,
     cpmm_withdraw_service: CpmmWithdrawService,
     lp_change_event_service: LpChangeEventService,
+    init_pool_event_service: InitPoolEventService,
     lp_mint_query_service: LpMintQueryService,
     position_service: PositionService,
     clmm_pool_service: ClmmPoolService,
@@ -148,6 +153,9 @@ impl SolanaService {
             cpmm_deposit_service: CpmmDepositService::new(optimized_shared_context.clone()),
             cpmm_withdraw_service: CpmmWithdrawService::new(optimized_shared_context.clone()),
             lp_change_event_service: super::cpmm::lp_change_event::LpChangeEventService::new(Arc::new(
+                database.clone(),
+            )),
+            init_pool_event_service: super::cpmm::init_pool_event::InitPoolEventService::new(Arc::new(
                 database.clone(),
             )),
             lp_mint_query_service: {
@@ -285,6 +293,16 @@ pub trait SolanaServiceTrait {
     async fn query_lp_change_events(&self, request: QueryLpChangeEventsRequest) -> Result<LpChangeEventsPageResponse>;
     async fn delete_lp_change_event(&self, id: &str) -> Result<bool>;
     async fn get_user_lp_change_event_stats(&self, user_wallet: &str) -> Result<UserEventStats>;
+
+    // CPMM Init Pool Event operations
+    async fn create_init_pool_event(&self, request: CreateInitPoolEventRequest) -> Result<InitPoolEventResponse>;
+    async fn get_init_pool_event_by_id(&self, id: &str) -> Result<InitPoolEventResponse>;
+    async fn get_init_pool_event_by_pool_id(&self, pool_id: &str) -> Result<InitPoolEventResponse>;
+    async fn get_init_pool_event_by_signature(&self, signature: &str) -> Result<InitPoolEventResponse>;
+    async fn query_init_pool_events(&self, request: QueryInitPoolEventsRequest) -> Result<InitPoolEventsPageResponse>;
+    async fn get_user_pool_stats(&self, pool_creator: &str) -> Result<UserPoolStats>;
+    async fn delete_init_pool_event(&self, id: &str) -> Result<bool>;
+
     // LP mint query operations
     async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>>;
 
@@ -621,6 +639,56 @@ impl SolanaServiceTrait for SolanaService {
     async fn get_user_lp_change_event_stats(&self, user_wallet: &str) -> Result<UserEventStats> {
         self.lp_change_event_service
             .get_user_event_stats(user_wallet)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    // CPMM Init Pool Event operations - delegate to init_pool_event_service
+    async fn create_init_pool_event(&self, request: CreateInitPoolEventRequest) -> Result<InitPoolEventResponse> {
+        self.init_pool_event_service
+            .create_event(request)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_init_pool_event_by_id(&self, id: &str) -> Result<InitPoolEventResponse> {
+        self.init_pool_event_service
+            .get_event_by_id(id)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_init_pool_event_by_pool_id(&self, pool_id: &str) -> Result<InitPoolEventResponse> {
+        self.init_pool_event_service
+            .get_event_by_pool_id(pool_id)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_init_pool_event_by_signature(&self, signature: &str) -> Result<InitPoolEventResponse> {
+        self.init_pool_event_service
+            .get_event_by_signature(signature)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn query_init_pool_events(&self, request: QueryInitPoolEventsRequest) -> Result<InitPoolEventsPageResponse> {
+        self.init_pool_event_service
+            .query_events(request)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_user_pool_stats(&self, pool_creator: &str) -> Result<UserPoolStats> {
+        self.init_pool_event_service
+            .get_user_pool_stats(pool_creator)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn delete_init_pool_event(&self, id: &str) -> Result<bool> {
+        self.init_pool_event_service
+            .delete_event(id)
             .await
             .map_err(anyhow::Error::from)
     }

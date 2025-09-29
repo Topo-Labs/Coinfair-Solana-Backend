@@ -511,6 +511,20 @@ impl EventListenerConfig {
         Ok(configs)
     }
 
+    /// 获取CPMM程序ID
+    /// 从环境变量 CPMM_PROGRAM_ID 读取，提供默认值，支持动态配置切换
+    pub fn get_cpmm_program_id(&self) -> Result<Pubkey> {
+        let program_id_str = std::env::var("CPMM_PROGRAM_ID")
+            .unwrap_or_else(|_| "FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi".to_string());
+
+        Pubkey::from_str(&program_id_str).map_err(|e| {
+            EventListenerError::Config(format!(
+                "解析CPMM程序ID失败: {} - {}",
+                program_id_str, e
+            ))
+        })
+    }
+
     /// 验证配置的有效性
     pub fn validate(&self) -> Result<()> {
         // 验证URL格式

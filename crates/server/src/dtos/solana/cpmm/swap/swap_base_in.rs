@@ -1,12 +1,12 @@
-use crate::dtos::solana::common::{TransactionStatus, validate_pubkey, default_slippage_option};
+use crate::dtos::solana::common::{default_slippage_option, validate_pubkey, TransactionStatus};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 /// CPMM SwapBaseIn请求参数
 ///
 /// 执行基于固定输入金额的代币交换
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema, IntoParams)]
 pub struct CpmmSwapBaseInRequest {
     /// 池子地址
     #[validate(custom = "validate_pubkey")]

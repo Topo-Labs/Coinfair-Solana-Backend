@@ -5,7 +5,8 @@ use crate::dtos::solana::cpmm::swap::{
     CpmmTransactionData,
 };
 use crate::{extractors::validation_extractor::ValidationExtractor, services::Services};
-use axum::{extract::Extension, http::StatusCode, response::Json, routing::post, Router};
+use axum::extract::Query;
+use axum::{extract::Extension, http::StatusCode, response::Json, routing::get, routing::post, Router};
 use tracing::{error, info};
 
 /// CPMM交换控制器
@@ -15,10 +16,10 @@ impl CpmmSwapController {
     /// 创建CPMM交换相关路由
     pub fn routes() -> Router {
         Router::new()
-            .route("/cpmm/compute/swap-base-in", post(compute_swap_base_in))
+            .route("/cpmm/compute/swap-base-in", get(compute_swap_base_in))
             .route("/cpmm/transaction/swap-base-in", post(build_swap_base_in))
             .route("/cpmm/local-send/swap-base-in", post(send_swap_base_in))
-            .route("/cpmm/compute/swap-base-out", post(compute_swap_base_out))
+            .route("/cpmm/compute/swap-base-out", get(compute_swap_base_out))
             .route("/cpmm/transaction/swap-base-out", post(build_swap_base_out))
             .route("/cpmm/local-send/swap-base-out", post(send_swap_base_out))
     }
@@ -138,9 +139,9 @@ pub async fn send_swap_base_in(
 /// }
 /// ```
 #[utoipa::path(
-    post,
+    get,
     path = "/api/v1/solana/cpmm/compute/swap-base-in/",
-    request_body = CpmmSwapBaseInRequest,
+    params(CpmmSwapBaseInRequest),
     responses(
         (status = 200, description = "计算成功", body = ApiResponse<CpmmSwapBaseInCompute>),
         (status = 400, description = "请求参数错误", body = ApiResponse<ErrorResponse>),
@@ -150,7 +151,7 @@ pub async fn send_swap_base_in(
 )]
 pub async fn compute_swap_base_in(
     Extension(services): Extension<Services>,
-    ValidationExtractor(request): ValidationExtractor<CpmmSwapBaseInRequest>,
+    Query(request): Query<CpmmSwapBaseInRequest>,
 ) -> Result<Json<ApiResponse<CpmmSwapBaseInCompute>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!(
         "💰 收到CPMM SwapBaseIn计算请求: pool_id={}, amount={}",
@@ -364,9 +365,9 @@ pub async fn send_swap_base_out(
 /// }
 /// ```
 #[utoipa::path(
-    post,
+    get,
     path = "/api/v1/solana/cpmm/swap/base-out/compute",
-    request_body = CpmmSwapBaseOutRequest,
+    params(CpmmSwapBaseOutRequest),
     responses(
         (status = 200, description = "计算成功", body = ApiResponse<CpmmSwapBaseOutCompute>),
         (status = 400, description = "请求参数错误", body = ApiResponse<ErrorResponse>),
@@ -376,7 +377,7 @@ pub async fn send_swap_base_out(
 )]
 pub async fn compute_swap_base_out(
     Extension(services): Extension<Services>,
-    ValidationExtractor(request): ValidationExtractor<CpmmSwapBaseOutRequest>,
+    Query(request): Query<CpmmSwapBaseOutRequest>,
 ) -> Result<Json<ApiResponse<CpmmSwapBaseOutCompute>>, (StatusCode, Json<ApiResponse<ErrorResponse>>)> {
     info!(
         "💰 收到CPMM SwapBaseOut计算请求: pool_id={}, amount_out_less_fee={}",

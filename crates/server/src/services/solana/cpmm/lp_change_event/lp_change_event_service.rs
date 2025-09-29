@@ -232,7 +232,11 @@ impl LpChangeEventService {
     }
 
     /// 根据多个LP mint查询事件列表（用于新的query-lp-mint接口）
-    pub async fn query_events_by_lp_mints(&self, lp_mints: Vec<String>, limit: Option<i64>) -> Result<Vec<LpChangeEvent>, LpChangeEventError> {
+    pub async fn query_events_by_lp_mints(
+        &self,
+        lp_mints: Vec<String>,
+        limit: Option<i64>,
+    ) -> Result<Vec<LpChangeEvent>, LpChangeEventError> {
         info!("根据LP mints查询事件，mint数量: {}, 限制: {:?}", lp_mints.len(), limit);
 
         if lp_mints.is_empty() {
@@ -242,7 +246,7 @@ impl LpChangeEventService {
         // 限制一次查询的LP mint数量，防止过大查询
         if lp_mints.len() > 100 {
             return Err(LpChangeEventError::QueryParameterError(
-                "一次查询的LP mint数量不能超过100个".to_string()
+                "一次查询的LP mint数量不能超过100个".to_string(),
             ));
         }
 
@@ -498,6 +502,7 @@ mod tests {
             deposit_events: mock_mongodb.collection("DepositEvent"),
             token_creation_events: mock_mongodb.collection("TokenCreationEvent"),
             lp_change_events: mock_mongodb.collection("LpChangeEvent"),
+            init_pool_events: mock_mongodb.collection("InitPoolEvent"),
             event_scanner_checkpoints: mock_mongodb.collection("EventScannerCheckpoints"),
             scan_records: mock_mongodb.collection("ScanRecords"),
             clmm_pool_repository: database::clmm::clmm_pool::repository::ClmmPoolRepository::new(
@@ -541,7 +546,12 @@ mod tests {
                 database::events::event_model::repository::TokenCreationEventRepository::new(
                     mock_mongodb.collection("TokenCreationEvent"),
                 ),
-            lp_change_event_repository: LpChangeEventRepository::new(&mock_mongodb),
+            lp_change_event_repository: database::cpmm::lp_change_event::repository::LpChangeEventRepository::new(
+                mock_mongodb.collection("LpChangeEvent"),
+            ),
+            init_pool_event_repository: database::cpmm::init_pool_event::repository::InitPoolEventRepository::new(
+                mock_mongodb.collection("InitPoolEvent"),
+            ),
             event_scanner_checkpoint_repository:
                 database::events::event_scanner::repository::EventScannerCheckpointRepository::new(
                     mock_mongodb.collection("EventScannerCheckpoints"),

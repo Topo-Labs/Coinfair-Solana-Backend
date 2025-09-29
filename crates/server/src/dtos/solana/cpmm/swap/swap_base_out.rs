@@ -1,15 +1,15 @@
-use crate::dtos::solana::common::{TransactionStatus, validate_pubkey, default_slippage_option};
-use crate::dtos::solana::cpmm::swap::swap_base_in::PoolStateInfo;
+use crate::dtos::solana::common::{default_slippage_option, validate_pubkey, TransactionStatus};
 #[cfg(test)]
 use crate::dtos::solana::cpmm::swap::swap_base_in::AmmConfigInfo;
+use crate::dtos::solana::cpmm::swap::swap_base_in::PoolStateInfo;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
 /// CPMM SwapBaseOut请求参数
 ///
 /// 执行基于固定输出金额的代币交换
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema, IntoParams)]
 pub struct CpmmSwapBaseOutRequest {
     /// 池子地址
     #[validate(custom = "validate_pubkey")]
@@ -267,8 +267,7 @@ mod tests {
         let serialized = serde_json::to_string(&response);
         assert!(serialized.is_ok(), "响应应该能够成功序列化");
 
-        let deserialized: Result<CpmmSwapBaseOutResponse, _> =
-            serde_json::from_str(&serialized.unwrap());
+        let deserialized: Result<CpmmSwapBaseOutResponse, _> = serde_json::from_str(&serialized.unwrap());
         assert!(deserialized.is_ok(), "序列化的响应应该能够反序列化");
     }
 
@@ -308,8 +307,7 @@ mod tests {
         let serialized = serde_json::to_string(&compute_result);
         assert!(serialized.is_ok(), "计算结果应该能够成功序列化");
 
-        let deserialized: Result<CpmmSwapBaseOutCompute, _> =
-            serde_json::from_str(&serialized.unwrap());
+        let deserialized: Result<CpmmSwapBaseOutCompute, _> = serde_json::from_str(&serialized.unwrap());
         assert!(deserialized.is_ok(), "序列化的计算结果应该能够反序列化");
     }
 
