@@ -10,7 +10,11 @@
 use crate::{
     config::EventListenerConfig,
     metrics::MetricsCollector,
-    parser::EventParserRegistry,
+    parser::{
+        nft_claim_parser::NftClaimEventData, pool_creation_parser::PoolCreatedEventData,
+        reward_distribution_parser::RewardDistributionEventData, token_creation_parser::TokenCreationEventData,
+        EventParserRegistry,
+    },
     persistence::{BatchWriter, EventStorage},
     subscriber::SubscriptionManager,
 };
@@ -105,13 +109,7 @@ async fn test_e2e_real_event_listening() {
     let batch_writer = Arc::new(BatchWriter::new(&config).await.unwrap());
     let metrics = Arc::new(MetricsCollector::new(&config).unwrap());
 
-    let manager = SubscriptionManager::new(
-        &config,
-        parser_registry,
-        batch_writer,
-        metrics.clone(),
-    )
-    .await;
+    let manager = SubscriptionManager::new(&config, parser_registry, batch_writer, metrics.clone()).await;
 
     match manager {
         Ok(subscription_manager) => {
@@ -175,7 +173,7 @@ async fn test_e2e_database_persistence() {
 
             // 创建测试事件
             let test_events = vec![
-                crate::parser::ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+                crate::parser::ParsedEvent::TokenCreation(TokenCreationEventData {
                     project_config: Pubkey::new_unique().to_string(),
                     mint_address: Pubkey::new_unique().to_string(),
                     name: "E2E Test Token".to_string(),
@@ -229,8 +227,8 @@ async fn test_e2e_database_persistence() {
 }
 
 /// 辅助函数：创建测试池子事件
-fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
-    crate::parser::event_parser::PoolCreatedEventData {
+fn create_test_pool_event() -> PoolCreatedEventData {
+    PoolCreatedEventData {
         pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: Pubkey::new_unique().to_string(),
         token_b_mint: Pubkey::new_unique().to_string(),
@@ -255,8 +253,8 @@ fn create_test_pool_event() -> crate::parser::event_parser::PoolCreatedEventData
 }
 
 /// 辅助函数：创建测试NFT事件
-fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
-    crate::parser::event_parser::NftClaimEventData {
+fn create_test_nft_event() -> NftClaimEventData {
+    NftClaimEventData {
         nft_mint: Pubkey::new_unique().to_string(),
         claimer: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),
@@ -284,8 +282,8 @@ fn create_test_nft_event() -> crate::parser::event_parser::NftClaimEventData {
 }
 
 /// 辅助函数：创建测试奖励事件
-fn create_test_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
-    crate::parser::event_parser::RewardDistributionEventData {
+fn create_test_reward_event() -> RewardDistributionEventData {
+    RewardDistributionEventData {
         distribution_id: chrono::Utc::now().timestamp_millis(),
         reward_pool: Pubkey::new_unique().to_string(),
         recipient: Pubkey::new_unique().to_string(),

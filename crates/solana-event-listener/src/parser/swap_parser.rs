@@ -1,11 +1,12 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::SwapEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
@@ -38,6 +39,40 @@ pub struct SwapEvent {
     pub tick: i32,
 }
 
+/// 交换事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SwapEventData {
+    /// 池子地址
+    pub pool_address: String,
+    /// 交换发起者
+    pub sender: String,
+    /// 代币0账户
+    pub token_account_0: String,
+    /// 代币1账户
+    pub token_account_1: String,
+    /// 代币0数量
+    pub amount_0: u64,
+    /// 代币0手续费
+    pub transfer_fee_0: u64,
+    /// 代币1数量
+    pub amount_1: u64,
+    /// 代币1手续费
+    pub transfer_fee_1: u64,
+    /// 是否从0到1的交换
+    pub zero_for_one: bool,
+    /// 新的sqrt价格
+    pub sqrt_price_x64: String,
+    /// 流动性
+    pub liquidity: String,
+    /// tick位置
+    pub tick: i32,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: String,
+}
 /// 交换事件解析器
 pub struct SwapParser {
     /// 事件的discriminator
@@ -209,6 +244,8 @@ impl EventParser for SwapParser {
 
 #[cfg(test)]
 mod tests {
+    use crate::parser::token_creation_parser::TokenCreationEventData;
+
     use super::*;
     use borsh::BorshDeserialize;
     use solana_sdk::pubkey::Pubkey;
@@ -391,7 +428,7 @@ mod tests {
         assert!(parser.validate_event(&swap_event).await.unwrap());
 
         // 测试其他类型的事件应该返回false
-        let token_event = ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+        let token_event = ParsedEvent::TokenCreation(TokenCreationEventData {
             project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "Test".to_string(),

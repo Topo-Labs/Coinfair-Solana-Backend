@@ -602,7 +602,7 @@ impl Clone for BatchWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{event_parser::TokenCreationEventData, ParsedEvent};
+    use crate::parser::{token_creation_parser::TokenCreationEventData, ParsedEvent};
     use solana_sdk::pubkey::Pubkey;
 
     fn create_test_config() -> EventListenerConfig {

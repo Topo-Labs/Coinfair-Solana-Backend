@@ -18,7 +18,11 @@
 use crate::{
     config::EventListenerConfig,
     metrics::MetricsCollector,
-    parser::{EventParserRegistry, ParsedEvent},
+    parser::{
+        nft_claim_parser::NftClaimEventData, pool_creation_parser::PoolCreatedEventData,
+        reward_distribution_parser::RewardDistributionEventData, token_creation_parser::TokenCreationEventData,
+        EventParserRegistry, ParsedEvent,
+    },
     persistence::{BatchWriter, EventStorage},
     subscriber::{SubscriptionManager, WebSocketManager},
 };
@@ -148,23 +152,17 @@ async fn test_complete_e2e_flow() {
     // === 第4步：创建订阅管理器 ===
     info!("📻 第4步：创建订阅管理器");
 
-    let subscription_manager = match SubscriptionManager::new(
-        &config,
-        parser_registry.clone(),
-        batch_writer.clone(),
-        metrics.clone(),
-    )
-    .await
-    {
-        Ok(manager) => {
-            info!("✅ 订阅管理器创建成功");
-            manager
-        }
-        Err(e) => {
-            error!("❌ 订阅管理器创建失败: {}", e);
-            panic!("订阅管理器创建失败");
-        }
-    };
+    let subscription_manager =
+        match SubscriptionManager::new(&config, parser_registry.clone(), batch_writer.clone(), metrics.clone()).await {
+            Ok(manager) => {
+                info!("✅ 订阅管理器创建成功");
+                manager
+            }
+            Err(e) => {
+                error!("❌ 订阅管理器创建失败: {}", e);
+                panic!("订阅管理器创建失败");
+            }
+        };
 
     // === 第5步：启动指标收集 ===
     info!("📈 第5步：启动指标收集");
@@ -531,7 +529,7 @@ async fn test_e2e_database_write_verification() {
 
     // 创建测试事件（模拟真实解析结果）
     let test_events = vec![
-        ParsedEvent::TokenCreation(crate::parser::event_parser::TokenCreationEventData {
+        ParsedEvent::TokenCreation(TokenCreationEventData {
             project_config: Pubkey::new_unique().to_string(),
             mint_address: Pubkey::new_unique().to_string(),
             name: "E2E Test Token".to_string(),
@@ -585,8 +583,8 @@ async fn test_e2e_database_write_verification() {
 }
 
 // 辅助函数：创建逼真的测试数据
-fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreatedEventData {
-    crate::parser::event_parser::PoolCreatedEventData {
+fn create_realistic_pool_event() -> PoolCreatedEventData {
+    PoolCreatedEventData {
         pool_address: Pubkey::new_unique().to_string(),
         token_a_mint: "So11111111111111111111111111111111111111112".parse().unwrap(), // SOL
         token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".parse().unwrap(), // USDC
@@ -610,8 +608,8 @@ fn create_realistic_pool_event() -> crate::parser::event_parser::PoolCreatedEven
     }
 }
 
-fn create_realistic_nft_event() -> crate::parser::event_parser::NftClaimEventData {
-    crate::parser::event_parser::NftClaimEventData {
+fn create_realistic_nft_event() -> NftClaimEventData {
+    NftClaimEventData {
         nft_mint: Pubkey::new_unique().to_string(),
         claimer: Pubkey::new_unique().to_string(),
         referrer: Some(Pubkey::new_unique().to_string()),
@@ -638,9 +636,9 @@ fn create_realistic_nft_event() -> crate::parser::event_parser::NftClaimEventDat
     }
 }
 
-fn create_realistic_reward_event() -> crate::parser::event_parser::RewardDistributionEventData {
+fn create_realistic_reward_event() -> RewardDistributionEventData {
     let now = chrono::Utc::now();
-    crate::parser::event_parser::RewardDistributionEventData {
+    RewardDistributionEventData {
         distribution_id: now.timestamp_millis(),
         reward_pool: Pubkey::new_unique().to_string(),
         recipient: Pubkey::new_unique().to_string(),

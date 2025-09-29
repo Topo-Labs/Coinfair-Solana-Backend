@@ -1,10 +1,11 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::DepositEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, error, info, warn};
 
@@ -41,6 +42,53 @@ pub struct DepositEvent {
     pub amount: u64,
     /// 累计筹资总额
     pub total_raised: u64,
+}
+
+/// 存款事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DepositEventData {
+    /// 用户钱包地址
+    pub user: String,
+    /// 项目配置地址
+    pub project_config: String,
+    /// 项目状态（来自链上/事件）
+    pub project_state: u8,
+    /// 存款代币mint地址
+    pub token_mint: String,
+    /// 存款数量
+    pub amount: u64,
+    /// 累计筹资总额
+    pub total_raised: u64,
+    /// 代币小数位数
+    pub token_decimals: Option<u8>,
+    /// 代币名称
+    pub token_name: Option<String>,
+    /// 代币符号
+    pub token_symbol: Option<String>,
+    /// 代币Logo URI
+    pub token_logo_uri: Option<String>,
+    /// 实际存款金额（考虑decimals）
+    pub actual_amount: f64,
+    /// 实际累计筹资总额（考虑decimals）
+    pub actual_total_raised: f64,
+    /// USD价值估算
+    pub estimated_usd_value: f64,
+    /// 存款类型：0=初始存款，1=追加存款，2=应急存款
+    pub deposit_type: u8,
+    /// 存款类型名称
+    pub deposit_type_name: String,
+    /// 是否为高价值存款
+    pub is_high_value_deposit: bool,
+    /// 关联的流动性池地址
+    pub related_pool: Option<String>,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 存款时间戳
+    pub deposited_at: i64,
+    /// 处理时间
+    pub processed_at: String,
 }
 
 /// 存款事件解析器

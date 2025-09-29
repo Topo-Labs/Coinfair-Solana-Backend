@@ -1,7 +1,7 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::TokenCreationEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
 };
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -35,6 +35,43 @@ pub struct TokenCreationEvent {
     pub whitelist_deadline: i64,
     /// 创建时间（Unix 时间戳）
     pub created_at: i64,
+}
+
+/// 代币创建事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenCreationEventData {
+    /// 项目配置地址
+    pub project_config: String,
+    /// 代币的 Mint 地址
+    pub mint_address: String,
+    /// 代币名称
+    pub name: String,
+    /// 代币符号
+    pub symbol: String,
+    /// 代币元数据的 URI（如 IPFS 链接）
+    pub metadata_uri: String,
+    /// 代币logo的URI
+    pub logo_uri: String,
+    /// 代币小数位数
+    pub decimals: u8,
+    /// 供应量（以最小单位计）
+    pub supply: u64,
+    /// 创建者的钱包地址
+    pub creator: String,
+    /// 是否支持白名单（true 表示有白名单机制）
+    pub has_whitelist: bool,
+    /// 白名单资格检查的时间戳（Unix 时间戳，0 表示无时间限制）
+    pub whitelist_deadline: i64,
+    /// 创建时间（Unix 时间戳）
+    pub created_at: i64,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 扩展信息 (可选)
+    pub extensions: Option<serde_json::Value>,
+    /// 数据来源 (可选，默认为external_push)
+    pub source: Option<DataSource>,
 }
 
 /// 代币创建事件解析器

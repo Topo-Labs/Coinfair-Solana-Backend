@@ -8,8 +8,12 @@
 //! 5. 测试数据清理
 
 use crate::{
-    config::EventListenerConfig, error::EventListenerError, metrics::MetricsCollector, parser::EventParserRegistry,
-    persistence::BatchWriter, subscriber::SubscriptionManager,
+    config::EventListenerConfig,
+    error::EventListenerError,
+    metrics::MetricsCollector,
+    parser::{token_creation_parser::TokenCreationEventData, EventParserRegistry},
+    persistence::BatchWriter,
+    subscriber::SubscriptionManager,
 };
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
@@ -124,26 +128,24 @@ async fn test_fix_3_intelligent_retry_logic() {
     println!("✅ 修复3验证开始：智能重试机制");
 
     // 创建测试事件
-    let test_batch = vec![crate::parser::ParsedEvent::TokenCreation(
-        crate::parser::event_parser::TokenCreationEventData {
-            project_config: Pubkey::new_unique().to_string(),
-            mint_address: Pubkey::new_unique().to_string(),
-            name: "Integration Test Token".to_string(),
-            symbol: "ITEST".to_string(),
-            metadata_uri: "https://test.example.com/metadata.json".to_string(),
-            logo_uri: "https://test.example.com/logo.png".to_string(),
-            decimals: 9,
-            supply: 1000000,
-            creator: Pubkey::new_unique().to_string(),
-            has_whitelist: false,
-            whitelist_deadline: 0,
-            created_at: 1234567890,
-            signature: "integration_test_signature".to_string(),
-            slot: 12345,
-            extensions: None,
-            source: None,
-        },
-    )];
+    let test_batch = vec![crate::parser::ParsedEvent::TokenCreation(TokenCreationEventData {
+        project_config: Pubkey::new_unique().to_string(),
+        mint_address: Pubkey::new_unique().to_string(),
+        name: "Integration Test Token".to_string(),
+        symbol: "ITEST".to_string(),
+        metadata_uri: "https://test.example.com/metadata.json".to_string(),
+        logo_uri: "https://test.example.com/logo.png".to_string(),
+        decimals: 9,
+        supply: 1000000,
+        creator: Pubkey::new_unique().to_string(),
+        has_whitelist: false,
+        whitelist_deadline: 0,
+        created_at: 1234567890,
+        signature: "integration_test_signature".to_string(),
+        slot: 12345,
+        extensions: None,
+        source: None,
+    })];
 
     // 测试可重试错误
     let retryable_errors = vec![

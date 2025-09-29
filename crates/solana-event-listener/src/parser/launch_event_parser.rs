@@ -1,13 +1,14 @@
 use crate::{
     config::EventListenerConfig,
     error::{EventListenerError, Result},
-    parser::{event_parser::LaunchEventData, EventParser, ParsedEvent},
+    parser::{EventParser, ParsedEvent},
     services::MigrationClient,
 };
 use async_trait::async_trait;
 use base64::{engine::general_purpose, Engine as _};
 use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::Arc;
@@ -40,6 +41,41 @@ pub struct LaunchEvent {
     pub max_slippage_percent: f64,
     /// 是否包含NFT元数据
     pub with_metadata: Option<bool>,
+}
+
+/// Meme币发射事件数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LaunchEventData {
+    /// meme币合约地址
+    pub meme_token_mint: String,
+    /// 配对代币地址(通常是SOL或USDC)
+    pub base_token_mint: String,
+    /// 用户钱包地址
+    pub user_wallet: String,
+    /// CLMM配置索引
+    pub config_index: u32,
+    /// 初始价格
+    pub initial_price: f64,
+    /// 池子开放时间戳，0表示立即开放
+    pub open_time: u64,
+    /// 价格下限
+    pub tick_lower_price: f64,
+    /// 价格上限  
+    pub tick_upper_price: f64,
+    /// meme币数量
+    pub meme_token_amount: u64,
+    /// 配对代币数量
+    pub base_token_amount: u64,
+    /// 最大滑点百分比
+    pub max_slippage_percent: f64,
+    /// 是否包含NFT元数据
+    pub with_metadata: bool,
+    /// 交易签名
+    pub signature: String,
+    /// 区块高度
+    pub slot: u64,
+    /// 处理时间
+    pub processed_at: String,
 }
 
 /// LaunchEvent解析器
