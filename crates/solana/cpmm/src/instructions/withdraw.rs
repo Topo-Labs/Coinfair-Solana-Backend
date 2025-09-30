@@ -12,10 +12,10 @@ use anchor_spl::{
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    /// Pays to mint the position
+    /// 支付铸造仓位
     pub owner: Signer<'info>,
 
-    /// CHECK: pool vault and lp mint authority
+    /// CHECK: 池子金库和LP铸币权限
     #[account(
         seeds = [
             crate::AUTH_SEED.as_bytes(),
@@ -24,71 +24,71 @@ pub struct Withdraw<'info> {
     )]
     pub authority: UncheckedAccount<'info>,
 
-    /// Pool state account
+    /// 池子状态账户
     #[account(mut)]
     pub pool_state: AccountLoader<'info, PoolState>,
 
-    /// Owner lp token account
+    /// 所有者LP代币账户
     #[account(
         mut, 
         token::authority = owner
     )]
     pub owner_lp_token: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The token account for receive token_0,
+    /// 用于接收token_0的代币账户，
     #[account(
         mut,
         token::mint = token_0_vault.mint,
     )]
     pub token_0_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The token account for receive token_1
+    /// 用于接收token_1的代币账户
     #[account(
         mut,
         token::mint = token_1_vault.mint,
     )]
     pub token_1_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The address that holds pool tokens for token_0
+    /// 持有token_0池子代币的地址
     #[account(
         mut,
         constraint = token_0_vault.key() == pool_state.load()?.token_0_vault
     )]
     pub token_0_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// The address that holds pool tokens for token_1
+    /// 持有token_1池子代币的地址
     #[account(
         mut,
         constraint = token_1_vault.key() == pool_state.load()?.token_1_vault
     )]
     pub token_1_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// token Program
+    /// 代币程序
     pub token_program: Program<'info, Token>,
 
-    /// Token program 2022
+    /// 代币程序2022
     pub token_program_2022: Program<'info, Token2022>,
 
-    /// The mint of token_0 vault
+    /// token_0金库的铸币
     #[account(
         address = token_0_vault.mint
     )]
     pub vault_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// The mint of token_1 vault
+    /// token_1金库的铸币
     #[account(
         address = token_1_vault.mint
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// Pool lp token mint
+    /// 池子LP代币铸币
     #[account(
         mut,
         address = pool_state.load()?.lp_mint @ ErrorCode::IncorrectLpMint)
     ]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// memo program
+    /// 备忘录程序
     /// CHECK:
     #[account(
         address = spl_memo::id()
@@ -158,11 +158,7 @@ pub fn withdraw(
         token_1_transfer_fee
     );
     emit!(LpChangeEvent {
-        user_wallet: ctx.accounts.owner.key(),
         pool_id,
-        lp_mint: ctx.accounts.lp_mint.key(),
-        token_0_mint: ctx.accounts.vault_0_mint.key(),
-        token_1_mint: ctx.accounts.vault_1_mint.key(),
         lp_amount_before: pool_state.lp_supply,
         token_0_vault_before: total_token_0_amount,
         token_1_vault_before: total_token_1_amount,
@@ -170,13 +166,7 @@ pub fn withdraw(
         token_1_amount: receive_token_1_amount,
         token_0_transfer_fee,
         token_1_transfer_fee,
-        change_type: 1,
-        lp_mint_program_id: ctx.accounts.lp_mint.to_account_info().owner.to_owned(),
-        token_0_program_id: ctx.accounts.vault_0_mint.to_account_info().owner.to_owned(),
-        token_1_program_id: ctx.accounts.vault_1_mint.to_account_info().owner.to_owned(),
-        lp_mint_decimals: ctx.accounts.lp_mint.decimals,
-        token_0_decimals: ctx.accounts.vault_0_mint.decimals,
-        token_1_decimals: ctx.accounts.vault_1_mint.decimals,
+        change_type: 1
     });
 
     if receive_token_0_amount < minimum_token_0_amount

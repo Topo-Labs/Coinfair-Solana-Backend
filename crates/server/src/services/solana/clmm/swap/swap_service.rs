@@ -6,12 +6,12 @@ use crate::services::solana::shared::{
     SharedContext,
 };
 
-use crate::dtos::solana::common::{RoutePlan, TransactionData, TransactionStatus, TransferFeeInfo};
 use crate::dtos::solana::clmm::swap::raydium::{ComputeSwapV2Request, SwapComputeV2Data, TransactionSwapV2Request};
 use crate::dtos::solana::clmm::swap::referral::ReferralInfo;
 use crate::dtos::solana::clmm::swap::swap_v3::{
     ComputeSwapV3Request, SwapComputeV3Data, SwapV3AndSendTransactionResponse, TransactionSwapV3Request,
 };
+use crate::dtos::solana::common::{RoutePlan, TransactionData, TransactionStatus, TransferFeeInfo};
 use ::utils::solana::builders::SwapV2InstructionBuilder as UtilsSwapV2InstructionBuilder;
 use ::utils::solana::builders::SwapV3InstructionBuilder as UtilsSwapV3InstructionBuilder;
 use ::utils::solana::{
@@ -1006,7 +1006,7 @@ impl SwapService {
         let mut upper_upper: Option<Pubkey> = None;
         let mut upper_upper_token_account: Option<Pubkey> = None;
         let mut payer_referral: Option<Pubkey> = None;
-        let referral = ConfigManager::get_referral_program_id()?;
+        let referral_program_id = ConfigManager::get_referral_program_id()?;
 
         let payer_key = user_wallet;
         let input_mint_pubkey = Pubkey::from_str(&swap_data.input_mint)?;
@@ -1024,7 +1024,8 @@ impl SwapService {
             &input_token_program,
         );
         info!("project_token_account: {}", project_token_account);
-        let (payer_referral_pda, _) = Pubkey::find_program_address(&[b"referral", &payer_key.to_bytes()], &referral);
+        let (payer_referral_pda, _) =
+            Pubkey::find_program_address(&[b"referral", &payer_key.to_bytes()], &referral_program_id);
         info!("payer_referral: {}", payer_referral_pda);
         let payer_referral_account_data = self.shared.rpc_client.get_account(&payer_referral_pda);
         match payer_referral_account_data {
@@ -1042,7 +1043,7 @@ impl SwapService {
                             ),
                         );
                         let (upper_referral_pda, _) =
-                            Pubkey::find_program_address(&[b"referral", &upper_key.to_bytes()], &referral);
+                            Pubkey::find_program_address(&[b"referral", &upper_key.to_bytes()], &referral_program_id);
                         upper_referral = Some(upper_referral_pda);
                         let upper_referral_account = self.shared.rpc_client.get_account(&upper_referral_pda)?;
                         let upper_referral_account: ReferralAccount =
@@ -1096,7 +1097,7 @@ impl SwapService {
             instructions.push(create_upper_upper_ata_ix);
         }
 
-        let referral_program_id = ConfigManager::get_referral_program_id()?;
+        // let referral_program_id = ConfigManager::get_referral_program_id()?;
         let amm_config_index = ConfigManager::get_amm_config_index();
         let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
         let (observation_key, _) = PDACalculator::calculate_observation_pda(&raydium_program_id, &pool_address);

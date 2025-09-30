@@ -5839,13 +5839,14 @@ dependencies = [
  "anchor-spl",
  "arrayref",
  "bytemuck",
+ "coinfair-referral",
  "proptest",
  "quickcheck 1.0.3",
  "rand 0.9.2",
  "solana-security-txt",
  "spl-math",
  "spl-token-2022 7.0.0",
- "uint 0.10.0",
+ "uint 0.9.5 (git+https://github.com/raydium-io/parity-common)",
 ]
 
 [[package]]

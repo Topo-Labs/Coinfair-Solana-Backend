@@ -14,8 +14,7 @@ pub struct ClaimReferralNFT<'info> {
     /// 上级地址，由客户端传入
     /// 必须是一个合法钱包地址
     /// 校验不能是 user 自己
-    /// CHECK:
-    pub upper: AccountInfo<'info>,
+    pub upper: SystemAccount<'info>,
 
     /// 记录当前用户的推荐关系
     #[account(
@@ -37,15 +36,14 @@ pub struct ClaimReferralNFT<'info> {
         bump
     )]
     pub upper_mint_counter: Account<'info, MintCounter>,
-
     /// 读取上级的推荐信息
     #[account(
         seeds = [b"referral", upper.key().as_ref()],
-        bump = upper_referral.bump,
+        bump
     )]
     pub upper_referral: Account<'info, ReferralAccount>,
 
-    /// 上级持有的 NFT TokenAccount
+    // /// 上级持有的 NFT TokenAccount
     // #[account(
     //     mut,
     //     constraint = upper_nft_account.mint == official_mint.key(),
@@ -53,7 +51,6 @@ pub struct ClaimReferralNFT<'info> {
     //     constraint = upper_nft_account.amount >= 1,
     // )]
     // pub upper_nft_account: Account<'info, TokenAccount>,
-
     /// 全局配置，包含官方NFT mint地址、手续费等信息
     #[account(
         seeds = [b"config"],
@@ -84,15 +81,14 @@ pub struct ClaimReferralNFT<'info> {
     // )]
     // pub user_token_account: Account<'info, TokenAccount>,
     /// 支付手续费的目标账户，协议方钱包
-    /// CHECK:
     #[account(
         mut,
         address = config.protocol_wallet, // 协议接收钱包
     )]
-    pub protocol_wallet: AccountInfo<'info>,
+    pub protocol_wallet: SystemAccount<'info>,
 
     /// PDA 签名者，用于托管上级 NFT 并进行分发
-    /// CHECK:
+    /// CHECK: This account is used as upper bound for some calculation
     #[account(
         seeds = [b"nft_pool", upper.key().as_ref()],
         bump,
@@ -109,15 +105,41 @@ pub struct ClaimReferralNFT<'info> {
 
     /// CPI相关的Token Program
     pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
     pub system_program: Program<'info, System>,
+    pub associated_token_program: Program<'info, anchor_spl::associated_token::AssociatedToken>,
     pub rent: Sysvar<'info, Rent>,
 }
 
+#[event]
+pub struct ClaimNFTEvent {
+    pub claimer: Pubkey,          // 领取者地址
+    pub upper: Pubkey,            // 上级地址
+    pub nft_mint: Pubkey,         // NFT mint 地址
+    pub claim_fee: u64,           // 支付的领取费用
+    pub upper_remain_mint: u64,   // 上级剩余可被领取的NFT数量
+    pub protocol_wallet: Pubkey,  // 协议费用接收钱包
+    pub nft_pool_account: Pubkey, // NFT池子账户
+    pub user_ata: Pubkey,         // 用户接收NFT的ATA账户
+    pub timestamp: i64,           // 领取时间戳
+}
+
+#[event]
+pub struct ReferralEstablishedEvent {
+    pub user: Pubkey,     // 下级用户
+    pub upper: Pubkey,    // 上级用户
+    pub nft_mint: Pubkey, // 相关NFT mint地址
+    pub timestamp: i64,   // 建立关系时间戳
+}
+
 pub fn claim_nft(ctx: Context<ClaimReferralNFT>) -> Result<()> {
+    msg!("🔍 Start: claim_nft");
+
     let user = &ctx.accounts.user;
     let config = &ctx.accounts.config;
     let user_referral = &mut ctx.accounts.user_referral;
+
+    msg!("User: {}", user.key());
+    msg!("Upper: {}", ctx.accounts.upper.key());
 
     // // 1. 确保用户未领取过
     // let user_ata = &ctx.accounts.user_ata;
@@ -133,19 +155,26 @@ pub fn claim_nft(ctx: Context<ClaimReferralNFT>) -> Result<()> {
         return Err(ReferralError::CannotReferSelf.into());
     }
 
+    msg!("✅ Referral check passed");
+
     // --------- 设置推荐关系 ----------
 
     user_referral.upper = Some(ctx.accounts.upper.key());
     // user_referral.upper_upper = ctx.accounts.upper_referral.upper;
 
+    msg!("Set upper done");
+
     // 4. 更新上级的 mint_counter
     let counter = &mut ctx.accounts.upper_mint_counter;
+    msg!("Upper remain_mint: {}", counter.remain_mint);
 
     if counter.remain_mint == 0 {
         msg!("❌ No remaining mint");
         return Err(ReferralError::NoRemainingMint.into());
     }
     counter.remain_mint -= 1;
+    msg!("Decremented remain_mint");
+
     // 2. 扣除手续费
     // token::transfer(
     //     CpiContext::new(
@@ -170,8 +199,9 @@ pub fn claim_nft(ctx: Context<ClaimReferralNFT>) -> Result<()> {
         ),
         config.claim_fee,
     )?;
+    msg!("✅ Claim fee transferred");
 
-    // 3. 将NFT从上级账户转移给下级
+    // 5. 将NFT从上级账户转移给下级
     // token::transfer(
     //     CpiContext::new(
     //         ctx.accounts.token_program.to_account_info(),
@@ -198,6 +228,26 @@ pub fn claim_nft(ctx: Context<ClaimReferralNFT>) -> Result<()> {
         ),
         1,
     )?;
+    msg!("✅ NFT transferred to user");
+
+    emit!(ClaimNFTEvent {
+        claimer: user.key(),
+        upper: ctx.accounts.upper.key(),
+        nft_mint: ctx.accounts.official_mint.key(),
+        claim_fee: config.claim_fee,
+        upper_remain_mint: counter.remain_mint,
+        protocol_wallet: ctx.accounts.protocol_wallet.key(),
+        nft_pool_account: ctx.accounts.nft_pool_account.key(),
+        user_ata: ctx.accounts.user_ata.key(),
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    emit!(ReferralEstablishedEvent {
+        user: user.key(),
+        upper: ctx.accounts.upper.key(),
+        nft_mint: ctx.accounts.official_mint.key(),
+        timestamp: Clock::get()?.unix_timestamp,
+    });
 
     Ok(())
 }

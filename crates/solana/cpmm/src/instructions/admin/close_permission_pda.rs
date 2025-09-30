@@ -10,10 +10,10 @@ pub struct ClosePermissionPda<'info> {
     )]
     pub owner: Signer<'info>,
 
-    /// CHECK: permission account authority
+    /// CHECK: 权限账户权限
     pub permission_authority: UncheckedAccount<'info>,
 
-    /// Initialize config state account to store protocol owner address and fee rates.
+    /// 初始化配置状态账户来存储协议所有者地址和费率。
     #[account(
         mut,
         seeds = [

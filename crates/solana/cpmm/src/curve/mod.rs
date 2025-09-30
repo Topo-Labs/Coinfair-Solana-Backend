@@ -1,4 +1,4 @@
-//! Curve invariant implementations
+//! 曲线不变量实现
 
 pub mod calculator;
 pub mod constant_product;

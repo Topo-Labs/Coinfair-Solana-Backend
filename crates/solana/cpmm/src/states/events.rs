@@ -1,59 +1,52 @@
 use anchor_lang::prelude::*;
 
-/// Emitted when deposit and withdraw
+/// 初始化池子时发出
+#[event]
+#[cfg_attr(feature = "client", derive(Debug))]
+pub struct InitPoolEvent {
+    pub pool_id: Pubkey,
+    pub pool_creator: Pubkey,
+    pub token_0_mint: Pubkey,
+    pub token_1_mint: Pubkey,
+    pub token_0_vault: Pubkey,
+    pub token_1_vault: Pubkey,
+    pub lp_program_id: Pubkey,
+    pub lp_mint: Pubkey,
+    pub decimals: u8,
+}
+
+/// 在存入和提取时发出
 #[event]
 #[cfg_attr(feature = "client", derive(Debug))]
 pub struct LpChangeEvent {
-    /// user wallet address
-    pub user_wallet: Pubkey,
-    /// pool id
     pub pool_id: Pubkey,
-    /// lp mint address
-    pub lp_mint: Pubkey,
-    /// token_0 mint address
-    pub token_0_mint: Pubkey,
-    /// token_1 mint address
-    pub token_1_mint: Pubkey,
-    /// lp amount before
     pub lp_amount_before: u64,
-    /// pool vault sub trade fees
+    /// 池金库减去交易费用
     pub token_0_vault_before: u64,
-    /// pool vault sub trade fees
+    /// 池金库减去交易费用
     pub token_1_vault_before: u64,
-    /// calculate result without transfer fee
+    /// 不包含转账费用的计算结果
     pub token_0_amount: u64,
-    /// calculate result without transfer fee
+    /// 不包含转账费用的计算结果
     pub token_1_amount: u64,
     pub token_0_transfer_fee: u64,
     pub token_1_transfer_fee: u64,
-    // 0: deposit, 1: withdraw, 2: initialize
+    // 0: 存入，1: 提取
     pub change_type: u8,
-    /// program id of lp mint
-    pub lp_mint_program_id: Pubkey,
-    /// token_0 program id
-    pub token_0_program_id: Pubkey,
-    /// token_1 program id
-    pub token_1_program_id: Pubkey,
-    /// decimals of lp mint
-    pub lp_mint_decimals: u8,
-    /// token_0 decimals
-    pub token_0_decimals: u8,
-    /// token_1 decimals
-    pub token_1_decimals: u8,
 }
 
-/// Emitted when swap
+/// 在交换时发出
 #[event]
 #[cfg_attr(feature = "client", derive(Debug))]
 pub struct SwapEvent {
     pub pool_id: Pubkey,
-    /// pool vault sub trade fees
+    /// 池金库减去交易费用
     pub input_vault_before: u64,
-    /// pool vault sub trade fees
+    /// 池金库减去交易费用
     pub output_vault_before: u64,
-    /// calculate result without transfer fee
+    /// 不包含转账费用的计算结果
     pub input_amount: u64,
-    /// calculate result without transfer fee
+    /// 不包含转账费用的计算结果
     pub output_amount: u64,
     pub input_transfer_fee: u64,
     pub output_transfer_fee: u64,
@@ -61,7 +54,7 @@ pub struct SwapEvent {
     pub input_mint: Pubkey,
     pub output_mint: Pubkey,
     pub trade_fee: u64,
-    /// Amount of fee tokens going to creator
+    /// 给创建者的费用代币数量
     pub creator_fee: u64,
     pub creator_fee_on_input: bool,
 }

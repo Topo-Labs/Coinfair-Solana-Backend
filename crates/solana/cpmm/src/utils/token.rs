@@ -1,4 +1,5 @@
 use crate::error::ErrorCode;
+use crate::states::PoolState;
 use anchor_lang::{prelude::*, system_program};
 use anchor_spl::{
     token::{Token, TokenAccount},
@@ -15,11 +16,139 @@ use spl_token_2022::{
 use std::collections::HashSet;
 
 const MINT_WHITELIST: [&'static str; 4] = [
-    "HVbpJAQGNpkgBaYBZQBR1t7yFdvaYVp2vCQQfKKEN4tM",
-    "Crn4x1Y2HUKko7ox2EZMT6N2t2ZyH7eKtwkBGVnhEq1g",
-    "FrBfWJ4qE5sCzKm3k3JaAtqZcXUh4LvJygDeketsrsH4",
-    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
+    "HVbpJAQGNpkgBaYBZQBR1t7yFdvaYVp2vCQQfKKEN4tM", //USDP
+    "Crn4x1Y2HUKko7ox2EZMT6N2t2ZyH7eKtwkBGVnhEq1g", //GYEN(?)
+    "FrBfWJ4qE5sCzKm3k3JaAtqZcXUh4LvJygDeketsrsH4", //ZUSD(?)
+    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", //PYUSD
 ];
+
+#[event]
+pub struct ReferralRewardEvent {
+    pub from: Pubkey,   // Payer
+    pub to: Pubkey,     // Upper or Lower
+    pub mint: Pubkey,   // 奖励的代币
+    pub amount: u64,    // 奖励数量
+    pub timestamp: i64, // 时间戳
+}
+
+// 实时分佣给swap payer的上级和上上级
+pub fn transfer_from_pool_vault_to_uppers_and_project<'info>(
+    pool_state_loader: &AccountLoader<'info, PoolState>,
+    from_vault: &AccountInfo<'info>,
+    project_token_account: &AccountInfo<'info>,
+    upper_token_account: Option<AccountInfo<'info>>,
+    upper_upper_token_account: Option<AccountInfo<'info>>,
+    mint: AccountInfo<'info>,
+    mint_decimals: u8,
+    token_program: AccountInfo<'info>,
+    total_reward_fee: u64,
+    signer_seeds: &[&[&[u8]]],
+    // 事件触发所需字段
+    reward_mint: Pubkey,
+    from: Pubkey,
+    project: Pubkey,
+    upper: Option<Pubkey>,
+    upper_upper: Option<Pubkey>,
+) -> Result<()> {
+    if total_reward_fee == 0 {
+        return Ok(());
+    }
+
+    let project_reward_fee = total_reward_fee / 2;
+    let uppers_total_reward_fee = total_reward_fee - project_reward_fee;
+
+    // 给项目方分佣（30%）
+    transfer_from_pool_vault_to_user(
+        pool_state_loader.to_account_info(),
+        from_vault.to_account_info(),
+        project_token_account.to_account_info(),
+        mint.clone(),
+        token_program.clone(),
+        project_reward_fee,
+        mint_decimals,
+        signer_seeds,
+    )?;
+
+    emit!(ReferralRewardEvent {
+        from,
+        to: project,
+        mint: reward_mint,
+        amount: project_reward_fee,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+
+    if let (Some(upper_token_account), Some(upper_upper_token_account)) =
+        (upper_token_account.clone(), upper_upper_token_account)
+    {
+        let upper_reward_fee = uppers_total_reward_fee * 5 / 6;
+        let upper_upper_reward_fee = uppers_total_reward_fee - upper_reward_fee;
+
+        // 给上级分佣（25%）
+        transfer_from_pool_vault_to_user(
+            pool_state_loader.to_account_info(),
+            from_vault.to_account_info(),
+            upper_token_account.to_account_info(),
+            mint.clone(),
+            token_program.clone(),
+            upper_reward_fee,
+            mint_decimals,
+            signer_seeds,
+        )?;
+        if let Some(upper_pubkey) = upper {
+            emit!(ReferralRewardEvent {
+                from,
+                to: upper_pubkey,
+                mint: reward_mint,
+                amount: upper_reward_fee,
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
+
+        // 给上上级分佣（5%）
+        transfer_from_pool_vault_to_user(
+            pool_state_loader.to_account_info(),
+            from_vault.to_account_info(),
+            upper_upper_token_account.to_account_info(),
+            mint.clone(),
+            token_program.clone(),
+            upper_upper_reward_fee,
+            mint_decimals,
+            signer_seeds,
+        )?;
+        if let Some(upper_upper_pubkey) = upper_upper {
+            emit!(ReferralRewardEvent {
+                from,
+                to: upper_upper_pubkey,
+                mint: reward_mint,
+                amount: upper_upper_reward_fee,
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
+    } else if let Some(upper_token_account) = upper_token_account {
+        // 全给上级分佣（30%）
+        transfer_from_pool_vault_to_user(
+            pool_state_loader.to_account_info(),
+            from_vault.to_account_info(),
+            upper_token_account.to_account_info(),
+            mint,
+            token_program,
+            uppers_total_reward_fee,
+            mint_decimals,
+            signer_seeds,
+        )?;
+        if let Some(upper_pubkey) = upper {
+            emit!(ReferralRewardEvent {
+                from,
+                to: upper_pubkey,
+                mint: reward_mint,
+                amount: uppers_total_reward_fee,
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
+    }
+
+    return Ok(());
+}
 
 pub fn transfer_from_user_to_pool_vault<'a>(
     authority: AccountInfo<'a>,
@@ -77,7 +206,7 @@ pub fn transfer_from_pool_vault_to_user<'a>(
     )
 }
 
-/// Issue a spl_token `MintTo` instruction.
+/// 发出 spl_token `MintTo` 指令。
 pub fn token_mint_to<'a>(
     authority: AccountInfo<'a>,
     token_program: AccountInfo<'a>,
@@ -111,18 +240,14 @@ pub fn token_burn<'a>(
     token_2022::burn(
         CpiContext::new_with_signer(
             token_program.to_account_info(),
-            token_2022::Burn {
-                from,
-                authority,
-                mint,
-            },
+            token_2022::Burn { from, authority, mint },
             signer_seeds,
         ),
         amount,
     )
 }
 
-/// Calculate the fee for output amount
+/// 计算输出量的费用
 pub fn get_transfer_inverse_fee(mint_info: &AccountInfo, post_fee_amount: u64) -> Result<u64> {
     if *mint_info.owner == Token::id() {
         return Ok(0);
@@ -157,7 +282,7 @@ pub fn get_transfer_inverse_fee(mint_info: &AccountInfo, post_fee_amount: u64) -
     Ok(fee)
 }
 
-/// Calculate the fee for input amount
+/// 计算输入量的费用
 pub fn get_transfer_fee(mint_info: &AccountInfo, pre_fee_amount: u64) -> Result<u64> {
     if *mint_info.owner == Token::id() {
         return Ok(0);
@@ -213,14 +338,10 @@ pub fn create_token_account<'a>(
         let mint_info = mint_account.to_account_info();
         if *mint_info.owner == token_2022::Token2022::id() {
             let mint_data = mint_info.try_borrow_data()?;
-            let mint_state =
-                StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+            let mint_state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
             let mint_extensions = mint_state.get_extension_types()?;
-            let required_extensions =
-                ExtensionType::get_required_init_account_extensions(&mint_extensions);
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
-                &required_extensions,
-            )?
+            let required_extensions = ExtensionType::get_required_init_account_extensions(&mint_extensions);
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&required_extensions)?
         } else {
             TokenAccount::LEN
         }
@@ -268,10 +389,7 @@ pub fn create_or_allocate_account<'a>(
             program_id,
         )?;
     } else {
-        let required_lamports = rent
-            .minimum_balance(space)
-            .max(1)
-            .saturating_sub(current_lamports);
+        let required_lamports = rent.minimum_balance(space).max(1).saturating_sub(current_lamports);
         if required_lamports > 0 {
             let cpi_accounts = system_program::Transfer {
                 from: payer.to_account_info(),
@@ -284,10 +402,7 @@ pub fn create_or_allocate_account<'a>(
             account_to_allocate: target_account.clone(),
         };
         let cpi_context = CpiContext::new(system_program.clone(), cpi_accounts);
-        system_program::allocate(
-            cpi_context.with_signer(&[siger_seed]),
-            u64::try_from(space).unwrap(),
-        )?;
+        system_program::allocate(cpi_context.with_signer(&[siger_seed]), u64::try_from(space).unwrap())?;
 
         let cpi_accounts = system_program::Assign {
             account_to_assign: target_account.clone(),

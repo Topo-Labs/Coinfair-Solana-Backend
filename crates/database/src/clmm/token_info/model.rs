@@ -4,6 +4,74 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
+/// 自定义日期时间反序列化器，兼容字符串和MongoDB日期对象格式
+mod flexible_datetime {
+    use chrono::{DateTime, Utc};
+    use serde::{Deserialize, Deserializer};
+    use mongodb::bson;
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = bson::Bson::deserialize(deserializer)?;
+
+        match value {
+            // 处理字符串格式的日期时间
+            bson::Bson::String(s) => {
+                s.parse::<DateTime<Utc>>()
+                    .map_err(|e| serde::de::Error::custom(format!("Failed to parse datetime string '{}': {}", s, e)))
+            },
+            // 处理MongoDB BSON日期对象格式
+            bson::Bson::DateTime(dt) => {
+                Ok(DateTime::<Utc>::from_timestamp_millis(dt.timestamp_millis())
+                    .ok_or_else(|| serde::de::Error::custom("Invalid timestamp"))?)
+            },
+            // 处理其他可能的格式
+            other => {
+                Err(serde::de::Error::custom(format!(
+                    "Expected datetime string or BSON DateTime, found: {:?}",
+                    other
+                )))
+            }
+        }
+    }
+
+    /// 可选日期时间的反序列化器
+    pub fn deserialize_optional<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Option::<bson::Bson>::deserialize(deserializer)?;
+
+        match value {
+            Some(bson_value) => match bson_value {
+                // 处理字符串格式的日期时间
+                bson::Bson::String(s) => {
+                    s.parse::<DateTime<Utc>>()
+                        .map(Some)
+                        .map_err(|e| serde::de::Error::custom(format!("Failed to parse datetime string '{}': {}", s, e)))
+                },
+                // 处理MongoDB BSON日期对象格式
+                bson::Bson::DateTime(dt) => {
+                    Ok(Some(DateTime::<Utc>::from_timestamp_millis(dt.timestamp_millis())
+                        .ok_or_else(|| serde::de::Error::custom("Invalid timestamp"))?))
+                },
+                // 处理null值
+                bson::Bson::Null => Ok(None),
+                // 处理其他格式
+                other => {
+                    Err(serde::de::Error::custom(format!(
+                        "Expected datetime string, BSON DateTime, or null, found: {:?}",
+                        other
+                    )))
+                }
+            },
+            None => Ok(None),
+        }
+    }
+}
+
 /// 静态DTO结构体，用于与现有API兼容
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StaticTokenInfo {
@@ -62,6 +130,7 @@ pub struct TokenInfo {
     pub daily_volume: f64,
 
     /// 代币创建时间
+    #[serde(deserialize_with = "flexible_datetime::deserialize")]
     pub created_at: DateTime<Utc>,
 
     /// 冻结权限地址 (可选)
@@ -74,15 +143,18 @@ pub struct TokenInfo {
     pub permanent_delegate: Option<String>,
 
     /// 铸造时间 (可选)
+    #[serde(deserialize_with = "flexible_datetime::deserialize_optional")]
     pub minted_at: Option<DateTime<Utc>>,
 
     /// 扩展信息 (JSON格式)
     pub extensions: serde_json::Value,
 
     /// 数据推送时间
+    #[serde(deserialize_with = "flexible_datetime::deserialize")]
     pub push_time: DateTime<Utc>,
 
     /// 最后更新时间
+    #[serde(deserialize_with = "flexible_datetime::deserialize")]
     pub updated_at: DateTime<Utc>,
 
     /// 数据状态

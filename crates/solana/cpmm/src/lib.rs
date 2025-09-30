@@ -1,43 +1,40 @@
 pub mod curve;
 pub mod error;
 pub mod instructions;
+pub mod libraries;
 pub mod states;
 pub mod utils;
+
+// Re-export core library for big_num.rs macro
 use crate::curve::fees::FEE_RATE_DENOMINATOR_VALUE;
 use anchor_lang::prelude::*;
+pub use core as core_;
 use instructions::*;
 pub use states::CreatorFeeOn;
 
 #[cfg(not(feature = "no-entrypoint"))]
 solana_security_txt::security_txt! {
-    name: "raydium-cp-swap",
-    project_url: "https://raydium.io",
-    contacts: "link:https://immunefi.com/bounty/raydium",
-    policy: "https://immunefi.com/bounty/raydium",
-    source_code: "https://github.com/raydium-io/raydium-cp-swap",
+    name: "coinfair",
+    project_url: "https://sol.coinfair.xyz",
+    contacts: "",
+    policy: "",
+    source_code: "https://github.com/Topo-Labs/Coinfair-Solana-AMM",
     preferred_languages: "en",
-    auditors: "https://github.com/raydium-io/raydium-docs/blob/master/audit/MadShield%20Q1%202024/raydium-cp-swap-v-1.0.0.pdf"
+    auditors: ""
 }
 
-#[cfg(feature = "devnet")]
-declare_id!("DRaycpLY18LhpbydsBWbVJtxpNv9oXPgjRSfpF2bWpYb");
-#[cfg(not(feature = "devnet"))]
-declare_id!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
+declare_id!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi");
 
 pub mod admin {
     use super::{pubkey, Pubkey};
-    #[cfg(feature = "devnet")]
-    pub const ID: Pubkey = pubkey!("DRayqG9RXYi8WHgWEmRQGrUWRWbhjYWYkCRJDd6JBBak");
-    #[cfg(not(feature = "devnet"))]
-    pub const ID: Pubkey = pubkey!("GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ");
+    pub const ID: Pubkey = pubkey!("AdmnrQJtt4vRN969ayudxfNDqiNa2AAQ1ErnUPTMYRgJ");
 }
 
+/// Coinfair池子创建所需费用（防止恶意创建大量无用池子）
 pub mod create_pool_fee_reveiver {
     use super::{pubkey, Pubkey};
-    #[cfg(feature = "devnet")]
-    pub const ID: Pubkey = pubkey!("3oE58BKVt8KuYkGxx8zBojugnymWmBiyafWgMrnb6eYy");
-    #[cfg(not(feature = "devnet"))]
-    pub const ID: Pubkey = pubkey!("DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8");
+    /// 部署钱包地址对WSOL的ATA
+    pub const ID: Pubkey = pubkey!("3gXnxLQj6Zs1WNNAdafAbGamfMyZwS62SSesEVF65rBj");
 }
 
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
@@ -46,14 +43,14 @@ pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
 pub mod raydium_cp_swap {
     use super::*;
 
-    // The configuration of AMM protocol, include trade fee and protocol fee
-    /// # Arguments
+    // AMM协议的配置，包括交易手续费和协议费
+    /// # 参数
     ///
-    /// * `ctx`- The accounts needed by instruction.
-    /// * `index` - The index of amm config, there may be multiple config.
-    /// * `trade_fee_rate` - Trade fee rate, can be changed.
-    /// * `protocol_fee_rate` - The rate of protocol fee within trade fee.
-    /// * `fund_fee_rate` - The rate of fund fee within trade fee.
+    /// * `ctx`- 指令所需的账户。
+    /// * `index` - AMM配置的索引，可能有多个配置。
+    /// * `trade_fee_rate` - 交易费率，可以更改。
+    /// * `protocol_fee_rate` - 交易费中协议费的比率。
+    /// * `fund_fee_rate` - 交易费中资金费的比率。
     ///
     pub fn create_amm_config(
         ctx: Context<CreateAmmConfig>,
@@ -79,41 +76,41 @@ pub mod raydium_cp_swap {
         )
     }
 
-    /// Updates the owner of the amm config
-    /// Must be called by the current owner or admin
+    /// 更新AMM配置的所有者
+    /// 必须由当前所有者或管理员调用
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `trade_fee_rate`- The new trade fee rate of amm config, be set when `param` is 0
-    /// * `protocol_fee_rate`- The new protocol fee rate of amm config, be set when `param` is 1
-    /// * `fund_fee_rate`- The new fund fee rate of amm config, be set when `param` is 2
-    /// * `new_owner`- The config's new owner, be set when `param` is 3
-    /// * `new_fund_owner`- The config's new fund owner, be set when `param` is 4
-    /// * `param`- The value can be 0 | 1 | 2 | 3 | 4, otherwise will report a error
+    /// * `ctx`- 账户的上下文
+    /// * `trade_fee_rate`- AMM配置的新交易费率，当`param`为0时设置
+    /// * `protocol_fee_rate`- AMM配置的新协议费率，当`param`为1时设置
+    /// * `fund_fee_rate`- AMM配置的新资金费率，当`param`为2时设置
+    /// * `new_owner`- 配置的新所有者，当`param`为3时设置
+    /// * `new_fund_owner`- 配置的新资金所有者，当`param`为4时设置
+    /// * `param`- 值可以是 0 | 1 | 2 | 3 | 4，否则会报错
     ///
     pub fn update_amm_config(ctx: Context<UpdateAmmConfig>, param: u8, value: u64) -> Result<()> {
         instructions::update_amm_config(ctx, param, value)
     }
 
-    /// Update pool status for given value
+    /// 为给定值更新池状态
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `status` - The value of status
+    /// * `ctx`- 账户的上下文
+    /// * `status` - 状态的值
     ///
     pub fn update_pool_status(ctx: Context<UpdatePoolStatus>, status: u8) -> Result<()> {
         instructions::update_pool_status(ctx, status)
     }
 
-    /// Collect the protocol fee accrued to the pool
+    /// 收取池中累积的协议费
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx` - The context of accounts
-    /// * `amount_0_requested` - The maximum amount of token_0 to send, can be 0 to collect fees in only token_1
-    /// * `amount_1_requested` - The maximum amount of token_1 to send, can be 0 to collect fees in only token_0
+    /// * `ctx` - 账户的上下文
+    /// * `amount_0_requested` - 要发送的token_0的最大数量，可以为0以仅收取token_1的费用
+    /// * `amount_1_requested` - 要发送的token_1的最大数量，可以为0以仅收取token_0的费用
     ///
     pub fn collect_protocol_fee(
         ctx: Context<CollectProtocolFee>,
@@ -123,13 +120,13 @@ pub mod raydium_cp_swap {
         instructions::collect_protocol_fee(ctx, amount_0_requested, amount_1_requested)
     }
 
-    /// Collect the fund fee accrued to the pool
+    /// 收取池中累积的资金费
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx` - The context of accounts
-    /// * `amount_0_requested` - The maximum amount of token_0 to send, can be 0 to collect fees in only token_1
-    /// * `amount_1_requested` - The maximum amount of token_1 to send, can be 0 to collect fees in only token_0
+    /// * `ctx` - 账户的上下文
+    /// * `amount_0_requested` - 要发送的token_0的最大数量，可以为0以仅收取token_1的费用
+    /// * `amount_1_requested` - 要发送的token_1的最大数量，可以为0以仅收取token_0的费用
     ///
     pub fn collect_fund_fee(
         ctx: Context<CollectFundFee>,
@@ -139,63 +136,58 @@ pub mod raydium_cp_swap {
         instructions::collect_fund_fee(ctx, amount_0_requested, amount_1_requested)
     }
 
-    /// Collect the creator fee
+    /// 收取创建者费用
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx` - The context of accounts
+    /// * `ctx` - 账户的上下文
     ///
     pub fn collect_creator_fee(ctx: Context<CollectCreatorFee>) -> Result<()> {
         instructions::collect_creator_fee(ctx)
     }
 
-    /// Create a permission account
+    /// 创建权限账户
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
+    /// * `ctx`- 账户的上下文
     ///
     pub fn create_permission_pda(ctx: Context<CreatePermissionPda>) -> Result<()> {
         instructions::create_permission_pda(ctx)
     }
 
-    /// Close a permission account
+    /// 关闭权限账户
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
+    /// * `ctx`- 账户的上下文
     ///
     pub fn close_permission_pda(ctx: Context<ClosePermissionPda>) -> Result<()> {
         instructions::close_permission_pda(ctx)
     }
 
-    /// Creates a pool for the given token pair and the initial price
+    /// 为给定的代币对和初始价格创建池
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `init_amount_0` - the initial amount_0 to deposit
-    /// * `init_amount_1` - the initial amount_1 to deposit
-    /// * `open_time` - the timestamp allowed for swap
+    /// * `ctx`- 账户的上下文
+    /// * `init_amount_0` - 要存入的初始amount_0
+    /// * `init_amount_1` - 要存入的初始amount_1
+    /// * `open_time` - 允许交换的时间戳
     ///
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        init_amount_0: u64,
-        init_amount_1: u64,
-        open_time: u64,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, open_time: u64) -> Result<()> {
         instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
     }
 
-    /// Create a pool with permission
+    /// 创建具有权限的池
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `init_amount_0` - the initial amount_0 to deposit
-    /// * `init_amount_1` - the initial amount_1 to deposit
-    /// * `open_time` - the timestamp allowed for swap
-    /// * `creator_fee_on` - creator fee model, 0：both token0 and token1 (depends on the input), 1: only token0, 2: only token1
+    /// * `ctx`- 账户的上下文
+    /// * `init_amount_0` - 要存入的初始amount_0
+    /// * `init_amount_1` - 要存入的初始amount_1
+    /// * `open_time` - 允许交换的时间戳
+    /// * `creator_fee_on` - 创建者费用模式，0：token0和token1都可以（取决于输入），1：仅token0，2：仅token1
     ///
     pub fn initialize_with_permission(
         ctx: Context<InitializeWithPermission>,
@@ -204,23 +196,17 @@ pub mod raydium_cp_swap {
         open_time: u64,
         creator_fee_on: CreatorFeeOn,
     ) -> Result<()> {
-        instructions::initialize_with_permission(
-            ctx,
-            init_amount_0,
-            init_amount_1,
-            open_time,
-            creator_fee_on,
-        )
+        instructions::initialize_with_permission(ctx, init_amount_0, init_amount_1, open_time, creator_fee_on)
     }
 
-    /// Deposit lp token to the pool
+    /// 向池中存入LP代币
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `lp_token_amount` - Increased number of LPs
-    /// * `maximum_token_0_amount` -  Maximum token 0 amount to deposit, prevents excessive slippage
-    /// * `maximum_token_1_amount` - Maximum token 1 amount to deposit, prevents excessive slippage
+    /// * `ctx`- 账户的上下文
+    /// * `lp_token_amount` - 增加的LP数量
+    /// * `maximum_token_0_amount` - 要存入的最大token 0数量，防止过度滑点
+    /// * `maximum_token_1_amount` - 要存入的最大token 1数量，防止过度滑点
     ///
     pub fn deposit(
         ctx: Context<Deposit>,
@@ -228,22 +214,17 @@ pub mod raydium_cp_swap {
         maximum_token_0_amount: u64,
         maximum_token_1_amount: u64,
     ) -> Result<()> {
-        instructions::deposit(
-            ctx,
-            lp_token_amount,
-            maximum_token_0_amount,
-            maximum_token_1_amount,
-        )
+        instructions::deposit(ctx, lp_token_amount, maximum_token_0_amount, maximum_token_1_amount)
     }
 
-    /// Withdraw lp for token0 and token1
+    /// 提取LP代币换取token0和token1
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `lp_token_amount` - Amount of pool tokens to burn. User receives an output of token a and b based on the percentage of the pool tokens that are returned.
-    /// * `minimum_token_0_amount` -  Minimum amount of token 0 to receive, prevents excessive slippage
-    /// * `minimum_token_1_amount` -  Minimum amount of token 1 to receive, prevents excessive slippage
+    /// * `ctx`- 账户的上下文
+    /// * `lp_token_amount` - 要销毁的池代币数量。用户根据返回的池代币百分比接收token a和b的输出。
+    /// * `minimum_token_0_amount` - 要接收的最小token 0数量，防止过度滑点
+    /// * `minimum_token_1_amount` - 要接收的最小token 1数量，防止过度滑点
     ///
     pub fn withdraw(
         ctx: Context<Withdraw>,
@@ -251,37 +232,28 @@ pub mod raydium_cp_swap {
         minimum_token_0_amount: u64,
         minimum_token_1_amount: u64,
     ) -> Result<()> {
-        instructions::withdraw(
-            ctx,
-            lp_token_amount,
-            minimum_token_0_amount,
-            minimum_token_1_amount,
-        )
+        instructions::withdraw(ctx, lp_token_amount, minimum_token_0_amount, minimum_token_1_amount)
     }
 
-    /// Swap the tokens in the pool base input amount
+    /// 基于输入数量在池中交换代币
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `amount_in` -  input amount to transfer, output to DESTINATION is based on the exchange rate
-    /// * `minimum_amount_out` -  Minimum amount of output token, prevents excessive slippage
+    /// * `ctx`- 账户的上下文
+    /// * `amount_in` - 要转移的输入数量，输出到目标地址基于汇率
+    /// * `minimum_amount_out` - 输出代币的最小数量，防止过度滑点
     ///
-    pub fn swap_base_input(
-        ctx: Context<Swap>,
-        amount_in: u64,
-        minimum_amount_out: u64,
-    ) -> Result<()> {
+    pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u64) -> Result<()> {
         instructions::swap_base_input(ctx, amount_in, minimum_amount_out)
     }
 
-    /// Swap the tokens in the pool base output amount
+    /// 基于输出数量在池中交换代币
     ///
-    /// # Arguments
+    /// # 参数
     ///
-    /// * `ctx`- The context of accounts
-    /// * `max_amount_in` -  input amount prevents excessive slippage
-    /// * `amount_out` -  amount of output token
+    /// * `ctx`- 账户的上下文
+    /// * `max_amount_in` - 输入数量防止过度滑点
+    /// * `amount_out` - 输出代币的数量
     ///
     pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out: u64) -> Result<()> {
         instructions::swap_base_output(ctx, max_amount_in, amount_out)
