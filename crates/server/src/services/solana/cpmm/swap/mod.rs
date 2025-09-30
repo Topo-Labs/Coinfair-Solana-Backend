@@ -7,11 +7,15 @@ mod tests {
     use crate::dtos::solana::cpmm::swap::{
         CpmmSwapBaseInCompute, CpmmSwapBaseInRequest, CpmmSwapBaseInTransactionRequest,
     };
-    use crate::services::solana::shared::SharedContext;
+    use crate::services::solana::clmm::referral_service::ReferralAccount;
+    use crate::services::solana::shared::{SharedContext, SolanaUtils};
     use anyhow::Result;
+    use solana_client::rpc_client::RpcClient;
     use std::sync::Arc;
     use tokio;
+    use tracing::info;
     use utils::config::AppConfig;
+    use utils::{ConfigManager, PoolInfoManager, TokenUtils};
 
     /// 创建测试用的SharedContext
     fn create_test_shared_context() -> Arc<SharedContext> {
@@ -105,8 +109,117 @@ mod tests {
         let payer = Pubkey::from_str("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy").unwrap();
         let pool_id = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
         let amm_config = Pubkey::from_str("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU").unwrap();
+        let input_token_mint = solana_sdk::pubkey::Pubkey::new_unique();
+        let output_token_mint = solana_sdk::pubkey::Pubkey::new_unique();
 
         let cpmm_program_id = Pubkey::from_str("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi").unwrap();
+
+        let rpc_client = RpcClient::new("https://api.devnet.solana.com");
+
+        // let raydium_cpmm_program_id = ConfigManager::get_cpmm_program_id().unwrap();
+
+        // SwapV3独有的推荐系统处理
+        let mut upper: Option<Pubkey> = None;
+        let mut upper_token_account: Option<Pubkey> = None;
+        let mut upper_referral: Option<Pubkey> = None;
+        let mut upper_upper: Option<Pubkey> = None;
+        let mut upper_upper_token_account: Option<Pubkey> = None;
+        let mut payer_referral: Option<Pubkey> = None;
+        let referral_program_id = ConfigManager::get_referral_program_id().unwrap();
+
+        let payer_key = payer;
+        let input_mint_pubkey = input_token_mint;
+        let input_token_program = TokenUtils::detect_mint_program(&rpc_client, &input_mint_pubkey).unwrap();
+        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+            &input_token_mint.to_string(),
+            &output_token_mint.to_string().to_string(),
+        )
+        .unwrap();
+        let pool_address = Pubkey::from_str(&pool_address_str).unwrap();
+        let pool_account = rpc_client.get_account(&pool_address).unwrap();
+        let pool_state: raydium_cp_swap::states::PoolState =
+            SolanaUtils::deserialize_anchor_account(&pool_account).unwrap();
+        // let token_program_id = token_2022_program_id();
+        let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
+            &pool_state.pool_creator,
+            &input_mint_pubkey,
+            &input_token_program,
+        );
+        info!("project_token_account: {}", project_token_account);
+        let (payer_referral_pda, _) =
+            Pubkey::find_program_address(&[b"referral", &payer_key.to_bytes()], &referral_program_id);
+        info!("payer_referral: {}", payer_referral_pda);
+        let payer_referral_account_data = rpc_client.get_account(&payer_referral_pda);
+        match payer_referral_account_data {
+            Ok(account_data) => {
+                let payer_referral_account: ReferralAccount =
+                    SolanaUtils::deserialize_anchor_account(&account_data).unwrap();
+                payer_referral = Some(payer_referral_pda);
+                match payer_referral_account.upper {
+                    Some(upper_key) => {
+                        upper = Some(upper_key);
+                        upper_token_account = Some(
+                            spl_associated_token_account::get_associated_token_address_with_program_id(
+                                &upper_key,
+                                &input_mint_pubkey,
+                                &input_token_program,
+                            ),
+                        );
+                        let (upper_referral_pda, _) =
+                            Pubkey::find_program_address(&[b"referral", &upper_key.to_bytes()], &referral_program_id);
+                        upper_referral = Some(upper_referral_pda);
+                        let upper_referral_account = rpc_client.get_account(&upper_referral_pda).unwrap();
+                        let upper_referral_account: ReferralAccount =
+                            SolanaUtils::deserialize_anchor_account(&upper_referral_account).unwrap();
+
+                        match upper_referral_account.upper {
+                            Some(upper_upper_key) => {
+                                upper_upper = Some(upper_upper_key);
+                                upper_upper_token_account = Some(
+                                    spl_associated_token_account::get_associated_token_address_with_program_id(
+                                        &upper_upper_key,
+                                        &input_mint_pubkey,
+                                        &input_token_program,
+                                    ),
+                                );
+                            }
+                            None => {}
+                        }
+                    }
+                    None => {}
+                }
+            }
+            Err(_) => {
+                info!("payer_referral_account not found, set it to None");
+            }
+        }
+
+        // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
+        if let Some(upper_account) = upper_token_account {
+            info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
+            let _create_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &payer_key,
+                    &upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
+            // instructions.push(create_upper_ata_ix);
+        }
+
+        // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
+        if let Some(upper_upper_account) = upper_upper_token_account {
+            info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
+            let _create_upper_upper_ata_ix =
+                spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                    &payer_key,
+                    &upper_upper.unwrap(),
+                    &input_mint_pubkey,
+                    &input_token_program,
+                );
+            // instructions.push(create_upper_upper_ata_ix);
+        }
+
         let instructions = super::swap_service::swap_base_input_instr(
             cpmm_program_id,
             payer,
@@ -123,6 +236,15 @@ mod tests {
             pool_id,         // output_token_mint
             1000,            // amount_in
             950,             // minimum_amount_out
+            &input_mint_pubkey,
+            payer_referral.as_ref(),
+            upper.as_ref(),
+            upper_token_account.as_ref(),
+            upper_referral.as_ref(),
+            upper_upper.as_ref(),
+            upper_upper_token_account.as_ref(),
+            &project_token_account,
+            &referral_program_id,
         )
         .unwrap();
 

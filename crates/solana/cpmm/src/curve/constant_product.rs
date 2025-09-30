@@ -82,6 +82,9 @@ impl ConstantProductCurve {
         input_vault_amount: u128,
         output_vault_amount: u128,
     ) -> u128 {
+        println!("input_amount: {}", input_amount);
+        println!("input_vault_amount: {}", input_vault_amount);
+        println!("output_vault_amount: {}", output_vault_amount);
         let x_vault = output_vault_amount;
         let y_vault = input_vault_amount;
         let delta_y = input_amount;
@@ -103,6 +106,9 @@ impl ConstantProductCurve {
         input_vault_amount: u128,
         output_vault_amount: u128,
     ) -> u128 {
+        println!("output_amount: {}", output_amount);
+        println!("input_vault_amount: {}", input_vault_amount);
+        println!("output_vault_amount: {}", output_vault_amount);
         let x_vault = output_vault_amount;
         let y_vault = input_vault_amount;
         let delta_x = output_amount;
