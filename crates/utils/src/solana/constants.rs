@@ -9,6 +9,7 @@ pub const USDC_MINT_ALTERNATIVE: &str = "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19
 
 // Raydium V3 (CLMM) 常量
 pub const DEFAULT_RAYDIUM_PROGRAM_ID: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
+pub const DEFAULT_RAYDIUM_CP_PROGRAM_ID: &str = "FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi";
 pub const DEFAULT_AMM_CONFIG_INDEX: u16 = 1;
 pub const DEFAULT_FEE_RATE: u64 = 400; // 0.25%
 

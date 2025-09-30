@@ -15,6 +15,13 @@ impl ConfigManager {
         Pubkey::from_str(&program_id_str).map_err(Into::into)
     }
 
+    /// 获取Raydium程序ID (CPMM)
+    pub fn get_cpmm_program_id() -> Result<Pubkey> {
+        let program_id_str = std::env::var("RAYDIUM_CP_PROGRAM_ID")
+            .unwrap_or_else(|_| constants::DEFAULT_RAYDIUM_CP_PROGRAM_ID.to_string());
+        Pubkey::from_str(&program_id_str).map_err(Into::into)
+    }
+
     /// 获取Raydium V2 AMM程序ID (Classic AMM)
     pub fn get_raydium_v2_amm_program_id() -> Result<Pubkey> {
         let program_id_str = std::env::var("RAYDIUM_V2_AMM_PROGRAM_ID")
