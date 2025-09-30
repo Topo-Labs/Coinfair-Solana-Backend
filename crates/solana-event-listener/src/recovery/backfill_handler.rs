@@ -312,6 +312,98 @@ impl EventBackfillHandler for ReferralRewardEventHandler {
     }
 }
 
+/// InitPoolEvent回填处理器
+#[derive(Debug, Clone)]
+pub struct InitPoolEventHandler;
+
+#[async_trait]
+impl EventBackfillHandler for InitPoolEventHandler {
+    fn event_type_name(&self) -> &'static str {
+        "InitPoolEvent"
+    }
+
+    fn collection_name(&self) -> &'static str {
+        "InitPoolEvent"
+    }
+
+    async fn get_oldest_event_signature(&self, repo: &EventModelRepository) -> Result<String> {
+        match repo.get_oldest_init_pool_event().await {
+            Ok(Some(init_pool)) => Ok(init_pool.signature),
+            Ok(None) => {
+                info!("⚠️ 没有找到InitPoolEvent，使用零签名");
+                Ok("1111111111111111111111111111111111111111111111111111111111111111".to_string())
+            }
+            Err(e) => Err(EventListenerError::Unknown(format!(
+                "获取最老InitPoolEvent失败: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn signature_exists(&self, repo: &EventModelRepository, signature: &str) -> Result<bool> {
+        // 检查InitPoolEvent集合中是否存在该签名
+        use mongodb::bson::doc;
+        let collection = repo
+            .get_database()
+            .collection::<mongodb::bson::Document>(self.collection_name());
+        let filter = doc! { "signature": signature };
+
+        match collection.count_documents(filter, None).await {
+            Ok(count) => Ok(count > 0),
+            Err(e) => Err(EventListenerError::Unknown(format!(
+                "检查InitPoolEvent签名存在性失败: {}",
+                e
+            ))),
+        }
+    }
+}
+
+/// LpChangeEvent回填处理器
+#[derive(Debug, Clone)]
+pub struct LpChangeEventHandler;
+
+#[async_trait]
+impl EventBackfillHandler for LpChangeEventHandler {
+    fn event_type_name(&self) -> &'static str {
+        "LpChangeEvent"
+    }
+
+    fn collection_name(&self) -> &'static str {
+        "LpChangeEvent"
+    }
+
+    async fn get_oldest_event_signature(&self, repo: &EventModelRepository) -> Result<String> {
+        match repo.get_oldest_lp_change_event().await {
+            Ok(Some(lp_change)) => Ok(lp_change.signature),
+            Ok(None) => {
+                info!("⚠️ 没有找到LpChangeEvent，使用零签名");
+                Ok("1111111111111111111111111111111111111111111111111111111111111111".to_string())
+            }
+            Err(e) => Err(EventListenerError::Unknown(format!(
+                "获取最老LpChangeEvent失败: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn signature_exists(&self, repo: &EventModelRepository, signature: &str) -> Result<bool> {
+        // 检查LpChangeEvent集合中是否存在该签名
+        use mongodb::bson::doc;
+        let collection = repo
+            .get_database()
+            .collection::<mongodb::bson::Document>(self.collection_name());
+        let filter = doc! { "signature": signature };
+
+        match collection.count_documents(filter, None).await {
+            Ok(count) => Ok(count > 0),
+            Err(e) => Err(EventListenerError::Unknown(format!(
+                "检查LpChangeEvent签名存在性失败: {}",
+                e
+            ))),
+        }
+    }
+}
+
 /// 事件回填处理器注册中心
 ///
 /// 管理所有事件类型的处理器，支持动态注册和查询
@@ -339,6 +431,8 @@ impl BackfillEventRegistry {
         self.register_handler("ClaimNFTEvent", Arc::new(ClaimNFTEventHandler));
         self.register_handler("PoolCreatedEvent", Arc::new(PoolCreatedEventHandler));
         self.register_handler("ReferralRewardEvent", Arc::new(ReferralRewardEventHandler));
+        self.register_handler("InitPoolEvent", Arc::new(InitPoolEventHandler));
+        self.register_handler("LpChangeEvent", Arc::new(LpChangeEventHandler));
     }
 
     /// 注册事件处理器
@@ -429,7 +523,9 @@ mod tests {
         assert!(registry.supports_event_type("ClaimNFTEvent"));
         assert!(registry.supports_event_type("PoolCreatedEvent"));
         assert!(registry.supports_event_type("ReferralRewardEvent"));
-        assert_eq!(registry.handler_count(), 6);
+        assert!(registry.supports_event_type("InitPoolEvent"));
+        assert!(registry.supports_event_type("LpChangeEvent"));
+        assert_eq!(registry.handler_count(), 8);
 
         let event_types = registry.get_registered_event_types();
         assert!(event_types.contains(&"LaunchEvent".to_string()));
@@ -438,6 +534,8 @@ mod tests {
         assert!(event_types.contains(&"ClaimNFTEvent".to_string()));
         assert!(event_types.contains(&"PoolCreatedEvent".to_string()));
         assert!(event_types.contains(&"ReferralRewardEvent".to_string()));
+        assert!(event_types.contains(&"InitPoolEvent".to_string()));
+        assert!(event_types.contains(&"LpChangeEvent".to_string()));
     }
 
     #[test]

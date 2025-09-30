@@ -210,15 +210,19 @@ mod tests {
         assert!(registry.supports_event_type("ClaimNFTEvent"));
         assert!(registry.supports_event_type("PoolCreatedEvent"));
         assert!(registry.supports_event_type("ReferralRewardEvent"));
+        assert!(registry.supports_event_type("InitPoolEvent"));
+        assert!(registry.supports_event_type("LpChangeEvent"));
         assert!(!registry.supports_event_type("UnsupportedEvent"));
 
         let event_types = registry.get_registered_event_types();
-        assert_eq!(event_types.len(), 6);
+        assert_eq!(event_types.len(), 8);
         assert!(event_types.contains(&"LaunchEvent".to_string()));
         assert!(event_types.contains(&"TokenCreationEvent".to_string()));
         assert!(event_types.contains(&"DepositEvent".to_string()));
         assert!(event_types.contains(&"ClaimNFTEvent".to_string()));
         assert!(event_types.contains(&"PoolCreatedEvent".to_string()));
         assert!(event_types.contains(&"ReferralRewardEvent".to_string()));
+        assert!(event_types.contains(&"InitPoolEvent".to_string()));
+        assert!(event_types.contains(&"LpChangeEvent".to_string()));
     }
 }

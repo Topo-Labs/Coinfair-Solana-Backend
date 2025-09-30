@@ -333,12 +333,12 @@ impl InitPoolParser {
             }
         }
 
-        // 验证交易签名格式（Base58格式，长度应为88）
+        // 验证交易签名格式（Base58格式，长度应为87或88）
         if event.signature.trim().is_empty() {
             validation_errors.push("交易签名为空".to_string());
-        } else if event.signature.len() != 88 || event.signature.len() != 87 {
+        } else if event.signature.len() != 88 && event.signature.len() != 87 {
             validation_errors.push(format!(
-                "交易签名长度异常: 期望88字符，实际{}字符",
+                "交易签名长度异常: 期望87或88字符，实际{}字符",
                 event.signature.len()
             ));
         } else {

@@ -5,6 +5,7 @@ use super::{
     },
     ClmmPoolEvent, DepositEvent, LaunchEvent, NftClaimEvent, RewardDistributionEvent, TokenCreationEvent,
 };
+use crate::cpmm::{init_pool_event::model::InitPoolEvent, lp_change_event::model::LpChangeEvent};
 use mongodb::{
     bson::doc,
     options::{ClientOptions, FindOptions},
@@ -191,6 +192,42 @@ impl EventModelRepository {
             .database
             .collection::<RewardDistributionEvent>("RewardDistributionEvent")
             .find(filter, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 获取最老的InitPoolEvent签名 (用于回填服务)
+    pub async fn get_oldest_init_pool_event(&self) -> AppResult<Option<InitPoolEvent>> {
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<InitPoolEvent>("InitPoolEvent")
+            .find(doc! {}, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// 获取最老的LpChangeEvent签名 (用于回填服务)
+    pub async fn get_oldest_lp_change_event(&self) -> AppResult<Option<LpChangeEvent>> {
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<LpChangeEvent>("LpChangeEvent")
+            .find(doc! {}, options)
             .await?;
 
         if cursor.advance().await? {

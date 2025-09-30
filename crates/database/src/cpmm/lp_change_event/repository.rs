@@ -79,8 +79,8 @@ impl LpChangeEventRepository {
         ];
 
         match self.collection.create_indexes(indexes, None).await {
-            Ok(result) => {
-                info!("✅ LP变更事件索引创建成功: {:?}", result);
+            Ok(_result) => {
+                info!("✅ LpChangeEvent索引初始化完成");
                 Ok(())
             }
             Err(e) => {

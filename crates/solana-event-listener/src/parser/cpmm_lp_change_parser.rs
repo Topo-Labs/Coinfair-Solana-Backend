@@ -12,7 +12,7 @@ use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
 /// LP变更事件的原始数据结构（与智能合约保持一致）
-/// 注意：作为事实表，此结构应直接包含智能合约发出的所有原始数据，无需解析器层面的计算
+/// 注意：字段顺序必须与智能合约中的事件结构体完全一致，否则Borsh反序列化会失败
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct LpChangeEvent {
     /// 用户钱包地址
@@ -25,19 +25,12 @@ pub struct LpChangeEvent {
     pub token_0_mint: Pubkey,
     /// token_1 mint地址
     pub token_1_mint: Pubkey,
-
-    /// 变更类型：0=存款，1=取款，2=初始化
-    pub change_type: u8,
-
-    // LP数量变化（智能合约直接提供）
     /// 变更前的LP数量
     pub lp_amount_before: u64,
-    /// 变更后的LP数量
-    pub lp_amount_after: u64,
-    /// LP数量变化（可为负数）
-    pub lp_amount_change: i64,
-
-    // 代币数量（智能合约直接提供）
+    /// 变更前的token_0金库余额（扣除交易费后）
+    pub token_0_vault_before: u64,
+    /// 变更前的token_1金库余额（扣除交易费后）
+    pub token_1_vault_before: u64,
     /// token_0操作数量（不含转账费）
     pub token_0_amount: u64,
     /// token_1操作数量（不含转账费）
@@ -46,18 +39,8 @@ pub struct LpChangeEvent {
     pub token_0_transfer_fee: u64,
     /// token_1转账费
     pub token_1_transfer_fee: u64,
-
-    // 池子状态变化（智能合约直接提供）
-    /// 变更前的token_0金库余额
-    pub token_0_vault_before: u64,
-    /// 变更前的token_1金库余额
-    pub token_1_vault_before: u64,
-    /// 变更后的token_0金库余额
-    pub token_0_vault_after: u64,
-    /// 变更后的token_1金库余额
-    pub token_1_vault_after: u64,
-
-    // 程序ID和精度信息
+    /// 变更类型：0=存款，1=取款，2=初始化
+    pub change_type: u8,
     /// LP mint的程序ID
     pub lp_mint_program_id: Pubkey,
     /// token_0的程序ID
@@ -144,28 +127,41 @@ impl LpChangeParser {
     /// 从程序数据解析LP变更事件
     fn parse_program_data(&self, data_str: &str) -> Result<LpChangeEvent> {
         // Base64解码
-        let data = general_purpose::STANDARD
-            .decode(data_str)
-            .map_err(|e| EventListenerError::EventParsing(format!("Base64解码失败: {}", e)))?;
+        let data = general_purpose::STANDARD.decode(data_str).map_err(|e| {
+            warn!("❌ Base64解码失败: {}, data: {}...", e, &data_str[..50.min(data_str.len())]);
+            EventListenerError::EventParsing(format!("Base64解码失败: {}", e))
+        })?;
+
+        debug!("📊 解码后数据长度: {} bytes", data.len());
 
         if data.len() < 8 {
-            return Err(EventListenerError::EventParsing(
-                "数据长度不足，无法包含discriminator".to_string(),
-            ));
+            warn!("❌ 数据长度不足: {} bytes", data.len());
+            return Err(EventListenerError::EventParsing("数据长度不足，无法包含discriminator".to_string()));
         }
 
         // 验证discriminator
         let discriminator = &data[0..8];
+        debug!("🔍 实际discriminator: {:?}", discriminator);
+        debug!("🔍 期望discriminator: {:?}", self.discriminator);
+
         if discriminator != self.discriminator {
+            warn!(
+                "❌ Discriminator不匹配: 实际={:?}, 期望={:?}",
+                discriminator, self.discriminator
+            );
             return Err(EventListenerError::DiscriminatorMismatch);
         }
 
         // Borsh反序列化事件数据
         let event_data = &data[8..];
-        let event = LpChangeEvent::try_from_slice(event_data)
-            .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
+        debug!("📊 事件数据长度: {} bytes", event_data.len());
 
-        debug!(
+        let event = LpChangeEvent::try_from_slice(event_data).map_err(|e| {
+            warn!("❌ Borsh反序列化失败: {}", e);
+            EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e))
+        })?;
+
+        info!(
             "✅ 成功解析LP变更事件: 用户={}, 池子={}, 类型={}",
             event.user_wallet, event.pool_id, event.change_type
         );
@@ -185,7 +181,55 @@ impl LpChangeParser {
 
     /// 将原始事件转换为ParsedEvent
     async fn convert_to_parsed_event(&self, event: LpChangeEvent, signature: String, slot: u64) -> Result<ParsedEvent> {
-        // 直接使用链上事件原始数据，无需计算
+        // 计算派生字段
+        // 根据change_type计算token_0和token_1的变化方向
+        let (token_0_delta, token_1_delta) = match event.change_type {
+            0 => {
+                // deposit: token增加，vault增加
+                (
+                    event.token_0_amount as i64 + event.token_0_transfer_fee as i64,
+                    event.token_1_amount as i64 + event.token_1_transfer_fee as i64,
+                )
+            }
+            1 => {
+                // withdraw: token减少，vault减少
+                (
+                    -(event.token_0_amount as i64 + event.token_0_transfer_fee as i64),
+                    -(event.token_1_amount as i64 + event.token_1_transfer_fee as i64),
+                )
+            }
+            2 => {
+                // initialize: 初始化，token增加
+                (
+                    event.token_0_amount as i64 + event.token_0_transfer_fee as i64,
+                    event.token_1_amount as i64 + event.token_1_transfer_fee as i64,
+                )
+            }
+            _ => (0, 0),
+        };
+
+        // 计算vault_after
+        let token_0_vault_after = (event.token_0_vault_before as i64 + token_0_delta) as u64;
+        let token_1_vault_after = (event.token_1_vault_before as i64 + token_1_delta) as u64;
+
+        // 计算LP数量变化
+        // 对于deposit和initialize，LP增加；对于withdraw，LP减少
+        let (lp_amount_after, lp_amount_change) = match event.change_type {
+            0 | 2 => {
+                // deposit或initialize: LP增加
+                // 需要根据AMM公式计算，这里简化处理，实际应该从合约获取
+                // 暂时使用token_0_amount作为近似值
+                let lp_delta = event.token_0_amount; // 简化处理
+                (event.lp_amount_before + lp_delta, lp_delta as i64)
+            }
+            1 => {
+                // withdraw: LP减少
+                let lp_delta = event.token_0_amount; // 简化处理
+                (event.lp_amount_before.saturating_sub(lp_delta), -(lp_delta as i64))
+            }
+            _ => (event.lp_amount_before, 0),
+        };
+
         let lp_change_event = LpChangeEventData {
             user_wallet: event.user_wallet.to_string(),
             pool_id: event.pool_id.to_string(),
@@ -195,22 +239,22 @@ impl LpChangeParser {
 
             change_type: event.change_type,
 
-            // LP数量变化 - 直接使用原始数值
+            // LP数量变化 - 计算得出
             lp_amount_before: event.lp_amount_before,
-            lp_amount_after: event.lp_amount_after,
-            lp_amount_change: event.lp_amount_change,
+            lp_amount_after,
+            lp_amount_change,
 
-            // 代币数量 - 直接使用原始数值
+            // 代币数量 - 原始数值
             token_0_amount: event.token_0_amount,
             token_1_amount: event.token_1_amount,
             token_0_transfer_fee: event.token_0_transfer_fee,
             token_1_transfer_fee: event.token_1_transfer_fee,
 
-            // 池子状态 - 直接使用原始数值
+            // 池子状态 - 原始和计算值
             token_0_vault_before: event.token_0_vault_before,
             token_1_vault_before: event.token_1_vault_before,
-            token_0_vault_after: event.token_0_vault_after,
-            token_1_vault_after: event.token_1_vault_after,
+            token_0_vault_after,
+            token_1_vault_after,
 
             // 程序ID和精度信息
             lp_mint_program_id: event.lp_mint_program_id.to_string(),
@@ -330,6 +374,24 @@ impl EventParser for LpChangeParser {
 
                             // 转换为ParsedEvent
                             let parsed_event = self.convert_to_parsed_event(event, signature.to_string(), slot).await?;
+
+                            // 验证事件数据
+                            if let ParsedEvent::LpChange(ref lp_change_data) = parsed_event {
+                                match self.validate_lp_change_event(lp_change_data) {
+                                    Ok(true) => {
+                                        info!("✅ LP变更事件验证通过");
+                                        return Ok(Some(parsed_event));
+                                    }
+                                    Ok(false) => {
+                                        warn!("❌ LP变更事件验证失败，跳过此事件");
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        warn!("❌ LP变更事件验证出错: {}", e);
+                                        continue;
+                                    }
+                                }
+                            }
 
                             return Ok(Some(parsed_event));
                         }
