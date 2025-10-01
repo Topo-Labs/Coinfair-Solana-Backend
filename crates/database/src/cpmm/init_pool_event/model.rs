@@ -16,6 +16,11 @@ pub struct InitPoolEvent {
     pub token_1_vault: String,
     pub lp_mint: String,
 
+    // AMM配置ID（从链上PoolState获取）
+    // 旧数据可能没有此字段，所以设为 Option
+    #[serde(default)]
+    pub amm_config: Option<String>,
+
     // 程序ID
     pub lp_program_id: String,
     pub token_0_program_id: String,

@@ -15,11 +15,21 @@ pub struct InitPoolEvent {
     pub decimals: u8,
 }
 
-/// 在存入和提取时发出
+/// 在存入，提取，创建池子时发出
 #[event]
 #[cfg_attr(feature = "client", derive(Debug))]
 pub struct LpChangeEvent {
+    /// 用户钱包地址
+    pub user_wallet: Pubkey,
+    /// 池子地址
     pub pool_id: Pubkey,
+    /// Lp Mint 地址
+    pub lp_mint: Pubkey,
+    /// Token_0 Mint地址
+    pub token_0_mint: Pubkey,
+    /// Token_1 Mint 地址
+    pub token_1_mint: Pubkey,
+    /// 改变前lp的数量
     pub lp_amount_before: u64,
     /// 池金库减去交易费用
     pub token_0_vault_before: u64,
@@ -31,8 +41,20 @@ pub struct LpChangeEvent {
     pub token_1_amount: u64,
     pub token_0_transfer_fee: u64,
     pub token_1_transfer_fee: u64,
-    // 0: 存入，1: 提取
+    // 0: 存入，1: 提取， 2: 池子初始化
     pub change_type: u8,
+    /// program id of lp mint
+    pub lp_mint_program_id: Pubkey,
+    /// token_0 program id
+    pub token_0_program_id: Pubkey,
+    /// token_1 program id
+    pub token_1_program_id: Pubkey,
+    /// decimals of lp mint
+    pub lp_mint_decimals: u8,
+    /// token_0 decimals
+    pub token_0_decimals: u8,
+    /// token_1 decimals
+    pub token_1_decimals: u8,
 }
 
 /// 在交换时发出

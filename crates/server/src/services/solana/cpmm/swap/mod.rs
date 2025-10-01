@@ -130,7 +130,7 @@ mod tests {
         let payer_key = payer;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&rpc_client, &input_mint_pubkey).unwrap();
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_clmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )

@@ -47,6 +47,9 @@ pub struct InitPoolEventData {
     pub token_1_vault: String,
     pub lp_mint: String,
 
+    // AMM配置ID（从链上PoolState获取）
+    pub amm_config: String,
+
     // 程序ID和精度信息
     pub lp_program_id: String,
     pub token_0_program_id: String, // 需要从链上获取
@@ -122,6 +125,62 @@ impl InitPoolParser {
         );
 
         Ok(event)
+    }
+
+    /// 从链上获取AMM配置ID（从PoolState账户的第一个字段读取）
+    async fn fetch_amm_config(&self, pool_id: &Pubkey) -> Result<String> {
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_DELAY_MS: u64 = 2000;
+
+        for attempt in 1..=MAX_RETRIES {
+            match self.try_fetch_amm_config(pool_id).await {
+                Ok(amm_config) => {
+                    debug!(
+                        "✅ 第{}次尝试成功获取amm_config: {} for pool: {}",
+                        attempt, amm_config, pool_id
+                    );
+                    return Ok(amm_config);
+                }
+                Err(e) => {
+                    warn!("⚠️ 第{}次尝试获取amm_config失败: {}", attempt, e);
+
+                    if attempt < MAX_RETRIES {
+                        debug!("📡 {}ms后重试...", RETRY_DELAY_MS);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+
+        Err(EventListenerError::SolanaRpc(
+            "达到最大重试次数，仍无法获取amm_config".to_string(),
+        ))
+    }
+
+    /// 实际获取amm_config的核心逻辑
+    async fn try_fetch_amm_config(&self, pool_id: &Pubkey) -> Result<String> {
+        // 获取PoolState账户数据
+        let pool_account = self
+            .rpc_client
+            .get_account(pool_id)
+            .map_err(|e| EventListenerError::SolanaRpc(format!("获取PoolState账户失败: {}", e)))?;
+
+        // PoolState的前8字节是discriminator，然后是amm_config (Pubkey, 32字节)
+        if pool_account.data.len() < 40 {
+            return Err(EventListenerError::EventParsing(format!(
+                "PoolState账户数据长度不足: {} bytes",
+                pool_account.data.len()
+            )));
+        }
+
+        // 跳过discriminator(8字节)，读取amm_config(32字节)
+        let amm_config_bytes = &pool_account.data[8..40];
+        let amm_config_pubkey = Pubkey::try_from(amm_config_bytes)
+            .map_err(|e| EventListenerError::EventParsing(format!("解析amm_config失败: {}", e)))?;
+
+        Ok(amm_config_pubkey.to_string())
     }
 
     /// 从链上获取缺失的信息（使用批量查询优化性能，带重试机制）
@@ -261,10 +320,17 @@ impl InitPoolParser {
 
     /// 将原始事件转换为ParsedEvent
     async fn convert_to_parsed_event(&self, event: InitPoolEvent, signature: String, slot: u64) -> Result<ParsedEvent> {
-        // 从链上获取缺失的信息
-        let (token_0_program_id, token_1_program_id, token_0_decimals, token_1_decimals) = self
-            .fetch_missing_info(&event.token_0_mint, &event.token_1_mint)
-            .await?;
+        // 并发获取链上缺失的信息（amm_config和token信息）
+        let (amm_config_result, token_info_result) = tokio::join!(
+            self.fetch_amm_config(&event.pool_id),
+            self.fetch_missing_info(&event.token_0_mint, &event.token_1_mint)
+        );
+
+        // 处理amm_config查询结果
+        let amm_config = amm_config_result?;
+
+        // 处理token信息查询结果
+        let (token_0_program_id, token_1_program_id, token_0_decimals, token_1_decimals) = token_info_result?;
 
         let init_pool_event = InitPoolEventData {
             pool_id: event.pool_id.to_string(),
@@ -274,6 +340,8 @@ impl InitPoolParser {
             token_0_vault: event.token_0_vault.to_string(),
             token_1_vault: event.token_1_vault.to_string(),
             lp_mint: event.lp_mint.to_string(),
+
+            amm_config,
 
             lp_program_id: event.lp_program_id.to_string(),
             token_0_program_id,
@@ -303,6 +371,7 @@ impl InitPoolParser {
             ("token_0_vault", &event.token_0_vault),
             ("token_1_vault", &event.token_1_vault),
             ("lp_mint", &event.lp_mint),
+            ("amm_config", &event.amm_config),
             ("lp_program_id", &event.lp_program_id),
             ("token_0_program_id", &event.token_0_program_id),
             ("token_1_program_id", &event.token_1_program_id),
@@ -535,6 +604,7 @@ mod tests {
             token_0_vault: Pubkey::new_unique().to_string(),
             token_1_vault: Pubkey::new_unique().to_string(),
             lp_mint: Pubkey::new_unique().to_string(),
+            amm_config: Pubkey::new_unique().to_string(),
             lp_program_id: Pubkey::new_unique().to_string(),
             token_0_program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
             token_1_program_id: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb".to_string(),

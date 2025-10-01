@@ -149,8 +149,8 @@ impl PoolInfoManager {
         pool_map.get(&pair_key1).or_else(|| pool_map.get(&pair_key2)).cloned()
     }
 
-    /// 计算池子地址使用PDA
-    pub fn calculate_pool_address_pda(input_mint: &str, output_mint: &str) -> Result<String> {
+    /// 计算clmm池子地址使用PDA
+    pub fn calculate_clmm_pool_address_pda(input_mint: &str, output_mint: &str) -> Result<String> {
         let raydium_program_id = ConfigManager::get_raydium_program_id()?;
         let amm_config_index = ConfigManager::get_amm_config_index();
 
@@ -162,6 +162,22 @@ impl PoolInfoManager {
         let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&raydium_program_id, amm_config_index);
         let (pool_id_account, _) =
             PDACalculator::calculate_pool_pda(&raydium_program_id, &amm_config_key, &mint0, &mint1);
+
+        Ok(pool_id_account.to_string())
+    }
+
+    /// 计算clmm池子地址使用PDA
+    pub fn calculate_cpmm_pool_address_pda(input_mint: &str, output_mint: &str) -> Result<String> {
+        let cpmm_program_id = ConfigManager::get_cpmm_program_id()?;
+        let amm_config_index = ConfigManager::get_amm_config_index();
+
+        let input_mint_pubkey = Pubkey::from_str(input_mint)?;
+        let output_mint_pubkey = Pubkey::from_str(output_mint)?;
+
+        let (mint0, mint1, _) = TokenUtils::normalize_mint_order(&input_mint_pubkey, &output_mint_pubkey);
+
+        let (amm_config_key, _) = PDACalculator::calculate_amm_config_pda(&cpmm_program_id, amm_config_index);
+        let (pool_id_account, _) = PDACalculator::calculate_pool_pda(&cpmm_program_id, &amm_config_key, &mint0, &mint1);
 
         Ok(pool_id_account.to_string())
     }

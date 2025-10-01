@@ -328,6 +328,28 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         decimals: ctx.accounts.lp_mint.decimals,
     });
 
+    emit!(LpChangeEvent {
+        user_wallet: ctx.accounts.creator.key(),
+        pool_id: ctx.accounts.pool_state.key(),
+        lp_mint: ctx.accounts.lp_mint.key(),
+        token_0_mint: ctx.accounts.token_0_mint.key(),
+        token_1_mint: ctx.accounts.token_1_mint.key(),
+        lp_amount_before: 0,     // 初始化时 LP 供应量为 0
+        token_0_vault_before: 0, // 初始化时金库为空
+        token_1_vault_before: 0, // 初始化时金库为空
+        token_0_amount: token_0_vault.amount,
+        token_1_amount: token_1_vault.amount,
+        token_0_transfer_fee: 0, // 初始化时没有转账费用（直接从用户转到金库）
+        token_1_transfer_fee: 0,
+        change_type: 2, // 2 表示池子初始化
+        lp_mint_program_id: ctx.accounts.token_program.key(),
+        token_0_program_id: ctx.accounts.token_0_program.key(),
+        token_1_program_id: ctx.accounts.token_1_program.key(),
+        lp_mint_decimals: ctx.accounts.lp_mint.decimals,
+        token_0_decimals: ctx.accounts.token_0_mint.decimals,
+        token_1_decimals: ctx.accounts.token_1_mint.decimals,
+    });
+
     Ok(())
 }
 

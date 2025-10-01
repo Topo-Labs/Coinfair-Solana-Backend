@@ -1161,6 +1161,7 @@ impl EventStorage {
             token_0_vault: event.token_0_vault.clone(),
             token_1_vault: event.token_1_vault.clone(),
             lp_mint: event.lp_mint.clone(),
+            amm_config: Some(event.amm_config.clone()),
             lp_program_id: event.lp_program_id.clone(),
             token_0_program_id: event.token_0_program_id.clone(),
             token_1_program_id: event.token_1_program_id.clone(),
