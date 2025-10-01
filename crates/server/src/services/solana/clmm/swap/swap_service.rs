@@ -1013,7 +1013,7 @@ impl SwapService {
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
         // let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint_pubkey)?;
         let pool_address_str =
-            PoolInfoManager::calculate_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
+            PoolInfoManager::calculate_clmm_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
@@ -1251,7 +1251,7 @@ impl SwapService {
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
         // let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint_pubkey)?;
         let pool_address_str =
-            PoolInfoManager::calculate_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
+            PoolInfoManager::calculate_clmm_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
@@ -1542,7 +1542,7 @@ impl SwapService {
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
         // let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint_pubkey)?;
         let pool_address_str =
-            PoolInfoManager::calculate_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
+            PoolInfoManager::calculate_clmm_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
@@ -1786,7 +1786,7 @@ impl SwapService {
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
         // let output_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &output_mint_pubkey)?;
         let pool_address_str =
-            PoolInfoManager::calculate_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
+            PoolInfoManager::calculate_clmm_pool_address_pda(&swap_data.input_mint, &swap_data.output_mint)?;
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_amm_v3::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;

@@ -506,7 +506,7 @@ impl SolanaServiceTrait for SolanaService {
 
     // CPMM Swap operations - delegate to cpmm_swap_service
     async fn cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInResponse> {
-        self.cpmm_swap_service.cpmm_swap_base_in(request).await
+        self.cpmm_swap_service.build_and_send_swap_base_in(request).await
     }
 
     async fn compute_cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInCompute> {
@@ -523,7 +523,7 @@ impl SolanaServiceTrait for SolanaService {
     }
 
     async fn cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutResponse> {
-        self.cpmm_swap_service.cpmm_swap_base_out(request).await
+        self.cpmm_swap_service.build_and_send_cpmm_swap_base_out(request).await
     }
 
     async fn compute_cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutCompute> {

@@ -157,8 +157,13 @@ pub fn withdraw(
         receive_token_1_amount,
         token_1_transfer_fee
     );
+
     emit!(LpChangeEvent {
+        user_wallet: ctx.accounts.owner.key(),
         pool_id,
+        lp_mint: ctx.accounts.lp_mint.key(),
+        token_0_mint: ctx.accounts.vault_0_mint.key(),
+        token_1_mint: ctx.accounts.vault_1_mint.key(),
         lp_amount_before: pool_state.lp_supply,
         token_0_vault_before: total_token_0_amount,
         token_1_vault_before: total_token_1_amount,
@@ -166,7 +171,13 @@ pub fn withdraw(
         token_1_amount: receive_token_1_amount,
         token_0_transfer_fee,
         token_1_transfer_fee,
-        change_type: 1
+        change_type: 1,
+        lp_mint_program_id: ctx.accounts.lp_mint.to_account_info().owner.key(),
+        token_0_program_id: ctx.accounts.vault_0_mint.to_account_info().owner.key(),
+        token_1_program_id: ctx.accounts.vault_1_mint.to_account_info().owner.key(),
+        lp_mint_decimals: ctx.accounts.lp_mint.decimals,
+        token_0_decimals: ctx.accounts.vault_0_mint.decimals,
+        token_1_decimals: ctx.accounts.vault_1_mint.decimals,
     });
 
     if receive_token_0_amount < minimum_token_0_amount

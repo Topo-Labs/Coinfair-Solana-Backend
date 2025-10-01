@@ -160,10 +160,10 @@ pub fn swap_base_input_instr(
         AccountMeta::new(observation_key, false),               // observation_state
     ];
 
-    // 添加必传的payer_referral账户
+    // 添加必传的reward_mint账户
     accounts.push(AccountMeta::new_readonly(*reward_mint, false)); // reward_mint
 
-    // 添加可选的payer_referral账户
+    // 添加可选的payer_referral账户（使用system_program作为None的占位符）
     if let Some(payer_referral_pubkey) = payer_referral {
         accounts.push(AccountMeta::new_readonly(*payer_referral_pubkey, false));
     } else {
@@ -173,7 +173,6 @@ pub fn swap_base_input_instr(
     // 添加可选的upper账户
     if let Some(upper_pubkey) = upper {
         accounts.push(AccountMeta::new_readonly(*upper_pubkey, false));
-    // upper
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -181,7 +180,6 @@ pub fn swap_base_input_instr(
     // 添加可选的upper_token_account
     if let Some(upper_token_pubkey) = upper_token_account {
         accounts.push(AccountMeta::new(*upper_token_pubkey, false));
-    // upper_token_account
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -189,7 +187,6 @@ pub fn swap_base_input_instr(
     // 添加可选的upper_referral账户
     if let Some(upper_referral_pubkey) = upper_referral {
         accounts.push(AccountMeta::new_readonly(*upper_referral_pubkey, false));
-    // upper_referral
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -197,7 +194,6 @@ pub fn swap_base_input_instr(
     // 添加可选的upper_upper账户
     if let Some(upper_upper_pubkey) = upper_upper {
         accounts.push(AccountMeta::new_readonly(*upper_upper_pubkey, false));
-    // upper_upper
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -205,7 +201,6 @@ pub fn swap_base_input_instr(
     // 添加可选的upper_upper_token_account
     if let Some(upper_upper_token_pubkey) = upper_upper_token_account {
         accounts.push(AccountMeta::new(*upper_upper_token_pubkey, false));
-    // upper_upper_token_account
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -384,7 +379,7 @@ impl CpmmSwapService {
     /// 5. 应用滑点保护
     /// 6. 创建输出代币ATA账户
     /// 7. 构建并发送交换交易
-    pub async fn cpmm_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInResponse> {
+    pub async fn build_and_send_swap_base_in(&self, request: CpmmSwapBaseInRequest) -> Result<CpmmSwapBaseInResponse> {
         info!(
             "执行CPMM SwapBaseIn: pool_id={}, user_input_token={}, amount={}",
             request.pool_id, request.user_input_token, request.user_input_amount
@@ -395,7 +390,7 @@ impl CpmmSwapService {
         let user_input_amount = request.user_input_amount;
         let slippage = request.slippage.unwrap_or(0.5) / 100.0; // 转换为小数
 
-        info!("📝 交换接口输入参数分析:");
+        info!("📝 SwapBaseIn接口输入参数分析:");
         info!("  pool_id: {}", pool_id);
         info!("  user_input_token_raw: {}", user_input_token_raw);
         info!("  user_input_amount: {}", user_input_amount);
@@ -470,7 +465,7 @@ impl CpmmSwapService {
                 state
             }
             Err(e) => {
-                info!("❌ 池子状态反序列化失败: pool_id={}, error={}", pool_id, e);
+                info!("❌ SwapBaseIn池子状态反序列化失败: pool_id={}, error={}", pool_id, e);
 
                 // 输出详细的十六进制数据用于调试
                 let data_len = pool_account.data.len();
@@ -495,7 +490,7 @@ impl CpmmSwapService {
 
         // 🔍 智能检测并确定用户代币账户地址（与compute函数相同的逻辑）
         let user_input_token = {
-            info!("🧠 交换接口开始智能检测用户代币账户...");
+            info!("🧠 SwapBaseIn开始智能检测用户代币账户...");
 
             // 检查用户输入的地址是否是池子中的代币mint之一
             let is_token_0_mint = user_input_token_raw == pool_state.token_0_mint;
@@ -515,7 +510,7 @@ impl CpmmSwapService {
                 let ata_address =
                     spl_associated_token_account::get_associated_token_address(&wallet_pubkey, &user_input_token_raw);
 
-                info!("✅ 交换接口检测到mint地址，已转换为ATA:");
+                info!("✅ SwapBaseIn检测到mint地址，已转换为ATA:");
                 info!("  mint地址: {}", user_input_token_raw);
                 info!("  钱包地址: {}", wallet_pubkey);
                 info!("  ATA地址: {}", ata_address);
@@ -526,7 +521,7 @@ impl CpmmSwapService {
             } else {
                 // 用户输入的可能已经是代币账户地址，直接使用
                 info!(
-                    "🔍 交换接口输入地址不是池子的mint，假设是代币账户地址: {}",
+                    "🔍 SwapBaseIn输入地址不是池子的mint，假设是代币账户地址: {}",
                     user_input_token_raw
                 );
                 user_input_token_raw
@@ -655,11 +650,20 @@ impl CpmmSwapService {
         // 9. 应用滑点保护计算最小输出金额
         let minimum_amount_out = amount_with_slippage(amount_received, slippage, false);
 
-        // 10. 继续使用前面定义的payer和payer_pubkey
+        info!("💰 SwapBaseIn计算结果:");
+        info!("  user_input_amount: {}", user_input_amount);
+        info!("  transfer_fee: {}", transfer_fee);
+        info!("  actual_amount_in: {}", actual_amount_in);
+        info!("  total_input_token_amount: {}", total_input_token_amount);
+        info!("  total_output_token_amount: {}", total_output_token_amount);
+        info!("  curve_result.output_amount: {}", curve_result.output_amount);
+        info!("  amount_out: {}", amount_out);
+        info!("  output_transfer_fee: {}", output_transfer_fee);
+        info!("  amount_received (预计算): {}", amount_received);
+        info!("  minimum_amount_out (传给合约): {}", minimum_amount_out);
+        info!("  slippage: {}%", slippage * 100.0);
 
-        // 11. user_output_token已在上面的交易方向逻辑中计算完成
-
-        // 12. 构建交易指令
+        // 10. 构建交易指令
         let mut instructions = Vec::new();
 
         // 创建输入代币ATA账户指令（如果不存在）
@@ -686,7 +690,7 @@ impl CpmmSwapService {
         let payer_key = payer_pubkey;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )?;
@@ -774,6 +778,10 @@ impl CpmmSwapService {
         }
 
         // 创建SwapBaseIn指令（使用从CLI逻辑推导出的正确参数）
+        info!("🔧 准备构建swap指令，参数:");
+        info!("  user_input_amount (传给指令): {}", user_input_amount);
+        info!("  minimum_amount_out (传给指令): {}", minimum_amount_out);
+
         let swap_base_in_instrs = swap_base_input_instr(
             cpmm_program_id,
             payer_pubkey,
@@ -800,9 +808,33 @@ impl CpmmSwapService {
             &project_token_account,
             &referral_program_id,
         )?;
+
+        // 调试：打印指令数据
+        if let Some(instr) = swap_base_in_instrs.first() {
+            info!("📋 Swap指令数据详情:");
+            info!("  program_id: {}", instr.program_id);
+            info!("  accounts数量: {}", instr.accounts.len());
+            info!("  data长度: {}", instr.data.len());
+            if instr.data.len() >= 24 {
+                let discriminator = &instr.data[0..8];
+                let amount_in_bytes = &instr.data[8..16];
+                let min_out_bytes = &instr.data[16..24];
+
+                info!("  discriminator: {:?}", discriminator);
+                info!("  amount_in (bytes): {:?}", amount_in_bytes);
+                info!("  minimum_amount_out (bytes): {:?}", min_out_bytes);
+
+                let parsed_amount_in = u64::from_le_bytes(amount_in_bytes.try_into().unwrap());
+                let parsed_min_out = u64::from_le_bytes(min_out_bytes.try_into().unwrap());
+
+                info!("  ✅ 解析后amount_in: {}", parsed_amount_in);
+                info!("  ✅ 解析后minimum_amount_out: {}", parsed_min_out);
+            }
+        }
+
         instructions.extend(swap_base_in_instrs);
 
-        // 13. 构建并发送交易
+        // 11. 构建并发送交易
         let recent_blockhash = rpc_client.get_latest_blockhash()?;
         let transaction =
             Transaction::new_signed_with_payer(&instructions, Some(&payer_pubkey), &[&payer], recent_blockhash);
@@ -811,7 +843,7 @@ impl CpmmSwapService {
 
         info!("CPMM SwapBaseIn交易成功: {}", signature);
 
-        // 14. 构建响应
+        // 12. 构建响应
         let explorer_url = format!("https://solscan.io/tx/{}", signature);
         let now = chrono::Utc::now().timestamp();
 
@@ -1315,7 +1347,7 @@ impl CpmmSwapService {
         let payer_key = wallet;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )?;
@@ -1458,7 +1490,10 @@ impl CpmmSwapService {
     /// 5. 计算输入转账费和最大输入金额（含滑点保护）
     /// 6. 创建输出代币ATA账户
     /// 7. 构建并发送交换交易
-    pub async fn cpmm_swap_base_out(&self, request: CpmmSwapBaseOutRequest) -> Result<CpmmSwapBaseOutResponse> {
+    pub async fn build_and_send_cpmm_swap_base_out(
+        &self,
+        request: CpmmSwapBaseOutRequest,
+    ) -> Result<CpmmSwapBaseOutResponse> {
         info!(
             "执行CPMM SwapBaseOut: pool_id={}, user_input_token={}, amount_out_less_fee={}",
             request.pool_id, request.user_input_token, request.amount_out_less_fee
@@ -1709,7 +1744,7 @@ impl CpmmSwapService {
         let payer_key = payer_pubkey;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )?;
@@ -2196,7 +2231,7 @@ impl CpmmSwapService {
         let payer_key = wallet;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )?;
@@ -2487,7 +2522,7 @@ mod tests {
         let payer_key = payer;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&rpc_client, &input_mint_pubkey).unwrap();
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )
@@ -2664,7 +2699,7 @@ mod tests {
         let payer_key = payer;
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&rpc_client, &input_mint_pubkey).unwrap();
-        let pool_address_str = PoolInfoManager::calculate_pool_address_pda(
+        let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
         )

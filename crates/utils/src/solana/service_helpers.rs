@@ -32,7 +32,7 @@ impl<'a> ServiceHelpers<'a> {
             &format!("输入: {} -> 输出: {}", input_mint, output_mint),
         );
 
-        let result = PoolInfoManager::calculate_pool_address_pda(input_mint, output_mint)?;
+        let result = PoolInfoManager::calculate_clmm_pool_address_pda(input_mint, output_mint)?;
 
         LogUtils::log_operation_success("PDA池子地址计算", &result);
         Ok(result)
