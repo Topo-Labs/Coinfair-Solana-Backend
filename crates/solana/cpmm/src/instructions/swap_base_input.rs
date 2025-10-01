@@ -288,9 +288,9 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
         &ctx.accounts.pool_state,
         &ctx.accounts.output_vault.to_account_info(),
         &ctx.accounts.project_token_account.to_account_info(),
-        ctx.accounts.upper_token_account.as_ref().map(|acc| acc.to_account_info()), // 修复这里
-        ctx.accounts.upper_upper_token_account.as_ref().map(|acc| acc.to_account_info()), // 修复这里
-        ctx.accounts.reward_mint.to_account_info(), // 也需要转换
+        ctx.accounts.upper_token_account.as_ref().map(|acc| acc.to_account_info()),
+        ctx.accounts.upper_upper_token_account.as_ref().map(|acc| acc.to_account_info()),
+        ctx.accounts.reward_mint.to_account_info(),
         ctx.accounts.output_token_mint.decimals,
         ctx.accounts.output_token_program.to_account_info(),
         total_reward_fee,

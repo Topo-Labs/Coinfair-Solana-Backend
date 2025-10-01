@@ -44,21 +44,52 @@ impl ConstantProductCurve {
     //     input_amount
     // }
 
+    // pub fn swap_base_input_without_fees_zero_to_one(
+    //     input_amount: u128,
+    //     input_vault_amount: u128,
+    //     output_vault_amount: u128,
+    // ) -> u128 {
+    //     let x4 = pow_4th_normalized(input_vault_amount);
+    //     let k = U512::from(x4)
+    //         .checked_mul(U512::from(output_vault_amount))
+    //         .unwrap();
+
+    //     let new_x = input_vault_amount.checked_add(input_amount).unwrap();
+    //     let new_x4 = pow_4th_normalized(new_x);
+
+    //     let new_y = k.checked_div(U512::from(new_x4)).unwrap();
+    //     let new_y_u128 = u128::try_from(new_y).unwrap_or(0);
+
+    //     output_vault_amount.checked_sub(new_y_u128).unwrap()
+    // }
+
     pub fn swap_base_input_without_fees_zero_to_one(
         input_amount: u128,
         input_vault_amount: u128,
         output_vault_amount: u128,
     ) -> u128 {
         let x4 = pow_4th_normalized(input_vault_amount);
-        let k = U512::from(x4).checked_mul(U512::from(output_vault_amount)).unwrap();
+        let k = x4.checked_mul(U512::from(output_vault_amount)).unwrap();
 
         let new_x = input_vault_amount.checked_add(input_amount).unwrap();
         let new_x4 = pow_4th_normalized(new_x);
 
-        let new_y = k.checked_div(U512::from(new_x4)).unwrap();
+        let new_y = k.checked_div(new_x4).unwrap();
         let new_y_u128 = u128::try_from(new_y).unwrap_or(0);
 
-        output_vault_amount.checked_sub(new_y_u128).unwrap()
+        // 输出应该向下取整（对协议有利）
+        // 但这里需要检查：如果除法有余数，说明 new_y 被向下取整了
+        // 那么用户得到的输出应该再减 1，确保 k 不会减少
+        let output = output_vault_amount.checked_sub(new_y_u128).unwrap();
+
+        // 检查是否有余数
+        let remainder = k.checked_rem(new_x4).unwrap();
+        if remainder > U512::zero() && output > 0 {
+            // 有余数说明 new_y 被向下取整，输出应该减 1
+            output.checked_sub(1).unwrap()
+        } else {
+            output
+        }
     }
 
     pub fn swap_base_output_without_fees_zero_to_one(
@@ -688,6 +719,48 @@ mod tests {
         println!("✓ ⁴√{} = {} (floor)", value, result);
 
         println!("\n========== 收敛性测试通过 ==========");
+    }
+
+    #[test]
+    fn test_swap_base_input_without_fees_zero_to_one() {
+        let input_amount = 100;
+        let input_vault_amount = 900;
+        let output_vault_amount = 1544;
+
+        let result = ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
+            input_amount,
+            input_vault_amount,
+            output_vault_amount,
+        );
+
+        println!("=== swap_base_input_without_fees_zero_to_one 测试 ===");
+        println!("输入参数:");
+        println!("  input_amount: {}", input_amount);
+        println!("  input_vault_amount: {}", input_vault_amount);
+        println!("  output_vault_amount: {}", output_vault_amount);
+        println!("输出结果: {}", result);
+
+        // 基本验证
+        assert!(result > 0, "输出应该大于 0");
+        assert!(result < output_vault_amount, "输出应该小于输出池余额");
+
+        // 验证不变量: x^4 * y 应该保持不变（或略微增加，因为有舍入）
+        let initial_x4 = pow_4th_normalized(input_vault_amount);
+        let initial_k = initial_x4.checked_mul(U512::from(output_vault_amount)).unwrap();
+
+        let final_x = input_vault_amount + input_amount;
+        let final_y = output_vault_amount - result;
+        let final_x4 = pow_4th_normalized(final_x);
+        let final_k = final_x4.checked_mul(U512::from(final_y)).unwrap();
+
+        println!("\n不变量验证:");
+        println!("  初始 k = {:?}", initial_k);
+        println!("  最终 k = {:?}", final_k);
+        println!("  k 是否保持: {}", final_k >= initial_k);
+
+        assert!(final_k >= initial_k, "交易后 k 应该保持或略微增加");
+
+        println!("✓ 测试通过\n");
     }
 
     #[test]

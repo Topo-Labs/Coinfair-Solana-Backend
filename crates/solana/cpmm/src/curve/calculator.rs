@@ -107,7 +107,9 @@ impl CurveCalculator {
         let trade_fee = Fees::trading_fee(input_amount, trade_fee_rate)?;
         let input_amount_less_fees = if is_creator_fee_on_input {
             creator_fee = Fees::creator_fee(input_amount, creator_fee_rate)?;
-            input_amount.checked_sub(trade_fee)?.checked_sub(creator_fee)?
+            input_amount
+                .checked_sub(trade_fee)?
+                .checked_sub(creator_fee)?
         } else {
             input_amount.checked_sub(trade_fee)?
         };
@@ -121,16 +123,20 @@ impl CurveCalculator {
         // );
 
         let output_amount_swapped = match trade_direction {
-            TradeDirection::ZeroForOne => ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
-                input_amount_less_fees,
-                input_vault_amount,
-                output_vault_amount,
-            ),
-            TradeDirection::OneForZero => ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
-                input_amount_less_fees,
-                input_vault_amount,
-                output_vault_amount,
-            ),
+            TradeDirection::ZeroForOne => {
+                ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
+                    input_amount_less_fees,
+                    input_vault_amount,
+                    output_vault_amount,
+                )
+            }
+            TradeDirection::OneForZero => {
+                ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
+                    input_amount_less_fees,
+                    input_vault_amount,
+                    output_vault_amount,
+                )
+            }
         };
 
         let output_amount = if is_creator_fee_on_input {
@@ -169,7 +175,8 @@ impl CurveCalculator {
         let actual_output_amount = if is_creator_fee_on_input {
             output_amount
         } else {
-            let out_amount_with_creator_fee = Fees::calculate_pre_fee_amount(output_amount, creator_fee_rate)?;
+            let out_amount_with_creator_fee =
+                Fees::calculate_pre_fee_amount(output_amount, creator_fee_rate)?;
             creator_fee = out_amount_with_creator_fee - output_amount;
             out_amount_with_creator_fee
         };
@@ -181,27 +188,35 @@ impl CurveCalculator {
         // );
 
         let input_amount_swapped = match trade_direction {
-            TradeDirection::ZeroForOne => ConstantProductCurve::swap_base_output_without_fees_zero_to_one(
-                actual_output_amount,
-                input_vault_amount,
-                output_vault_amount,
-            ),
-            TradeDirection::OneForZero => ConstantProductCurve::swap_base_output_without_fees_one_to_zero(
-                actual_output_amount,
-                input_vault_amount,
-                output_vault_amount,
-            ),
+            TradeDirection::ZeroForOne => {
+                ConstantProductCurve::swap_base_output_without_fees_zero_to_one(
+                    actual_output_amount,
+                    input_vault_amount,
+                    output_vault_amount,
+                )
+            }
+            TradeDirection::OneForZero => {
+                ConstantProductCurve::swap_base_output_without_fees_one_to_zero(
+                    actual_output_amount,
+                    input_vault_amount,
+                    output_vault_amount,
+                )
+            }
         };
 
         let input_amount = if is_creator_fee_on_input {
-            let input_amount_with_fee =
-                Fees::calculate_pre_fee_amount(input_amount_swapped, trade_fee_rate + creator_fee_rate).unwrap();
+            let input_amount_with_fee = Fees::calculate_pre_fee_amount(
+                input_amount_swapped,
+                trade_fee_rate + creator_fee_rate,
+            )
+            .unwrap();
             let total_fee = input_amount_with_fee - input_amount_swapped;
             creator_fee = Fees::split_creator_fee(total_fee, trade_fee_rate, creator_fee_rate)?;
             trade_fee = total_fee - creator_fee;
             input_amount_with_fee
         } else {
-            let input_amount_with_fee = Fees::calculate_pre_fee_amount(input_amount_swapped, trade_fee_rate).unwrap();
+            let input_amount_with_fee =
+                Fees::calculate_pre_fee_amount(input_amount_swapped, trade_fee_rate).unwrap();
             trade_fee = input_amount_with_fee - input_amount_swapped;
             input_amount_with_fee
         };
@@ -241,7 +256,10 @@ impl CurveCalculator {
 /// 曲线的测试辅助函数
 #[cfg(test)]
 pub mod test {
-    use {super::*, proptest::prelude::*, spl_math::precise_number::PreciseNumber, spl_math::uint::U256};
+    use {
+        super::*, proptest::prelude::*, spl_math::precise_number::PreciseNumber,
+        spl_math::uint::U256,
+    };
 
     /// 大多数曲线执行转换测试时的ε值，
     /// 比较单侧存款与交换+存款。
@@ -250,10 +268,15 @@ pub mod test {
     /// 给定流动性参数计算曲线的总归一化值。
     ///
     /// 此函数的常数产品实现给出Uniswap不变量的平方根。
-    pub fn normalized_value(swap_token_a_amount: u128, swap_token_b_amount: u128) -> Option<PreciseNumber> {
+    pub fn normalized_value(
+        swap_token_a_amount: u128,
+        swap_token_b_amount: u128,
+    ) -> Option<PreciseNumber> {
         let swap_token_a_amount = PreciseNumber::new(swap_token_a_amount)?;
         let swap_token_b_amount = PreciseNumber::new(swap_token_b_amount)?;
-        swap_token_a_amount.checked_mul(&swap_token_b_amount)?.sqrt()
+        swap_token_a_amount
+            .checked_mul(&swap_token_b_amount)?
+            .sqrt()
     }
 
     /// 测试函数检查交换从不会减少池的整体价值。
@@ -269,26 +292,33 @@ pub mod test {
         swap_destination_amount: u128,
         trade_direction: TradeDirection,
     ) {
-        let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
-            source_token_amount,
-            swap_source_amount,
-            swap_destination_amount,
-        );
+        let destination_amount_swapped =
+            ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
+                source_token_amount,
+                swap_source_amount,
+                swap_destination_amount,
+            );
 
         let (swap_token_0_amount, swap_token_1_amount) = match trade_direction {
             TradeDirection::ZeroForOne => (swap_source_amount, swap_destination_amount),
             TradeDirection::OneForZero => (swap_destination_amount, swap_source_amount),
         };
-        let previous_value = swap_token_0_amount.checked_mul(swap_token_1_amount).unwrap();
+        let previous_value = swap_token_0_amount
+            .checked_mul(swap_token_1_amount)
+            .unwrap();
 
         let new_swap_source_amount = swap_source_amount.checked_add(source_token_amount).unwrap();
-        let new_swap_destination_amount = swap_destination_amount.checked_sub(destination_amount_swapped).unwrap();
+        let new_swap_destination_amount = swap_destination_amount
+            .checked_sub(destination_amount_swapped)
+            .unwrap();
         let (swap_token_0_amount, swap_token_1_amount) = match trade_direction {
             TradeDirection::ZeroForOne => (new_swap_source_amount, new_swap_destination_amount),
             TradeDirection::OneForZero => (new_swap_destination_amount, new_swap_source_amount),
         };
 
-        let new_value = swap_token_0_amount.checked_mul(swap_token_1_amount).unwrap();
+        let new_value = swap_token_0_amount
+            .checked_mul(swap_token_1_amount)
+            .unwrap();
         assert!(new_value >= previous_value);
     }
 
@@ -329,8 +359,12 @@ pub mod test {
         let swap_token_b_amount = U256::from(swap_token_1_amount);
         let new_swap_token_b_amount = U256::from(new_swap_token_1_amount);
 
-        assert!(new_swap_token_0_amount * lp_token_supply >= swap_token_0_amount * new_lp_token_supply);
-        assert!(new_swap_token_b_amount * lp_token_supply >= swap_token_b_amount * new_lp_token_supply);
+        assert!(
+            new_swap_token_0_amount * lp_token_supply >= swap_token_0_amount * new_lp_token_supply
+        );
+        assert!(
+            new_swap_token_b_amount * lp_token_supply >= swap_token_b_amount * new_lp_token_supply
+        );
     }
 
     /// Test function checking that a withdraw never reduces the value of pool
