@@ -13,8 +13,8 @@ use crate::dtos::solana::cpmm::lp::lp_change_event::{
 };
 use crate::dtos::solana::cpmm::lp::query_lp_mint::{LpMintPoolInfo, QueryLpMintRequest};
 use crate::dtos::solana::cpmm::pool::init_pool_event::{
-    CreateInitPoolEventRequest, InitPoolEventResponse, InitPoolEventsPageResponse, QueryInitPoolEventsRequest,
-    UserPoolStats,
+    CreateInitPoolEventRequest, InitPoolEventResponse, InitPoolEventsDetailedPageResponse, InitPoolEventsPageResponse,
+    QueryInitPoolEventsRequest, UserPoolStats,
 };
 use crate::dtos::solana::cpmm::withdraw::{
     CpmmWithdrawAndSendRequest, CpmmWithdrawAndSendResponse, CpmmWithdrawCompute, CpmmWithdrawRequest,
@@ -155,9 +155,10 @@ impl SolanaService {
             lp_change_event_service: super::cpmm::lp_change_event::LpChangeEventService::new(Arc::new(
                 database.clone(),
             )),
-            init_pool_event_service: super::cpmm::init_pool_event::InitPoolEventService::new(Arc::new(
-                database.clone(),
-            )),
+            init_pool_event_service: super::cpmm::init_pool_event::InitPoolEventService::new(
+                Arc::new(database.clone()),
+                optimized_shared_context.rpc_client.clone(),
+            ),
             lp_mint_query_service: {
                 let mut lp_service =
                     LpMintQueryService::new(Arc::new(database.clone())).expect("Failed to create LpMintQueryService");
@@ -300,6 +301,10 @@ pub trait SolanaServiceTrait {
     async fn get_init_pool_event_by_pool_id(&self, pool_id: &str) -> Result<InitPoolEventResponse>;
     async fn get_init_pool_event_by_signature(&self, signature: &str) -> Result<InitPoolEventResponse>;
     async fn query_init_pool_events(&self, request: QueryInitPoolEventsRequest) -> Result<InitPoolEventsPageResponse>;
+    async fn query_init_pool_events_with_details(
+        &self,
+        request: QueryInitPoolEventsRequest,
+    ) -> Result<InitPoolEventsDetailedPageResponse>;
     async fn get_user_pool_stats(&self, pool_creator: &str) -> Result<UserPoolStats>;
     async fn delete_init_pool_event(&self, id: &str) -> Result<bool>;
 
@@ -675,6 +680,16 @@ impl SolanaServiceTrait for SolanaService {
     async fn query_init_pool_events(&self, request: QueryInitPoolEventsRequest) -> Result<InitPoolEventsPageResponse> {
         self.init_pool_event_service
             .query_events(request)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn query_init_pool_events_with_details(
+        &self,
+        request: QueryInitPoolEventsRequest,
+    ) -> Result<InitPoolEventsDetailedPageResponse> {
+        self.init_pool_event_service
+            .query_events_with_details(request)
             .await
             .map_err(anyhow::Error::from)
     }

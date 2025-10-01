@@ -1,7 +1,7 @@
 use crate::dtos::solana::common::{ApiResponse, ErrorResponse};
 use crate::dtos::solana::cpmm::pool::init_pool_event::{
-    CreateInitPoolEventRequest, InitPoolEventResponse, InitPoolEventsPageResponse, QueryInitPoolEventsRequest,
-    UserPoolStats,
+    CreateInitPoolEventRequest, InitPoolEventResponse, InitPoolEventsDetailedPageResponse,
+    InitPoolEventsPageResponse, QueryInitPoolEventsRequest, UserPoolStats,
 };
 use crate::extractors::validation_extractor::ValidationExtractor;
 use crate::services::Services;
@@ -21,6 +21,11 @@ pub fn init_pool_event_routes() -> Router {
         .route("/init-pool-events/:id", delete(delete_init_pool_event))
         // 查询接口（支持多个pool_id）
         .route("/init-pool-events/query", post(query_init_pool_events))
+        // 查询接口（带详细信息：config和token信息）
+        .route(
+            "/init-pool-events/query-details",
+            post(query_init_pool_events_with_details),
+        )
         // 根据pool_id查询
         .route("/init-pool-events/pool/:pool_id", get(get_event_by_pool_id))
         // 根据signature查询（防重）
@@ -290,6 +295,52 @@ pub async fn get_user_pool_stats(
         Err(e) => {
             error!("用户池子统计获取失败: {}", e);
             let error_response = ErrorResponse::new("INIT_POOL_EVENT_GET_FAILED", &format!("获取失败: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiResponse::error(error_response)),
+            ))
+        }
+    }
+}
+
+/// 查询池子初始化事件列表（带详细信息：config和token信息）
+#[utoipa::path(
+    post,
+    path = "/api/v1/solana/events/cpmm/init-pool-events/query-details",
+    request_body = QueryInitPoolEventsRequest,
+    responses(
+        (status = 200, description = "成功查询池子初始化事件（含详细信息）", body = InitPoolEventsDetailedPageResponse),
+        (status = 400, description = "请求参数错误"),
+        (status = 500, description = "服务器错误")
+    ),
+    tag = "Init Pool Events"
+)]
+pub async fn query_init_pool_events_with_details(
+    Extension(services): Extension<Services>,
+    ValidationExtractor(request): ValidationExtractor<QueryInitPoolEventsRequest>,
+) -> Result<
+    Json<ApiResponse<InitPoolEventsDetailedPageResponse>>,
+    (StatusCode, Json<ApiResponse<ErrorResponse>>),
+> {
+    info!("收到查询池子初始化事件（带详细信息）请求");
+
+    match services.solana.query_init_pool_events_with_details(request).await {
+        Ok(response) => {
+            info!(
+                "池子初始化事件查询成功: 共{}条，其中{}条有配置信息，{}条有Token A信息，{}条有Token B信息",
+                response.total,
+                response.data.iter().filter(|e| e.config.is_some()).count(),
+                response.data.iter().filter(|e| e.mint_a.is_some()).count(),
+                response.data.iter().filter(|e| e.mint_b.is_some()).count()
+            );
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => {
+            error!("池子初始化事件查询失败: {}", e);
+            let error_response = ErrorResponse::new(
+                "INIT_POOL_EVENT_QUERY_WITH_DETAILS_FAILED",
+                &format!("获取失败: {}", e),
+            );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ApiResponse::error(error_response)),

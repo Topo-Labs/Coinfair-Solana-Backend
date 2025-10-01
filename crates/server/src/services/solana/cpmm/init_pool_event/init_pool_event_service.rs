@@ -1,6 +1,6 @@
 use crate::dtos::solana::cpmm::pool::init_pool_event::{
-    CreateInitPoolEventRequest, InitPoolEventResponse, InitPoolEventsPageResponse, QueryInitPoolEventsRequest,
-    UserPoolStats,
+    ConfigInfo, CreateInitPoolEventRequest, InitPoolEventDetailedResponse, InitPoolEventResponse,
+    InitPoolEventsDetailedPageResponse, InitPoolEventsPageResponse, MintInfo, QueryInitPoolEventsRequest, UserPoolStats,
 };
 use crate::services::solana::cpmm::init_pool_event::init_pool_event_error::InitPoolEventError;
 use anyhow::Result;
@@ -8,17 +8,21 @@ use database::cpmm::init_pool_event::model::InitPoolEvent;
 use database::Database;
 use mongodb::bson::{doc, oid::ObjectId, Document};
 use mongodb::options::FindOptions;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::pubkey::Pubkey;
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub struct InitPoolEventService {
     db: Arc<Database>,
+    rpc_client: Arc<RpcClient>,
 }
 
 impl InitPoolEventService {
-    pub fn new(db: Arc<Database>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<Database>, rpc_client: Arc<RpcClient>) -> Self {
+        Self { db, rpc_client }
     }
 
     pub async fn create_event(&self, request: CreateInitPoolEventRequest) -> Result<InitPoolEventResponse> {
@@ -213,5 +217,276 @@ impl InitPoolEventService {
         }
 
         Ok(deleted)
+    }
+
+    /// 查询带详细信息的池子初始化事件（包含config和token信息）
+    pub async fn query_events_with_details(
+        &self,
+        request: QueryInitPoolEventsRequest,
+    ) -> Result<InitPoolEventsDetailedPageResponse> {
+        debug!("🔍 查询带详细信息的池子初始化事件列表");
+
+        // 1. 首先查询事件列表
+        let events_page = self.query_events(request).await?;
+
+        if events_page.data.is_empty() {
+            debug!("📋 查询结果为空，返回空列表");
+            return Ok(InitPoolEventsDetailedPageResponse {
+                data: Vec::new(),
+                total: events_page.total,
+                page: events_page.page,
+                page_size: events_page.page_size,
+                total_pages: events_page.total_pages,
+            });
+        }
+
+        // 2. 收集需要查询的ID（去重）
+        let config_ids: Vec<String> = events_page
+            .data
+            .iter()
+            .filter_map(|e| e.amm_config.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        let mut mint_ids: Vec<String> = Vec::new();
+        for event in &events_page.data {
+            mint_ids.push(event.token_0_mint.clone());
+            mint_ids.push(event.token_1_mint.clone());
+        }
+        let mint_ids: Vec<String> = mint_ids.into_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+
+        debug!(
+            "📊 需要查询 {} 个配置ID 和 {} 个代币地址",
+            config_ids.len(),
+            mint_ids.len()
+        );
+
+        // 3. 并发批量查询配置和代币信息
+        let (configs_result, tokens_result) = tokio::join!(
+            self.db.cpmm_config_repository.get_configs_by_addresses_batch(&config_ids),
+            self.db.token_info_repository.find_by_addresses(&mint_ids)
+        );
+
+        // 4. 处理查询结果
+        let configs = configs_result.unwrap_or_else(|e| {
+            warn!("⚠️ 批量查询配置信息失败: {}", e);
+            Vec::new()
+        });
+
+        let tokens = tokens_result.unwrap_or_else(|e| {
+            warn!("⚠️ 批量查询代币信息失败: {}", e);
+            Vec::new()
+        });
+
+        // 5. 构建HashMap以便快速查找
+        let config_map: HashMap<String, ConfigInfo> = configs
+            .into_iter()
+            .map(|c| {
+                (
+                    c.config_id.clone(),
+                    ConfigInfo {
+                        id: c.config_id,
+                        index: c.index,
+                        protocol_fee_rate: c.protocol_fee_rate,
+                        trade_fee_rate: c.trade_fee_rate,
+                        fund_fee_rate: c.fund_fee_rate,
+                        create_pool_fee: c.create_pool_fee.to_string(),
+                        creator_fee_rate: c.creator_fee_rate,
+                    },
+                )
+            })
+            .collect();
+
+        let token_map: HashMap<String, MintInfo> = tokens
+            .into_iter()
+            .map(|t| {
+                (
+                    t.address.clone(),
+                    MintInfo {
+                        logo_uri: t.logo_uri,
+                        symbol: t.symbol,
+                        name: t.name,
+                    },
+                )
+            })
+            .collect();
+
+        // 6. 批量查询所有 vault 的余额
+        let mut vault_addresses = Vec::new();
+        for event in &events_page.data {
+            vault_addresses.push(event.token_0_vault.clone());
+            vault_addresses.push(event.token_1_vault.clone());
+        }
+
+        // 去重
+        let vault_addresses: Vec<String> = vault_addresses
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        debug!("📊 需要查询 {} 个 vault 余额", vault_addresses.len());
+
+        // 批量查询 vault 余额
+        let vault_balances = self.fetch_vault_balances(&vault_addresses).await;
+
+        // 7. 组装详细事件数据
+        let detailed_events: Vec<InitPoolEventDetailedResponse> = events_page
+            .data
+            .into_iter()
+            .map(|event| {
+                let config = event
+                    .amm_config
+                    .as_ref()
+                    .and_then(|config_id| config_map.get(config_id).cloned());
+                let mint_a = token_map.get(&event.token_0_mint).cloned();
+                let mint_b = token_map.get(&event.token_1_mint).cloned();
+
+                if config.is_none() && event.amm_config.is_some() {
+                    debug!("⚠️ 未找到配置信息: {}", event.amm_config.as_ref().unwrap());
+                }
+                if mint_a.is_none() {
+                    debug!("⚠️ 未找到Token A信息: {}", event.token_0_mint);
+                }
+                if mint_b.is_none() {
+                    debug!("⚠️ 未找到Token B信息: {}", event.token_1_mint);
+                }
+
+                // 获取 vault 余额
+                let vault_0_balance = vault_balances.get(&event.token_0_vault);
+                let vault_1_balance = vault_balances.get(&event.token_1_vault);
+
+                // 计算 mint amount（考虑小数位数）并格式化为字符串
+                let mint_amount_a_raw = vault_0_balance.map(|balance| {
+                    *balance as f64 / 10_f64.powi(event.token_0_decimals as i32)
+                });
+                let mint_amount_b_raw = vault_1_balance.map(|balance| {
+                    *balance as f64 / 10_f64.powi(event.token_1_decimals as i32)
+                });
+
+                // 格式化为字符串，避免科学计数法
+                let mint_amount_a = mint_amount_a_raw.map(|amount| {
+                    Self::format_amount(amount, event.token_0_decimals)
+                });
+                let mint_amount_b = mint_amount_b_raw.map(|amount| {
+                    Self::format_amount(amount, event.token_1_decimals)
+                });
+
+                // 计算价格（wsol / token）并格式化为字符串（保留8位小数）
+                let price = if let (Some(amount_a), Some(amount_b)) = (mint_amount_a_raw, mint_amount_b_raw) {
+                    if amount_b > 0.0 {
+                        Some(format!("{:.8}", amount_a / amount_b))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // 计算手续费率并格式化为字符串（保留4位小数）
+                let fee_rate = config.as_ref().map(|c| {
+                    format!("{:.4}", c.protocol_fee_rate as f64 / 10000.0)
+                });
+
+                InitPoolEventDetailedResponse {
+                    event,
+                    config,
+                    mint_a,
+                    mint_b,
+                    mint_amount_a,
+                    mint_amount_b,
+                    price,
+                    fee_rate,
+                }
+            })
+            .collect();
+
+        info!(
+            "✅ 查询带详细信息的池子初始化事件成功: 共{}条，其中{}条有配置信息，{}条有Token A信息，{}条有Token B信息",
+            detailed_events.len(),
+            detailed_events.iter().filter(|e| e.config.is_some()).count(),
+            detailed_events.iter().filter(|e| e.mint_a.is_some()).count(),
+            detailed_events.iter().filter(|e| e.mint_b.is_some()).count(),
+        );
+
+        Ok(InitPoolEventsDetailedPageResponse {
+            data: detailed_events,
+            total: events_page.total,
+            page: events_page.page,
+            page_size: events_page.page_size,
+            total_pages: events_page.total_pages,
+        })
+    }
+
+    /// 批量查询 vault 的 token 余额
+    async fn fetch_vault_balances(&self, vault_addresses: &[String]) -> HashMap<String, u64> {
+        let mut balances = HashMap::new();
+
+        // 解析所有的 vault 地址
+        let pubkeys: Vec<_> = vault_addresses
+            .iter()
+            .filter_map(|addr| {
+                Pubkey::from_str(addr)
+                    .map_err(|e| {
+                        warn!("⚠️ 无效的 vault 地址 {}: {}", addr, e);
+                        e
+                    })
+                    .ok()
+            })
+            .collect();
+
+        if pubkeys.is_empty() {
+            return balances;
+        }
+
+        // 批量查询账户信息
+        match self.rpc_client.get_multiple_accounts(&pubkeys) {
+            Ok(accounts) => {
+                for (i, account_option) in accounts.into_iter().enumerate() {
+                    if let Some(account) = account_option {
+                        // SPL Token 账户的余额在第 64-72 字节（u64 little-endian）
+                        if account.data.len() >= 72 {
+                            let balance_bytes: [u8; 8] = account.data[64..72].try_into().unwrap_or([0u8; 8]);
+                            let balance = u64::from_le_bytes(balance_bytes);
+                            balances.insert(vault_addresses[i].clone(), balance);
+                        } else {
+                            warn!(
+                                "⚠️ Vault {} 账户数据长度不足: {} bytes",
+                                vault_addresses[i],
+                                account.data.len()
+                            );
+                        }
+                    } else {
+                        debug!("⚠️ Vault {} 不存在", vault_addresses[i]);
+                    }
+                }
+            }
+            Err(e) => {
+                error!("❌ 批量查询 vault 余额失败: {}", e);
+            }
+        }
+
+        debug!("✅ 成功查询 {} 个 vault 余额", balances.len());
+        balances
+    }
+
+    /// 格式化金额为字符串，避免科学计数法
+    fn format_amount(amount: f64, decimals: u8) -> String {
+        // 根据小数位数确定格式化精度
+        let precision = decimals as usize;
+
+        // 格式化为固定小数位数
+        let formatted = format!("{:.precision$}", amount, precision = precision);
+
+        // 移除末尾的零，但保留至少一位小数
+        let trimmed = formatted.trim_end_matches('0');
+
+        // 如果全部是零（例如 "0."），保留一位小数
+        if trimmed.ends_with('.') {
+            format!("{}0", trimmed)
+        } else {
+            trimmed.to_string()
+        }
     }
 }

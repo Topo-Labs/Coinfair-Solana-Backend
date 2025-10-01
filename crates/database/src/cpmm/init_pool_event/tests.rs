@@ -15,6 +15,7 @@ mod tests {
             token_0_vault: "vault0".to_string(),
             token_1_vault: "vault1".to_string(),
             lp_mint: "lpmint".to_string(),
+            amm_config: Some("AmmConfig11111111111111111111111111111111111".to_string()),
             lp_program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
             token_0_program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),
             token_1_program_id: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA".to_string(),

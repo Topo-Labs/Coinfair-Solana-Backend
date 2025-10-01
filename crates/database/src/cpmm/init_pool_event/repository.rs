@@ -79,6 +79,15 @@ impl InitPoolEventRepository {
                         .build(),
                 )
                 .build(),
+            // AMM配置查询索引
+            IndexModel::builder()
+                .keys(doc! { "amm_config": 1, "created_at": -1 })
+                .options(
+                    IndexOptions::builder()
+                        .name("idx_amm_config_created_at".to_string())
+                        .build(),
+                )
+                .build(),
             // 区块高度查询索引
             IndexModel::builder()
                 .keys(doc! { "slot": -1 })
