@@ -10,6 +10,7 @@ use anyhow::Result;
 use raydium_cp_swap::curve::{CurveCalculator, TradeDirection};
 use raydium_cp_swap::instruction;
 use raydium_cp_swap::states::{AmmConfig, PoolState};
+use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signer},
@@ -163,7 +164,7 @@ pub fn swap_base_input_instr(
     // 添加必传的reward_mint账户
     accounts.push(AccountMeta::new_readonly(*reward_mint, false)); // reward_mint
 
-    // 添加可选的payer_referral账户（使用system_program作为None的占位符）
+    // 添加可选的payer_referral账户
     if let Some(payer_referral_pubkey) = payer_referral {
         accounts.push(AccountMeta::new_readonly(*payer_referral_pubkey, false));
     } else {
@@ -216,6 +217,16 @@ pub fn swap_base_input_instr(
 
     // 添加必传的referral账户
     accounts.push(AccountMeta::new_readonly(*referral_program_id, false)); // referral
+
+    // 调试：打印所有可写账户
+    info!("🔍 检查所有账户:");
+    for account in accounts.iter() {
+        if account.is_writable {
+            info!("  writable account: {}", account.pubkey);
+        } else {
+            info!("  readonly account: {}", account.pubkey);
+        }
+    }
 
     let instruction = Instruction {
         program_id: cpmm_program_id,
@@ -285,7 +296,7 @@ pub fn swap_base_output_instr(
         AccountMeta::new(observation_key, false),               // observation_state
     ];
 
-    // 添加必传的payer_referral账户
+    // 添加必传的reward_mint账户
     accounts.push(AccountMeta::new_readonly(*reward_mint, false)); // reward_mint
 
     // 添加可选的payer_referral账户
@@ -298,7 +309,6 @@ pub fn swap_base_output_instr(
     // 添加可选的upper账户
     if let Some(upper_pubkey) = upper {
         accounts.push(AccountMeta::new_readonly(*upper_pubkey, false));
-    // upper
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -306,7 +316,6 @@ pub fn swap_base_output_instr(
     // 添加可选的upper_token_account
     if let Some(upper_token_pubkey) = upper_token_account {
         accounts.push(AccountMeta::new(*upper_token_pubkey, false));
-    // upper_token_account
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -314,7 +323,6 @@ pub fn swap_base_output_instr(
     // 添加可选的upper_referral账户
     if let Some(upper_referral_pubkey) = upper_referral {
         accounts.push(AccountMeta::new_readonly(*upper_referral_pubkey, false));
-    // upper_referral
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -322,7 +330,6 @@ pub fn swap_base_output_instr(
     // 添加可选的upper_upper账户
     if let Some(upper_upper_pubkey) = upper_upper {
         accounts.push(AccountMeta::new_readonly(*upper_upper_pubkey, false));
-    // upper_upper
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -330,7 +337,6 @@ pub fn swap_base_output_instr(
     // 添加可选的upper_upper_token_account
     if let Some(upper_upper_token_pubkey) = upper_upper_token_account {
         accounts.push(AccountMeta::new(*upper_upper_token_pubkey, false));
-    // upper_upper_token_account
     } else {
         accounts.push(AccountMeta::new_readonly(cpmm_program_id, false)); // 占位符
     }
@@ -346,6 +352,16 @@ pub fn swap_base_output_instr(
 
     // 添加必传的referral账户
     accounts.push(AccountMeta::new_readonly(*referral_program_id, false)); // referral
+
+    // 调试：打印所有可写账户
+    info!("🔍 检查所有账户:");
+    for account in accounts.iter() {
+        if account.is_writable {
+            info!("  writable account: {}", account.pubkey);
+        } else {
+            info!("  readonly account: {}", account.pubkey);
+        }
+    }
 
     let instruction = Instruction {
         program_id: cpmm_program_id,
@@ -624,13 +640,20 @@ impl CpmmSwapService {
         let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
 
         // 7. 使用CurveCalculator计算交换结果（与CLI完全相同）
+        // 🔧 关键修复：需要根据池子的enable_creator_fee标志调整creator_fee_rate
+        let creator_fee_rate = if pool_state.enable_creator_fee {
+            amm_config_state.creator_fee_rate
+        } else {
+            0
+        };
+
         let curve_result = CurveCalculator::swap_base_input(
             trade_direction,
             u128::from(actual_amount_in),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
             amm_config_state.trade_fee_rate,
-            amm_config_state.creator_fee_rate,
+            creator_fee_rate,
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
@@ -665,6 +688,7 @@ impl CpmmSwapService {
 
         // 10. 构建交易指令
         let mut instructions = Vec::new();
+        instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(800_000));
 
         // 创建输入代币ATA账户指令（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token);
@@ -688,8 +712,10 @@ impl CpmmSwapService {
         let referral_program_id = ConfigManager::get_referral_program_id()?;
 
         let payer_key = payer_pubkey;
-        let input_mint_pubkey = input_token_mint;
-        let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
+        let reward_mint_pubkey = input_token_mint;
+        info!("reward_mint_pubkey: {}", reward_mint_pubkey);
+        let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_mint_pubkey)?;
+        info!("reward_token_program: {}", reward_token_program);
         let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
@@ -697,11 +723,11 @@ impl CpmmSwapService {
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_cp_swap::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
-        // let token_program_id = token_2022_program_id();
+        // 项目方奖励账户使用output_token（与reward_mint一致）
         let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
             &pool_state.pool_creator,
-            &input_mint_pubkey,
-            &input_token_program,
+            &reward_mint_pubkey,
+            &reward_token_program,
         );
         info!("project_token_account: {}", project_token_account);
         let (payer_referral_pda, _) =
@@ -715,11 +741,12 @@ impl CpmmSwapService {
                 match payer_referral_account.upper {
                     Some(upper_key) => {
                         upper = Some(upper_key);
+                        // upper奖励账户也使用output_token（与reward_mint一致）
                         upper_token_account = Some(
                             spl_associated_token_account::get_associated_token_address_with_program_id(
                                 &upper_key,
-                                &input_mint_pubkey,
-                                &input_token_program,
+                                &reward_mint_pubkey,
+                                &reward_token_program,
                             ),
                         );
                         let (upper_referral_pda, _) =
@@ -732,11 +759,12 @@ impl CpmmSwapService {
                         match upper_referral_account.upper {
                             Some(upper_upper_key) => {
                                 upper_upper = Some(upper_upper_key);
+                                // upper_upper奖励账户也使用output_token（与reward_mint一致）
                                 upper_upper_token_account = Some(
                                     spl_associated_token_account::get_associated_token_address_with_program_id(
                                         &upper_upper_key,
-                                        &input_mint_pubkey,
-                                        &input_token_program,
+                                        &reward_mint_pubkey,
+                                        &reward_token_program,
                                     ),
                                 );
                             }
@@ -751,31 +779,42 @@ impl CpmmSwapService {
             }
         }
 
-        // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
+        // 为上级推荐用户创建奖励代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
-            info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
+            info!("📝 确保上级推荐用户奖励代币ATA账户存在: {}", upper_account);
             let create_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_ata_ix);
         }
 
-        // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
+        // 为上上级推荐用户创建奖励代币ATA账户（如果存在上上级且不存在上上级推荐用户）
         if let Some(upper_upper_account) = upper_upper_token_account {
-            info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
+            info!("📝 确保上上级推荐用户奖励代币ATA账户存在: {}", upper_upper_account);
             let create_upper_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper_upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_upper_ata_ix);
         }
+
+        // 🔧 关键修复：创建项目方代币账户（如果不存在）
+        info!("📝 确保项目方代币ATA账户存在: {}", project_token_account);
+        let create_project_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &payer_key,
+                &pool_state.pool_creator,
+                &reward_mint_pubkey,
+                &reward_token_program,
+            );
+        instructions.push(create_project_ata_ix);
 
         // 创建SwapBaseIn指令（使用从CLI逻辑推导出的正确参数）
         info!("🔧 准备构建swap指令，参数:");
@@ -798,7 +837,7 @@ impl CpmmSwapService {
             output_token_mint,
             user_input_amount,
             minimum_amount_out,
-            &input_mint_pubkey,
+            &reward_mint_pubkey,
             payer_referral.as_ref(),
             upper.as_ref(),
             upper_token_account.as_ref(),
@@ -1118,13 +1157,20 @@ impl CpmmSwapService {
 
         let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
 
+        // 🔧 关键修复：需要根据池子的enable_creator_fee标志调整creator_fee_rate
+        let creator_fee_rate = if pool_state.enable_creator_fee {
+            amm_config_state.creator_fee_rate
+        } else {
+            0
+        };
+
         let curve_result = CurveCalculator::swap_base_input(
             trade_direction,
             u128::from(actual_amount_in),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
             amm_config_state.trade_fee_rate,
-            amm_config_state.creator_fee_rate,
+            creator_fee_rate, // 使用调整后的creator_fee_rate
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
@@ -1303,6 +1349,7 @@ impl CpmmSwapService {
         let user_output_token = spl_associated_token_account::get_associated_token_address(&wallet, &output_token_mint);
 
         let mut instructions = Vec::new();
+        instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(800_000));
 
         // 确定交易方向和对应的vault/program（基于swap_compute的mint信息）
         let (input_vault, output_vault, input_token_program, output_token_program) =
@@ -1345,6 +1392,10 @@ impl CpmmSwapService {
         let referral_program_id = ConfigManager::get_referral_program_id()?;
 
         let payer_key = wallet;
+        // 🔧 关键修复：奖励使用output_token，避免与input_token_mint账户重复
+        let reward_mint_pubkey = input_token_mint;
+        let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_mint_pubkey)?;
+        // 仍然需要input_mint_pubkey用于某些推荐系统逻辑
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
         let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
@@ -1354,11 +1405,11 @@ impl CpmmSwapService {
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_cp_swap::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
-        // let token_program_id = token_2022_program_id();
+        // 项目方奖励账户使用output_token（与reward_mint一致）
         let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
             &pool_state.pool_creator,
-            &input_mint_pubkey,
-            &input_token_program,
+            &reward_mint_pubkey,
+            &reward_token_program,
         );
         info!("project_token_account: {}", project_token_account);
         let (payer_referral_pda, _) =
@@ -1372,11 +1423,12 @@ impl CpmmSwapService {
                 match payer_referral_account.upper {
                     Some(upper_key) => {
                         upper = Some(upper_key);
+                        // upper奖励账户也使用output_token（与reward_mint一致）
                         upper_token_account = Some(
                             spl_associated_token_account::get_associated_token_address_with_program_id(
                                 &upper_key,
-                                &input_mint_pubkey,
-                                &input_token_program,
+                                &reward_mint_pubkey,
+                                &reward_token_program,
                             ),
                         );
                         let (upper_referral_pda, _) =
@@ -1389,11 +1441,12 @@ impl CpmmSwapService {
                         match upper_referral_account.upper {
                             Some(upper_upper_key) => {
                                 upper_upper = Some(upper_upper_key);
+                                // upper_upper奖励账户也使用output_token（与reward_mint一致）
                                 upper_upper_token_account = Some(
                                     spl_associated_token_account::get_associated_token_address_with_program_id(
                                         &upper_upper_key,
-                                        &input_mint_pubkey,
-                                        &input_token_program,
+                                        &reward_mint_pubkey,
+                                        &reward_token_program,
                                     ),
                                 );
                             }
@@ -1408,31 +1461,42 @@ impl CpmmSwapService {
             }
         }
 
-        // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
+        // 为上级推荐用户创建奖励代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
-            info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
+            info!("📝 确保上级推荐用户奖励代币ATA账户存在: {}", upper_account);
             let create_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_ata_ix);
         }
 
-        // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
+        // 为上上级推荐用户创建奖励代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
-            info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
+            info!("📝 确保上上级推荐用户奖励代币ATA账户存在: {}", upper_upper_account);
             let create_upper_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper_upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_upper_ata_ix);
         }
+
+        // 🔧 关键修复：创建项目方代币账户（如果不存在）
+        info!("📝 确保项目方代币ATA账户存在: {}", project_token_account);
+        let create_project_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &payer_key,
+                &pool_state.pool_creator,
+                &reward_mint_pubkey,
+                &reward_token_program,
+            );
+        instructions.push(create_project_ata_ix);
 
         // 创建SwapBaseIn指令（使用正确的参数顺序）
         let swap_instrs = swap_base_input_instr(
@@ -1691,13 +1755,20 @@ impl CpmmSwapService {
         let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
 
         // 7. 使用CurveCalculator::swap_base_output计算交换结果（与CLI完全相同）
+        // 🔧 关键修复：需要根据池子的enable_creator_fee标志调整creator_fee_rate
+        let creator_fee_rate = if pool_state.enable_creator_fee {
+            amm_config_state.creator_fee_rate
+        } else {
+            0
+        };
+
         let curve_result = CurveCalculator::swap_base_output(
             trade_direction,
             u128::from(actual_amount_out),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
             amm_config_state.trade_fee_rate,
-            amm_config_state.creator_fee_rate,
+            creator_fee_rate, // 使用调整后的creator_fee_rate
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
@@ -1719,6 +1790,7 @@ impl CpmmSwapService {
 
         // 10. 构建交易指令
         let mut instructions = Vec::new();
+        instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(800_000));
 
         // 创建输入代币ATA账户指令（如果不存在）
         info!("📝 确保输入代币ATA账户存在: {}", user_input_token);
@@ -1742,8 +1814,11 @@ impl CpmmSwapService {
         let referral_program_id = ConfigManager::get_referral_program_id()?;
 
         let payer_key = payer_pubkey;
-        let input_mint_pubkey = input_token_mint;
-        let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
+        // 🔧 关键修复：奖励使用output_token，避免与input_token_mint账户重复
+        let reward_mint_pubkey = output_token_mint;
+        info!("reward_mint_pubkey: {}", reward_mint_pubkey);
+        let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_mint_pubkey)?;
+        info!("reward_token_program: {}", reward_token_program);
         let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
             &input_token_mint.to_string(),
             &output_token_mint.to_string().to_string(),
@@ -1751,11 +1826,11 @@ impl CpmmSwapService {
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_cp_swap::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
-        // let token_program_id = token_2022_program_id();
+        // 项目方奖励账户使用output_token（与reward_mint一致）
         let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
             &pool_state.pool_creator,
-            &input_mint_pubkey,
-            &input_token_program,
+            &reward_mint_pubkey,
+            &reward_token_program,
         );
         info!("project_token_account: {}", project_token_account);
         let (payer_referral_pda, _) =
@@ -1769,11 +1844,12 @@ impl CpmmSwapService {
                 match payer_referral_account.upper {
                     Some(upper_key) => {
                         upper = Some(upper_key);
+                        // upper奖励账户也使用output_token（与reward_mint一致）
                         upper_token_account = Some(
                             spl_associated_token_account::get_associated_token_address_with_program_id(
                                 &upper_key,
-                                &input_mint_pubkey,
-                                &input_token_program,
+                                &reward_mint_pubkey,
+                                &reward_token_program,
                             ),
                         );
                         let (upper_referral_pda, _) =
@@ -1786,11 +1862,12 @@ impl CpmmSwapService {
                         match upper_referral_account.upper {
                             Some(upper_upper_key) => {
                                 upper_upper = Some(upper_upper_key);
+                                // upper_upper奖励账户也使用output_token（与reward_mint一致）
                                 upper_upper_token_account = Some(
                                     spl_associated_token_account::get_associated_token_address_with_program_id(
                                         &upper_upper_key,
-                                        &input_mint_pubkey,
-                                        &input_token_program,
+                                        &reward_mint_pubkey,
+                                        &reward_token_program,
                                     ),
                                 );
                             }
@@ -1805,31 +1882,42 @@ impl CpmmSwapService {
             }
         }
 
-        // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
+        // 为上级推荐用户创建奖励代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
-            info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
+            info!("📝 确保上级推荐用户奖励代币ATA账户存在: {}", upper_account);
             let create_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_ata_ix);
         }
 
-        // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
+        // 为上上级推荐用户创建奖励代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
-            info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
+            info!("📝 确保上上级推荐用户奖励代币ATA账户存在: {}", upper_upper_account);
             let create_upper_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper_upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_upper_ata_ix);
         }
+
+        // 🔧 关键修复：创建项目方代币账户（如果不存在）
+        info!("📝 确保项目方代币ATA账户存在: {}", project_token_account);
+        let create_project_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &payer_key,
+                &pool_state.pool_creator,
+                &reward_mint_pubkey,
+                &reward_token_program,
+            );
+        instructions.push(create_project_ata_ix);
 
         // 创建SwapBaseOutput指令（使用从CLI逻辑推导出的正确参数）
         let swap_base_out_instrs = swap_base_output_instr(
@@ -1848,7 +1936,7 @@ impl CpmmSwapService {
             output_token_mint,
             max_amount_in,
             amount_out_less_fee,
-            &input_mint_pubkey,
+            &reward_mint_pubkey, // reward_mint: 使用output_token避免重复
             payer_referral.as_ref(),
             upper.as_ref(),
             upper_token_account.as_ref(),
@@ -2053,13 +2141,20 @@ impl CpmmSwapService {
 
         let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
 
+        // 🔧 关键修复：需要根据池子的enable_creator_fee标志调整creator_fee_rate
+        let creator_fee_rate = if pool_state.enable_creator_fee {
+            amm_config_state.creator_fee_rate
+        } else {
+            0
+        };
+
         let curve_result = CurveCalculator::swap_base_output(
             trade_direction,
             u128::from(actual_amount_out),
             u128::from(total_input_token_amount),
             u128::from(total_output_token_amount),
             amm_config_state.trade_fee_rate,
-            amm_config_state.creator_fee_rate,
+            creator_fee_rate, // 使用调整后的creator_fee_rate
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
@@ -2187,6 +2282,7 @@ impl CpmmSwapService {
         let user_output_token = spl_associated_token_account::get_associated_token_address(&wallet, &output_token_mint);
 
         let mut instructions = Vec::new();
+        instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(800_000));
 
         // 确定交易方向和对应的vault/program（基于swap_compute的mint信息）
         let (input_vault, output_vault, input_token_program, output_token_program) =
@@ -2229,6 +2325,10 @@ impl CpmmSwapService {
         let referral_program_id = ConfigManager::get_referral_program_id()?;
 
         let payer_key = wallet;
+        // 🔧 关键修复：奖励使用output_token，避免与input_token_mint账户重复
+        let reward_mint_pubkey = output_token_mint;
+        let reward_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &reward_mint_pubkey)?;
+        // 仍然需要input_mint_pubkey用于某些推荐系统逻辑
         let input_mint_pubkey = input_token_mint;
         let input_token_program = TokenUtils::detect_mint_program(&self.shared.rpc_client, &input_mint_pubkey)?;
         let pool_address_str = PoolInfoManager::calculate_cpmm_pool_address_pda(
@@ -2238,11 +2338,11 @@ impl CpmmSwapService {
         let pool_address = Pubkey::from_str(&pool_address_str)?;
         let pool_account = self.shared.rpc_client.get_account(&pool_address)?;
         let pool_state: raydium_cp_swap::states::PoolState = SolanaUtils::deserialize_anchor_account(&pool_account)?;
-        // let token_program_id = token_2022_program_id();
+        // 项目方奖励账户使用output_token（与reward_mint一致）
         let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
             &pool_state.pool_creator,
-            &input_mint_pubkey,
-            &input_token_program,
+            &reward_mint_pubkey,
+            &reward_token_program,
         );
         info!("project_token_account: {}", project_token_account);
         let (payer_referral_pda, _) =
@@ -2256,11 +2356,12 @@ impl CpmmSwapService {
                 match payer_referral_account.upper {
                     Some(upper_key) => {
                         upper = Some(upper_key);
+                        // upper奖励账户也使用output_token（与reward_mint一致）
                         upper_token_account = Some(
                             spl_associated_token_account::get_associated_token_address_with_program_id(
                                 &upper_key,
-                                &input_mint_pubkey,
-                                &input_token_program,
+                                &reward_mint_pubkey,
+                                &reward_token_program,
                             ),
                         );
                         let (upper_referral_pda, _) =
@@ -2273,11 +2374,12 @@ impl CpmmSwapService {
                         match upper_referral_account.upper {
                             Some(upper_upper_key) => {
                                 upper_upper = Some(upper_upper_key);
+                                // upper_upper奖励账户也使用output_token（与reward_mint一致）
                                 upper_upper_token_account = Some(
                                     spl_associated_token_account::get_associated_token_address_with_program_id(
                                         &upper_upper_key,
-                                        &input_mint_pubkey,
-                                        &input_token_program,
+                                        &reward_mint_pubkey,
+                                        &reward_token_program,
                                     ),
                                 );
                             }
@@ -2292,31 +2394,42 @@ impl CpmmSwapService {
             }
         }
 
-        // 为上级推荐用户创建输入代币ATA账户（如果存在上级且不存在）
+        // 为上级推荐用户创建奖励代币ATA账户（如果存在上级且不存在）
         if let Some(upper_account) = upper_token_account {
-            info!("📝 确保上级推荐用户输入代币ATA账户存在: {}", upper_account);
+            info!("📝 确保上级推荐用户奖励代币ATA账户存在: {}", upper_account);
             let create_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_ata_ix);
         }
 
-        // 为上上级推荐用户创建输入代币ATA账户（如果存在上上级且不存在）
+        // 为上上级推荐用户创建奖励代币ATA账户（如果存在上上级且不存在）
         if let Some(upper_upper_account) = upper_upper_token_account {
-            info!("📝 确保上上级推荐用户输入代币ATA账户存在: {}", upper_upper_account);
+            info!("📝 确保上上级推荐用户奖励代币ATA账户存在: {}", upper_upper_account);
             let create_upper_upper_ata_ix =
                 spl_associated_token_account::instruction::create_associated_token_account_idempotent(
                     &payer_key,
                     &upper_upper.unwrap(),
-                    &input_mint_pubkey,
-                    &input_token_program,
+                    &reward_mint_pubkey,
+                    &reward_token_program,
                 );
             instructions.push(create_upper_upper_ata_ix);
         }
+
+        // 🔧 关键修复：创建项目方代币账户（如果不存在）
+        info!("📝 确保项目方代币ATA账户存在: {}", project_token_account);
+        let create_project_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &payer_key,
+                &pool_state.pool_creator,
+                &reward_mint_pubkey,
+                &reward_token_program,
+            );
+        instructions.push(create_project_ata_ix);
 
         // 创建SwapBaseOutput指令（使用正确的参数顺序）
         let swap_instrs = swap_base_output_instr(
@@ -2509,6 +2622,8 @@ mod tests {
         let rpc_client = RpcClient::new("https://api.devnet.solana.com");
 
         // let raydium_cpmm_program_id = ConfigManager::get_cpmm_program_id().unwrap();
+        let reward_mint_pubkey = output_token_mint;
+        let reward_token_program = TokenUtils::detect_mint_program(&rpc_client, &reward_mint_pubkey).unwrap();
 
         // SwapV3独有的推荐系统处理
         let mut upper: Option<Pubkey> = None;
@@ -2531,11 +2646,11 @@ mod tests {
         let pool_account = rpc_client.get_account(&pool_address).unwrap();
         let pool_state: raydium_cp_swap::states::PoolState =
             SolanaUtils::deserialize_anchor_account(&pool_account).unwrap();
-        // let token_program_id = token_2022_program_id();
+        // 项目方奖励账户使用output_token（与reward_mint一致）
         let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
             &pool_state.pool_creator,
-            &input_mint_pubkey,
-            &input_token_program,
+            &reward_mint_pubkey,
+            &reward_token_program,
         );
         info!("project_token_account: {}", project_token_account);
         let (payer_referral_pda, _) =
@@ -2550,11 +2665,12 @@ mod tests {
                 match payer_referral_account.upper {
                     Some(upper_key) => {
                         upper = Some(upper_key);
+                        // upper奖励账户也使用output_token（与reward_mint一致）
                         upper_token_account = Some(
                             spl_associated_token_account::get_associated_token_address_with_program_id(
                                 &upper_key,
-                                &input_mint_pubkey,
-                                &input_token_program,
+                                &reward_mint_pubkey,
+                                &reward_token_program,
                             ),
                         );
                         let (upper_referral_pda, _) =
@@ -2567,11 +2683,12 @@ mod tests {
                         match upper_referral_account.upper {
                             Some(upper_upper_key) => {
                                 upper_upper = Some(upper_upper_key);
+                                // upper_upper奖励账户也使用output_token（与reward_mint一致）
                                 upper_upper_token_account = Some(
                                     spl_associated_token_account::get_associated_token_address_with_program_id(
                                         &upper_upper_key,
-                                        &input_mint_pubkey,
-                                        &input_token_program,
+                                        &reward_mint_pubkey,
+                                        &reward_token_program,
                                     ),
                                 );
                             }
@@ -2686,6 +2803,9 @@ mod tests {
         let rpc_client = RpcClient::new("https://api.devnet.solana.com");
 
         // let raydium_cpmm_program_id = ConfigManager::get_cpmm_program_id().unwrap();
+        // 🔧 关键修复：奖励使用output_token，避免与input_token_mint账户重复
+        let reward_mint_pubkey = output_token_mint;
+        let reward_token_program = TokenUtils::detect_mint_program(&rpc_client, &reward_mint_pubkey).unwrap();
 
         // SwapV3独有的推荐系统处理
         let mut upper: Option<Pubkey> = None;
@@ -2708,11 +2828,11 @@ mod tests {
         let pool_account = rpc_client.get_account(&pool_address).unwrap();
         let pool_state: raydium_cp_swap::states::PoolState =
             SolanaUtils::deserialize_anchor_account(&pool_account).unwrap();
-        // let token_program_id = token_2022_program_id();
+        // 项目方奖励账户使用output_token（与reward_mint一致）
         let project_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
             &pool_state.pool_creator,
-            &input_mint_pubkey,
-            &input_token_program,
+            &reward_mint_pubkey,
+            &reward_token_program,
         );
         info!("project_token_account: {}", project_token_account);
         let (payer_referral_pda, _) =
@@ -2727,11 +2847,12 @@ mod tests {
                 match payer_referral_account.upper {
                     Some(upper_key) => {
                         upper = Some(upper_key);
+                        // upper奖励账户也使用output_token（与reward_mint一致）
                         upper_token_account = Some(
                             spl_associated_token_account::get_associated_token_address_with_program_id(
                                 &upper_key,
-                                &input_mint_pubkey,
-                                &input_token_program,
+                                &reward_mint_pubkey,
+                                &reward_token_program,
                             ),
                         );
                         let (upper_referral_pda, _) =
@@ -2744,11 +2865,12 @@ mod tests {
                         match upper_referral_account.upper {
                             Some(upper_upper_key) => {
                                 upper_upper = Some(upper_upper_key);
+                                // upper_upper奖励账户也使用output_token（与reward_mint一致）
                                 upper_upper_token_account = Some(
                                     spl_associated_token_account::get_associated_token_address_with_program_id(
                                         &upper_upper_key,
-                                        &input_mint_pubkey,
-                                        &input_token_program,
+                                        &reward_mint_pubkey,
+                                        &reward_token_program,
                                     ),
                                 );
                             }

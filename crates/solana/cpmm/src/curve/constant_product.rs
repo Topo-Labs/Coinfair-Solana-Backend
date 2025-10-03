@@ -1,11 +1,8 @@
 //! Uniswap 不变量恒定乘积曲线::
 
-use crate::{
-    curve::calculator::{RoundDirection, TradingTokenResult},
-    utils::CheckedCeilDiv,
-};
+use crate::curve::calculator::{RoundDirection, TradingTokenResult};
 
-use crate::libraries::big_num::{U256, U512};
+use crate::libraries::big_num::U512;
 
 /// 实现 CurveCalculator 的恒定乘积曲线结构体
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -380,7 +377,7 @@ impl ConstantProductCurve {
 ///
 /// 输入: value (保证 <= 2^64)
 /// 输出: value^4 (U512 类型，可以容纳最大 2^256 的结果)
-fn pow_4th_normalized(value: u128) -> U512 {
+pub fn pow_4th_normalized(value: u128) -> U512 {
     if value == 0 {
         return U512::zero();
     }
@@ -434,6 +431,94 @@ fn pow_4th_normalized(value: u128) -> U512 {
 //     x
 // }
 
+// 计算4次方根（该版本超过 CUs 限制）
+// fn nth_root_4(value: u128) -> u128 {
+//     if value == 0 {
+//         return 0;
+//     }
+//     if value == 1 {
+//         return 1;
+//     }
+
+//     // 使用更好的初始猜测值
+//     // 对于 value，⁴√value ≈ 2^(log2(value)/4)
+//     let mut x = {
+//         // 找到 value 的近似位数
+//         let bits = 128 - value.leading_zeros();
+//         // 四次方根大约在 bits/4 位
+//         let initial_bits = (bits / 4).max(1);
+//         1u128 << (initial_bits - 1)
+//     };
+
+//     // 牛顿迭代法求四次方根 127307017307
+//     // 对于 f(x) = x^4 - value = 0
+//     // x_new = x - f(x)/f'(x) = x - (x^4 - value)/(4x^3)
+//     // x_new = (4x^4 - x^4 + value)/(4x^3) = (3x^4 + value)/(4x^3)
+//     // x_new = (3x + value/x^3) / 4
+
+//     for _ in 0..15 {
+//         // 计算 x^3，注意溢出
+//         let x_squared = match x.checked_mul(x) {
+//             Some(v) => v,
+//             None => break, // x 太大，停止迭代
+//         };
+//         let x_cubed = match x_squared.checked_mul(x) {
+//             Some(v) => v,
+//             None => break,
+//         };
+
+//         if x_cubed == 0 {
+//             break;
+//         }
+
+//         // 计算 value / x^3
+//         let quotient = value / x_cubed;
+
+//         // 计算 3x + value/x^3
+//         let three_x = match 3u128.checked_mul(x) {
+//             Some(v) => v,
+//             None => break,
+//         };
+//         let numerator = match three_x.checked_add(quotient) {
+//             Some(v) => v,
+//             None => break,
+//         };
+
+//         // 计算 x_new = (3x + value/x^3) / 4
+//         let x_new = numerator / 4;
+
+//         // 检查收敛
+//         if x_new >= x || x - x_new <= 1 {
+//             break;
+//         }
+
+//         x = x_new;
+//     }
+
+//     // 微调：确保返回的是 floor(⁴√value)
+//     // 检查 x^4 和 (x+1)^4
+//     while x > 0 {
+//         let x_fourth = match x.checked_pow(4) {
+//             Some(v) if v <= value => break,
+//             _ => {
+//                 x -= 1;
+//                 continue;
+//             }
+//         };
+//     }
+
+//     // 向上检查是否可以增加
+//     loop {
+//         match (x + 1).checked_pow(4) {
+//             Some(v) if v <= value => x += 1,
+//             _ => break,
+//         }
+//     }
+
+//     x
+// }
+
+// 二分查找法
 fn nth_root_4(value: u128) -> u128 {
     if value == 0 {
         return 0;
@@ -442,83 +527,67 @@ fn nth_root_4(value: u128) -> u128 {
         return 1;
     }
 
-    // 使用更好的初始猜测值
-    // 对于 value，⁴√value ≈ 2^(log2(value)/4)
-    let mut x = {
-        // 找到 value 的近似位数
+    let mut low = 1u128;
+    let mut high = {
         let bits = 128 - value.leading_zeros();
-        // 四次方根大约在 bits/4 位
-        let initial_bits = (bits / 4).max(1);
-        1u128 << (initial_bits - 1)
+        1u128 << ((bits + 3) / 4)
     };
 
-    // 牛顿迭代法求四次方根 127307017307
-    // 对于 f(x) = x^4 - value = 0
-    // x_new = x - f(x)/f'(x) = x - (x^4 - value)/(4x^3)
-    // x_new = (4x^4 - x^4 + value)/(4x^3) = (3x^4 + value)/(4x^3)
-    // x_new = (3x + value/x^3) / 4
-
-    for _ in 0..100 {
-        // 计算 x^3，注意溢出
-        let x_squared = match x.checked_mul(x) {
-            Some(v) => v,
-            None => break, // x 太大，停止迭代
-        };
-        let x_cubed = match x_squared.checked_mul(x) {
-            Some(v) => v,
-            None => break,
-        };
-
-        if x_cubed == 0 {
-            break;
-        }
-
-        // 计算 value / x^3
-        let quotient = value / x_cubed;
-
-        // 计算 3x + value/x^3
-        let three_x = match 3u128.checked_mul(x) {
-            Some(v) => v,
-            None => break,
-        };
-        let numerator = match three_x.checked_add(quotient) {
-            Some(v) => v,
-            None => break,
-        };
-
-        // 计算 x_new = (3x + value/x^3) / 4
-        let x_new = numerator / 4;
-
-        // 检查收敛
-        if x_new >= x || x - x_new <= 1 {
-            break;
-        }
-
-        x = x_new;
-    }
-
-    // 微调：确保返回的是 floor(⁴√value)
-    // 检查 x^4 和 (x+1)^4
-    while x > 0 {
-        let x_fourth = match x.checked_pow(4) {
-            Some(v) if v <= value => break,
-            _ => {
-                x -= 1;
-                continue;
+    // ✅ 改为向上取整：找满足 x^4 >= value 的最小 x
+    while low < high {
+        let mid = low + (high - low) / 2;
+        match mid.checked_pow(4) {
+            Some(mid_fourth) if mid_fourth >= value => {
+                high = mid; // mid 可能是答案，继续向左找
             }
-        };
-    }
-
-    // 向上检查是否可以增加
-    loop {
-        match (x + 1).checked_pow(4) {
-            Some(v) if v <= value => x += 1,
-            _ => break,
+            _ => {
+                low = mid + 1; // mid 太小，向右找
+            }
         }
     }
 
-    x
+    low // 返回满足 low^4 >= value 的最小值
 }
+
+// 牛顿迭代法（待测试）
+// fn nth_root_4(value: u128) -> u128 {
+//     if value == 0 {
+//         return 0;
+//     }
+//     if value == 1 {
+//         return 1;
+//     }
+
+//     // 初始猜测
+//     let bits = 128 - value.leading_zeros();
+//     let mut x = 1u128 << ((bits + 3) / 4);
+
+//     // 牛顿迭代
+//     for _ in 0..8 {
+//         let x_cubed = match x.checked_pow(3) {
+//             Some(v) => v,
+//             None => break,
+//         };
+
+//         let quotient = value / x_cubed;
+//         let new_x = (3 * x + quotient) / 4;
+
+//         if new_x == x || new_x.abs_diff(x) <= 1 {
+//             break;
+//         }
+//         x = new_x;
+//     }
+
+//     // ✅ 关键修改：向上取整以保护池子
+//     // 如果 x^4 < value，那么真实的根在 x 和 x+1 之间，应该返回 x+1
+//     if let Some(x_fourth) = x.checked_pow(4) {
+//         if x_fourth < value {
+//             x = x.saturating_add(1);
+//         }
+//     }
+
+//     x
+// }
 
 #[cfg(test)]
 mod tests {
@@ -723,9 +792,9 @@ mod tests {
 
     #[test]
     fn test_swap_base_input_without_fees_zero_to_one() {
-        let input_amount = 100;
-        let input_vault_amount = 900;
-        let output_vault_amount = 1544;
+        let input_amount = 1000000;
+        let input_vault_amount = 100000000;
+        let output_vault_amount = 111000000000;
 
         let result = ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
             input_amount,
@@ -764,6 +833,48 @@ mod tests {
     }
 
     #[test]
+    fn test_swap_base_input_without_fees_one_to_zero() {
+        let input_amount = 100;
+        let input_vault_amount = 900;
+        let output_vault_amount = 1544;
+
+        let result = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
+            input_amount,
+            input_vault_amount,
+            output_vault_amount,
+        );
+
+        println!("=== swap_base_input_without_fees_one_to_zero 测试 ===");
+        println!("输入参数:");
+        println!("  input_amount: {}", input_amount);
+        println!("  input_vault_amount: {}", input_vault_amount);
+        println!("  output_vault_amount: {}", output_vault_amount);
+        println!("输出结果: {}", result);
+
+        // 基本验证
+        assert!(result > 0, "输出应该大于 0");
+        assert!(result < output_vault_amount, "输出应该小于输出池余额");
+
+        // 验证不变量: x^4 * y 应该保持或增加
+        let initial_x4 = pow_4th_normalized(output_vault_amount);
+        let initial_k = initial_x4.checked_mul(U512::from(input_vault_amount)).unwrap();
+
+        let final_x = output_vault_amount - result;
+        let final_y = input_vault_amount + input_amount;
+        let final_x4 = pow_4th_normalized(final_x);
+        let final_k = final_x4.checked_mul(U512::from(final_y)).unwrap();
+
+        println!("\n不变量验证:");
+        println!("  初始 k = {:?}", initial_k);
+        println!("  最终 k = {:?}", final_k);
+        println!("  k 是否保持或增加: {}", final_k >= initial_k);
+
+        assert!(final_k >= initial_k, "交易后 k 应该保持或增加");
+
+        println!("✓ 测试通过\n");
+    }
+
+    #[test]
     fn test_swap_base_output_without_fees_one_to_zero() {
         let output_amount = 100;
         let input_vault_amount = 1009;
@@ -777,6 +888,48 @@ mod tests {
 
         println!("输入需求: {}", result);
         assert!(result > 0);
+    }
+
+    #[test]
+    fn test_swap_base_output_without_fees_zero_to_one() {
+        let output_amount = 100;
+        let input_vault_amount = 900;
+        let output_vault_amount = 1544;
+
+        let result = ConstantProductCurve::swap_base_output_without_fees_zero_to_one(
+            output_amount,
+            input_vault_amount,
+            output_vault_amount,
+        );
+
+        println!("=== swap_base_output_without_fees_zero_to_one 测试 ===");
+        println!("输入参数:");
+        println!("  output_amount: {}", output_amount);
+        println!("  input_vault_amount: {}", input_vault_amount);
+        println!("  output_vault_amount: {}", output_vault_amount);
+        println!("需要输入: {}", result);
+
+        // 基本验证
+        assert!(result > 0, "需要的输入应该大于 0");
+
+        // 验证不变量: x^4 * y 应该保持或略微增加（向上取整对协议有利）
+        let initial_x4 = pow_4th_normalized(input_vault_amount);
+        let initial_k = initial_x4.checked_mul(U512::from(output_vault_amount)).unwrap();
+
+        let final_x = input_vault_amount + result;
+        let final_y = output_vault_amount - output_amount;
+        let final_x4 = pow_4th_normalized(final_x);
+        let final_k = final_x4.checked_mul(U512::from(final_y)).unwrap();
+
+        println!("\n不变量验证:");
+        println!("  初始 k = {:?}", initial_k);
+        println!("  最终 k = {:?}", final_k);
+        println!("  k 增加量 = {:?}", final_k - initial_k);
+        println!("  k 是否保持或增加: {}", final_k >= initial_k);
+
+        assert!(final_k >= initial_k, "交易后 k 应该保持或增加（向上取整）");
+
+        println!("✓ 测试通过\n");
     }
 
     // Raydium cpmm

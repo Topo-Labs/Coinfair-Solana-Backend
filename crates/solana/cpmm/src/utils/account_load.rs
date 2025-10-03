@@ -53,7 +53,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
 
     /// 返回用于读取或写入账户数据结构的 `RefMut`。
     /// 应该只在账户被初始化时调用一次。
-    pub fn load_init(&self) -> Result<RefMut<T>> {
+    pub fn load_init(&self) -> Result<RefMut<'_, T>> {
         // AccountInfo API 允许您在账户不可写时借用可变引用，
         // 因此添加此检查以提供更好的开发体验。
         if !self.acc_info.is_writable {
@@ -105,7 +105,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
     }
 
     /// 返回用于读取账户数据结构的 Ref。
-    pub fn load(&self) -> Result<Ref<T>> {
+    pub fn load(&self) -> Result<Ref<'_, T>> {
         let data = self.acc_info.try_borrow_data()?;
         if data.len() < T::DISCRIMINATOR.len() {
             return Err(ErrorCode::AccountDiscriminatorNotFound.into());
@@ -122,7 +122,7 @@ impl<'info, T: ZeroCopy + Owner> AccountLoad<'info, T> {
     }
 
     /// 返回用于读取或写入账户数据结构的 `RefMut`。
-    pub fn load_mut(&self) -> Result<RefMut<T>> {
+    pub fn load_mut(&self) -> Result<RefMut<'_, T>> {
         // AccountInfo API 允许您在账户不可写时借用可变引用，
         // 因此添加此检查以提供更好的开发体验。
         if !self.acc_info.is_writable {
