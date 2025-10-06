@@ -2,6 +2,7 @@ use crate::curve::CurveCalculator;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::*;
+use anchor_lang::solana_program::sysvar::instructions as sysvar_instructions;
 use anchor_lang::{
     accounts::interface_account::InterfaceAccount,
     prelude::*,
@@ -14,6 +15,8 @@ use anchor_spl::{
     token::Token,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
+use mpl_token_metadata::instructions::CreateV1CpiBuilder;
+use mpl_token_metadata::types::TokenStandard;
 use spl_token_2022;
 use std::ops::Deref;
 
@@ -78,6 +81,20 @@ pub struct Initialize<'info> {
         mint::token_program = token_program,
     )]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// LP Mint 的元数据账户（便于客户端根据lp_mint反查Pool）
+    /// CHECK: 由 Metaplex 程序验证
+    #[account(
+        mut,
+        seeds = [
+            b"metadata",
+            mpl_token_metadata::ID.as_ref(),
+            lp_mint.key().as_ref(),
+        ],
+        bump,
+        seeds::program = mpl_token_metadata::ID,
+    )]
+    pub lp_mint_metadata: UncheckedAccount<'info>,
 
     /// 付款人token0账户
     #[account(
@@ -159,6 +176,14 @@ pub struct Initialize<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
     /// 创建新程序账户
     pub system_program: Program<'info, System>,
+    /// Metaplex Token Metadata 程序(便于客户端由LP_Mint反查Pool)
+    /// CHECK: 地址验证
+    #[account(address = mpl_token_metadata::ID)]
+    pub metadata_program: UncheckedAccount<'info>,
+    /// Sysvar Instructions - Metaplex 要求
+    /// CHECK: Metaplex 需要此账户来验证指令上下文
+    #[account(address = sysvar_instructions::ID)]
+    pub sysvar_instructions: UncheckedAccount<'info>,
     /// 程序账户的系统变量
     pub rent: Sysvar<'info, Rent>,
 }
@@ -175,7 +200,8 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
     }
     let block_timestamp = clock::Clock::get()?.unix_timestamp as u64;
     if open_time <= block_timestamp {
-        open_time = block_timestamp + 1;
+        // open_time = block_timestamp + 1;
+        open_time = block_timestamp;
     }
     // 由于栈/堆限制，我们必须自己创建冗余的新账户。
     create_token_account(
@@ -315,6 +341,26 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         CreatorFeeOn::BothToken,
         false,
     );
+
+    // 创建 LP Mint 元数据，包含 Pool ID
+    CreateV1CpiBuilder::new(&ctx.accounts.metadata_program.to_account_info())
+        .metadata(&ctx.accounts.lp_mint_metadata.to_account_info())
+        .mint(&ctx.accounts.lp_mint.to_account_info(), false)
+        .authority(&ctx.accounts.authority.to_account_info())
+        .payer(&ctx.accounts.creator.to_account_info())
+        .update_authority(&ctx.accounts.authority.to_account_info(), true)
+        .system_program(&ctx.accounts.system_program.to_account_info())
+        .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
+        .name(format!("Coinfair LP"))
+        .symbol("LP".to_string())
+        .uri(format!(
+            "https://gateway.pinata.cloud/ipfs/{}",
+            ctx.accounts.pool_state.key()
+        ))
+        .seller_fee_basis_points(0)
+        .is_mutable(true)
+        .token_standard(TokenStandard::Fungible)
+        .invoke_signed(&[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]])?;
 
     emit!(InitPoolEvent {
         pool_id: ctx.accounts.pool_state.key(),

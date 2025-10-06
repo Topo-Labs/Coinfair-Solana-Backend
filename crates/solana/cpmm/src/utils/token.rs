@@ -32,8 +32,10 @@ pub struct ReferralRewardEvent {
 }
 
 // 实时分佣给swap payer的上级和上上级
+#[allow(unused_variables)]
 pub fn transfer_from_pool_vault_to_uppers_and_project<'info>(
     pool_state_loader: &AccountLoader<'info, PoolState>,
+    authority: &AccountInfo<'info>,
     from_vault: &AccountInfo<'info>,
     project_token_account: &AccountInfo<'info>,
     upper_token_account: Option<AccountInfo<'info>>,
@@ -41,6 +43,7 @@ pub fn transfer_from_pool_vault_to_uppers_and_project<'info>(
     mint: AccountInfo<'info>,
     mint_decimals: u8,
     token_program: AccountInfo<'info>,
+    // 这里的奖励总费用（已经根据是否存在上级，扣除了协议方部分）
     total_reward_fee: u64,
     signer_seeds: &[&[&[u8]]],
     // 事件触发所需字段
@@ -54,97 +57,125 @@ pub fn transfer_from_pool_vault_to_uppers_and_project<'info>(
         return Ok(());
     }
 
-    let project_reward_fee = total_reward_fee / 2;
-    let uppers_total_reward_fee = total_reward_fee - project_reward_fee;
+    let uppers_total_reward_fee;
 
-    // 给项目方分佣（30%）
-    transfer_from_pool_vault_to_user(
-        pool_state_loader.to_account_info(),
-        from_vault.to_account_info(),
-        project_token_account.to_account_info(),
-        mint.clone(),
-        token_program.clone(),
-        project_reward_fee,
-        mint_decimals,
-        signer_seeds,
-    )?;
-
-    emit!(ReferralRewardEvent {
-        from,
-        to: project,
-        mint: reward_mint,
-        amount: project_reward_fee,
-        timestamp: Clock::get()?.unix_timestamp,
-    });
-
-    if let (Some(upper_token_account), Some(upper_upper_token_account)) =
-        (upper_token_account.clone(), upper_upper_token_account)
-    {
-        let upper_reward_fee = uppers_total_reward_fee * 5 / 6;
-        let upper_upper_reward_fee = uppers_total_reward_fee - upper_reward_fee;
-
-        // 给上级分佣（25%）
+    // 有上级存在：
+    if let Some(upper_token_account) = upper_token_account.clone() {
+        // 上级链和项目方，各占trade_fee的1/2
+        let project_reward_fee = total_reward_fee / 2;
         transfer_from_pool_vault_to_user(
-            pool_state_loader.to_account_info(),
+            authority.to_account_info(),
             from_vault.to_account_info(),
-            upper_token_account.to_account_info(),
+            project_token_account.to_account_info(),
             mint.clone(),
             token_program.clone(),
-            upper_reward_fee,
+            project_reward_fee,
             mint_decimals,
             signer_seeds,
         )?;
-        if let Some(upper_pubkey) = upper {
-            emit!(ReferralRewardEvent {
-                from,
-                to: upper_pubkey,
-                mint: reward_mint,
-                amount: upper_reward_fee,
-                timestamp: Clock::get()?.unix_timestamp,
-            });
+
+        emit!(ReferralRewardEvent {
+            from,
+            to: project,
+            mint: reward_mint,
+            amount: project_reward_fee,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        // 上级链的总奖励
+        uppers_total_reward_fee = total_reward_fee - project_reward_fee;
+
+        // 若上上级存在，则上级和上上级各占trade_fee的25%，5%
+        if let Some(upper_upper_token_account) = upper_upper_token_account {
+            let upper_reward_fee = uppers_total_reward_fee * 5 / 6;
+            let upper_upper_reward_fee = uppers_total_reward_fee - upper_reward_fee;
+
+            // 给上级分佣（25%）
+            transfer_from_pool_vault_to_user(
+                authority.to_account_info(),
+                from_vault.to_account_info(),
+                upper_token_account.to_account_info(),
+                mint.clone(),
+                token_program.clone(),
+                upper_reward_fee,
+                mint_decimals,
+                signer_seeds,
+            )?;
+            if let Some(upper_pubkey) = upper {
+                emit!(ReferralRewardEvent {
+                    from,
+                    to: upper_pubkey,
+                    mint: reward_mint,
+                    amount: upper_reward_fee,
+                    timestamp: Clock::get()?.unix_timestamp,
+                });
+            }
+
+            // 给上上级分佣（5%）
+            transfer_from_pool_vault_to_user(
+                authority.to_account_info(),
+                from_vault.to_account_info(),
+                upper_upper_token_account.to_account_info(),
+                mint.clone(),
+                token_program.clone(),
+                upper_upper_reward_fee,
+                mint_decimals,
+                signer_seeds,
+            )?;
+            if let Some(upper_upper_pubkey) = upper_upper {
+                emit!(ReferralRewardEvent {
+                    from,
+                    to: upper_upper_pubkey,
+                    mint: reward_mint,
+                    amount: upper_upper_reward_fee,
+                    timestamp: Clock::get()?.unix_timestamp,
+                });
+            }
+
+        // 若上上级不存在：上级独占trade_fee的30%
+        } else {
+            transfer_from_pool_vault_to_user(
+                authority.to_account_info(),
+                from_vault.to_account_info(),
+                upper_token_account.to_account_info(),
+                mint,
+                token_program,
+                uppers_total_reward_fee,
+                mint_decimals,
+                signer_seeds,
+            )?;
+            if let Some(upper_pubkey) = upper {
+                emit!(ReferralRewardEvent {
+                    from,
+                    to: upper_pubkey,
+                    mint: reward_mint,
+                    amount: uppers_total_reward_fee,
+                    timestamp: Clock::get()?.unix_timestamp,
+                });
+            }
         }
 
-        // 给上上级分佣（5%）
+    // 如无上级存在：剩余奖励部分全为项目方所得
+    } else {
+        let project_reward_fee = total_reward_fee;
         transfer_from_pool_vault_to_user(
-            pool_state_loader.to_account_info(),
+            authority.to_account_info(),
             from_vault.to_account_info(),
-            upper_upper_token_account.to_account_info(),
+            project_token_account.to_account_info(),
             mint.clone(),
             token_program.clone(),
-            upper_upper_reward_fee,
+            project_reward_fee,
             mint_decimals,
             signer_seeds,
         )?;
-        if let Some(upper_upper_pubkey) = upper_upper {
-            emit!(ReferralRewardEvent {
-                from,
-                to: upper_upper_pubkey,
-                mint: reward_mint,
-                amount: upper_upper_reward_fee,
-                timestamp: Clock::get()?.unix_timestamp,
-            });
-        }
-    } else if let Some(upper_token_account) = upper_token_account {
-        // 全给上级分佣（30%）
-        transfer_from_pool_vault_to_user(
-            pool_state_loader.to_account_info(),
-            from_vault.to_account_info(),
-            upper_token_account.to_account_info(),
-            mint,
-            token_program,
-            uppers_total_reward_fee,
-            mint_decimals,
-            signer_seeds,
-        )?;
-        if let Some(upper_pubkey) = upper {
-            emit!(ReferralRewardEvent {
-                from,
-                to: upper_pubkey,
-                mint: reward_mint,
-                amount: uppers_total_reward_fee,
-                timestamp: Clock::get()?.unix_timestamp,
-            });
-        }
+
+        emit!(ReferralRewardEvent {
+            from,
+            to: project,
+            mint: reward_mint,
+            amount: project_reward_fee,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
     }
 
     return Ok(());

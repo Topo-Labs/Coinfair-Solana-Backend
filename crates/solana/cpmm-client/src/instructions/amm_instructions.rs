@@ -6,6 +6,7 @@ use anchor_spl::{
 use anyhow::Result;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
 
+use anchor_lang::solana_program::sysvar::instructions as sysvar_instructions;
 use raydium_cp_swap::accounts as raydium_cp_accounts;
 use raydium_cp_swap::instruction as raydium_cp_instructions;
 use raydium_cp_swap::{
@@ -109,6 +110,9 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
+            metadata_program: mpl_token_metadata::ID,
+            sysvar_instructions: sysvar_instructions::ID,
+            lp_mint_metadata: lp_mint_key,
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,

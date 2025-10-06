@@ -247,8 +247,9 @@ use anchor_lang::solana_program;
 pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_received: u64) -> Result<()> {
     require_gt!(amount_out_received, 0);
 
-    // ✅ 提前声明需要在作用域外使用的变量
     let (pool_creator, auth_bump, token_0_price_x64, token_1_price_x64, input_transfer_amount, output_transfer_amount);
+
+    let pool_owner_and_upper_fee;
 
     // 将所有使用 pool_state 的代码放在作用域内
     {
@@ -295,6 +296,8 @@ pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_recei
         let constant_before = x4_before.checked_mul(U512::from(y_vault_before)).unwrap();
 
         let creator_fee_rate = pool_state.adjust_creator_fee_rate(ctx.accounts.amm_config.creator_fee_rate);
+
+        let has_upper = ctx.accounts.upper.is_some();
         let result = CurveCalculator::swap_base_output(
             trade_direction,
             u128::from(amount_out_with_transfer_fee),
@@ -305,8 +308,11 @@ pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_recei
             ctx.accounts.amm_config.protocol_fee_rate,
             ctx.accounts.amm_config.fund_fee_rate,
             is_creator_fee_on_input,
+            has_upper,
         )
         .ok_or(ErrorCode::ZeroTradingTokens)?;
+
+        pool_owner_and_upper_fee = result.pool_owner_and_upper_fee;
 
         let x_vault_after = match trade_direction {
             TradeDirection::ZeroForOne => result.new_input_vault_amount,
@@ -385,8 +391,6 @@ pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_recei
         pool_state.recent_epoch = Clock::get()?.epoch;
     } // pool_state 在这里释放
 
-    let total_reward_fee = 0;
-
     // ✅ 提取其他数据
     let reward_mint_key = ctx.accounts.reward_mint.key();
     let payer_key = ctx.accounts.payer.key();
@@ -410,7 +414,8 @@ pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_recei
     // 从 vault 分佣给 project/uppers
     transfer_from_pool_vault_to_uppers_and_project(
         &ctx.accounts.pool_state,
-        &output_vault.to_account_info(),
+        &ctx.accounts.authority.to_account_info(),
+        &input_vault.to_account_info(),
         &ctx.accounts.project_token_account.to_account_info(),
         ctx.accounts
             .upper_token_account
@@ -423,7 +428,7 @@ pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_recei
         ctx.accounts.reward_mint.to_account_info(),
         output_decimals,
         output_program.to_account_info(),
-        total_reward_fee,
+        pool_owner_and_upper_fee as u64,
         &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]],
         reward_mint_key,
         payer_key,

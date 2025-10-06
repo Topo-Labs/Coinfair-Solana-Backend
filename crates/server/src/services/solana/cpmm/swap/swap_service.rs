@@ -657,6 +657,7 @@ impl CpmmSwapService {
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+            false,
         )
         .ok_or_else(|| anyhow::anyhow!("交换计算失败：零交易代币"))?;
 
@@ -1174,6 +1175,7 @@ impl CpmmSwapService {
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+            false,
         )
         .ok_or_else(|| anyhow::anyhow!("交换计算失败：零交易代币"))?;
 
@@ -1772,6 +1774,7 @@ impl CpmmSwapService {
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+            false,
         )
         .ok_or_else(|| anyhow::anyhow!("交换计算失败：零交易代币"))?;
 
@@ -2158,6 +2161,7 @@ impl CpmmSwapService {
             amm_config_state.protocol_fee_rate,
             amm_config_state.fund_fee_rate,
             pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+            false,
         )
         .ok_or_else(|| anyhow::anyhow!("交换计算失败：零交易代币"))?;
 

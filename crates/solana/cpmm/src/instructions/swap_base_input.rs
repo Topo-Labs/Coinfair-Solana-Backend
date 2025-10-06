@@ -479,6 +479,8 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
     
     // ✅ 提前提取需要在后面使用的数据
     let (pool_creator, auth_bump, token_0_price_x64, token_1_price_x64, input_transfer_amount, output_transfer_amount);
+
+    let pool_owner_and_upper_fee ;
     
     // 将所有使用 pool_state 的代码放在一个作用域内
     {
@@ -529,13 +531,17 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
             TradeDirection::ZeroForOne => total_output_token_amount,
             TradeDirection::OneForZero => total_input_token_amount,
         };
+        msg!("x_vault_before: {}, y_vault_before: {}", x_vault_before, y_vault_before);
 
         let x4_before = pow_4th_normalized(u128::from(x_vault_before));
         let constant_before = x4_before.checked_mul(U512::from(y_vault_before)).unwrap();
+        msg!("x4_before: {:?}, constant_before: {:?}", x4_before, constant_before);
 
         msg!("=== Step 5: Calculate swap result ===");
         let creator_fee_rate =
             pool_state.adjust_creator_fee_rate(ctx.accounts.amm_config.creator_fee_rate);
+
+        let has_upper = ctx.accounts.upper.is_some();
 
         let result = CurveCalculator::swap_base_input(
             trade_direction,
@@ -547,8 +553,11 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
             ctx.accounts.amm_config.protocol_fee_rate,
             ctx.accounts.amm_config.fund_fee_rate,
             is_creator_fee_on_input,
+            has_upper,
         )
         .ok_or(ErrorCode::ZeroTradingTokens)?;
+
+        pool_owner_and_upper_fee = result.pool_owner_and_upper_fee;
         msg!("Swap calculation complete");
 
         let x_vault_after = match trade_direction {
@@ -559,9 +568,11 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
             TradeDirection::ZeroForOne => result.new_output_vault_amount,
             TradeDirection::OneForZero => result.new_input_vault_amount,
         };
+        msg!("x_vault_after: {}, y_vault_after: {}", x_vault_after, y_vault_after);
 
         let x4_after = pow_4th_normalized(x_vault_after);
         let constant_after = x4_after.checked_mul(U512::from(y_vault_after)).unwrap();
+        msg!("x4_after: {:?}, constant_after: {:?}", x4_after, constant_after);
 
         require_eq!(
             u64::try_from(result.input_amount).unwrap(),
@@ -629,8 +640,6 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
         
     } // ← pool_state 在这里被 drop，释放借用
 
-    let total_reward_fee = 0;
-
     msg!("=== Step 9: Extract additional data ===");
     let reward_mint_key = ctx.accounts.reward_mint.key();
     let payer_key = ctx.accounts.payer.key();
@@ -657,14 +666,15 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
     msg!("=== Step 12: Transfer to uppers and project ===");
     transfer_from_pool_vault_to_uppers_and_project(
         &ctx.accounts.pool_state,
-        &output_vault.to_account_info(),
+        &ctx.accounts.authority.to_account_info(),
+        &input_vault.to_account_info(),
         &ctx.accounts.project_token_account.to_account_info(),
         ctx.accounts.upper_token_account.as_ref().map(|acc| acc.to_account_info()),
         ctx.accounts.upper_upper_token_account.as_ref().map(|acc| acc.to_account_info()),
         ctx.accounts.reward_mint.to_account_info(),
         output_decimals,
         output_program.to_account_info(),
-        total_reward_fee,
+        pool_owner_and_upper_fee as u64,
         &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]],
         reward_mint_key,
         payer_key,
@@ -711,239 +721,4 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
     Ok(())
 }
 
-// pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u64) -> Result<()> {
-//     msg!("=== Step 1: Basic accounts ===");
-//     msg!("input_vault: {}", ctx.accounts.input_vault.key());
-//     msg!("output_vault: {}", ctx.accounts.output_vault.key());
-//     msg!("input_token_account: {}", ctx.accounts.input_token_account.key());
-//     msg!("output_token_account: {}", ctx.accounts.output_token_account.key());
-//     msg!("project_token_account: {}", ctx.accounts.project_token_account.key());
-    
-//     // ✅ 提前提取需要在后面使用的数据
-//     let (pool_creator, auth_bump, token_0_price_x64, token_1_price_x64);
 
-//     {
-//         msg!("=== Step 2: Loading pool_state (load_mut) ===");
-//         let block_timestamp = solana_program::clock::Clock::get()?.unix_timestamp as u64;
-//         let pool_id = ctx.accounts.pool_state.key();
-//         let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
-//         msg!("pool_state loaded successfully");
-        
-//         if !pool_state.get_status_by_bit(PoolStatusBitIndex::Swap)
-//             || block_timestamp < pool_state.open_time
-//         {
-//             return err!(ErrorCode::NotApproved);
-//         }
-
-//         msg!("=== Step 3: Transfer fee calculation ===");
-//         let transfer_fee =
-//             get_transfer_fee(&ctx.accounts.input_token_mint.to_account_info(), amount_in)?;
-//         let actual_amount_in = amount_in.saturating_sub(transfer_fee);
-//         require_gt!(actual_amount_in, 0);
-//         msg!("transfer_fee: {}, actual_amount_in: {}", transfer_fee, actual_amount_in);
-
-//         msg!("=== Step 4: Get swap params ===");
-//         let SwapParams {
-//             trade_direction,
-//             total_input_token_amount,
-//             total_output_token_amount,
-//             token_0_price_x64,
-//             token_1_price_x64,
-//             is_creator_fee_on_input,
-//         } = pool_state.get_swap_params(
-//             ctx.accounts.input_vault.key(),
-//             ctx.accounts.output_vault.key(),
-//             ctx.accounts.input_vault.amount,
-//             ctx.accounts.output_vault.amount,
-//         )?;
-//         msg!("Swap params calculated");
-
-//         let x_vault_before = match trade_direction {
-//             TradeDirection::ZeroForOne => total_input_token_amount,
-//             TradeDirection::OneForZero => total_output_token_amount,
-//         };
-//         let y_vault_before = match trade_direction {
-//             TradeDirection::ZeroForOne => total_output_token_amount,
-//             TradeDirection::OneForZero => total_input_token_amount,
-//         };
-
-//         let x4_before = pow_4th_normalized(u128::from(x_vault_before));
-//         let constant_before = x4_before.checked_mul(U512::from(y_vault_before)).unwrap();
-
-//         msg!("=== Step 5: Calculate swap result ===");
-//         let creator_fee_rate =
-//             pool_state.adjust_creator_fee_rate(ctx.accounts.amm_config.creator_fee_rate);
-
-//         let result = CurveCalculator::swap_base_input(
-//             trade_direction,
-//             u128::from(actual_amount_in),
-//             u128::from(total_input_token_amount),
-//             u128::from(total_output_token_amount),
-//             ctx.accounts.amm_config.trade_fee_rate,
-//             creator_fee_rate,
-//             ctx.accounts.amm_config.protocol_fee_rate,
-//             ctx.accounts.amm_config.fund_fee_rate,
-//             is_creator_fee_on_input,
-//         )
-//         .ok_or(ErrorCode::ZeroTradingTokens)?;
-//         msg!("Swap calculation complete");
-
-//         let x_vault_after = match trade_direction {
-//             TradeDirection::ZeroForOne => result.new_input_vault_amount,
-//             TradeDirection::OneForZero => result.new_output_vault_amount,
-//         };
-//         let y_vault_after = match trade_direction {
-//             TradeDirection::ZeroForOne => result.new_output_vault_amount,
-//             TradeDirection::OneForZero => result.new_input_vault_amount,
-//         };
-
-//         let x4_after = pow_4th_normalized(x_vault_after);
-//         let constant_after = x4_after.checked_mul(U512::from(y_vault_after)).unwrap();
-
-//         require_eq!(
-//             u64::try_from(result.input_amount).unwrap(),
-//             actual_amount_in
-//         );
-
-//         msg!("=== Step 6: Slippage protection ===");
-//         let (input_transfer_amount, input_transfer_fee) = (amount_in, transfer_fee);
-//         let (output_transfer_amount, output_transfer_fee) = {
-//             let amount_out = u64::try_from(result.output_amount).unwrap();
-//             let transfer_fee = get_transfer_fee(
-//                 &ctx.accounts.output_token_mint.to_account_info(),
-//                 amount_out,
-//             )?;
-//             let amount_received = amount_out.checked_sub(transfer_fee).unwrap();
-//             require_gt!(amount_received, 0);
-//             require_gte!(
-//                 amount_received,
-//                 minimum_amount_out,
-//                 ErrorCode::ExceededSlippage
-//             );
-//             (amount_out, transfer_fee)
-//         };
-//         msg!("Slippage check passed");
-
-//         msg!("=== Step 7: Update fees ===");
-//         pool_state.update_fees(
-//             u64::try_from(result.protocol_fee).unwrap(),
-//             u64::try_from(result.fund_fee).unwrap(),
-//             u64::try_from(result.creator_fee).unwrap(),
-//             trade_direction,
-//         )?;
-//         msg!("Fees updated");
-
-//         msg!("=== Step 8: Emit event ===");
-//         emit!(SwapEvent {
-//             pool_id,
-//             input_vault_before: total_input_token_amount,
-//             output_vault_before: total_output_token_amount,
-//             input_amount: u64::try_from(result.input_amount).unwrap(),
-//             output_amount: u64::try_from(result.output_amount).unwrap(),
-//             input_transfer_fee,
-//             output_transfer_fee,
-//             base_input: true,
-//             input_mint: ctx.accounts.input_token_mint.key(),
-//             output_mint: ctx.accounts.output_token_mint.key(),
-//             trade_fee: u64::try_from(result.trade_fee).unwrap(),
-//             creator_fee: u64::try_from(result.creator_fee).unwrap(),
-//             creator_fee_on_input: is_creator_fee_on_input,
-//         });
-//         require_gte!(constant_after, constant_before);
-//         msg!("Event emitted");
-//     }
-
-//     let total_reward_fee = 0;
-
-//     msg!("=== Step 9: Extract data (load pool_state again) ===");
-//     let (pool_creator, auth_bump, reward_mint_key, payer_key, upper_key, upper_upper_key) = {
-//         msg!("About to call pool_state.load()...");
-//         let ps = ctx.accounts.pool_state.load()?;
-//         msg!("pool_state.load() successful");
-//         (
-//             ps.pool_creator,
-//             ps.auth_bump,
-//             ctx.accounts.reward_mint.key(),
-//             ctx.accounts.payer.key(),
-//             ctx.accounts.upper.as_ref().map(|u| u.key()),
-//             ctx.accounts.upper_upper.as_ref().map(|u| u.key()),
-//         )
-//     };
-//     msg!("Data extraction complete");
-
-//     msg!("=== Step 10: Extract decimals ===");
-//     let input_decimals = ctx.accounts.input_token_mint.decimals;
-//     let output_decimals = ctx.accounts.output_token_mint.decimals;
-//     msg!("Decimals extracted");
-
-//     msg!("=== Step 11: Create references ===");
-//     let input_account = &ctx.accounts.input_token_account;
-//     let output_account = &ctx.accounts.output_token_account;
-//     let input_vault = &ctx.accounts.input_vault;
-//     let output_vault = &ctx.accounts.output_vault;
-//     let input_mint = &ctx.accounts.input_token_mint;
-//     let output_mint = &ctx.accounts.output_token_mint;
-//     let input_program = &ctx.accounts.input_token_program;
-//     let output_program = &ctx.accounts.output_token_program;
-//     msg!("References created");
-
-//     msg!("=== Step 12: Transfer to uppers and project ===");
-//     transfer_from_pool_vault_to_uppers_and_project(
-//         &ctx.accounts.pool_state,
-//         &output_vault.to_account_info(),
-//         &ctx.accounts.project_token_account.to_account_info(),
-//         ctx.accounts.upper_token_account.as_ref().map(|acc| acc.to_account_info()),
-//         ctx.accounts.upper_upper_token_account.as_ref().map(|acc| acc.to_account_info()),
-//         ctx.accounts.reward_mint.to_account_info(),
-//         output_decimals,
-//         output_program.to_account_info(),
-//         total_reward_fee,
-//         &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]],
-//         reward_mint_key,
-//         payer_key,
-//         pool_creator,
-//         upper_key,
-//         upper_upper_key,
-//     )?;
-//     msg!("Transfer to uppers/project complete");
-
-//     msg!("=== Step 13: Transfer from user to vault ===");
-//     transfer_from_user_to_pool_vault(
-//         ctx.accounts.payer.to_account_info(),
-//         input_account.to_account_info(),
-//         input_vault.to_account_info(),
-//         input_mint.to_account_info(),
-//         input_program.to_account_info(),
-//         input_transfer_amount,
-//         input_decimals,
-//     )?;
-//     msg!("Transfer from user complete");
-
-//     msg!("=== Step 14: Transfer from vault to user ===");
-//     transfer_from_pool_vault_to_user(
-//         ctx.accounts.authority.to_account_info(),
-//         output_vault.to_account_info(),
-//         output_account.to_account_info(),
-//         output_mint.to_account_info(),
-//         output_program.to_account_info(),
-//         output_transfer_amount,
-//         output_decimals,
-//         &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]],
-//     )?;
-//     msg!("Transfer to user complete");
-
-//     msg!("=== Step 15: Update observation ===");
-//     ctx.accounts.observation_state.load_mut()?.update(
-//         oracle::block_timestamp(),
-//         token_0_price_x64,
-//         token_1_price_x64,
-//     );
-//     msg!("Observation updated");
-
-//     msg!("=== Step 16: Update pool recent_epoch ===");
-//     pool_state.recent_epoch = Clock::get()?.epoch;
-//     msg!("recent_epoch updated");
-
-//     msg!("=== Swap complete ===");
-//     Ok(())
-// }

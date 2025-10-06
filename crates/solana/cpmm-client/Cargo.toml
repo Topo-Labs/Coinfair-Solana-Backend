@@ -40,3 +40,4 @@ regex = "1"
 colorful = "0.3.2"
 base64 = "0.21.0"
 bytemuck = { version = "1.23.0", features = ["derive"] }
+mpl-token-metadata = { version = "5.1.0" }
