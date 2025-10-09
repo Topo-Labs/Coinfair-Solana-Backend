@@ -426,8 +426,8 @@ pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out_recei
             .as_ref()
             .map(|acc| acc.to_account_info()),
         ctx.accounts.reward_mint.to_account_info(),
-        output_decimals,
-        output_program.to_account_info(),
+        input_decimals,
+        input_program.to_account_info(),
         pool_owner_and_upper_fee as u64,
         &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]],
         reward_mint_key,

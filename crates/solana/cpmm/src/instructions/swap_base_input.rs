@@ -480,7 +480,7 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
     // ✅ 提前提取需要在后面使用的数据
     let (pool_creator, auth_bump, token_0_price_x64, token_1_price_x64, input_transfer_amount, output_transfer_amount);
 
-    let pool_owner_and_upper_fee ;
+    let pool_owner_and_upper_fee;
     
     // 将所有使用 pool_state 的代码放在一个作用域内
     {
@@ -672,8 +672,8 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
         ctx.accounts.upper_token_account.as_ref().map(|acc| acc.to_account_info()),
         ctx.accounts.upper_upper_token_account.as_ref().map(|acc| acc.to_account_info()),
         ctx.accounts.reward_mint.to_account_info(),
-        output_decimals,
-        output_program.to_account_info(),
+        input_decimals,
+        input_program.to_account_info(),
         pool_owner_and_upper_fee as u64,
         &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]],
         reward_mint_key,

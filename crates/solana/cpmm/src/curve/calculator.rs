@@ -171,7 +171,6 @@ impl CurveCalculator {
     //     })
     // }
 
-    #[allow(unused_variables)]
     pub fn swap_base_input(
         trade_direction: TradeDirection,
         input_amount: u128,
@@ -179,8 +178,8 @@ impl CurveCalculator {
         output_vault_amount: u128,
         trade_fee_rate: u64,
         creator_fee_rate: u64,
-        protocol_fee_rate: u64,
-        fund_fee_rate: u64,
+        _protocol_fee_rate: u64,
+        _fund_fee_rate: u64,
         is_creator_fee_on_input: bool,
         has_upper: bool,
     ) -> Option<SwapResult> {
@@ -448,7 +447,7 @@ impl CurveCalculator {
         );
 
         msg!("╔══════════════════════════════════════════════════════════════╗");
-        msg!("║         CurveCalculator::swap_base_input END ✓              ║");
+        msg!("║         CurveCalculator::swap_base_input END ✓               ║");
         msg!("╚══════════════════════════════════════════════════════════════╝");
 
         Some(result)
