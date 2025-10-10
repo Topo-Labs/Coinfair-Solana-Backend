@@ -31,8 +31,8 @@ pub struct ReferralRewardEvent {
     pub timestamp: i64, // 时间戳
 }
 
-// 实时分佣给swap payer的上级和上上级
 #[allow(unused_variables)]
+// 实时分佣给swap payer的上级和上上级
 pub fn transfer_from_pool_vault_to_uppers_and_project<'info>(
     pool_state_loader: &AccountLoader<'info, PoolState>,
     authority: &AccountInfo<'info>,
@@ -349,6 +349,7 @@ pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>) -> Result<bool> 
             && e != ExtensionType::TokenMetadata
             && e != ExtensionType::InterestBearingConfig
             && e != ExtensionType::ScaledUiAmount
+            && e != ExtensionType::TransferHook
         {
             return Ok(false);
         }

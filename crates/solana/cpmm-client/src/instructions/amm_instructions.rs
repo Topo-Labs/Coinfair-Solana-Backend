@@ -113,6 +113,9 @@ pub fn initialize_pool_instr(
             metadata_program: mpl_token_metadata::ID,
             sysvar_instructions: sysvar_instructions::ID,
             lp_mint_metadata: lp_mint_key,
+            extra_account_metas: None,
+            project_config: None,
+            transfer_hook_program: None,
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
@@ -282,6 +285,9 @@ pub fn swap_base_input_instr(
             system_program: system_program::id(),
             associated_token_program: spl_associated_token_account::id(),
             referral: pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
+            extra_account_metas: None,
+            project_config: None,
+            transfer_hook_program: None,
         })
         .args(raydium_cp_instructions::SwapBaseInput {
             amount_in,
@@ -342,6 +348,9 @@ pub fn swap_base_output_instr(
             system_program: system_program::id(),
             associated_token_program: spl_associated_token_account::id(),
             referral: pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
+            extra_account_metas: None,
+            project_config: None,
+            transfer_hook_program: None,
         })
         .args(raydium_cp_instructions::SwapBaseOutput {
             max_amount_in,

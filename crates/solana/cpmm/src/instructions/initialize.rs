@@ -186,6 +186,14 @@ pub struct Initialize<'info> {
     pub sysvar_instructions: UncheckedAccount<'info>,
     /// 程序账户的系统变量
     pub rent: Sysvar<'info, Rent>,
+
+    /// TransferHook相关账户(可选)
+    /// CHECK: 可选的 Transfer Hook 程序账户（可执行程序ID）
+    pub transfer_hook_program: Option<UncheckedAccount<'info>>,
+    /// CHECK: 可选的 ExtraAccountMetaList 账户（由发行方程序创建）
+    pub extra_account_metas: Option<UncheckedAccount<'info>>,
+    /// CHECK: 可选的发行方配置账户（按 EAML 解析需要）
+    pub project_config: Option<UncheckedAccount<'info>>,
 }
 
 pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, mut open_time: u64) -> Result<()> {
