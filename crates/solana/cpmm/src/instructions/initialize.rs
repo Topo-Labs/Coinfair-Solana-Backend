@@ -41,18 +41,26 @@ pub struct Initialize<'info> {
     )]
     pub authority: UncheckedAccount<'info>,
 
-    /// CHECK: 初始化一个账户来存储池子状态
-    /// PDA account:
-    /// seeds = [
-    /// POOL_SEED.as_bytes(),
-    /// amm_config.key().as_ref(),
-    /// token_0_mint.key().as_ref(),
-    /// token_1_mint.key().as_ref(),
-    /// ],
-    ///
-    /// 或随机账户: 必须由cli签名
-    #[account(mut)]
-    pub pool_state: UncheckedAccount<'info>,
+    #[account(
+        init,
+        seeds = [
+            POOL_SEED.as_bytes(),
+            amm_config.key().as_ref(),
+            token_0_mint.key().as_ref(),
+            token_1_mint.key().as_ref(),
+        ],
+        bump,
+        payer = creator,
+        space = PoolState::LEN
+    )]
+    pub pool_state: AccountLoader<'info, PoolState>,
+    // #[account(mut)]
+    // pub pool_state: UncheckedAccount<'info>,
+    /// Base mint - must be either token_mint_0 or token_mint_1
+    #[account(
+        constraint = base_mint.key() == token_0_mint.key() || base_mint.key() == token_1_mint.key() @ ErrorCode::InvalidBaseMint,
+    )]
+    pub base_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Token_0铸币，键值必须小于token_1铸币。
     #[account(
@@ -194,6 +202,14 @@ pub struct Initialize<'info> {
     pub extra_account_metas: Option<UncheckedAccount<'info>>,
     /// CHECK: 可选的发行方配置账户（按 EAML 解析需要）
     pub project_config: Option<UncheckedAccount<'info>>,
+    /// CHECK: 发射平台Program
+    pub fairlaunch_program: Option<UncheckedAccount<'info>>,
+    /// 带TransferHook的Token_2022(Coinfair_FairGo)
+    pub token_2022_hook_mint: Option<Box<InterfaceAccount<'info, Mint>>>,
+    /// CHECK: 转账方用户存款账户
+    pub source_user_deposit: Option<UncheckedAccount<'info>>,
+    /// CHECK: 接收方用户存款账户
+    pub destination_user_deposit: Option<UncheckedAccount<'info>>,
 }
 
 pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u64, mut open_time: u64) -> Result<()> {
@@ -242,38 +258,184 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         ],
     )?;
 
-    let pool_state_loader = create_pool(
-        &ctx.accounts.creator.to_account_info(),
-        &ctx.accounts.pool_state.to_account_info(),
-        &ctx.accounts.amm_config.to_account_info(),
-        &ctx.accounts.token_0_mint.to_account_info(),
-        &ctx.accounts.token_1_mint.to_account_info(),
-        &ctx.accounts.system_program.to_account_info(),
-    )?;
-    let pool_state = &mut pool_state_loader.load_init()?;
+    // 确定是否需要交换 token 顺序
+    let is_base_token_0 = ctx.accounts.base_mint.key() == ctx.accounts.token_0_mint.key();
+
+    let (
+        first_mint,
+        second_mint,
+        first_vault,
+        second_vault,
+        first_program,
+        second_program,
+        creator_token_first,
+        creator_token_second,
+    ) = if is_base_token_0 {
+        (
+            ctx.accounts.token_0_mint.clone(),
+            ctx.accounts.token_1_mint.clone(),
+            ctx.accounts.token_0_vault.to_account_info(),
+            ctx.accounts.token_1_vault.to_account_info(),
+            ctx.accounts.token_0_program.to_account_info(),
+            ctx.accounts.token_1_program.to_account_info(),
+            ctx.accounts.creator_token_0.to_account_info(),
+            ctx.accounts.creator_token_1.to_account_info(),
+        )
+    } else {
+        (
+            ctx.accounts.token_1_mint.clone(),
+            ctx.accounts.token_0_mint.clone(),
+            ctx.accounts.token_1_vault.to_account_info(),
+            ctx.accounts.token_0_vault.to_account_info(),
+            ctx.accounts.token_1_program.to_account_info(),
+            ctx.accounts.token_0_program.to_account_info(),
+            ctx.accounts.creator_token_1.to_account_info(),
+            ctx.accounts.creator_token_0.to_account_info(),
+        )
+    };
+
+    // let pool_state_loader = create_pool(
+    //     &ctx.accounts.creator.to_account_info(),
+    //     &ctx.accounts.pool_state.to_account_info(),
+    //     &ctx.accounts.amm_config.to_account_info(),
+    //     &first_mint.to_account_info(),
+    //     &second_mint.to_account_info(),
+    //     &ctx.accounts.system_program.to_account_info(),
+    // )?;
+    // let pool_state = &mut pool_state_loader.load_init()?;
+    let pool_state = &mut ctx.accounts.pool_state.load_init()?;
 
     let mut observation_state = ctx.accounts.observation_state.load_init()?;
     observation_state.pool_id = ctx.accounts.pool_state.key();
 
-    transfer_from_user_to_pool_vault(
-        ctx.accounts.creator.to_account_info(),
-        ctx.accounts.creator_token_0.to_account_info(),
-        ctx.accounts.token_0_vault.to_account_info(),
-        ctx.accounts.token_0_mint.to_account_info(),
-        ctx.accounts.token_0_program.to_account_info(),
-        init_amount_0,
-        ctx.accounts.token_0_mint.decimals,
-    )?;
+    match (
+        &ctx.accounts.transfer_hook_program,
+        &ctx.accounts.extra_account_metas,
+        &ctx.accounts.fairlaunch_program,
+        &ctx.accounts.project_config,
+    ) {
+        // 所有 Hook 相关账户都存在
+        (Some(hook_program), Some(extra_metas), Some(fairlaunch), Some(config)) => {
+            let _auth_bump = pool_state.auth_bump;
+            // let signer_seeds = &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]];
 
-    transfer_from_user_to_pool_vault(
-        ctx.accounts.creator.to_account_info(),
-        ctx.accounts.creator_token_1.to_account_info(),
-        ctx.accounts.token_1_vault.to_account_info(),
-        ctx.accounts.token_1_mint.to_account_info(),
-        ctx.accounts.token_1_program.to_account_info(),
-        init_amount_1,
-        ctx.accounts.token_1_mint.decimals,
-    )?;
+            let is_token_0_hook = ctx
+                .accounts
+                .token_2022_hook_mint
+                .as_ref()
+                .map(|mint| mint.key() == first_mint.key())
+                .unwrap_or(false);
+
+            let _is_token_1_hook = ctx
+                .accounts
+                .token_2022_hook_mint
+                .as_ref()
+                .map(|mint| mint.key() == second_mint.key())
+                .unwrap_or(false);
+
+            let source_deposit = ctx
+                .accounts
+                .source_user_deposit
+                .as_ref()
+                .map(|acc| acc.to_account_info())
+                .unwrap_or_else(|| fairlaunch.to_account_info());
+
+            let destination_deposit = ctx
+                .accounts
+                .destination_user_deposit
+                .as_ref()
+                .map(|acc| acc.to_account_info())
+                .unwrap_or_else(|| fairlaunch.to_account_info());
+
+            // 1.当上述账户存在时，说明有其一为TranferHook Mint
+            // 2.Mint_0和Mint_1只能有一个TransferHook Mint
+            if is_token_0_hook {
+                // Token 0 转账（带 Hook）
+                transfer_from_user_to_pool_vault_with_hook(
+                    ctx.accounts.creator.to_account_info(),
+                    creator_token_first.to_account_info(),
+                    first_vault.to_account_info(),
+                    first_mint.to_account_info(),
+                    first_program.to_account_info(),
+                    init_amount_0,
+                    first_mint.decimals,
+                    extra_metas.to_account_info(),
+                    fairlaunch.to_account_info(),
+                    config.to_account_info(),
+                    source_deposit,
+                    destination_deposit,
+                    hook_program.to_account_info(),
+                )?;
+
+                // Token 1 转账（不带 Hook）
+                transfer_from_user_to_pool_vault(
+                    ctx.accounts.creator.to_account_info(),
+                    creator_token_second.to_account_info(),
+                    second_vault.to_account_info(),
+                    second_mint.to_account_info(),
+                    second_program.to_account_info(),
+                    init_amount_1,
+                    second_mint.decimals,
+                )?;
+            } else {
+                // Token 0 转账（不带 Hook）
+                transfer_from_user_to_pool_vault(
+                    ctx.accounts.creator.to_account_info(),
+                    creator_token_first.to_account_info(),
+                    first_vault.to_account_info(),
+                    first_mint.to_account_info(),
+                    first_program.to_account_info(),
+                    init_amount_0,
+                    first_mint.decimals,
+                )?;
+
+                // Token 1 转账（带 Hook）
+                transfer_from_user_to_pool_vault_with_hook(
+                    ctx.accounts.creator.to_account_info(),
+                    creator_token_second.to_account_info(),
+                    second_vault.to_account_info(),
+                    second_mint.to_account_info(),
+                    second_program.to_account_info(),
+                    init_amount_1,
+                    second_mint.decimals,
+                    extra_metas.to_account_info(),
+                    fairlaunch.to_account_info(),
+                    config.to_account_info(),
+                    source_deposit,
+                    destination_deposit,
+                    hook_program.to_account_info(),
+                )?;
+            }
+        }
+
+        // 没有 Hook，使用标准转账
+        (_, None, _, None) => {
+            transfer_from_user_to_pool_vault(
+                ctx.accounts.creator.to_account_info(),
+                creator_token_first.to_account_info(),
+                first_vault.to_account_info(),
+                first_mint.to_account_info(),
+                first_program.to_account_info(),
+                init_amount_0,
+                first_mint.decimals,
+            )?;
+
+            transfer_from_user_to_pool_vault(
+                ctx.accounts.creator.to_account_info(),
+                creator_token_second.to_account_info(),
+                second_vault.to_account_info(),
+                second_mint.to_account_info(),
+                second_program.to_account_info(),
+                init_amount_1,
+                second_mint.decimals,
+            )?;
+        }
+
+        // 账户不完整，返回错误
+        _ => {
+            return err!(ErrorCode::IncompleteTransferHookAccounts);
+        }
+    }
 
     let token_0_vault = spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
         ctx.accounts.token_0_vault.to_account_info().try_borrow_data()?.deref(),
@@ -339,10 +501,10 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         open_time,
         ctx.accounts.creator.key(),
         ctx.accounts.amm_config.key(),
-        ctx.accounts.token_0_vault.key(),
-        ctx.accounts.token_1_vault.key(),
-        &ctx.accounts.token_0_mint,
-        &ctx.accounts.token_1_mint,
+        first_vault.key(),
+        second_vault.key(),
+        &first_mint,
+        &second_mint,
         ctx.accounts.lp_mint.key(),
         ctx.accounts.lp_mint.decimals,
         ctx.accounts.observation_state.key(),
@@ -373,10 +535,10 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
     emit!(InitPoolEvent {
         pool_id: ctx.accounts.pool_state.key(),
         pool_creator: ctx.accounts.creator.key(),
-        token_0_mint: ctx.accounts.token_0_mint.key(),
-        token_1_mint: ctx.accounts.token_1_mint.key(),
-        token_0_vault: ctx.accounts.token_0_vault.key(),
-        token_1_vault: ctx.accounts.token_1_vault.key(),
+        token_0_mint: first_mint.key(),
+        token_1_mint: second_mint.key(),
+        token_0_vault: first_vault.key(),
+        token_1_vault: second_vault.key(),
         lp_program_id: ctx.accounts.token_program.key(),
         lp_mint: ctx.accounts.lp_mint.key(),
         decimals: ctx.accounts.lp_mint.decimals,
@@ -386,22 +548,22 @@ pub fn initialize(ctx: Context<Initialize>, init_amount_0: u64, init_amount_1: u
         user_wallet: ctx.accounts.creator.key(),
         pool_id: ctx.accounts.pool_state.key(),
         lp_mint: ctx.accounts.lp_mint.key(),
-        token_0_mint: ctx.accounts.token_0_mint.key(),
-        token_1_mint: ctx.accounts.token_1_mint.key(),
-        lp_amount_before: 0,     // 初始化时 LP 供应量为 0
-        token_0_vault_before: 0, // 初始化时金库为空
-        token_1_vault_before: 0, // 初始化时金库为空
-        token_0_amount: token_0_vault.amount,
+        token_0_mint: first_mint.key(),
+        token_1_mint: second_mint.key(),
+        lp_amount_before: 0,                  // 初始化时 LP 供应量为 0
+        token_0_vault_before: 0,              // 初始化时金库为空
+        token_1_vault_before: 0,              // 初始化时金库为空
+        token_0_amount: token_0_vault.amount, //TODO
         token_1_amount: token_1_vault.amount,
         token_0_transfer_fee: 0, // 初始化时没有转账费用（直接从用户转到金库）
         token_1_transfer_fee: 0,
         change_type: 2, // 2 表示池子初始化
         lp_mint_program_id: ctx.accounts.token_program.key(),
-        token_0_program_id: ctx.accounts.token_0_program.key(),
-        token_1_program_id: ctx.accounts.token_1_program.key(),
+        token_0_program_id: first_program.key(),
+        token_1_program_id: second_program.key(),
         lp_mint_decimals: ctx.accounts.lp_mint.decimals,
-        token_0_decimals: ctx.accounts.token_0_mint.decimals,
-        token_1_decimals: ctx.accounts.token_1_mint.decimals,
+        token_0_decimals: first_mint.decimals,
+        token_1_decimals: second_mint.decimals,
     });
 
     Ok(())

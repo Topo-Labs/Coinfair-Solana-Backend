@@ -91,6 +91,7 @@ pub fn initialize_pool_instr(
             amm_config: amm_config_key,
             authority,
             pool_state: pool_account_key,
+            base_mint: token_0_mint,
             token_0_mint,
             token_1_mint,
             lp_mint: lp_mint_key,
@@ -116,6 +117,10 @@ pub fn initialize_pool_instr(
             extra_account_metas: None,
             project_config: None,
             transfer_hook_program: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
@@ -174,6 +179,13 @@ pub fn deposit_instr(
             vault_0_mint: token_0_mint,
             vault_1_mint: token_1_mint,
             lp_mint: token_lp_mint,
+            transfer_hook_program: None,
+            extra_account_metas: None,
+            project_config: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::Deposit {
             lp_token_amount,
@@ -224,6 +236,13 @@ pub fn withdraw_instr(
             vault_1_mint: token_1_mint,
             lp_mint: token_lp_mint,
             memo_program: spl_memo::id(),
+            transfer_hook_program: None,
+            extra_account_metas: None,
+            project_config: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::Withdraw {
             lp_token_amount,
@@ -288,6 +307,10 @@ pub fn swap_base_input_instr(
             extra_account_metas: None,
             project_config: None,
             transfer_hook_program: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::SwapBaseInput {
             amount_in,
@@ -351,6 +374,10 @@ pub fn swap_base_output_instr(
             extra_account_metas: None,
             project_config: None,
             transfer_hook_program: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::SwapBaseOutput {
             max_amount_in,

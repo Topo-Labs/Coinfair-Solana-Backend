@@ -50,4 +50,11 @@ pub enum ErrorCode {
     UpperUpperTokenAccountMismatch,
     #[msg("swap_with_referral: project token account mismatch")]
     ProjectTokenAccountMismatch,
+
+    #[msg("Create Pool: Base mint - must be either token_mint_0 or token_mint_1")]
+    InvalidBaseMint,
+    #[msg("with_hook: incomplete transfer hook accounts")]
+    IncompleteTransferHookAccounts,
+    #[msg("with_hook: invalid hook mint")]
+    InvalidHookMint,
 }

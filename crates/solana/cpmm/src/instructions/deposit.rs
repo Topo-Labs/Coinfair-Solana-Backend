@@ -82,6 +82,22 @@ pub struct Deposit<'info> {
         address = pool_state.load()?.lp_mint @ ErrorCode::IncorrectLpMint)
     ]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// TransferHook相关账户(可选)
+    /// CHECK: 可选的 Transfer Hook 程序账户（可执行程序ID）
+    pub transfer_hook_program: Option<UncheckedAccount<'info>>,
+    /// CHECK: 可选的 ExtraAccountMetaList 账户（由发行方程序创建）
+    pub extra_account_metas: Option<UncheckedAccount<'info>>,
+    /// CHECK: 可选的发行方配置账户（按 EAML 解析需要）
+    pub project_config: Option<UncheckedAccount<'info>>,
+    /// CHECK: 发射平台Program
+    pub fairlaunch_program: Option<UncheckedAccount<'info>>,
+    /// 带TransferHook的Token_2022(Coinfair_FairGo)
+    pub token_2022_hook_mint: Option<Box<InterfaceAccount<'info, Mint>>>,
+    /// CHECK: 转账方用户存款账户
+    pub source_user_deposit: Option<UncheckedAccount<'info>>,
+    /// CHECK: 接收方用户存款账户
+    pub destination_user_deposit: Option<UncheckedAccount<'info>>,
 }
 
 pub fn deposit(
@@ -159,33 +175,177 @@ pub fn deposit(
         return Err(ErrorCode::ExceededSlippage.into());
     }
 
-    transfer_from_user_to_pool_vault(
-        ctx.accounts.owner.to_account_info(),
-        ctx.accounts.token_0_account.to_account_info(),
-        ctx.accounts.token_0_vault.to_account_info(),
-        ctx.accounts.vault_0_mint.to_account_info(),
-        if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
-            ctx.accounts.token_program.to_account_info()
-        } else {
-            ctx.accounts.token_program_2022.to_account_info()
-        },
-        transfer_token_0_amount,
-        ctx.accounts.vault_0_mint.decimals,
-    )?;
+    match (
+        &ctx.accounts.transfer_hook_program,
+        &ctx.accounts.extra_account_metas,
+        &ctx.accounts.fairlaunch_program,
+        &ctx.accounts.project_config,
+    ) {
+        // 所有 Hook 相关账户都存在
+        (Some(hook_program), Some(extra_metas), Some(fairlaunch), Some(config)) => {
+            let _auth_bump = pool_state.auth_bump;
+            // let signer_seeds = &[&[crate::AUTH_SEED.as_bytes(), &[auth_bump]]];
 
-    transfer_from_user_to_pool_vault(
-        ctx.accounts.owner.to_account_info(),
-        ctx.accounts.token_1_account.to_account_info(),
-        ctx.accounts.token_1_vault.to_account_info(),
-        ctx.accounts.vault_1_mint.to_account_info(),
-        if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
-            ctx.accounts.token_program.to_account_info()
-        } else {
-            ctx.accounts.token_program_2022.to_account_info()
-        },
-        transfer_token_1_amount,
-        ctx.accounts.vault_1_mint.decimals,
-    )?;
+            let is_token_0_hook = ctx
+                .accounts
+                .token_2022_hook_mint
+                .as_ref()
+                .map(|mint| mint.key() == ctx.accounts.token_0_vault.mint)
+                .unwrap_or(false);
+
+            let _is_token_1_hook = ctx
+                .accounts
+                .token_2022_hook_mint
+                .as_ref()
+                .map(|mint| mint.key() == ctx.accounts.token_0_vault.mint)
+                .unwrap_or(false);
+
+            let source_deposit = ctx
+                .accounts
+                .source_user_deposit
+                .as_ref()
+                .map(|acc| acc.to_account_info())
+                .unwrap_or_else(|| fairlaunch.to_account_info());
+
+            let destination_deposit = ctx
+                .accounts
+                .destination_user_deposit
+                .as_ref()
+                .map(|acc| acc.to_account_info())
+                .unwrap_or_else(|| fairlaunch.to_account_info());
+
+            // 1.当上述账户存在时，说明有其一为TranferHook Mint
+            // 2.Mint_0和Mint_1只能有一个TransferHook Mint
+            if is_token_0_hook {
+                // Token 0 转账（带 Hook）
+                transfer_from_user_to_pool_vault_with_hook(
+                    ctx.accounts.owner.to_account_info(),
+                    ctx.accounts.token_0_account.to_account_info(),
+                    ctx.accounts.token_0_vault.to_account_info(),
+                    ctx.accounts.vault_0_mint.to_account_info(),
+                    if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
+                        ctx.accounts.token_program.to_account_info()
+                    } else {
+                        ctx.accounts.token_program_2022.to_account_info()
+                    },
+                    transfer_token_0_amount,
+                    ctx.accounts.vault_0_mint.decimals,
+                    extra_metas.to_account_info(),
+                    fairlaunch.to_account_info(),
+                    config.to_account_info(),
+                    source_deposit,
+                    destination_deposit,
+                    hook_program.to_account_info(),
+                )?;
+
+                // Token 1 转账（不带 Hook）
+                transfer_from_user_to_pool_vault(
+                    ctx.accounts.owner.to_account_info(),
+                    ctx.accounts.token_1_account.to_account_info(),
+                    ctx.accounts.token_1_vault.to_account_info(),
+                    ctx.accounts.vault_1_mint.to_account_info(),
+                    if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
+                        ctx.accounts.token_program.to_account_info()
+                    } else {
+                        ctx.accounts.token_program_2022.to_account_info()
+                    },
+                    transfer_token_1_amount,
+                    ctx.accounts.vault_1_mint.decimals,
+                )?;
+            } else {
+                // Token 0 转账（不带 Hook）
+                transfer_from_user_to_pool_vault(
+                    ctx.accounts.owner.to_account_info(),
+                    ctx.accounts.token_0_account.to_account_info(),
+                    ctx.accounts.token_0_vault.to_account_info(),
+                    ctx.accounts.vault_0_mint.to_account_info(),
+                    if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
+                        ctx.accounts.token_program.to_account_info()
+                    } else {
+                        ctx.accounts.token_program_2022.to_account_info()
+                    },
+                    transfer_token_0_amount,
+                    ctx.accounts.vault_0_mint.decimals,
+                )?;
+
+                // Token 1 转账（带 Hook）
+                transfer_from_user_to_pool_vault_with_hook(
+                    ctx.accounts.owner.to_account_info(),
+                    ctx.accounts.token_1_account.to_account_info(),
+                    ctx.accounts.token_1_vault.to_account_info(),
+                    ctx.accounts.vault_1_mint.to_account_info(),
+                    if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
+                        ctx.accounts.token_program.to_account_info()
+                    } else {
+                        ctx.accounts.token_program_2022.to_account_info()
+                    },
+                    transfer_token_1_amount,
+                    ctx.accounts.vault_1_mint.decimals,
+                    extra_metas.to_account_info(),
+                    fairlaunch.to_account_info(),
+                    config.to_account_info(),
+                    source_deposit,
+                    destination_deposit,
+                    hook_program.to_account_info(),
+                )?;
+            }
+        }
+
+        // 没有 Hook，使用标准转账
+        (_, None, _, None) => {
+            transfer_from_user_to_pool_vault(
+                ctx.accounts.owner.to_account_info(),
+                ctx.accounts.token_0_account.to_account_info(),
+                ctx.accounts.token_0_vault.to_account_info(),
+                ctx.accounts.vault_0_mint.to_account_info(),
+                if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
+                    ctx.accounts.token_program.to_account_info()
+                } else {
+                    ctx.accounts.token_program_2022.to_account_info()
+                },
+                transfer_token_0_amount,
+                ctx.accounts.vault_0_mint.decimals,
+            )?;
+
+            transfer_from_user_to_pool_vault(
+                ctx.accounts.owner.to_account_info(),
+                ctx.accounts.token_1_account.to_account_info(),
+                ctx.accounts.token_1_vault.to_account_info(),
+                ctx.accounts.vault_1_mint.to_account_info(),
+                if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
+                    ctx.accounts.token_program.to_account_info()
+                } else {
+                    ctx.accounts.token_program_2022.to_account_info()
+                },
+                transfer_token_1_amount,
+                ctx.accounts.vault_1_mint.decimals,
+            )?;
+            // transfer_from_user_to_pool_vault(
+            //     ctx.accounts.creator.to_account_info(),
+            //     ctx.accounts.creator_token_0.to_account_info(),
+            //     ctx.accounts.token_0_vault.to_account_info(),
+            //     ctx.accounts.token_0_mint.to_account_info(),
+            //     ctx.accounts.token_0_program.to_account_info(),
+            //     init_amount_0,
+            //     ctx.accounts.token_0_mint.decimals,
+            // )?;
+
+            // transfer_from_user_to_pool_vault(
+            //     ctx.accounts.creator.to_account_info(),
+            //     ctx.accounts.creator_token_1.to_account_info(),
+            //     ctx.accounts.token_1_vault.to_account_info(),
+            //     ctx.accounts.token_1_mint.to_account_info(),
+            //     ctx.accounts.token_1_program.to_account_info(),
+            //     init_amount_1,
+            //     ctx.accounts.token_1_mint.decimals,
+            // )?;
+        }
+
+        // 账户不完整，返回错误
+        _ => {
+            return err!(ErrorCode::IncompleteTransferHookAccounts);
+        }
+    }
 
     pool_state.lp_supply = pool_state.lp_supply.checked_add(lp_token_amount).unwrap();
 

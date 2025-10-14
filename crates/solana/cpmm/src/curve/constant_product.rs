@@ -2,6 +2,8 @@
 
 use crate::curve::calculator::{RoundDirection, TradingTokenResult};
 
+use anchor_lang::prelude::msg;
+
 use crate::libraries::big_num::U512;
 
 /// 实现 CurveCalculator 的恒定乘积曲线结构体
@@ -62,6 +64,11 @@ impl ConstantProductCurve {
         input_vault_amount: u128,
         output_vault_amount: u128,
     ) -> u128 {
+        msg!("=== 首笔购买 ===");
+        msg!("input_amount: {}", input_amount);
+        msg!("input_vault_amount: {}", input_vault_amount);
+        msg!("output_vault_amount: {}", output_vault_amount);
+
         let x_vault = output_vault_amount;
         let y_vault = input_vault_amount;
         let delta_y = input_amount;
@@ -586,9 +593,13 @@ mod tests {
 
     #[test]
     fn test_swap_base_input_without_fees_one_to_zero() {
-        let input_amount = 99;
-        let input_vault_amount = 1006000000000;
-        let output_vault_amount = 1006000000000;
+        // let input_amount = 99;
+        // let input_vault_amount = 1006000000000;
+        // let output_vault_amount = 1006000000000;
+
+        let input_amount = 240;
+        let input_vault_amount = 5;
+        let output_vault_amount = 1000000000000000;
 
         let result = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
             input_amount,

@@ -171,6 +171,7 @@ impl CurveCalculator {
     //     })
     // }
 
+    #[allow(unused_variables)]
     pub fn swap_base_input(
         trade_direction: TradeDirection,
         input_amount: u128,
@@ -183,53 +184,17 @@ impl CurveCalculator {
         is_creator_fee_on_input: bool,
         has_upper: bool,
     ) -> Option<SwapResult> {
-        msg!("╔══════════════════════════════════════════════════════════════╗");
-        msg!("║         CurveCalculator::swap_base_input START               ║");
-        msg!("╚══════════════════════════════════════════════════════════════╝");
-
-        // 1. 输入参数日志
-        msg!("📥 Input Parameters:");
-        msg!("   trade_direction: {:?}", trade_direction);
-        msg!("   input_amount: {}", input_amount);
-        msg!("   input_vault_amount: {}", input_vault_amount);
-        msg!("   output_vault_amount: {}", output_vault_amount);
-        msg!("   trade_fee_rate: {}", trade_fee_rate);
-        msg!("   creator_fee_rate: {}", creator_fee_rate);
-        msg!("   has_upper: {}", has_upper);
-        msg!("   is_creator_fee_on_input: {}", is_creator_fee_on_input);
-
-        // 2. 计算交易费用
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("💰 Step 1: Calculate trade fee");
         let trade_fee = Fees::trading_fee(input_amount, trade_fee_rate)?;
-        msg!(
-            "   trade_fee = {} ({}% of input)",
-            trade_fee,
-            trade_fee_rate as f64 / 100.0
-        );
 
-        // 3. 计算协议费和池创建者费
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("💵 Step 2: Split trade fee (has_upper: {})", has_upper);
         let (protocol_fee, pool_owner_and_upper_fee) = if has_upper {
             // 有上级：protocol_fee = 40%, pool_owner_and_upper_fee = 60%
             let protocol_fee = trade_fee.checked_mul(40)?.checked_div(100)?;
             let pool_owner_and_upper_fee = trade_fee.checked_mul(60)?.checked_div(100)?;
-            msg!("   [WITH UPPER] protocol_fee: {} (40% of trade_fee)", protocol_fee);
-            msg!(
-                "   [WITH UPPER] pool_owner_and_upper_fee: {} (60% of trade_fee)",
-                pool_owner_and_upper_fee
-            );
             (protocol_fee, pool_owner_and_upper_fee)
         } else {
             // 无上级：protocol_fee = 70%, pool_owner_and_upper_fee = 30%
             let protocol_fee = trade_fee.checked_mul(70)?.checked_div(100)?;
             let pool_owner_and_upper_fee = trade_fee.checked_mul(30)?.checked_div(100)?;
-            msg!("   [NO UPPER] protocol_fee: {} (70% of trade_fee)", protocol_fee);
-            msg!(
-                "   [NO UPPER] pool_owner_and_upper_fee: {} (30% of trade_fee)",
-                pool_owner_and_upper_fee
-            );
             (protocol_fee, pool_owner_and_upper_fee)
         };
 
@@ -254,144 +219,63 @@ impl CurveCalculator {
         }
 
         // 4. 计算创建者费用和扣除费用后的输入
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("🎯 Step 3: Calculate creator fee and net input");
         let mut creator_fee = 0;
         let input_amount_less_fees = if is_creator_fee_on_input {
             creator_fee = Fees::creator_fee(input_amount, creator_fee_rate)?;
-            msg!("   [CREATOR FEE ON INPUT]");
-            msg!(
-                "   creator_fee: {} ({}% of input_amount)",
-                creator_fee,
-                creator_fee_rate as f64 / 10000.0
-            );
 
             let after_trade_fee = input_amount.checked_sub(trade_fee)?;
-            msg!(
-                "   input_amount {} - trade_fee {} = {}",
-                input_amount,
-                trade_fee,
-                after_trade_fee
-            );
 
             let final_input = after_trade_fee.checked_sub(creator_fee)?;
-            msg!("   {} - creator_fee {} = {}", after_trade_fee, creator_fee, final_input);
-            msg!("   input_amount_less_fees: {}", final_input);
 
             final_input
         } else {
-            msg!("   [CREATOR FEE ON OUTPUT - calculated later]");
             let final_input = input_amount.checked_sub(trade_fee)?;
-            msg!(
-                "   input_amount {} - trade_fee {} = {}",
-                input_amount,
-                trade_fee,
-                final_input
-            );
-            msg!("   input_amount_less_fees: {}", final_input);
 
             final_input
         };
 
         // 设置基金费用为 0
         let fund_fee = 0;
-        msg!("   fund_fee: {} (disabled)", fund_fee);
-
-        // 5. 执行恒定乘积曲线计算
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("📊 Step 4: Execute constant product curve swap");
-        msg!("   Direction: {:?}", trade_direction);
-        msg!("   Input to curve: {}", input_amount_less_fees);
-        msg!("   Current input vault: {}", input_vault_amount);
-        msg!("   Current output vault: {}", output_vault_amount);
 
         let output_amount_swapped = match trade_direction {
             TradeDirection::ZeroForOne => {
-                msg!("   Calling: swap_base_input_without_fees_zero_to_one");
                 let result = ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
                     input_amount_less_fees,
                     input_vault_amount,
                     output_vault_amount,
                 );
-                msg!("   ✓ Curve calculation returned: {}", result);
                 result
             }
             TradeDirection::OneForZero => {
-                msg!("   Calling: swap_base_input_without_fees_one_to_zero");
                 let result = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
                     input_amount_less_fees,
                     input_vault_amount,
                     output_vault_amount,
                 );
-                msg!("   ✓ Curve calculation returned: {}", result);
                 result
             }
         };
 
         // 6. 计算最终输出金额（可能需要扣除创建者费用）
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("💎 Step 5: Calculate final output amount");
         let output_amount = if is_creator_fee_on_input {
-            msg!("   [Creator fee already deducted from input]");
-            msg!("   output_amount = output_amount_swapped = {}", output_amount_swapped);
             output_amount_swapped
         } else {
-            msg!("   [Deducting creator fee from output]");
             creator_fee = Fees::creator_fee(output_amount_swapped, creator_fee_rate)?;
-            msg!(
-                "   creator_fee: {} ({}% of output_amount_swapped {})",
-                creator_fee,
-                creator_fee_rate as f64 / 10000.0,
-                output_amount_swapped
-            );
-
             let final_output = output_amount_swapped.checked_sub(creator_fee)?;
-            msg!(
-                "   output_amount_swapped {} - creator_fee {} = {}",
-                output_amount_swapped,
-                creator_fee,
-                final_output
-            );
-            msg!("   final output_amount: {}", final_output);
-
             final_output
         };
 
-        // 7. 计算新的 vault 数量
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("🏦 Step 6: Calculate new vault amounts");
-
         let new_input_vault_amount = input_vault_amount.checked_add(input_amount_less_fees)?;
-        msg!(
-            "   new_input_vault_amount = {} + {} = {}",
-            input_vault_amount,
-            input_amount_less_fees,
-            new_input_vault_amount
-        );
 
         let new_output_vault_amount = output_vault_amount.checked_sub(output_amount_swapped)?;
-        msg!(
-            "   new_output_vault_amount = {} - {} = {}",
-            output_vault_amount,
-            output_amount_swapped,
-            new_output_vault_amount
-        );
-
-        // 8. 验证计算结果
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("✅ Step 7: Validation checks");
 
         // 检查 vault 数量的有效性
         if new_input_vault_amount == 0 {
-            msg!("   ❌ ERROR: new_input_vault_amount is ZERO!");
             return None;
         }
         if new_output_vault_amount == 0 {
             msg!("   ⚠️  WARNING: new_output_vault_amount is ZERO!");
         }
-
-        msg!("   ✓ new_input_vault_amount: {} (valid)", new_input_vault_amount);
-        msg!("   ✓ new_output_vault_amount: {} (valid)", new_output_vault_amount);
 
         // 计算价格影响
         let price_before = if input_vault_amount > 0 {
@@ -410,14 +294,6 @@ impl CurveCalculator {
             0.0
         };
 
-        msg!("   📈 Price impact: {:.4}%", price_impact);
-        msg!("      Price before: {:.6}", price_before);
-        msg!("      Price after:  {:.6}", price_after);
-
-        // 9. 构建结果
-        msg!("─────────────────────────────────────────────────────────────");
-        msg!("📦 Step 8: Building SwapResult");
-
         let result = SwapResult {
             new_input_vault_amount,
             new_output_vault_amount,
@@ -430,28 +306,315 @@ impl CurveCalculator {
             pool_owner_and_upper_fee,
         };
 
-        msg!("   ✓ SwapResult created successfully");
-        msg!("   Summary:");
-        msg!("   ├─ Input:  {} (net: {})", input_amount, input_amount_less_fees);
-        msg!("   ├─ Output: {}", output_amount);
-        msg!("   ├─ Fees:");
-        msg!("   │  ├─ Trade fee:     {}", trade_fee);
-        msg!("   │  ├─ Protocol fee:  {}", protocol_fee);
-        msg!("   │  ├─ Fund fee:      {}", fund_fee);
-        msg!("   │  ├─ Creator fee:   {}", creator_fee);
-        msg!("   │  └─ Pool/Upper:    {}", pool_owner_and_upper_fee);
-        msg!(
-            "   └─ New vaults: input={}, output={}",
-            new_input_vault_amount,
-            new_output_vault_amount
-        );
-
-        msg!("╔══════════════════════════════════════════════════════════════╗");
-        msg!("║         CurveCalculator::swap_base_input END ✓               ║");
-        msg!("╚══════════════════════════════════════════════════════════════╝");
-
         Some(result)
     }
+
+    // // 带日志注释版
+    // pub fn swap_base_input(
+    //     trade_direction: TradeDirection,
+    //     input_amount: u128,
+    //     input_vault_amount: u128,
+    //     output_vault_amount: u128,
+    //     trade_fee_rate: u64,
+    //     creator_fee_rate: u64,
+    //     _protocol_fee_rate: u64,
+    //     _fund_fee_rate: u64,
+    //     is_creator_fee_on_input: bool,
+    //     has_upper: bool,
+    // ) -> Option<SwapResult> {
+    //     msg!("╔══════════════════════════════════════════════════════════════╗");
+    //     msg!("║         CurveCalculator::swap_base_input START               ║");
+    //     msg!("╚══════════════════════════════════════════════════════════════╝");
+
+    //     // 1. 输入参数日志
+    //     msg!("📥 Input Parameters:");
+    //     msg!("   trade_direction: {:?}", trade_direction);
+    //     msg!("   input_amount: {}", input_amount);
+    //     msg!("   input_vault_amount: {}", input_vault_amount);
+    //     msg!("   output_vault_amount: {}", output_vault_amount);
+    //     msg!("   trade_fee_rate: {}", trade_fee_rate);
+    //     msg!("   creator_fee_rate: {}", creator_fee_rate);
+    //     msg!("   has_upper: {}", has_upper);
+    //     msg!("   is_creator_fee_on_input: {}", is_creator_fee_on_input);
+
+    //     // 2. 计算交易费用
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("💰 Step 1: Calculate trade fee");
+    //     let trade_fee = Fees::trading_fee(input_amount, trade_fee_rate)?;
+    //     msg!(
+    //         "   trade_fee = {} ({}% of input)",
+    //         trade_fee,
+    //         trade_fee_rate as f64 / 100.0
+    //     );
+
+    //     // 3. 计算协议费和池创建者费
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("💵 Step 2: Split trade fee (has_upper: {})", has_upper);
+    //     let (protocol_fee, pool_owner_and_upper_fee) = if has_upper {
+    //         // 有上级：protocol_fee = 40%, pool_owner_and_upper_fee = 60%
+    //         let protocol_fee = trade_fee.checked_mul(40)?.checked_div(100)?;
+    //         let pool_owner_and_upper_fee = trade_fee.checked_mul(60)?.checked_div(100)?;
+    //         msg!(
+    //             "   [WITH UPPER] protocol_fee: {} (40% of trade_fee)",
+    //             protocol_fee
+    //         );
+    //         msg!(
+    //             "   [WITH UPPER] pool_owner_and_upper_fee: {} (60% of trade_fee)",
+    //             pool_owner_and_upper_fee
+    //         );
+    //         (protocol_fee, pool_owner_and_upper_fee)
+    //     } else {
+    //         // 无上级：protocol_fee = 70%, pool_owner_and_upper_fee = 30%
+    //         let protocol_fee = trade_fee.checked_mul(70)?.checked_div(100)?;
+    //         let pool_owner_and_upper_fee = trade_fee.checked_mul(30)?.checked_div(100)?;
+    //         msg!(
+    //             "   [NO UPPER] protocol_fee: {} (70% of trade_fee)",
+    //             protocol_fee
+    //         );
+    //         msg!(
+    //             "   [NO UPPER] pool_owner_and_upper_fee: {} (30% of trade_fee)",
+    //             pool_owner_and_upper_fee
+    //         );
+    //         (protocol_fee, pool_owner_and_upper_fee)
+    //     };
+
+    //     // 验证费用拆分
+    //     let total_split = protocol_fee.checked_add(pool_owner_and_upper_fee)?;
+    //     msg!(
+    //         "   ✓ Fee split verification: {} + {} = {} (should equal trade_fee: {})",
+    //         protocol_fee,
+    //         pool_owner_and_upper_fee,
+    //         total_split,
+    //         trade_fee
+    //     );
+    //     if total_split != trade_fee {
+    //         msg!(
+    //             "   ⚠️  WARNING: Fee split mismatch! Diff: {}",
+    //             if total_split > trade_fee {
+    //                 total_split - trade_fee
+    //             } else {
+    //                 trade_fee - total_split
+    //             }
+    //         );
+    //     }
+
+    //     // 4. 计算创建者费用和扣除费用后的输入
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("🎯 Step 3: Calculate creator fee and net input");
+    //     let mut creator_fee = 0;
+    //     let input_amount_less_fees = if is_creator_fee_on_input {
+    //         creator_fee = Fees::creator_fee(input_amount, creator_fee_rate)?;
+    //         msg!("   [CREATOR FEE ON INPUT]");
+    //         msg!(
+    //             "   creator_fee: {} ({}% of input_amount)",
+    //             creator_fee,
+    //             creator_fee_rate as f64 / 10000.0
+    //         );
+
+    //         let after_trade_fee = input_amount.checked_sub(trade_fee)?;
+    //         msg!(
+    //             "   input_amount {} - trade_fee {} = {}",
+    //             input_amount,
+    //             trade_fee,
+    //             after_trade_fee
+    //         );
+
+    //         let final_input = after_trade_fee.checked_sub(creator_fee)?;
+    //         msg!(
+    //             "   {} - creator_fee {} = {}",
+    //             after_trade_fee,
+    //             creator_fee,
+    //             final_input
+    //         );
+    //         msg!("   input_amount_less_fees: {}", final_input);
+
+    //         final_input
+    //     } else {
+    //         msg!("   [CREATOR FEE ON OUTPUT - calculated later]");
+    //         let final_input = input_amount.checked_sub(trade_fee)?;
+    //         msg!(
+    //             "   input_amount {} - trade_fee {} = {}",
+    //             input_amount,
+    //             trade_fee,
+    //             final_input
+    //         );
+    //         msg!("   input_amount_less_fees: {}", final_input);
+
+    //         final_input
+    //     };
+
+    //     // 设置基金费用为 0
+    //     let fund_fee = 0;
+    //     msg!("   fund_fee: {} (disabled)", fund_fee);
+
+    //     // 5. 执行恒定乘积曲线计算
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("📊 Step 4: Execute constant product curve swap");
+    //     msg!("   Direction: {:?}", trade_direction);
+    //     msg!("   Input to curve: {}", input_amount_less_fees);
+    //     msg!("   Current input vault: {}", input_vault_amount);
+    //     msg!("   Current output vault: {}", output_vault_amount);
+
+    //     let output_amount_swapped = match trade_direction {
+    //         TradeDirection::ZeroForOne => {
+    //             msg!("   Calling: swap_base_input_without_fees_zero_to_one");
+    //             let result = ConstantProductCurve::swap_base_input_without_fees_zero_to_one(
+    //                 input_amount_less_fees,
+    //                 input_vault_amount,
+    //                 output_vault_amount,
+    //             );
+    //             msg!("   ✓ Curve calculation returned: {}", result);
+    //             result
+    //         }
+    //         TradeDirection::OneForZero => {
+    //             msg!("   Calling: swap_base_input_without_fees_one_to_zero");
+    //             let result = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
+    //                 input_amount_less_fees,
+    //                 input_vault_amount,
+    //                 output_vault_amount,
+    //             );
+    //             msg!("   ✓ Curve calculation returned: {}", result);
+    //             result
+    //         }
+    //     };
+
+    //     // 6. 计算最终输出金额（可能需要扣除创建者费用）
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("💎 Step 5: Calculate final output amount");
+    //     let output_amount = if is_creator_fee_on_input {
+    //         msg!("   [Creator fee already deducted from input]");
+    //         msg!(
+    //             "   output_amount = output_amount_swapped = {}",
+    //             output_amount_swapped
+    //         );
+    //         output_amount_swapped
+    //     } else {
+    //         msg!("   [Deducting creator fee from output]");
+    //         creator_fee = Fees::creator_fee(output_amount_swapped, creator_fee_rate)?;
+    //         msg!(
+    //             "   creator_fee: {} ({}% of output_amount_swapped {})",
+    //             creator_fee,
+    //             creator_fee_rate as f64 / 10000.0,
+    //             output_amount_swapped
+    //         );
+
+    //         let final_output = output_amount_swapped.checked_sub(creator_fee)?;
+    //         msg!(
+    //             "   output_amount_swapped {} - creator_fee {} = {}",
+    //             output_amount_swapped,
+    //             creator_fee,
+    //             final_output
+    //         );
+    //         msg!("   final output_amount: {}", final_output);
+
+    //         final_output
+    //     };
+
+    //     // 7. 计算新的 vault 数量
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("🏦 Step 6: Calculate new vault amounts");
+
+    //     let new_input_vault_amount = input_vault_amount.checked_add(input_amount_less_fees)?;
+    //     msg!(
+    //         "   new_input_vault_amount = {} + {} = {}",
+    //         input_vault_amount,
+    //         input_amount_less_fees,
+    //         new_input_vault_amount
+    //     );
+
+    //     let new_output_vault_amount = output_vault_amount.checked_sub(output_amount_swapped)?;
+    //     msg!(
+    //         "   new_output_vault_amount = {} - {} = {}",
+    //         output_vault_amount,
+    //         output_amount_swapped,
+    //         new_output_vault_amount
+    //     );
+
+    //     // 8. 验证计算结果
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("✅ Step 7: Validation checks");
+
+    //     // 检查 vault 数量的有效性
+    //     if new_input_vault_amount == 0 {
+    //         msg!("   ❌ ERROR: new_input_vault_amount is ZERO!");
+    //         return None;
+    //     }
+    //     if new_output_vault_amount == 0 {
+    //         msg!("   ⚠️  WARNING: new_output_vault_amount is ZERO!");
+    //     }
+
+    //     msg!(
+    //         "   ✓ new_input_vault_amount: {} (valid)",
+    //         new_input_vault_amount
+    //     );
+    //     msg!(
+    //         "   ✓ new_output_vault_amount: {} (valid)",
+    //         new_output_vault_amount
+    //     );
+
+    //     // 计算价格影响
+    //     let price_before = if input_vault_amount > 0 {
+    //         (output_vault_amount as f64) / (input_vault_amount as f64)
+    //     } else {
+    //         0.0
+    //     };
+    //     let price_after = if new_input_vault_amount > 0 {
+    //         (new_output_vault_amount as f64) / (new_input_vault_amount as f64)
+    //     } else {
+    //         0.0
+    //     };
+    //     let price_impact = if price_before > 0.0 {
+    //         ((price_before - price_after) / price_before) * 100.0
+    //     } else {
+    //         0.0
+    //     };
+
+    //     msg!("   📈 Price impact: {:.4}%", price_impact);
+    //     msg!("      Price before: {:.6}", price_before);
+    //     msg!("      Price after:  {:.6}", price_after);
+
+    //     // 9. 构建结果
+    //     msg!("─────────────────────────────────────────────────────────────");
+    //     msg!("📦 Step 8: Building SwapResult");
+
+    //     let result = SwapResult {
+    //         new_input_vault_amount,
+    //         new_output_vault_amount,
+    //         input_amount,
+    //         output_amount,
+    //         trade_fee,
+    //         protocol_fee,
+    //         fund_fee,
+    //         creator_fee,
+    //         pool_owner_and_upper_fee,
+    //     };
+
+    //     msg!("   ✓ SwapResult created successfully");
+    //     msg!("   Summary:");
+    //     msg!(
+    //         "   ├─ Input:  {} (net: {})",
+    //         input_amount,
+    //         input_amount_less_fees
+    //     );
+    //     msg!("   ├─ Output: {}", output_amount);
+    //     msg!("   ├─ Fees:");
+    //     msg!("   │  ├─ Trade fee:     {}", trade_fee);
+    //     msg!("   │  ├─ Protocol fee:  {}", protocol_fee);
+    //     msg!("   │  ├─ Fund fee:      {}", fund_fee);
+    //     msg!("   │  ├─ Creator fee:   {}", creator_fee);
+    //     msg!("   │  └─ Pool/Upper:    {}", pool_owner_and_upper_fee);
+    //     msg!(
+    //         "   └─ New vaults: input={}, output={}",
+    //         new_input_vault_amount,
+    //         new_output_vault_amount
+    //     );
+
+    //     msg!("╔══════════════════════════════════════════════════════════════╗");
+    //     msg!("║         CurveCalculator::swap_base_input END ✓               ║");
+    //     msg!("╚══════════════════════════════════════════════════════════════╝");
+
+    //     Some(result)
+    // }
 
     pub fn swap_base_output(
         trade_direction: TradeDirection,

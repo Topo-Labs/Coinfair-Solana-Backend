@@ -237,6 +237,289 @@ pub fn transfer_from_pool_vault_to_user<'a>(
     )
 }
 
+#[allow(unused_variables)]
+pub fn transfer_from_pool_vault_to_uppers_and_project_with_hook<'info>(
+    pool_state_loader: &AccountLoader<'info, PoolState>,
+    authority: &AccountInfo<'info>,
+    from_vault: &AccountInfo<'info>,
+    project_token_account: &AccountInfo<'info>,
+    upper_token_account: Option<AccountInfo<'info>>,
+    upper_upper_token_account: Option<AccountInfo<'info>>,
+    mint: AccountInfo<'info>,
+    mint_decimals: u8,
+    token_program: AccountInfo<'info>,
+    // 这里的奖励总费用（已经根据是否存在上级，扣除了协议方部分）
+    total_reward_fee: u64,
+    signer_seeds: &[&[&[u8]]],
+    // 事件触发所需字段
+    reward_mint: Pubkey,
+    from: Pubkey,
+    project: Pubkey,
+    upper: Option<Pubkey>,
+    upper_upper: Option<Pubkey>,
+    // Hook新增
+    extra_account_metas: AccountInfo<'info>,
+    fairlaunch_program: AccountInfo<'info>,
+    project_config: AccountInfo<'info>,
+    source_deposit: AccountInfo<'info>,
+    destination_deposit: AccountInfo<'info>,
+    transfer_hook_program: AccountInfo<'info>,
+) -> Result<()> {
+    if total_reward_fee == 0 {
+        return Ok(());
+    }
+
+    let uppers_total_reward_fee;
+
+    // 有上级存在：
+    if let Some(upper_token_account) = upper_token_account.clone() {
+        // 上级链和项目方，各占trade_fee的1/2
+        let project_reward_fee = total_reward_fee / 2;
+        transfer_from_pool_vault_to_user_with_hook(
+            authority.to_account_info(),
+            from_vault.to_account_info(),
+            project_token_account.to_account_info(),
+            mint.clone(),
+            token_program.clone(),
+            project_reward_fee,
+            mint_decimals,
+            signer_seeds,
+            extra_account_metas.clone(),
+            fairlaunch_program.clone(),
+            project_config.clone(),
+            source_deposit.clone(),
+            destination_deposit.clone(),
+            transfer_hook_program.clone(),
+        )?;
+
+        emit!(ReferralRewardEvent {
+            from,
+            to: project,
+            mint: reward_mint,
+            amount: project_reward_fee,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+
+        // 上级链的总奖励
+        uppers_total_reward_fee = total_reward_fee - project_reward_fee;
+
+        // 若上上级存在，则上级和上上级各占trade_fee的25%，5%
+        if let Some(upper_upper_token_account) = upper_upper_token_account {
+            let upper_reward_fee = uppers_total_reward_fee * 5 / 6;
+            let upper_upper_reward_fee = uppers_total_reward_fee - upper_reward_fee;
+
+            // 给上级分佣（25%）
+            transfer_from_pool_vault_to_user_with_hook(
+                authority.to_account_info(),
+                from_vault.to_account_info(),
+                upper_token_account.to_account_info(),
+                mint.clone(),
+                token_program.clone(),
+                upper_reward_fee,
+                mint_decimals,
+                signer_seeds,
+                extra_account_metas.clone(),
+                fairlaunch_program.clone(),
+                project_config.clone(),
+                source_deposit.clone(),
+                destination_deposit.clone(),
+                transfer_hook_program.clone(),
+            )?;
+            if let Some(upper_pubkey) = upper {
+                emit!(ReferralRewardEvent {
+                    from,
+                    to: upper_pubkey,
+                    mint: reward_mint,
+                    amount: upper_reward_fee,
+                    timestamp: Clock::get()?.unix_timestamp,
+                });
+            }
+
+            // 给上上级分佣（5%）
+            transfer_from_pool_vault_to_user_with_hook(
+                authority.to_account_info(),
+                from_vault.to_account_info(),
+                upper_upper_token_account.to_account_info(),
+                mint.clone(),
+                token_program.clone(),
+                upper_upper_reward_fee,
+                mint_decimals,
+                signer_seeds,
+                extra_account_metas,
+                fairlaunch_program,
+                project_config,
+                source_deposit,
+                destination_deposit,
+                transfer_hook_program,
+            )?;
+            if let Some(upper_upper_pubkey) = upper_upper {
+                emit!(ReferralRewardEvent {
+                    from,
+                    to: upper_upper_pubkey,
+                    mint: reward_mint,
+                    amount: upper_upper_reward_fee,
+                    timestamp: Clock::get()?.unix_timestamp,
+                });
+            }
+
+        // 若上上级不存在：上级独占trade_fee的30%
+        } else {
+            transfer_from_pool_vault_to_user_with_hook(
+                authority.to_account_info(),
+                from_vault.to_account_info(),
+                upper_token_account.to_account_info(),
+                mint,
+                token_program,
+                uppers_total_reward_fee,
+                mint_decimals,
+                signer_seeds,
+                extra_account_metas,
+                fairlaunch_program,
+                project_config,
+                source_deposit,
+                destination_deposit,
+                transfer_hook_program,
+            )?;
+            if let Some(upper_pubkey) = upper {
+                emit!(ReferralRewardEvent {
+                    from,
+                    to: upper_pubkey,
+                    mint: reward_mint,
+                    amount: uppers_total_reward_fee,
+                    timestamp: Clock::get()?.unix_timestamp,
+                });
+            }
+        }
+
+    // 如无上级存在：剩余奖励部分全为项目方所得
+    } else {
+        let project_reward_fee = total_reward_fee;
+        transfer_from_pool_vault_to_user_with_hook(
+            authority.to_account_info(),
+            from_vault.to_account_info(),
+            project_token_account.to_account_info(),
+            mint.clone(),
+            token_program.clone(),
+            project_reward_fee,
+            mint_decimals,
+            signer_seeds,
+            extra_account_metas,
+            fairlaunch_program,
+            project_config,
+            source_deposit,
+            destination_deposit,
+            transfer_hook_program,
+        )?;
+
+        emit!(ReferralRewardEvent {
+            from,
+            to: project,
+            mint: reward_mint,
+            amount: project_reward_fee,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+    }
+
+    return Ok(());
+}
+
+pub fn transfer_from_user_to_pool_vault_with_hook<'a>(
+    authority: AccountInfo<'a>,
+    from: AccountInfo<'a>,
+    to_vault: AccountInfo<'a>,
+    mint: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    amount: u64,
+    mint_decimals: u8,
+    // 新增(TransferHook所需)
+    extra_account_metas: AccountInfo<'a>,
+    fairlaunch_program: AccountInfo<'a>,
+    project_config: AccountInfo<'a>,
+    source_deposit: AccountInfo<'a>,
+    destination_deposit: AccountInfo<'a>,
+    transfer_hook_program: AccountInfo<'a>,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+
+    let hook_accounts: Vec<AccountInfo<'a>> = vec![
+        from.clone(),
+        mint.clone(),
+        to_vault.clone(),
+        authority.clone(),
+        extra_account_metas,
+        fairlaunch_program,
+        project_config,
+        source_deposit,
+        destination_deposit,
+        transfer_hook_program,
+    ];
+
+    spl_token_2022::onchain::invoke_transfer_checked(
+        &token_program.key(),
+        from,
+        mint,
+        to_vault,
+        authority,
+        &hook_accounts,
+        amount,
+        mint_decimals,
+        &[],
+    )?;
+
+    Ok(())
+}
+
+pub fn transfer_from_pool_vault_to_user_with_hook<'a>(
+    authority: AccountInfo<'a>,
+    from_vault: AccountInfo<'a>,
+    to: AccountInfo<'a>,
+    mint: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+    amount: u64,
+    mint_decimals: u8,
+    // 新增(TransferHook所需)
+    signer_seeds: &[&[&[u8]]],
+    extra_account_metas: AccountInfo<'a>,
+    fairlaunch_program: AccountInfo<'a>,
+    project_config: AccountInfo<'a>,
+    source_deposit: AccountInfo<'a>,
+    destination_deposit: AccountInfo<'a>,
+    transfer_hook_program: AccountInfo<'a>,
+) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+
+    let hook_accounts: Vec<AccountInfo<'a>> = vec![
+        from_vault.clone(),
+        mint.clone(),
+        to.clone(),
+        authority.clone(),
+        extra_account_metas,
+        fairlaunch_program,
+        project_config,
+        source_deposit,
+        destination_deposit,
+        transfer_hook_program,
+    ];
+
+    spl_token_2022::onchain::invoke_transfer_checked(
+        &token_program.key(),
+        from_vault,
+        mint,
+        to,
+        authority,
+        &hook_accounts,
+        amount,
+        mint_decimals,
+        signer_seeds,
+    )?;
+
+    Ok(())
+}
+
 /// 发出 spl_token `MintTo` 指令。
 pub fn token_mint_to<'a>(
     authority: AccountInfo<'a>,
