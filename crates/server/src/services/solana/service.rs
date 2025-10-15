@@ -30,7 +30,8 @@ use crate::services::solana::cpmm::deposit::CpmmDepositService;
 use crate::services::solana::cpmm::lp_change_event::lp_change_event_service::UserEventStats;
 use crate::services::solana::cpmm::lp_change_event::LpMintQueryService;
 use crate::services::solana::cpmm::swap::CpmmSwapService;
-use crate::services::solana::cpmm::{CpmmWithdrawService, InitPoolEventService, LpChangeEventService};
+use crate::services::solana::cpmm::{CpmmWithdrawService, InitPoolEventService, LpChangeEventService, PointsService};
+use crate::dtos::solana::cpmm::points::points_stats::PointsStatsResponse;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -102,6 +103,7 @@ pub struct SolanaService {
     config_service: ClmmConfigService,
     cpmm_config_service: CpmmConfigService,
     liquidity_line_service: LiquidityLineService,
+    points_service: PointsService,
     pub launch_migration: LaunchMigrationService,
     pub nft: NftService,
     pub referral: ReferralService,
@@ -197,6 +199,7 @@ impl SolanaService {
                 optimized_shared_context.rpc_client.clone(),
                 Arc::new(database.clone()),
             ),
+            points_service: PointsService::new(Arc::new(database.clone())),
             launch_migration: LaunchMigrationService::new(optimized_shared_context.clone(), &database),
             nft: NftService::new(optimized_shared_context.clone()),
             referral: ReferralService::new(optimized_shared_context.clone()),
@@ -310,6 +313,9 @@ pub trait SolanaServiceTrait {
 
     // LP mint query operations
     async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>>;
+
+    // Points System operations
+    async fn get_points_stats(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<PointsStatsResponse>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -712,6 +718,14 @@ impl SolanaServiceTrait for SolanaService {
     async fn query_lp_mint_pools(&self, request: QueryLpMintRequest) -> Result<Vec<Option<LpMintPoolInfo>>> {
         self.lp_mint_query_service
             .query_pools_by_lp_mints(request)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    // Points System operations - delegate to points_service
+    async fn get_points_stats(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<PointsStatsResponse> {
+        self.points_service
+            .get_points_stats(wallet_address, page, page_size)
             .await
             .map_err(anyhow::Error::from)
     }

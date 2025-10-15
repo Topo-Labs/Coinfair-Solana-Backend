@@ -9,7 +9,7 @@
 
 use auth::permission_config;
 use clmm::{clmm_config, clmm_pool, position, refer, reward, token_info};
-use cpmm::{cpmm_config, init_pool_event, lp_change_event};
+use cpmm::{cpmm_config, init_pool_event, lp_change_event, points};
 use mongodb::{Client, Collection};
 use std::sync::Arc;
 use tracing::{error, info};
@@ -49,6 +49,8 @@ pub struct Database {
     // 事件扫描器集合
     pub event_scanner_checkpoints: Collection<event_scanner::model::EventScannerCheckpoints>,
     pub scan_records: Collection<event_scanner::model::ScanRecords>,
+    // 用户积分集合
+    pub user_points: Collection<points::model::UserPointsSummary>,
     // 仓库层
     pub clmm_pool_repository: clmm_pool::repository::ClmmPoolRepository,
     pub cpmm_config_repository: cpmm_config::repository::CpmmConfigRepository,
@@ -70,6 +72,8 @@ pub struct Database {
     // 事件扫描器仓库
     pub event_scanner_checkpoint_repository: event_scanner::repository::EventScannerCheckpointRepository,
     pub scan_record_repository: event_scanner::repository::ScanRecordRepository,
+    // 用户积分仓库
+    pub user_points_repository: points::repository::UserPointsRepository,
 }
 
 impl Database {
@@ -102,6 +106,8 @@ impl Database {
         // 事件扫描器集合
         let event_scanner_checkpoints = db.collection("EventScannerCheckpoints");
         let scan_records = db.collection("ScanRecords");
+        // 用户积分集合
+        let user_points = db.collection("UserPointsSummary");
 
         // 初始化仓库层
         let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
@@ -134,6 +140,8 @@ impl Database {
         let event_scanner_checkpoint_repository =
             event_scanner::repository::EventScannerCheckpointRepository::new(event_scanner_checkpoints.clone());
         let scan_record_repository = event_scanner::repository::ScanRecordRepository::new(scan_records.clone());
+        // 用户积分仓库
+        let user_points_repository = points::repository::UserPointsRepository::new(user_points.clone());
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -159,6 +167,7 @@ impl Database {
             init_pool_events,
             event_scanner_checkpoints,
             scan_records,
+            user_points,
             clmm_pool_repository,
             cpmm_config_repository,
             global_permission_repository,
@@ -175,6 +184,7 @@ impl Database {
             init_pool_event_repository,
             event_scanner_checkpoint_repository,
             scan_record_repository,
+            user_points_repository,
         })
     }
 
@@ -209,6 +219,9 @@ impl Database {
         // 初始化事件扫描器索引
         let _result = self.event_scanner_checkpoint_repository.init_indexes().await;
         let _result = self.scan_record_repository.init_indexes().await;
+
+        // 初始化用户积分索引
+        let _result = self.user_points_repository.init_indexes().await;
 
         info!("✅ 权限配置和事件索引初始化完成");
         Ok(())

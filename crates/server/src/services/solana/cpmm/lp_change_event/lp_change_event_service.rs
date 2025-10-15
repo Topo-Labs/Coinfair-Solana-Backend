@@ -559,6 +559,10 @@ mod tests {
             scan_record_repository: database::events::event_scanner::repository::ScanRecordRepository::new(
                 mock_mongodb.collection("ScanRecords"),
             ),
+            user_points: mock_mongodb.collection("UserPointsSummary"),
+            user_points_repository: database::cpmm::points::repository::UserPointsRepository::new(
+                mock_mongodb.collection("UserPointsSummary"),
+            ),
         };
 
         LpChangeEventService::new(Arc::new(mock_database))
