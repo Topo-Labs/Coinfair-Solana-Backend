@@ -449,12 +449,12 @@ impl EventStorage {
             match self.write_single_swap(event).await {
                 Ok(true) => {
                     written_count += 1;
-                    debug!("✅ 交换事件已写入: {} in pool {}", event.signature, event.pool_address);
+                    debug!("✅ 交换事件已写入: {} in pool {}", event.signature, event.pool_id);
                 }
                 Ok(false) => {
                     debug!(
                         "ℹ️ 交换事件已存在，跳过: {} in pool {}",
-                        event.signature, event.pool_address
+                        event.signature, event.pool_id
                     );
                 }
                 Err(e) => {
@@ -462,21 +462,21 @@ impl EventStorage {
                     if self.is_duplicate_key_error(&e) {
                         debug!(
                             "ℹ️ 交换事件已存在（重复键），跳过: {} in pool {}",
-                            event.signature, event.pool_address
+                            event.signature, event.pool_id
                         );
                         continue;
                     }
 
                     error!(
                         "❌ 交换事件写入失败: {} in pool {} - {}",
-                        event.signature, event.pool_address, e
+                        event.signature, event.pool_id, e
                     );
 
                     if self.is_fatal_error(&e) {
                         return Err(e);
                     }
 
-                    warn!("⚠️ 跳过失败的事件: {} in pool {}", event.signature, event.pool_address);
+                    warn!("⚠️ 跳过失败的事件: {} in pool {}", event.signature, event.pool_id);
                 }
             }
         }
@@ -785,20 +785,117 @@ impl EventStorage {
 
     /// 写入单个交换事件
     async fn write_single_swap(&self, event: &SwapEventData) -> Result<bool> {
-        // 交换事件通常不需要去重（每个签名都是唯一的）
-        // 但可以根据业务需求添加
         info!(
-            "💱 记录交换事件: {} in pool {}, amount: {}→{}",
-            event.signature, event.pool_address, event.amount_0, event.amount_1
+            "💱 处理交换事件: signature={}, pool={}, payer={}, input={}→output={}",
+            event.signature, event.pool_id, event.payer, event.input_amount, event.output_amount
         );
 
-        // 目前只记录日志，可以根据需求添加数据库存储
-        // 例如：存储到交易历史表、更新池子统计等
+        // 1. 检查是否已存在（根据交易签名去重）
+        let existing = self
+            .database
+            .swap_event_repository
+            .find_by_signature(&event.signature)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("查询现有交换事件失败: {}", e)))?;
 
-        // 这里可以添加实际的数据库写入逻辑
-        // 例如：更新池子的交易量、价格等
+        if existing.is_some() {
+            debug!("交换事件已存在，跳过: {}", event.signature);
+            return Ok(false);
+        }
+
+        // 2. 转换为数据库模型
+        let swap_event_model = self.convert_to_swap_event_model(event)?;
+
+        // 3. 插入数据库
+        self.database
+            .swap_event_repository
+            .insert(swap_event_model)
+            .await
+            .map_err(|e| EventListenerError::Persistence(format!("插入交换事件失败: {}", e)))?;
+
+        info!(
+            "✅ 交换事件已写入: signature={}, pool={}, payer={}, input_amount={}, output_amount={}",
+            event.signature, event.pool_id, event.payer, event.input_amount, event.output_amount
+        );
+
+        // 4. 调用用户积分保存（异步非阻塞）
+        let database = Arc::clone(&self.database);
+        let user_wallet = event.payer.clone();
+        let signature = event.signature.clone();
+
+        tokio::spawn(async move {
+            debug!("🎯 异步触发用户交易积分保存: user={}, signature={}", user_wallet, signature);
+
+            // 4.1 保存交易积分明细
+            match database
+                .user_transaction_points_detail_repository
+                .upsert_from_swap_event(&user_wallet, &signature)
+                .await
+            {
+                Ok(_) => {
+                    info!(
+                        "✅ 用户交易积分明细保存成功: user={}, signature={}",
+                        user_wallet, signature
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "❌ 用户交易积分明细保存失败: user={}, signature={} - {}",
+                        user_wallet, signature, e
+                    );
+                }
+            }
+
+            // 4.2 维护用户积分汇总表（UserPointsSummary）
+            match database
+                .user_points_repository
+                .upsert_from_swap_event(&user_wallet)
+                .await
+            {
+                Ok(_) => {
+                    info!(
+                        "✅ 用户积分汇总表维护成功: user={}",
+                        user_wallet
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "❌ 用户积分汇总表维护失败: user={} - {}",
+                        user_wallet, e
+                    );
+                }
+            }
+        });
 
         Ok(true)
+    }
+
+    /// 将SwapEventData转换为SwapEventModel
+    fn convert_to_swap_event_model(&self, event: &SwapEventData) -> Result<database::cpmm::swap_event::SwapEventModel> {
+        use chrono::Utc;
+        use database::cpmm::swap_event::SwapEventModel;
+
+        Ok(SwapEventModel {
+            id: None,
+            payer: event.payer.clone(),
+            pool_id: event.pool_id.clone(),
+            input_vault_before: event.input_vault_before,
+            output_vault_before: event.output_vault_before,
+            input_amount: event.input_amount,
+            output_amount: event.output_amount,
+            input_transfer_fee: event.input_transfer_fee,
+            output_transfer_fee: event.output_transfer_fee,
+            base_input: event.base_input,
+            input_mint: event.input_mint.clone(),
+            output_mint: event.output_mint.clone(),
+            trade_fee: event.trade_fee,
+            creator_fee: event.creator_fee,
+            creator_fee_on_input: event.creator_fee_on_input,
+            signature: event.signature.clone(),
+            slot: event.slot,
+            block_time: None, // 可以从RPC获取实际的block_time
+            created_at: Utc::now(),
+        })
     }
 
     /// 批量写入Launch事件

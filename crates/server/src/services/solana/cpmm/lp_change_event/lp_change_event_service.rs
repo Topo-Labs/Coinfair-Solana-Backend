@@ -503,6 +503,7 @@ mod tests {
             token_creation_events: mock_mongodb.collection("TokenCreationEvent"),
             lp_change_events: mock_mongodb.collection("LpChangeEvent"),
             init_pool_events: mock_mongodb.collection("InitPoolEvent"),
+            swap_events: mock_mongodb.collection("SwapEvent"),
             event_scanner_checkpoints: mock_mongodb.collection("EventScannerCheckpoints"),
             scan_records: mock_mongodb.collection("ScanRecords"),
             clmm_pool_repository: database::clmm::clmm_pool::repository::ClmmPoolRepository::new(
@@ -551,6 +552,9 @@ mod tests {
             ),
             init_pool_event_repository: database::cpmm::init_pool_event::repository::InitPoolEventRepository::new(
                 mock_mongodb.collection("InitPoolEvent"),
+            ),
+            swap_event_repository: database::cpmm::swap_event::repository::SwapEventRepository::new(
+                mock_mongodb.collection("SwapEvent"),
             ),
             event_scanner_checkpoint_repository:
                 database::events::event_scanner::repository::EventScannerCheckpointRepository::new(

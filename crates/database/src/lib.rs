@@ -9,7 +9,7 @@
 
 use auth::permission_config;
 use clmm::{clmm_config, clmm_pool, position, refer, reward, token_info};
-use cpmm::{cpmm_config, init_pool_event, lp_change_event, points};
+use cpmm::{cpmm_config, init_pool_event, lp_change_event, points, swap_event};
 use mongodb::{Client, Collection};
 use std::sync::Arc;
 use tracing::{error, info};
@@ -46,6 +46,8 @@ pub struct Database {
     pub lp_change_events: Collection<lp_change_event::model::LpChangeEvent>,
     // CPMM池子初始化事件集合
     pub init_pool_events: Collection<init_pool_event::model::InitPoolEvent>,
+    // CPMM交换事件集合
+    pub swap_events: Collection<swap_event::model::SwapEventModel>,
     // 事件扫描器集合
     pub event_scanner_checkpoints: Collection<event_scanner::model::EventScannerCheckpoints>,
     pub scan_records: Collection<event_scanner::model::ScanRecords>,
@@ -71,6 +73,8 @@ pub struct Database {
     pub lp_change_event_repository: lp_change_event::repository::LpChangeEventRepository,
     // 池子初始化事件仓库
     pub init_pool_event_repository: init_pool_event::repository::InitPoolEventRepository,
+    // 交换事件仓库
+    pub swap_event_repository: swap_event::repository::SwapEventRepository,
     // 事件扫描器仓库
     pub event_scanner_checkpoint_repository: event_scanner::repository::EventScannerCheckpointRepository,
     pub scan_record_repository: event_scanner::repository::ScanRecordRepository,
@@ -107,6 +111,8 @@ impl Database {
         let lp_change_events = db.collection("LpChangeEvent");
         // 池子初始化事件集合
         let init_pool_events = db.collection("InitPoolEvent");
+        // 交换事件集合
+        let swap_events = db.collection("SwapEvent");
         // 事件扫描器集合
         let event_scanner_checkpoints = db.collection("EventScannerCheckpoints");
         let scan_records = db.collection("ScanRecords");
@@ -142,6 +148,8 @@ impl Database {
         // 池子初始化事件仓库
         let init_pool_event_repository =
             init_pool_event::repository::InitPoolEventRepository::new(init_pool_events.clone());
+        // 交换事件仓库
+        let swap_event_repository = swap_event::repository::SwapEventRepository::new(swap_events.clone());
         // 事件扫描器仓库
         let event_scanner_checkpoint_repository =
             event_scanner::repository::EventScannerCheckpointRepository::new(event_scanner_checkpoints.clone());
@@ -176,6 +184,7 @@ impl Database {
             token_creation_events,
             lp_change_events,
             init_pool_events,
+            swap_events,
             event_scanner_checkpoints,
             scan_records,
             user_points,
@@ -194,6 +203,7 @@ impl Database {
             token_creation_event_repository,
             lp_change_event_repository,
             init_pool_event_repository,
+            swap_event_repository,
             event_scanner_checkpoint_repository,
             scan_record_repository,
             user_points_repository,
@@ -228,6 +238,9 @@ impl Database {
 
         // 初始化池子初始化事件索引
         let _result = self.init_pool_event_repository.init_indexes().await;
+
+        // 初始化交换事件索引
+        let _result = self.swap_event_repository.init_indexes().await;
 
         // 初始化事件扫描器索引
         let _result = self.event_scanner_checkpoint_repository.init_indexes().await;

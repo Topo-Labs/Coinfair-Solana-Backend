@@ -10,62 +10,71 @@ use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use tracing::{debug, info, warn};
 
-/// 交换事件的原始数据结构（与智能合约保持一致）
+/// 交换事件的原始数据结构（与最新智能合约保持一致）
+/// 最新的SwapEvent结构体（需求中提供的新版本）
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct SwapEvent {
-    /// 池子状态地址
-    pub pool_state: Pubkey,
-    /// 交换发起者
-    pub sender: Pubkey,
-    /// 代币0账户
-    pub token_account_0: Pubkey,
-    /// 代币1账户
-    pub token_account_1: Pubkey,
-    /// 代币0数量
-    pub amount_0: u64,
-    /// 代币0手续费
-    pub transfer_fee_0: u64,
-    /// 代币1数量
-    pub amount_1: u64,
-    /// 代币1手续费
-    pub transfer_fee_1: u64,
-    /// 是否从0到1的交换
-    pub zero_for_one: bool,
-    /// 新的sqrt价格
-    pub sqrt_price_x64: u128,
-    /// 流动性
-    pub liquidity: u128,
-    /// tick位置
-    pub tick: i32,
+    /// 支付者/交换发起者
+    pub payer: Pubkey,
+    /// 池子ID
+    pub pool_id: Pubkey,
+    /// 输入金库余额（扣除交易费后）
+    pub input_vault_before: u64,
+    /// 输出金库余额（扣除交易费后）
+    pub output_vault_before: u64,
+    /// 输入数量（不含转账费）
+    pub input_amount: u64,
+    /// 输出数量（不含转账费）
+    pub output_amount: u64,
+    /// 输入转账费
+    pub input_transfer_fee: u64,
+    /// 输出转账费
+    pub output_transfer_fee: u64,
+    /// 是否是基础代币输入
+    pub base_input: bool,
+    /// 输入代币mint地址
+    pub input_mint: Pubkey,
+    /// 输出代币mint地址
+    pub output_mint: Pubkey,
+    /// 交易手续费
+    pub trade_fee: u64,
+    /// 创建者费用
+    pub creator_fee: u64,
+    /// 创建者费用是否在输入代币上
+    pub creator_fee_on_input: bool,
 }
 
-/// 交换事件数据
+/// 交换事件数据（用于事件系统传递）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapEventData {
+    /// 支付者/交换发起者
+    pub payer: String,
     /// 池子地址
-    pub pool_address: String,
-    /// 交换发起者
-    pub sender: String,
-    /// 代币0账户
-    pub token_account_0: String,
-    /// 代币1账户
-    pub token_account_1: String,
-    /// 代币0数量
-    pub amount_0: u64,
-    /// 代币0手续费
-    pub transfer_fee_0: u64,
-    /// 代币1数量
-    pub amount_1: u64,
-    /// 代币1手续费
-    pub transfer_fee_1: u64,
-    /// 是否从0到1的交换
-    pub zero_for_one: bool,
-    /// 新的sqrt价格
-    pub sqrt_price_x64: String,
-    /// 流动性
-    pub liquidity: String,
-    /// tick位置
-    pub tick: i32,
+    pub pool_id: String,
+    /// 输入金库余额（扣除交易费后）
+    pub input_vault_before: u64,
+    /// 输出金库余额（扣除交易费后）
+    pub output_vault_before: u64,
+    /// 输入数量（不含转账费）
+    pub input_amount: u64,
+    /// 输出数量（不含转账费）
+    pub output_amount: u64,
+    /// 输入转账费
+    pub input_transfer_fee: u64,
+    /// 输出转账费
+    pub output_transfer_fee: u64,
+    /// 是否是基础代币输入
+    pub base_input: bool,
+    /// 输入代币mint地址
+    pub input_mint: String,
+    /// 输出代币mint地址
+    pub output_mint: String,
+    /// 交易手续费
+    pub trade_fee: u64,
+    /// 创建者费用
+    pub creator_fee: u64,
+    /// 创建者费用是否在输入代币上
+    pub creator_fee_on_input: bool,
     /// 交易签名
     pub signature: String,
     /// 区块高度
@@ -118,8 +127,8 @@ impl SwapParser {
             .map_err(|e| EventListenerError::EventParsing(format!("Borsh反序列化失败: {}", e)))?;
 
         debug!(
-            "✅ 成功解析交换事件: 池子={}, 发送者={}, amount_0={}, amount_1={}",
-            event.pool_state, event.sender, event.amount_0, event.amount_1
+            "✅ 成功解析交换事件: 池子={}, 发送者={}, input={}, output={}",
+            event.pool_id, event.payer, event.input_amount, event.output_amount
         );
         Ok(event)
     }
@@ -127,18 +136,20 @@ impl SwapParser {
     /// 将原始事件转换为SwapEventData
     fn convert_to_parsed_event(&self, event: SwapEvent, signature: String, slot: u64) -> ParsedEvent {
         ParsedEvent::Swap(SwapEventData {
-            pool_address: event.pool_state.to_string(),
-            sender: event.sender.to_string(),
-            token_account_0: event.token_account_0.to_string(),
-            token_account_1: event.token_account_1.to_string(),
-            amount_0: event.amount_0,
-            transfer_fee_0: event.transfer_fee_0,
-            amount_1: event.amount_1,
-            transfer_fee_1: event.transfer_fee_1,
-            zero_for_one: event.zero_for_one,
-            sqrt_price_x64: event.sqrt_price_x64.to_string(),
-            liquidity: event.liquidity.to_string(),
-            tick: event.tick,
+            payer: event.payer.to_string(),
+            pool_id: event.pool_id.to_string(),
+            input_vault_before: event.input_vault_before,
+            output_vault_before: event.output_vault_before,
+            input_amount: event.input_amount,
+            output_amount: event.output_amount,
+            input_transfer_fee: event.input_transfer_fee,
+            output_transfer_fee: event.output_transfer_fee,
+            base_input: event.base_input,
+            input_mint: event.input_mint.to_string(),
+            output_mint: event.output_mint.to_string(),
+            trade_fee: event.trade_fee,
+            creator_fee: event.creator_fee,
+            creator_fee_on_input: event.creator_fee_on_input,
             signature,
             slot,
             processed_at: chrono::Utc::now().to_rfc3339(),
@@ -148,32 +159,26 @@ impl SwapParser {
     /// 验证交换事件数据
     fn validate_swap(&self, event: &SwapEvent) -> Result<bool> {
         // 验证池子地址
-        if event.pool_state == Pubkey::default() {
+        if event.pool_id == Pubkey::default() {
             warn!("❌ 无效的池子地址");
             return Ok(false);
         }
 
-        // 验证发送者地址
-        if event.sender == Pubkey::default() {
-            warn!("❌ 无效的发送者地址");
+        // 验证支付者地址
+        if event.payer == Pubkey::default() {
+            warn!("❌ 无效的支付者地址");
+            return Ok(false);
+        }
+
+        // 验证输入输出代币地址
+        if event.input_mint == Pubkey::default() || event.output_mint == Pubkey::default() {
+            warn!("❌ 无效的代币mint地址");
             return Ok(false);
         }
 
         // 验证交换数量
-        if event.amount_0 == 0 && event.amount_1 == 0 {
-            warn!("❌ 交换数量不能都为0");
-            return Ok(false);
-        }
-
-        // 验证sqrt价格
-        if event.sqrt_price_x64 == 0 {
-            warn!("❌ sqrt价格不能为0");
-            return Ok(false);
-        }
-
-        // 验证tick范围
-        if event.tick < -887272 || event.tick > 887272 {
-            warn!("❌ tick超出范围: {}", event.tick);
+        if event.input_amount == 0 && event.output_amount == 0 {
+            warn!("❌ 输入和输出数量不能同时为0");
             return Ok(false);
         }
 
@@ -206,12 +211,12 @@ impl EventParser for SwapParser {
                     match self.parse_program_data(data_part) {
                         Ok(event) => {
                             info!(
-                                "💱 第{}行发现交换事件: 池子={}, 交换者={}, 数量={}->{}",
+                                "💱 第{}行发现交换事件: 池子={}, 交换者={}, 输入={}, 输出={}",
                                 index + 1,
-                                event.pool_state,
-                                event.sender,
-                                event.amount_0,
-                                event.amount_1
+                                event.pool_id,
+                                event.payer,
+                                event.input_amount,
+                                event.output_amount
                             );
 
                             if self.validate_swap(&event)? {
@@ -322,18 +327,18 @@ mod tests {
                         match SwapEvent::try_from_slice(event_data) {
                             Ok(swap_event) => {
                                 println!("✅ 成功解析Swap事件！");
-                                println!("🔍 Pool State: {}", swap_event.pool_state);
-                                println!("🔍 Sender: {}", swap_event.sender);
-                                println!("🔍 Amount 0: {}", swap_event.amount_0);
-                                println!("🔍 Amount 1: {}", swap_event.amount_1);
-                                println!("🔍 Zero for One: {}", swap_event.zero_for_one);
-                                println!("🔍 Sqrt Price: {}", swap_event.sqrt_price_x64);
-                                println!("🔍 Liquidity: {}", swap_event.liquidity);
-                                println!("🔍 Tick: {}", swap_event.tick);
+                                println!("🔍 Payer: {}", swap_event.payer);
+                                println!("🔍 Pool ID: {}", swap_event.pool_id);
+                                println!("🔍 Input Amount: {}", swap_event.input_amount);
+                                println!("🔍 Output Amount: {}", swap_event.output_amount);
+                                println!("🔍 Input Mint: {}", swap_event.input_mint);
+                                println!("🔍 Output Mint: {}", swap_event.output_mint);
+                                println!("🔍 Base Input: {}", swap_event.base_input);
+                                println!("🔍 Trade Fee: {}", swap_event.trade_fee);
 
                                 // 验证关键字段合理性
-                                assert!(!swap_event.pool_state.to_string().is_empty());
-                                assert!(!swap_event.sender.to_string().is_empty());
+                                assert!(!swap_event.pool_id.to_string().is_empty());
+                                assert!(!swap_event.payer.to_string().is_empty());
                                 println!("✅ SwapEvent字段验证通过");
                             }
                             Err(e) => {
@@ -408,18 +413,20 @@ mod tests {
 
         // 创建测试交换事件
         let swap_event = ParsedEvent::Swap(SwapEventData {
-            pool_address: Pubkey::new_unique().to_string(),
-            sender: Pubkey::new_unique().to_string(),
-            token_account_0: Pubkey::new_unique().to_string(),
-            token_account_1: Pubkey::new_unique().to_string(),
-            amount_0: 1000000,
-            transfer_fee_0: 1000,
-            amount_1: 2000000,
-            transfer_fee_1: 2000,
-            zero_for_one: true,
-            sqrt_price_x64: (1u128 << 64).to_string(),
-            liquidity: (1000u128).to_string(),
-            tick: 0,
+            payer: Pubkey::new_unique().to_string(),
+            pool_id: Pubkey::new_unique().to_string(),
+            input_vault_before: 1000000,
+            output_vault_before: 2000000,
+            input_amount: 1000000,
+            output_amount: 2000000,
+            input_transfer_fee: 1000,
+            output_transfer_fee: 2000,
+            base_input: true,
+            input_mint: Pubkey::new_unique().to_string(),
+            output_mint: Pubkey::new_unique().to_string(),
+            trade_fee: 3000,
+            creator_fee: 500,
+            creator_fee_on_input: true,
             signature: "test_sig".to_string(),
             slot: 12345,
             processed_at: chrono::Utc::now().to_rfc3339(),
