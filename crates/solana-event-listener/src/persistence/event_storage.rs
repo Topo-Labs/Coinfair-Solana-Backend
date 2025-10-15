@@ -742,6 +742,11 @@ impl EventStorage {
 
     /// 写入单个NFT领取事件
     async fn write_single_nft_claim(&self, event: &NftClaimEventData) -> Result<bool> {
+        info!(
+            "🎁 处理NFT领取事件: claimer={}, referrer={:?}, nft_mint={}",
+            event.claimer, event.referrer, event.nft_mint
+        );
+
         // 转换为数据库模型
         let nft_event = self.convert_to_nft_claim_event(event)?;
 
@@ -751,6 +756,51 @@ impl EventStorage {
             .insert_nft_claim_event(nft_event)
             .await
             .map_err(|e| EventListenerError::Persistence(format!("插入NFT领取事件失败: {}", e)))?;
+
+        info!(
+            "✅ NFT领取事件已写入: claimer={}, nft_mint={}",
+            event.claimer, event.nft_mint
+        );
+
+        // 维护用户积分汇总表（异步非阻塞）
+        // 注意：ClaimNFTEvent中，referrer字段对应的是upper（NFT铸造人）
+        if let Some(ref upper) = event.referrer {
+            let database = Arc::clone(&self.database);
+            let claimer = event.claimer.clone();
+            let upper = upper.clone();
+            let nft_mint = event.nft_mint.clone();
+
+            tokio::spawn(async move {
+                debug!(
+                    "🎯 异步触发用户积分汇总表维护: claimer={}, upper={}, nft_mint={}",
+                    claimer, upper, nft_mint
+                );
+
+                match database
+                    .user_points_repository
+                    .upsert_from_claim_nft_event(&claimer, &upper)
+                    .await
+                {
+                    Ok(_) => {
+                        info!(
+                            "✅ 用户积分汇总表维护成功: claimer={}, upper={}",
+                            claimer, upper
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            "❌ 用户积分汇总表维护失败: claimer={}, upper={} - {}",
+                            claimer, upper, e
+                        );
+                    }
+                }
+            });
+        } else {
+            warn!(
+                "⚠️ NFT领取事件缺少referrer(upper)信息，跳过积分维护: claimer={}, nft_mint={}",
+                event.claimer, event.nft_mint
+            );
+        }
 
         Ok(true)
     }

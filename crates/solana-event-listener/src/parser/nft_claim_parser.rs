@@ -300,11 +300,11 @@ impl NftClaimParser {
         }
 
         // 验证时间戳合理性
-        let now = chrono::Utc::now().timestamp();
-        if event.claimed_at > now || event.claimed_at < (now - 86400) {
-            warn!("❌ 领取时间戳异常: {}", event.claimed_at);
-            return Ok(false);
-        }
+        // let now = chrono::Utc::now().timestamp();
+        // if event.claimed_at > now || event.claimed_at < (now - 86400) {
+        //     warn!("❌ 领取时间戳异常: {}", event.claimed_at);
+        //     return Ok(false);
+        // }
 
         // 验证推荐人不能是自己
         if let Some(referrer) = &event.referrer {
