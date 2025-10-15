@@ -51,6 +51,8 @@ pub struct Database {
     pub scan_records: Collection<event_scanner::model::ScanRecords>,
     // 用户积分集合
     pub user_points: Collection<points::model::UserPointsSummary>,
+    // 用户交易积分详情集合
+    pub user_transaction_points_detail: Collection<points::transaction_detail_model::UserTransactionPointsDetail>,
     // 仓库层
     pub clmm_pool_repository: clmm_pool::repository::ClmmPoolRepository,
     pub cpmm_config_repository: cpmm_config::repository::CpmmConfigRepository,
@@ -74,6 +76,8 @@ pub struct Database {
     pub scan_record_repository: event_scanner::repository::ScanRecordRepository,
     // 用户积分仓库
     pub user_points_repository: points::repository::UserPointsRepository,
+    // 用户交易积分详情仓库
+    pub user_transaction_points_detail_repository: points::transaction_detail_repository::UserTransactionPointsDetailRepository,
 }
 
 impl Database {
@@ -108,6 +112,8 @@ impl Database {
         let scan_records = db.collection("ScanRecords");
         // 用户积分集合
         let user_points = db.collection("UserPointsSummary");
+        // 用户交易积分详情集合
+        let user_transaction_points_detail = db.collection("UserTransactionPointsDetail");
 
         // 初始化仓库层
         let clmm_pool_repository = clmm_pool::repository::ClmmPoolRepository::new(clmm_pools.clone());
@@ -142,6 +148,11 @@ impl Database {
         let scan_record_repository = event_scanner::repository::ScanRecordRepository::new(scan_records.clone());
         // 用户积分仓库
         let user_points_repository = points::repository::UserPointsRepository::new(user_points.clone());
+        // 用户交易积分详情仓库
+        let user_transaction_points_detail_repository =
+            points::transaction_detail_repository::UserTransactionPointsDetailRepository::new(
+                user_transaction_points_detail.clone(),
+            );
 
         info!("🧱 database({:#}) connected.", &config.mongo_db);
 
@@ -168,6 +179,7 @@ impl Database {
             event_scanner_checkpoints,
             scan_records,
             user_points,
+            user_transaction_points_detail,
             clmm_pool_repository,
             cpmm_config_repository,
             global_permission_repository,
@@ -185,6 +197,7 @@ impl Database {
             event_scanner_checkpoint_repository,
             scan_record_repository,
             user_points_repository,
+            user_transaction_points_detail_repository,
         })
     }
 
@@ -222,6 +235,9 @@ impl Database {
 
         // 初始化用户积分索引
         let _result = self.user_points_repository.init_indexes().await;
+
+        // 初始化用户交易积分详情索引
+        let _result = self.user_transaction_points_detail_repository.init_indexes().await;
 
         info!("✅ 权限配置和事件索引初始化完成");
         Ok(())

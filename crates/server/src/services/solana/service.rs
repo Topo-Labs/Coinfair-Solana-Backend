@@ -32,6 +32,7 @@ use crate::services::solana::cpmm::lp_change_event::LpMintQueryService;
 use crate::services::solana::cpmm::swap::CpmmSwapService;
 use crate::services::solana::cpmm::{CpmmWithdrawService, InitPoolEventService, LpChangeEventService, PointsService};
 use crate::dtos::solana::cpmm::points::points_stats::PointsStatsResponse;
+use crate::dtos::solana::cpmm::points::transaction_detail::TransactionDetailResponse;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -316,6 +317,7 @@ pub trait SolanaServiceTrait {
 
     // Points System operations
     async fn get_points_stats(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<PointsStatsResponse>;
+    async fn get_user_transaction_details(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<TransactionDetailResponse>;
 
     // Position operations
     async fn open_position(&self, request: OpenPositionRequest) -> Result<OpenPositionResponse>;
@@ -726,6 +728,13 @@ impl SolanaServiceTrait for SolanaService {
     async fn get_points_stats(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<PointsStatsResponse> {
         self.points_service
             .get_points_stats(wallet_address, page, page_size)
+            .await
+            .map_err(anyhow::Error::from)
+    }
+
+    async fn get_user_transaction_details(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<TransactionDetailResponse> {
+        self.points_service
+            .get_user_transaction_details(wallet_address, page, page_size)
             .await
             .map_err(anyhow::Error::from)
     }

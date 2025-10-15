@@ -1,5 +1,10 @@
 use crate::dtos::solana::cpmm::points::points_stats::{PointsStatsData, PointsStatsResponse, RankItem};
+use crate::dtos::solana::cpmm::points::transaction_detail::{
+    TransactionDetailData, TransactionDetailItem, TransactionDetailResponse,
+};
 use anyhow::Result;
+use database::cpmm::points::model::{UserPointsStats, UserPointsSummary};
+use database::cpmm::points::transaction_detail_model::TransactionPointsQuery;
 use database::Database;
 use std::sync::Arc;
 use tracing::{debug, error, info};
@@ -38,8 +43,16 @@ impl PointsService {
     ///
     /// # Returns
     /// 包含排行榜列表、用户信息和分页信息的响应
-    pub async fn get_points_stats(&self, wallet_address: &str, page: Option<u64>, page_size: Option<u64>) -> Result<PointsStatsResponse, PointsServiceError> {
-        info!("🔍 查询积分排行榜统计: wallet={}, page={:?}, page_size={:?}", wallet_address, page, page_size);
+    pub async fn get_points_stats(
+        &self,
+        wallet_address: &str,
+        page: Option<u64>,
+        page_size: Option<u64>,
+    ) -> Result<PointsStatsResponse, PointsServiceError> {
+        info!(
+            "🔍 查询积分排行榜统计: wallet={}, page={:?}, page_size={:?}",
+            wallet_address, page, page_size
+        );
 
         // 验证和设置分页参数
         let page = page.unwrap_or(1).max(1);
@@ -78,7 +91,10 @@ impl PointsService {
                 // 处理用户排名信息
                 let (my_points, my_rank) = match user_rank_opt {
                     Some(user_rank) => {
-                        debug!("✅ 用户排名: rank={}, points={}", user_rank.rank, user_rank.total_points);
+                        debug!(
+                            "✅ 用户排名: rank={}, points={}",
+                            user_rank.rank, user_rank.total_points
+                        );
                         (user_rank.total_points, user_rank.rank)
                     }
                     None => {
@@ -88,7 +104,11 @@ impl PointsService {
                 };
 
                 // 计算总页数
-                let total_pages = if total == 0 { 0 } else { (total + page_size - 1) / page_size };
+                let total_pages = if total == 0 {
+                    0
+                } else {
+                    (total + page_size - 1) / page_size
+                };
 
                 // 构建响应数据
                 let data = PointsStatsData {
@@ -102,7 +122,10 @@ impl PointsService {
                     total_pages,
                 };
 
-                info!("✅ 积分排行榜查询成功: wallet={}, rank={}/{}", wallet_address, my_rank, total);
+                info!(
+                    "✅ 积分排行榜查询成功: wallet={}, rank={}/{}",
+                    wallet_address, my_rank, total
+                );
                 Ok(PointsStatsResponse::success(data))
             }
             (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
@@ -113,7 +136,7 @@ impl PointsService {
     }
 
     /// 获取用户积分信息（不含排行榜）
-    pub async fn get_user_points(&self, wallet_address: &str) -> Result<Option<database::cpmm::points::model::UserPointsSummary>, PointsServiceError> {
+    pub async fn get_user_points(&self, wallet_address: &str) -> Result<Option<UserPointsSummary>, PointsServiceError> {
         debug!("🔍 查询用户积分: {}", wallet_address);
 
         match self.database.user_points_repository.get_by_wallet(wallet_address).await {
@@ -133,7 +156,7 @@ impl PointsService {
     }
 
     /// 获取积分统计信息
-    pub async fn get_stats(&self) -> Result<database::cpmm::points::model::UserPointsStats, PointsServiceError> {
+    pub async fn get_stats(&self) -> Result<UserPointsStats, PointsServiceError> {
         debug!("🔍 查询积分统计信息");
 
         match self.database.user_points_repository.get_stats().await {
@@ -143,6 +166,103 @@ impl PointsService {
             }
             Err(e) => {
                 error!("❌ 查询积分统计失败: {}", e);
+                Err(PointsServiceError::DatabaseError(e))
+            }
+        }
+    }
+
+    /// 获取用户交易积分详情列表
+    ///
+    /// # Arguments
+    /// * `wallet_address` - 用户钱包地址
+    /// * `page` - 页码（从1开始）
+    /// * `page_size` - 每页数量（默认50，最大100）
+    ///
+    /// # Returns
+    /// 包含用户交易积分详情列表和分页信息的响应
+    pub async fn get_user_transaction_details(
+        &self,
+        wallet_address: &str,
+        page: Option<u64>,
+        page_size: Option<u64>,
+    ) -> Result<TransactionDetailResponse, PointsServiceError> {
+        info!(
+            "🔍 查询用户交易积分详情: wallet={}, page={:?}, page_size={:?}",
+            wallet_address, page, page_size
+        );
+
+        // 验证和设置分页参数
+        let page = page.unwrap_or(1).max(1);
+        let page_size = page_size.unwrap_or(50).min(100).max(1);
+
+        debug!("📊 使用分页参数: page={}, page_size={}", page, page_size);
+
+        // 构建查询参数
+        let query = TransactionPointsQuery {
+            user_wallet: Some(wallet_address.to_string()),
+            first_transaction_only: None,
+            sort_by: Some("pointsGainedTime".to_string()),
+            sort_order: Some("desc".to_string()),
+            page: Some(page as i64),
+            limit: Some(page_size as i64),
+        };
+
+        // 查询交易记录
+        let records_result = self
+            .database
+            .user_transaction_points_detail_repository
+            .query_transactions(&query)
+            .await;
+
+        // 查询总记录数
+        let total_result = self
+            .database
+            .user_transaction_points_detail_repository
+            .get_user_transaction_count(wallet_address)
+            .await;
+
+        // 处理查询结果
+        match (records_result, total_result) {
+            (Ok(records), Ok(total)) => {
+                debug!("✅ 查询成功: 返回{}条记录, 总计{}条", records.len(), total);
+
+                // 转换记录为DTO
+                let point_list: Vec<TransactionDetailItem> = records
+                    .into_iter()
+                    .map(|record| TransactionDetailItem {
+                        signature: record.signature,
+                        is_first_transaction: record.is_first_transaction,
+                        points_gained_amount: record.points_gained_amount,
+                        points_gained_time: record.points_gained_time,
+                    })
+                    .collect();
+
+                // 计算总页数
+                let total_pages = if total == 0 {
+                    0
+                } else {
+                    (total + page_size - 1) / page_size
+                };
+
+                // 构建响应数据
+                let data = TransactionDetailData {
+                    user_wallet: wallet_address.to_string(),
+                    point_list,
+                    total,
+                    page,
+                    page_size,
+                    total_pages,
+                };
+
+                info!(
+                    "✅ 用户交易积分详情查询成功: wallet={}, 返回{}条记录",
+                    wallet_address,
+                    data.point_list.len()
+                );
+                Ok(TransactionDetailResponse::success(data))
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                error!("❌ 查询用户交易积分详情失败: {}", e);
                 Err(PointsServiceError::DatabaseError(e))
             }
         }
@@ -188,7 +308,11 @@ mod tests {
 
         let total = 0u64;
         let page_size = 50u64;
-        let total_pages = if total == 0 { 0 } else { (total + page_size - 1) / page_size };
+        let total_pages = if total == 0 {
+            0
+        } else {
+            (total + page_size - 1) / page_size
+        };
         assert_eq!(total_pages, 0);
 
         println!("✅ 总页数计算测试通过");

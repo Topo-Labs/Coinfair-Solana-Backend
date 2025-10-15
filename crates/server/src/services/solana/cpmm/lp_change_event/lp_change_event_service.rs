@@ -563,6 +563,11 @@ mod tests {
             user_points_repository: database::cpmm::points::repository::UserPointsRepository::new(
                 mock_mongodb.collection("UserPointsSummary"),
             ),
+            user_transaction_points_detail: mock_mongodb.collection("UserTransactionPointsDetail"),
+            user_transaction_points_detail_repository:
+                database::cpmm::points::transaction_detail_repository::UserTransactionPointsDetailRepository::new(
+                    mock_mongodb.collection("UserTransactionPointsDetail"),
+                ),
         };
 
         LpChangeEventService::new(Arc::new(mock_database))
