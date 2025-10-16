@@ -311,6 +311,125 @@ impl NftClaimEventRepository {
             tier_distribution,
         })
     }
+
+    /// 按NFT地址分组统计领取次数
+    ///
+    /// 返回每个NFT被领取的次数、总金额和最新领取时间
+    pub async fn get_nft_claim_stats_by_mint(&self) -> AppResult<Vec<NftMintClaimStats>> {
+        let pipeline = vec![
+            doc! {
+                "$group": {
+                    "_id": "$nft_mint",
+                    "claim_count": { "$sum": 1 },
+                    "total_claim_amount": { "$sum": "$claim_amount" },
+                    "latest_claim_time": { "$max": "$claimed_at" },
+                    "earliest_claim_time": { "$min": "$claimed_at" },
+                    "unique_claimers": { "$addToSet": "$claimer" }
+                }
+            },
+            doc! {
+                "$project": {
+                    "_id": 0,
+                    "nft_mint": "$_id",
+                    "claim_count": 1,
+                    "total_claim_amount": 1,
+                    "latest_claim_time": 1,
+                    "earliest_claim_time": 1,
+                    "unique_claimers_count": { "$size": "$unique_claimers" }
+                }
+            },
+            doc! {
+                "$sort": { "claim_count": -1 }
+            },
+        ];
+
+        let mut cursor = self.collection.aggregate(pipeline, None).await?;
+        let mut stats = Vec::new();
+
+        while let Some(doc) = cursor.try_next().await? {
+            if let (Some(nft_mint), Some(claim_count), Some(total_claim_amount)) = (
+                doc.get_str("nft_mint").ok(),
+                doc.get_i32("claim_count").ok().or_else(|| doc.get_i64("claim_count").ok().map(|v| v as i32)),
+                doc.get_i64("total_claim_amount").ok(),
+            ) {
+                let latest_claim_time = doc.get_i64("latest_claim_time").ok();
+                let earliest_claim_time = doc.get_i64("earliest_claim_time").ok();
+                let unique_claimers_count = doc.get_i32("unique_claimers_count").ok()
+                    .or_else(|| doc.get_i64("unique_claimers_count").ok().map(|v| v as i32))
+                    .unwrap_or(0);
+
+                stats.push(NftMintClaimStats {
+                    nft_mint: nft_mint.to_string(),
+                    claim_count: claim_count as u64,
+                    total_claim_amount: total_claim_amount as u64,
+                    latest_claim_time,
+                    earliest_claim_time,
+                    unique_claimers_count: unique_claimers_count as u64,
+                });
+            }
+        }
+
+        Ok(stats)
+    }
+
+    /// 按NFT地址查询单个NFT的统计信息
+    ///
+    /// 返回指定NFT的领取次数、总金额和最新领取时间
+    pub async fn get_nft_claim_stats_by_single_mint(&self, nft_mint: &str) -> AppResult<Option<NftMintClaimStats>> {
+        let pipeline = vec![
+            doc! {
+                "$match": { "nft_mint": nft_mint }
+            },
+            doc! {
+                "$group": {
+                    "_id": "$nft_mint",
+                    "claim_count": { "$sum": 1 },
+                    "total_claim_amount": { "$sum": "$claim_amount" },
+                    "latest_claim_time": { "$max": "$claimed_at" },
+                    "earliest_claim_time": { "$min": "$claimed_at" },
+                    "unique_claimers": { "$addToSet": "$claimer" }
+                }
+            },
+            doc! {
+                "$project": {
+                    "_id": 0,
+                    "nft_mint": "$_id",
+                    "claim_count": 1,
+                    "total_claim_amount": 1,
+                    "latest_claim_time": 1,
+                    "earliest_claim_time": 1,
+                    "unique_claimers_count": { "$size": "$unique_claimers" }
+                }
+            },
+        ];
+
+        let mut cursor = self.collection.aggregate(pipeline, None).await?;
+
+        if let Some(doc) = cursor.try_next().await? {
+            if let (Some(nft_mint), Some(claim_count), Some(total_claim_amount)) = (
+                doc.get_str("nft_mint").ok(),
+                doc.get_i32("claim_count").ok().or_else(|| doc.get_i64("claim_count").ok().map(|v| v as i32)),
+                doc.get_i64("total_claim_amount").ok(),
+            ) {
+                let latest_claim_time = doc.get_i64("latest_claim_time").ok();
+                let earliest_claim_time = doc.get_i64("earliest_claim_time").ok();
+                let unique_claimers_count = doc.get_i32("unique_claimers_count").ok()
+                    .or_else(|| doc.get_i64("unique_claimers_count").ok().map(|v| v as i32))
+                    .unwrap_or(0);
+
+                return Ok(Some(NftMintClaimStats {
+                    nft_mint: nft_mint.to_string(),
+                    claim_count: claim_count as u64,
+                    total_claim_amount: total_claim_amount as u64,
+                    latest_claim_time,
+                    earliest_claim_time,
+                    unique_claimers_count: unique_claimers_count as u64,
+                }));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 /// 奖励分发事件仓库
@@ -530,6 +649,23 @@ pub struct NftClaimStats {
     pub total_claims: u64,
     pub today_claims: u64,
     pub tier_distribution: Vec<(u8, u64, u64)>, // (等级, 数量, 总金额)
+}
+
+/// NFT Mint 领取统计
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NftMintClaimStats {
+    /// NFT地址
+    pub nft_mint: String,
+    /// 领取次数
+    pub claim_count: u64,
+    /// 总领取金额
+    pub total_claim_amount: u64,
+    /// 最新领取时间（Unix时间戳）
+    pub latest_claim_time: Option<i64>,
+    /// 最早领取时间（Unix时间戳）
+    pub earliest_claim_time: Option<i64>,
+    /// 独立领取者数量
+    pub unique_claimers_count: u64,
 }
 
 /// 奖励分发统计

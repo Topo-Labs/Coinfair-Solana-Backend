@@ -404,6 +404,52 @@ impl EventBackfillHandler for LpChangeEventHandler {
     }
 }
 
+/// SwapEvent回填处理器
+#[derive(Debug, Clone)]
+pub struct SwapEventHandler;
+
+#[async_trait]
+impl EventBackfillHandler for SwapEventHandler {
+    fn event_type_name(&self) -> &'static str {
+        "SwapEvent"
+    }
+
+    fn collection_name(&self) -> &'static str {
+        "SwapEvent"
+    }
+
+    async fn get_oldest_event_signature(&self, repo: &EventModelRepository) -> Result<String> {
+        match repo.get_oldest_swap_event().await {
+            Ok(Some(swap)) => Ok(swap.signature),
+            Ok(None) => {
+                info!("⚠️ 没有找到SwapEvent，使用零签名");
+                Ok("1111111111111111111111111111111111111111111111111111111111111111".to_string())
+            }
+            Err(e) => Err(EventListenerError::Unknown(format!(
+                "获取最老SwapEvent失败: {}",
+                e
+            ))),
+        }
+    }
+
+    async fn signature_exists(&self, repo: &EventModelRepository, signature: &str) -> Result<bool> {
+        // 检查SwapEvent集合中是否存在该签名
+        use mongodb::bson::doc;
+        let collection = repo
+            .get_database()
+            .collection::<mongodb::bson::Document>(self.collection_name());
+        let filter = doc! { "signature": signature };
+
+        match collection.count_documents(filter, None).await {
+            Ok(count) => Ok(count > 0),
+            Err(e) => Err(EventListenerError::Unknown(format!(
+                "检查SwapEvent签名存在性失败: {}",
+                e
+            ))),
+        }
+    }
+}
+
 /// 事件回填处理器注册中心
 ///
 /// 管理所有事件类型的处理器，支持动态注册和查询
@@ -433,6 +479,7 @@ impl BackfillEventRegistry {
         self.register_handler("ReferralRewardEvent", Arc::new(ReferralRewardEventHandler));
         self.register_handler("InitPoolEvent", Arc::new(InitPoolEventHandler));
         self.register_handler("LpChangeEvent", Arc::new(LpChangeEventHandler));
+        self.register_handler("SwapEvent", Arc::new(SwapEventHandler));
     }
 
     /// 注册事件处理器
@@ -525,7 +572,8 @@ mod tests {
         assert!(registry.supports_event_type("ReferralRewardEvent"));
         assert!(registry.supports_event_type("InitPoolEvent"));
         assert!(registry.supports_event_type("LpChangeEvent"));
-        assert_eq!(registry.handler_count(), 8);
+        assert!(registry.supports_event_type("SwapEvent"));
+        assert_eq!(registry.handler_count(), 9);
 
         let event_types = registry.get_registered_event_types();
         assert!(event_types.contains(&"LaunchEvent".to_string()));
@@ -536,6 +584,7 @@ mod tests {
         assert!(event_types.contains(&"ReferralRewardEvent".to_string()));
         assert!(event_types.contains(&"InitPoolEvent".to_string()));
         assert!(event_types.contains(&"LpChangeEvent".to_string()));
+        assert!(event_types.contains(&"SwapEvent".to_string()));
     }
 
     #[test]
@@ -639,5 +688,14 @@ mod tests {
             valid_signature,
             "1111111111111111111111111111111111111111111111111111111111111111"
         );
+    }
+
+    #[test]
+    fn test_swap_event_handler_properties() {
+        let handler = SwapEventHandler;
+
+        assert_eq!(handler.event_type_name(), "SwapEvent");
+        assert_eq!(handler.collection_name(), "SwapEvent");
+        assert_eq!(handler.checkpoint_event_name(), "swapevent");
     }
 }

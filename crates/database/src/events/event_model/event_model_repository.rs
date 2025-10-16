@@ -5,7 +5,11 @@ use super::{
     },
     ClmmPoolEvent, DepositEvent, LaunchEvent, NftClaimEvent, RewardDistributionEvent, TokenCreationEvent,
 };
-use crate::cpmm::{init_pool_event::model::InitPoolEvent, lp_change_event::model::LpChangeEvent};
+use crate::cpmm::{
+    init_pool_event::model::InitPoolEvent,
+    lp_change_event::model::LpChangeEvent,
+    swap_event::model::SwapEventModel,
+};
 use mongodb::{
     bson::doc,
     options::{ClientOptions, FindOptions},
@@ -238,6 +242,24 @@ impl EventModelRepository {
         }
     }
 
+    /// 获取最老的SwapEvent签名 (用于回填服务)
+    pub async fn get_oldest_swap_event(&self) -> AppResult<Option<SwapEventModel>> {
+        let options = FindOptions::builder().sort(doc! { "slot": 1, "signature": 1 }).limit(1).build();
+
+        let mut cursor = self
+            .database
+            .collection::<SwapEventModel>("SwapEvent")
+            .find(doc! {}, options)
+            .await?;
+
+        if cursor.advance().await? {
+            let event = cursor.deserialize_current()?;
+            Ok(Some(event))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// 查询数据库中已存在的签名集合 (用于回填服务去重)
     pub async fn get_existing_signatures(&self, signatures: &[String]) -> AppResult<Vec<String>> {
         if signatures.is_empty() {
@@ -322,6 +344,19 @@ impl EventModelRepository {
                 }
             }
 
+            // 检查SwapEvent集合
+            if let Ok(mut cursor) = self
+                .database
+                .collection::<SwapEventModel>("SwapEvent")
+                .find(filter.clone(), None)
+                .await
+            {
+                while cursor.advance().await? {
+                    let event = cursor.deserialize_current()?;
+                    all_found.push(event.signature);
+                }
+            }
+
             existing_signatures.extend(all_found);
         }
 
@@ -341,6 +376,7 @@ impl EventModelRepository {
             "NftClaimEvent",
             "RewardDistributionEvent",
             "DepositEvent",
+            "SwapEvent",
         ];
 
         for collection_name in &collections {
@@ -417,11 +453,22 @@ impl EventModelRepository {
             stats.deposit_events = count;
         }
 
+        // SwapEvent统计
+        if let Ok(count) = self
+            .database
+            .collection::<SwapEventModel>("SwapEvent")
+            .count_documents(doc! {}, None)
+            .await
+        {
+            stats.swap_events = count;
+        }
+
         stats.total_events = stats.launch_events
             + stats.clmm_pool_events
             + stats.nft_claim_events
             + stats.reward_distribution_events
-            + stats.deposit_events;
+            + stats.deposit_events
+            + stats.swap_events;
 
         Ok(stats)
     }
@@ -454,6 +501,7 @@ pub struct SignatureStatistics {
     pub nft_claim_events: u64,
     pub reward_distribution_events: u64,
     pub deposit_events: u64,
+    pub swap_events: u64,
 }
 
 impl SignatureStatistics {
@@ -471,6 +519,7 @@ impl SignatureStatistics {
             nft_claim_events_pct: (self.nft_claim_events as f64 / total) * 100.0,
             reward_distribution_events_pct: (self.reward_distribution_events as f64 / total) * 100.0,
             deposit_events_pct: (self.deposit_events as f64 / total) * 100.0,
+            swap_events_pct: (self.swap_events as f64 / total) * 100.0,
         }
     }
 }
@@ -483,6 +532,7 @@ pub struct EventDistributionPercentages {
     pub nft_claim_events_pct: f64,
     pub reward_distribution_events_pct: f64,
     pub deposit_events_pct: f64,
+    pub swap_events_pct: f64,
 }
 
 #[cfg(test)]
