@@ -22,7 +22,7 @@ async fn main() -> Result<(), anyhow::Error> {
 #[allow(dead_code)]
 pub struct Coinfair {
     services: Services,
-    monitor: Monitor,
+    monitor: Option<Monitor>, // 改为Optional，可以禁用
     timer: Timer,
     telegram: HopeBot,
     event_listener: Option<EventListenerService>,
@@ -38,7 +38,8 @@ impl Coinfair {
         let log_guard = Self::setup_logging(&config);
 
         let services = Coinfair::with_service(config.clone()).await;
-        let monitor = Coinfair::with_monitor(services.clone()).await;
+        // Monitor服务已临时禁用 - WebSocket连接问题
+        let monitor = None; // 不创建Monitor实例
         let telegram = Coinfair::with_telegram(services.clone());
         let timer = Coinfair::with_timer(services.clone(), telegram.clone());
         let event_listener = Coinfair::with_event_listener(config.clone()).await;
@@ -74,20 +75,25 @@ impl Coinfair {
         //  self.monitor.run().await.expect("🔴 Failed to start monitor");
         // });
 
-        set.spawn(async move {
-            loop {
-                info!("Starting monitor...");
-                match self.monitor.run().await {
-                    Ok(_) => {
-                        info!("Monitor exited normally, restarting...");
+        // Monitor服务（如果启用）
+        if let Some(monitor) = self.monitor {
+            set.spawn(async move {
+                loop {
+                    info!("Starting monitor...");
+                    match monitor.run().await {
+                        Ok(_) => {
+                            info!("Monitor exited normally, restarting...");
+                        }
+                        Err(e) => {
+                            info!("🔴 Monitor crashed: {:?}. Restarting in 2 seconds...", e);
+                        }
                     }
-                    Err(e) => {
-                        info!("🔴 Monitor crashed: {:?}. Restarting in 2 seconds...", e);
-                    }
+                    sleep(Duration::from_secs(2)).await; // 等待2秒后重试
                 }
-                sleep(Duration::from_secs(2)).await; // 等待2秒后重试
-            }
-        });
+            });
+        } else {
+            info!("⚠️ Monitor服务已禁用");
+        }
 
         set.spawn(async move {
             ApplicationServer::serve(self.config.clone())
@@ -183,6 +189,7 @@ impl Coinfair {
         services
     }
 
+    #[allow(dead_code)]
     async fn with_monitor(services: Services) -> Monitor {
         let monitor = Monitor::default(services).await;
         monitor

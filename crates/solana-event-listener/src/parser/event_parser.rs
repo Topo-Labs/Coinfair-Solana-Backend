@@ -133,7 +133,7 @@ impl ParsedEvent {
             ParsedEvent::PoolCreation(data) => data.pool_address.to_string(),
             ParsedEvent::NftClaim(data) => format!("{}_{}", data.nft_mint, data.signature),
             ParsedEvent::RewardDistribution(data) => format!("{}_{}", data.distribution_id, data.signature),
-            ParsedEvent::Swap(data) => format!("{}_{}", data.pool_address, data.signature),
+            ParsedEvent::Swap(data) => format!("{}_{}", data.pool_id, data.signature),
             ParsedEvent::Launch(data) => format!("{}_{}", data.meme_token_mint, data.signature),
             ParsedEvent::Deposit(data) => format!("{}_{}_{}", data.user, data.token_mint, data.signature),
             ParsedEvent::LpChange(data) => data.signature.clone(), // 使用signature作为唯一标识
@@ -212,28 +212,28 @@ impl EventParserRegistry {
         // 交换事件解析器
         let swap_parser = Box::new(SwapParser::new(
             config,
-            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+            pubkey!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"),
         )?);
         registry.register_program_parser(swap_parser)?;
 
         // 池子创建事件解析器
         let pool_creation_parser = Box::new(PoolCreationParser::new(
             config,
-            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+            pubkey!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"),
         )?);
         registry.register_program_parser(pool_creation_parser)?;
 
         // NFT领取事件解析器
         let nft_claim_parser = Box::new(NftClaimParser::new(
             config,
-            pubkey!("REFxcjx4pKym9j5Jzbo9wh92CtYTzHt9fqcjgvZGvUL"),
+            pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
         )?);
         registry.register_program_parser(nft_claim_parser)?;
 
         // 奖励分发事件解析器
         let mut reward_distribution_parser = Box::new(RewardDistributionParser::new(
             config,
-            pubkey!("FA1RJDDXysgwg5Gm3fJXWxt26JQzPkAzhTA114miqNUX"),
+            pubkey!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi"),
         )?);
 
         // 如果提供了元数据提供者，则注入到奖励分发解析器中

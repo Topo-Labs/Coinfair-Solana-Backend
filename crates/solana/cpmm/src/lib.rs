@@ -25,6 +25,12 @@ solana_security_txt::security_txt! {
 
 declare_id!("FairxoKThzWcDy9avKPsADqzni18LrXxKAZEHdXVo5gi");
 
+// ✅ 添加这个宏，覆盖 Anchor 的 msg!
+#[cfg(feature = "no-log")]
+macro_rules! msg {
+    ($($arg:tt)*) => {};
+}
+
 pub mod admin {
     use super::{pubkey, Pubkey};
     pub const ID: Pubkey = pubkey!("AdmnrQJtt4vRN969ayudxfNDqiNa2AAQ1ErnUPTMYRgJ");

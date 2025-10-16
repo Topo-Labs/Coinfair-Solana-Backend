@@ -2,7 +2,7 @@ pub mod clmm;
 pub mod cpmm;
 pub mod statics;
 
-use crate::auth::SolanaMiddlewareBuilder;
+use crate::{api::solana::cpmm::NftClaimStatsController, auth::SolanaMiddlewareBuilder};
 use axum::{middleware, Extension, Router};
 use clmm::{
     clmm_config_controller, clmm_pool_create, clmm_pool_query, deposit_event_controller, event_controller,
@@ -12,7 +12,7 @@ use clmm::{
 };
 use cpmm::{
     cpmm_config_controller, cpmm_swap_controller, deposit_controller, init_pool_event_controller,
-    lp_change_event_controller, pool_create_controller, withdraw_controller,
+    lp_change_event_controller, points_controller, pool_create_controller, withdraw_controller,
 };
 use std::sync::Arc;
 
@@ -85,7 +85,7 @@ impl SolanaController {
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 
-    /// 事件查询路由 - NFT领取和奖励分发事件、Launch事件、存款事件、LP变更事件
+    /// 事件查询路由 - NFT领取和奖励分发事件、Launch事件、存款事件、LP变更事件、积分系统、NFT统计
     fn event_routes() -> Router {
         Router::new()
             // 基础事件路由 - NFT领取和奖励分发事件
@@ -98,6 +98,11 @@ impl SolanaController {
             .nest("/cpmm", lp_change_event_controller::lp_change_event_routes())
             // 池子初始化事件路由
             .nest("/cpmm", init_pool_event_controller::init_pool_event_routes())
+            // 积分系统路由
+            .nest("/cpmm", points_controller::points_routes())
+            // NFT统计路由
+            .nest("/cpmm/nft", NftClaimStatsController::routes())
+            //应用可选权限检查中间件
             .layer(middleware::from_fn(Self::apply_solana_optional_auth))
     }
 

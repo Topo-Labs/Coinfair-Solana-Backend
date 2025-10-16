@@ -2,6 +2,8 @@
 
 use crate::curve::calculator::{RoundDirection, TradingTokenResult};
 
+use anchor_lang::prelude::msg;
+
 use crate::libraries::big_num::U512;
 
 /// 实现 CurveCalculator 的恒定乘积曲线结构体
@@ -9,57 +11,6 @@ use crate::libraries::big_num::U512;
 pub struct ConstantProductCurve;
 
 impl ConstantProductCurve {
-    /// 恒定乘积交换确保 x * y = 常数
-    /// 恒定乘积交换计算，从其类中分离出来以便重用。
-    ///
-    /// 这保证对所有满足以下条件的值都有效：
-    ///  - 1 <= source_vault_amount * destination_vault_amount <= u128::MAX
-    ///  - 1 <= source_amount <= u64::MAX
-    // pub fn swap_base_input_without_fees(
-    //     input_amount: u128,
-    //     input_vault_amount: u128,
-    //     output_vault_amount: u128,
-    // ) -> u128 {
-    //     // (x + delta_x) * (y - delta_y) = x * y
-    //     // delta_y = (delta_x * y) / (x + delta_x)
-    //     let numerator = input_amount.checked_mul(output_vault_amount).unwrap();
-    //     let denominator = input_vault_amount.checked_add(input_amount).unwrap();
-    //     let output_amount = numerator.checked_div(denominator).unwrap();
-    //     output_amount
-    // }
-
-    // pub fn swap_base_output_without_fees(
-    //     output_amount: u128,
-    //     input_vault_amount: u128,
-    //     output_vault_amount: u128,
-    // ) -> u128 {
-    //     // (x + delta_x) * (y - delta_y) = x * y
-    //     // delta_x = (x * delta_y) / (y - delta_y)
-    //     let numerator = input_vault_amount.checked_mul(output_amount).unwrap();
-    //     let denominator = output_vault_amount.checked_sub(output_amount).unwrap();
-    //     let input_amount = numerator.checked_ceil_div(denominator).unwrap();
-    //     input_amount
-    // }
-
-    // pub fn swap_base_input_without_fees_zero_to_one(
-    //     input_amount: u128,
-    //     input_vault_amount: u128,
-    //     output_vault_amount: u128,
-    // ) -> u128 {
-    //     let x4 = pow_4th_normalized(input_vault_amount);
-    //     let k = U512::from(x4)
-    //         .checked_mul(U512::from(output_vault_amount))
-    //         .unwrap();
-
-    //     let new_x = input_vault_amount.checked_add(input_amount).unwrap();
-    //     let new_x4 = pow_4th_normalized(new_x);
-
-    //     let new_y = k.checked_div(U512::from(new_x4)).unwrap();
-    //     let new_y_u128 = u128::try_from(new_y).unwrap_or(0);
-
-    //     output_vault_amount.checked_sub(new_y_u128).unwrap()
-    // }
-
     pub fn swap_base_input_without_fees_zero_to_one(
         input_amount: u128,
         input_vault_amount: u128,
@@ -113,106 +64,50 @@ impl ConstantProductCurve {
         input_vault_amount: u128,
         output_vault_amount: u128,
     ) -> u128 {
+        msg!("=== 首笔购买 ===");
+        msg!("input_amount: {}", input_amount);
+        msg!("input_vault_amount: {}", input_vault_amount);
+        msg!("output_vault_amount: {}", output_vault_amount);
+
         let x_vault = output_vault_amount;
         let y_vault = input_vault_amount;
         let delta_y = input_amount;
 
         let x4 = pow_4th_normalized(x_vault);
-        let k = U512::from(x4).checked_mul(U512::from(y_vault)).unwrap();
+        let k = x4.checked_mul(U512::from(y_vault)).unwrap();
 
         let new_y = y_vault.checked_add(delta_y).unwrap();
         let required_x4 = k.checked_div(U512::from(new_y)).unwrap();
-        let required_x4_u128 = u128::try_from(required_x4).unwrap_or(0);
 
-        let new_x = nth_root_4(required_x4_u128);
+        let new_x = nth_root_4_u512(required_x4);
 
         x_vault.checked_sub(new_x).unwrap()
     }
-
-    // pub fn swap_base_output_without_fees_one_to_zero(
-    //     output_amount: u128,
-    //     input_vault_amount: u128,
-    //     output_vault_amount: u128,
-    // ) -> u128 {
-    //     let x_vault = output_vault_amount;
-    //     let y_vault = input_vault_amount;
-    //     let delta_x = output_amount;
-
-    //     assert!(delta_x < x_vault);
-
-    //     let x4 = pow_4th_normalized(x_vault);
-    //     let k = U512::from(x4).checked_mul(U512::from(y_vault)).unwrap();
-
-    //     let new_x = x_vault.checked_sub(delta_x).unwrap();
-    //     let new_x4 = pow_4th_normalized(new_x);
-
-    //     let new_y = k.checked_div(U512::from(new_x4)).unwrap();
-    //     let new_y_u128 = u128::try_from(new_y).unwrap_or(u128::MAX);
-
-    //     new_y_u128
-    //         .checked_sub(y_vault)
-    //         .unwrap()
-    //         .checked_add(1)
-    //         .unwrap()
-    // }
 
     pub fn swap_base_output_without_fees_one_to_zero(
         output_amount: u128,
         input_vault_amount: u128,
         output_vault_amount: u128,
     ) -> u128 {
-        println!("=== 开始计算 ===");
-        println!("输入参数:");
-        println!("  output_amount: {}", output_amount);
-        println!("  input_vault_amount: {}", input_vault_amount);
-        println!("  output_vault_amount: {}", output_vault_amount);
-
         let x_vault = output_vault_amount;
         let y_vault = input_vault_amount;
         let delta_x = output_amount;
 
-        println!("\n变量赋值:");
-        println!("  x_vault: {}", x_vault);
-        println!("  y_vault: {}", y_vault);
-        println!("  delta_x: {}", delta_x);
-
-        assert!(delta_x < x_vault);
-        println!("  ✓ delta_x < x_vault 检查通过");
-
         let x4 = pow_4th_normalized(x_vault);
-        println!("\n计算 x^4:");
-        println!("  x4 = pow_4th_normalized({}) = {}", x_vault, x4);
 
         let k = U512::from(x4).checked_mul(U512::from(y_vault)).unwrap();
-        println!("\n计算不变量 k = x^4 * y:");
-        println!("  k = {} * {} = {:?}", x4, y_vault, k);
 
         let new_x = x_vault.checked_sub(delta_x).unwrap();
-        println!("\n计算新的 x:");
-        println!("  new_x = {} - {} = {}", x_vault, delta_x, new_x);
 
         let new_x4 = pow_4th_normalized(new_x);
-        println!("\n计算 new_x^4:");
-        println!("  new_x4 = pow_4th_normalized({}) = {}", new_x, new_x4);
 
         let new_y = k.checked_div(U512::from(new_x4)).unwrap();
-        println!("\n计算新的 y = k / new_x^4:");
-        println!("  new_y = {:?} / {} = {:?}", k, new_x4, new_y);
 
         let new_y_u128 = u128::try_from(new_y).unwrap_or(u128::MAX);
-        println!("  new_y_u128 = {}", new_y_u128);
 
         let delta_y = new_y_u128.checked_sub(y_vault).unwrap();
-        println!("\n计算需要的输入量 delta_y:");
-        println!("  delta_y = {} - {} = {}", new_y_u128, y_vault, delta_y);
 
         let result = delta_y.checked_add(1).unwrap();
-        println!("\n向上取整 (+1):");
-        println!("  result = {} + 1 = {}", delta_y, result);
-
-        println!("\n=== 计算完成 ===");
-        println!("最终结果: {}\n", result);
-
         result
     }
 
@@ -302,77 +197,6 @@ impl ConstantProductCurve {
 //     result_u128.into()
 // }
 
-// fn pow_4th_normalized(value: u128) -> u128 {
-//     println!("\n--- pow_4th_normalized 开始 ---");
-//     println!("输入 value: {}", value);
-
-//     if value == 0 {
-//         println!("value 为 0，直接返回 0");
-//         println!("--- pow_4th_normalized 结束 ---\n");
-//         return 0u128;
-//     }
-
-//     // 由于 value <= 2^64，可以安全地计算 value^2
-//     let val_u128 = value;
-//     let squared = (val_u128 as u128).checked_mul(val_u128 as u128).unwrap();
-//     println!("计算平方: {} * {} = {}", val_u128, val_u128, squared);
-
-//     // squared 最大为 2^128，不会溢出 u128
-//     // 现在计算 squared^2 = value^4，这会超出 u128，所以需要用 U512
-//     let squared_u512 = U512::from(squared);
-//     let fourth_power = squared_u512 * squared_u512;
-//     println!("计算四次方: {:?}", fourth_power);
-
-//     // 转换回 u128，检查是否溢出
-//     let u512_words = fourth_power.0;
-//     println!("U512 内部数组:");
-//     for (i, word) in u512_words.iter().enumerate() {
-//         if *word != 0 {
-//             println!("  words[{}] = {}", i, word);
-//         }
-//     }
-
-//     // 检查高位是否都为0（除了前两个64位字）
-//     let has_high_bits_overflow = u512_words[2] != 0
-//         || u512_words[3] != 0
-//         || u512_words[4] != 0
-//         || u512_words[5] != 0
-//         || u512_words[6] != 0
-//         || u512_words[7] != 0;
-//     println!("高位溢出检查 (words[2-7]): {}", has_high_bits_overflow);
-
-//     let result_u128 = if has_high_bits_overflow {
-//         println!("⚠️ 警告: 结果溢出u128，使用饱和转换");
-//         u128::MAX
-//     } else {
-//         // 安全转换：只使用低128位
-//         let low_64 = u512_words[0] as u128;
-//         let high_64 = (u512_words[1] as u128) << 64;
-//         println!("低 64 位: {}", low_64);
-//         println!("高 64 位 (左移后): {}", high_64);
-//         let result = low_64 | high_64;
-//         println!("组合结果: {}", result);
-//         result
-//     };
-
-//     println!("最终返回值: {}", result_u128);
-//     println!("--- pow_4th_normalized 结束 ---\n");
-
-//     result_u128
-// }
-
-/// 计算 value^4，使用 Q64 定点数格式避免溢出
-///
-/// 原理：
-/// - 输入 value 表示实际数量（0 到 2^64）（以9位精度，最多可支持184亿枚的代币数量）
-/// - 先转换为 Q64 格式：value_q64 = value << 64
-/// - 计算 (value_q64)^4 并在每次平方后归一化
-/// - 最终结果也是 Q64 格式
-
-/// 计算 value^4，使用 Q64 定点数格式避免溢出
-/// 支持输入范围：0 到 2^64
-/// 返回值也是 Q64 格式
-
 /// 计算 value^4，返回 U512 类型
 ///
 /// 输入: value (保证 <= 2^64)
@@ -394,129 +218,104 @@ pub fn pow_4th_normalized(value: u128) -> U512 {
     val_fourth
 }
 
-/// 计算4次方根（牛顿迭代法）
-// fn nth_root_4(value: u128) -> u128 {
-//     if value == 0 {
-//         return 0;
-//     }
-//     if value == 1 {
-//         return 1;
-//     }
+/// 简化实用版本：U512 四次方根（向上取整）
+fn nth_root_4_u512(value: U512) -> u128 {
+    if value == U512::zero() {
+        return 0;
+    }
 
-//     // 初始猜测：使用二分查找的起点
-//     let mut x = (value >> 96).max(1) as u128; // 粗略的初始值
-//     if x == 0 {
-//         x = 1;
-//     }
+    // 快速路径
+    if let Ok(val_u128) = u128::try_from(value) {
+        return nth_root_4_round_up(val_u128);
+    }
 
-//     // 牛顿迭代: x_new = (3*x + value/x³) / 4
-//     for _ in 0..50 {
-//         let x_cubed = (x as u128).checked_mul(x).unwrap().checked_mul(x).unwrap();
+    // 通用策略：从合理范围开始二分
+    // 对于任何 U512 值，其四次方根不会超过 2^128
+    let mut left = 1u128;
+    let mut right = u128::MAX / 2; // 避免 mid^4 溢出
+    let mut result = right;
 
-//         if x_cubed == 0 {
-//             break;
-//         }
+    // 优化：先粗略定位数量级
+    // 测试几个关键点快速缩小范围
+    for power in [100, 80, 60, 40, 30, 20].iter() {
+        if *power < 128 {
+            let test = 1u128 << power;
+            let test4 = pow_4th_normalized(test);
 
-//         let term1 = (3u128).checked_mul(x).unwrap();
-//         let term2 = value.checked_div(x_cubed).unwrap();
-//         let numerator = term1.checked_add(term2).unwrap();
-//         let x_new = numerator.checked_div(4).unwrap();
+            if test4 <= value {
+                left = test;
+                break;
+            } else {
+                right = test;
+            }
+        }
+    }
 
-//         if x_new == x || x_new.abs_diff(x) <= 1 {
-//             break;
-//         }
-//         x = x_new;
-//     }
+    // 二分查找
+    for _ in 0..50 {
+        if left > right {
+            break;
+        }
 
-//     x
-// }
+        let mid = left + (right - left) / 2;
+        let mid4 = pow_4th_normalized(mid);
 
-// 计算4次方根（该版本超过 CUs 限制）
-// fn nth_root_4(value: u128) -> u128 {
-//     if value == 0 {
-//         return 0;
-//     }
-//     if value == 1 {
-//         return 1;
-//     }
+        if mid4 >= value {
+            result = mid;
+            right = mid.saturating_sub(1);
+        } else {
+            left = mid + 1;
+        }
+    }
 
-//     // 使用更好的初始猜测值
-//     // 对于 value，⁴√value ≈ 2^(log2(value)/4)
-//     let mut x = {
-//         // 找到 value 的近似位数
-//         let bits = 128 - value.leading_zeros();
-//         // 四次方根大约在 bits/4 位
-//         let initial_bits = (bits / 4).max(1);
-//         1u128 << (initial_bits - 1)
-//     };
+    result
+}
 
-//     // 牛顿迭代法求四次方根 127307017307
-//     // 对于 f(x) = x^4 - value = 0
-//     // x_new = x - f(x)/f'(x) = x - (x^4 - value)/(4x^3)
-//     // x_new = (4x^4 - x^4 + value)/(4x^3) = (3x^4 + value)/(4x^3)
-//     // x_new = (3x + value/x^3) / 4
+/// u128 版本的四次方根（向上取整）
+fn nth_root_4_round_up(value: u128) -> u128 {
+    if value == 0 {
+        return 0;
+    }
+    if value == 1 {
+        return 1;
+    }
 
-//     for _ in 0..15 {
-//         // 计算 x^3，注意溢出
-//         let x_squared = match x.checked_mul(x) {
-//             Some(v) => v,
-//             None => break, // x 太大，停止迭代
-//         };
-//         let x_cubed = match x_squared.checked_mul(x) {
-//             Some(v) => v,
-//             None => break,
-//         };
+    let mut low = 1u128;
+    let mut high = {
+        let bits = 128 - value.leading_zeros();
+        1u128 << ((bits + 3) / 4)
+    };
 
-//         if x_cubed == 0 {
-//             break;
-//         }
+    while low < high {
+        let mid = low + (high - low) / 2;
+        match mid.checked_pow(4) {
+            Some(mid_fourth) if mid_fourth >= value => {
+                high = mid;
+            }
+            _ => {
+                low = mid + 1;
+            }
+        }
+    }
 
-//         // 计算 value / x^3
-//         let quotient = value / x_cubed;
+    low
+}
 
-//         // 计算 3x + value/x^3
-//         let three_x = match 3u128.checked_mul(x) {
-//             Some(v) => v,
-//             None => break,
-//         };
-//         let numerator = match three_x.checked_add(quotient) {
-//             Some(v) => v,
-//             None => break,
-//         };
+#[allow(dead_code)]
+/// 估计 U512 值的四次方根的上界
+fn estimate_upper_bound_u512(value: U512) -> u128 {
+    // value 是 U512，我们需要找到一个合理的 u128 上界
+    // 如果 value 能转换为 u128，直接使用
+    if let Ok(val_u128) = u128::try_from(value) {
+        // 粗略估计：x^4 = val，所以 x ≈ val^(1/4)
+        let bits = 128 - val_u128.leading_zeros();
+        return 1u128 << ((bits + 3) / 4).min(120); // 避免溢出
+    }
 
-//         // 计算 x_new = (3x + value/x^3) / 4
-//         let x_new = numerator / 4;
-
-//         // 检查收敛
-//         if x_new >= x || x - x_new <= 1 {
-//             break;
-//         }
-
-//         x = x_new;
-//     }
-
-//     // 微调：确保返回的是 floor(⁴√value)
-//     // 检查 x^4 和 (x+1)^4
-//     while x > 0 {
-//         let x_fourth = match x.checked_pow(4) {
-//             Some(v) if v <= value => break,
-//             _ => {
-//                 x -= 1;
-//                 continue;
-//             }
-//         };
-//     }
-
-//     // 向上检查是否可以增加
-//     loop {
-//         match (x + 1).checked_pow(4) {
-//             Some(v) if v <= value => x += 1,
-//             _ => break,
-//         }
-//     }
-
-//     x
-// }
+    // 如果 value 太大，返回一个较大的估计值
+    // 但不能太大，避免二分查找时间过长
+    1u128 << 60 // 2^60，对于大多数情况足够了
+}
 
 // 二分查找法
 fn nth_root_4(value: u128) -> u128 {
@@ -548,46 +347,6 @@ fn nth_root_4(value: u128) -> u128 {
 
     low // 返回满足 low^4 >= value 的最小值
 }
-
-// 牛顿迭代法（待测试）
-// fn nth_root_4(value: u128) -> u128 {
-//     if value == 0 {
-//         return 0;
-//     }
-//     if value == 1 {
-//         return 1;
-//     }
-
-//     // 初始猜测
-//     let bits = 128 - value.leading_zeros();
-//     let mut x = 1u128 << ((bits + 3) / 4);
-
-//     // 牛顿迭代
-//     for _ in 0..8 {
-//         let x_cubed = match x.checked_pow(3) {
-//             Some(v) => v,
-//             None => break,
-//         };
-
-//         let quotient = value / x_cubed;
-//         let new_x = (3 * x + quotient) / 4;
-
-//         if new_x == x || new_x.abs_diff(x) <= 1 {
-//             break;
-//         }
-//         x = new_x;
-//     }
-
-//     // ✅ 关键修改：向上取整以保护池子
-//     // 如果 x^4 < value，那么真实的根在 x 和 x+1 之间，应该返回 x+1
-//     if let Some(x_fourth) = x.checked_pow(4) {
-//         if x_fourth < value {
-//             x = x.saturating_add(1);
-//         }
-//     }
-
-//     x
-// }
 
 #[cfg(test)]
 mod tests {
@@ -834,9 +593,13 @@ mod tests {
 
     #[test]
     fn test_swap_base_input_without_fees_one_to_zero() {
-        let input_amount = 100;
-        let input_vault_amount = 900;
-        let output_vault_amount = 1544;
+        // let input_amount = 99;
+        // let input_vault_amount = 1006000000000;
+        // let output_vault_amount = 1006000000000;
+
+        let input_amount = 240;
+        let input_vault_amount = 5;
+        let output_vault_amount = 1000000000000000;
 
         let result = ConstantProductCurve::swap_base_input_without_fees_one_to_zero(
             input_amount,

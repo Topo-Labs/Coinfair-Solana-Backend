@@ -71,7 +71,12 @@ impl ObservationState {
     /// # 返回值
     /// * `next_observation_index` - 预言机数组中要更新元素的新索引
     ///
-    pub fn update(&mut self, block_timestamp: u64, token_0_price_x32: u128, token_1_price_x32: u128) {
+    pub fn update(
+        &mut self,
+        block_timestamp: u64,
+        token_0_price_x32: u128,
+        token_1_price_x32: u128,
+    ) {
         let observation_index = self.observation_index;
         if !self.initialized {
             // 跳过池初始价格
@@ -94,12 +99,14 @@ impl ObservationState {
             };
             self.observations[next_observation_index as usize].block_timestamp = block_timestamp;
             // cumulative_token_price_x32 只占用前 64 位，剩余 64 位用于存储溢出数据
-            self.observations[next_observation_index as usize].cumulative_token_0_price_x32 = last_observation
-                .cumulative_token_0_price_x32
-                .wrapping_add(delta_token_0_price_x32);
-            self.observations[next_observation_index as usize].cumulative_token_1_price_x32 = last_observation
-                .cumulative_token_1_price_x32
-                .wrapping_add(delta_token_1_price_x32);
+            self.observations[next_observation_index as usize].cumulative_token_0_price_x32 =
+                last_observation
+                    .cumulative_token_0_price_x32
+                    .wrapping_add(delta_token_0_price_x32);
+            self.observations[next_observation_index as usize].cumulative_token_1_price_x32 =
+                last_observation
+                    .cumulative_token_1_price_x32
+                    .wrapping_add(delta_token_1_price_x32);
             self.observation_index = next_observation_index;
         }
     }
@@ -113,7 +120,10 @@ pub fn block_timestamp() -> u64 {
 
 #[cfg(test)]
 pub fn block_timestamp_mock() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 #[cfg(test)]
@@ -122,6 +132,9 @@ pub mod observation_test {
 
     #[test]
     fn observation_state_size_test() {
-        assert_eq!(std::mem::size_of::<ObservationState>(), ObservationState::LEN - 8)
+        assert_eq!(
+            std::mem::size_of::<ObservationState>(),
+            ObservationState::LEN - 8
+        )
     }
 }

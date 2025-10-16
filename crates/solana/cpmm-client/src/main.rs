@@ -497,6 +497,7 @@ fn main() -> Result<()> {
                 amm_config_state.protocol_fee_rate,
                 amm_config_state.fund_fee_rate,
                 pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+                false,
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
@@ -642,6 +643,7 @@ fn main() -> Result<()> {
                 amm_config_state.protocol_fee_rate,
                 amm_config_state.fund_fee_rate,
                 pool_state.is_creator_fee_on_input(trade_direction).unwrap(),
+                false,
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();

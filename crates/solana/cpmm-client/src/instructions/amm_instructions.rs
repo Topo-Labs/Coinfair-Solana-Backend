@@ -6,6 +6,7 @@ use anchor_spl::{
 use anyhow::Result;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
 
+use anchor_lang::solana_program::sysvar::instructions as sysvar_instructions;
 use raydium_cp_swap::accounts as raydium_cp_accounts;
 use raydium_cp_swap::instruction as raydium_cp_instructions;
 use raydium_cp_swap::{
@@ -90,6 +91,7 @@ pub fn initialize_pool_instr(
             amm_config: amm_config_key,
             authority,
             pool_state: pool_account_key,
+            base_mint: token_0_mint,
             token_0_mint,
             token_1_mint,
             lp_mint: lp_mint_key,
@@ -109,6 +111,16 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
+            metadata_program: mpl_token_metadata::ID,
+            sysvar_instructions: sysvar_instructions::ID,
+            lp_mint_metadata: lp_mint_key,
+            extra_account_metas: None,
+            project_config: None,
+            transfer_hook_program: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
@@ -167,6 +179,13 @@ pub fn deposit_instr(
             vault_0_mint: token_0_mint,
             vault_1_mint: token_1_mint,
             lp_mint: token_lp_mint,
+            transfer_hook_program: None,
+            extra_account_metas: None,
+            project_config: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::Deposit {
             lp_token_amount,
@@ -217,6 +236,13 @@ pub fn withdraw_instr(
             vault_1_mint: token_1_mint,
             lp_mint: token_lp_mint,
             memo_program: spl_memo::id(),
+            transfer_hook_program: None,
+            extra_account_metas: None,
+            project_config: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::Withdraw {
             lp_token_amount,
@@ -278,6 +304,13 @@ pub fn swap_base_input_instr(
             system_program: system_program::id(),
             associated_token_program: spl_associated_token_account::id(),
             referral: pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
+            extra_account_metas: None,
+            project_config: None,
+            transfer_hook_program: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::SwapBaseInput {
             amount_in,
@@ -338,6 +371,13 @@ pub fn swap_base_output_instr(
             system_program: system_program::id(),
             associated_token_program: spl_associated_token_account::id(),
             referral: pubkey!("RefhMEwmB38AWzjySFcGiSYtRxrK6qy9DVpFJRTX9Ku"),
+            extra_account_metas: None,
+            project_config: None,
+            transfer_hook_program: None,
+            fairlaunch_program: None,
+            token_2022_hook_mint: None,
+            source_user_deposit: None,
+            destination_user_deposit: None,
         })
         .args(raydium_cp_instructions::SwapBaseOutput {
             max_amount_in,
