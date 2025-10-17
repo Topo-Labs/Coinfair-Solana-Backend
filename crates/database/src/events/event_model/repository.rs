@@ -334,26 +334,24 @@ impl NftClaimEventRepository {
             // 1. 过滤掉没有推荐人的记录
             doc! {
                 "$match": {
-                    "referrer": { "$ne": null },
-                    "has_referrer": true
+                    "referrer": { "$ne": null }
                 }
             },
             // 2. 按推荐人分组统计
             doc! {
                 "$group": {
                     "_id": "$referrer",
-                    "referred_count": { "$sum": 1 },
                     "latest_claim_time": { "$max": "$claimed_at" },
                     "earliest_claim_time": { "$min": "$claimed_at" },
                     "claimers": { "$addToSet": "$claimer" }
                 }
             },
-            // 3. 重新整理输出格式
+            // 3. 重新整理输出格式，计算去重后的推荐人数
             doc! {
                 "$project": {
                     "_id": 0,
                     "referrer": "$_id",
-                    "referred_count": 1,
+                    "referred_count": { "$size": "$claimers" },
                     "latest_claim_time": 1,
                     "earliest_claim_time": 1,
                     "claimers": 1
@@ -369,8 +367,7 @@ impl NftClaimEventRepository {
         let count_pipeline = vec![
             doc! {
                 "$match": {
-                    "referrer": { "$ne": null },
-                    "has_referrer": true
+                    "referrer": { "$ne": null }
                 }
             },
             doc! {
@@ -439,14 +436,12 @@ impl NftClaimEventRepository {
         let pipeline = vec![
             doc! {
                 "$match": {
-                    "referrer": referrer,
-                    "has_referrer": true
+                    "referrer": referrer
                 }
             },
             doc! {
                 "$group": {
                     "_id": "$referrer",
-                    "referred_count": { "$sum": 1 },
                     "latest_claim_time": { "$max": "$claimed_at" },
                     "earliest_claim_time": { "$min": "$claimed_at" },
                     "claimers": { "$addToSet": "$claimer" }
@@ -456,7 +451,7 @@ impl NftClaimEventRepository {
                 "$project": {
                     "_id": 0,
                     "referrer": "$_id",
-                    "referred_count": 1,
+                    "referred_count": { "$size": "$claimers" },
                     "latest_claim_time": 1,
                     "earliest_claim_time": 1,
                     "claimers": 1
