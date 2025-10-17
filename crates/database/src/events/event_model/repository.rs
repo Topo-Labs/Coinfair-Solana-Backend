@@ -312,93 +312,154 @@ impl NftClaimEventRepository {
         })
     }
 
-    /// 按NFT地址分组统计领取次数
+    /// 按推荐人（referrer）分组统计推荐效果（分页版本）
     ///
-    /// 返回每个NFT被领取的次数、总金额和最新领取时间
-    pub async fn get_nft_claim_stats_by_mint(&self) -> AppResult<Vec<NftMintClaimStats>> {
+    /// 返回每个推荐人的推荐人数、被推荐人列表等信息（支持分页）
+    /// 注意：只统计有推荐人的领取记录，过滤掉没有推荐人的情况
+    pub async fn get_nft_claim_stats_by_claimer_paginated(
+        &self,
+        page: u32,
+        page_size: u32,
+        sort_by: Option<String>,
+        sort_order: Option<String>,
+    ) -> AppResult<PaginatedResult<ReferrerStats>> {
+        // 计算跳过的记录数
+        let skip = ((page - 1) * page_size) as u64;
+
+        // 确定排序字段和方向
+        let sort_field = sort_by.unwrap_or_else(|| "referred_count".to_string());
+        let sort_direction = if sort_order.as_deref() == Some("asc") { 1 } else { -1 };
+
         let pipeline = vec![
+            // 1. 过滤掉没有推荐人的记录
             doc! {
-                "$group": {
-                    "_id": "$nft_mint",
-                    "claim_count": { "$sum": 1 },
-                    "total_claim_amount": { "$sum": "$claim_amount" },
-                    "latest_claim_time": { "$max": "$claimed_at" },
-                    "earliest_claim_time": { "$min": "$claimed_at" },
-                    "unique_claimers": { "$addToSet": "$claimer" }
+                "$match": {
+                    "referrer": { "$ne": null },
+                    "has_referrer": true
                 }
             },
+            // 2. 按推荐人分组统计
+            doc! {
+                "$group": {
+                    "_id": "$referrer",
+                    "referred_count": { "$sum": 1 },
+                    "latest_claim_time": { "$max": "$claimed_at" },
+                    "earliest_claim_time": { "$min": "$claimed_at" },
+                    "claimers": { "$addToSet": "$claimer" }
+                }
+            },
+            // 3. 重新整理输出格式
             doc! {
                 "$project": {
                     "_id": 0,
-                    "nft_mint": "$_id",
-                    "claim_count": 1,
-                    "total_claim_amount": 1,
+                    "referrer": "$_id",
+                    "referred_count": 1,
                     "latest_claim_time": 1,
                     "earliest_claim_time": 1,
-                    "unique_claimers_count": { "$size": "$unique_claimers" }
+                    "claimers": 1
                 }
             },
+            // 4. 按指定字段排序
             doc! {
-                "$sort": { "claim_count": -1 }
+                "$sort": { sort_field.as_str(): sort_direction }
             },
         ];
 
-        let mut cursor = self.collection.aggregate(pipeline, None).await?;
+        // 先查询总数（使用$group + $sum模式，避免$count在某些环境下返回0的问题）
+        let count_pipeline = vec![
+            doc! {
+                "$match": {
+                    "referrer": { "$ne": null },
+                    "has_referrer": true
+                }
+            },
+            doc! {
+                "$group": {
+                    "_id": "$referrer"
+                }
+            },
+            doc! {
+                "$group": {
+                    "_id": null,
+                    "total": { "$sum": 1 }
+                }
+            },
+        ];
+
+        let mut count_cursor = self.collection.aggregate(count_pipeline, None).await?;
+        let total = if let Some(doc) = count_cursor.try_next().await? {
+            doc.get_i32("total").unwrap_or(0) as u64
+        } else {
+            0
+        };
+
+        // 执行分页查询（添加skip和limit）
+        let mut paginated_pipeline = pipeline;
+        paginated_pipeline.push(doc! { "$skip": skip as i64 });
+        paginated_pipeline.push(doc! { "$limit": page_size as i64 });
+
+        let mut cursor = self.collection.aggregate(paginated_pipeline, None).await?;
         let mut stats = Vec::new();
 
         while let Some(doc) = cursor.try_next().await? {
-            if let (Some(nft_mint), Some(claim_count), Some(total_claim_amount)) = (
-                doc.get_str("nft_mint").ok(),
-                doc.get_i32("claim_count").ok().or_else(|| doc.get_i64("claim_count").ok().map(|v| v as i32)),
-                doc.get_i64("total_claim_amount").ok(),
+            if let (Some(referrer), Some(referred_count)) = (
+                doc.get_str("referrer").ok(),
+                doc.get_i32("referred_count").ok().or_else(|| doc.get_i64("referred_count").ok().map(|v| v as i32)),
             ) {
                 let latest_claim_time = doc.get_i64("latest_claim_time").ok();
                 let earliest_claim_time = doc.get_i64("earliest_claim_time").ok();
-                let unique_claimers_count = doc.get_i32("unique_claimers_count").ok()
-                    .or_else(|| doc.get_i64("unique_claimers_count").ok().map(|v| v as i32))
-                    .unwrap_or(0);
 
-                stats.push(NftMintClaimStats {
-                    nft_mint: nft_mint.to_string(),
-                    claim_count: claim_count as u64,
-                    total_claim_amount: total_claim_amount as u64,
+                // 提取被推荐人列表（claimers）
+                let claimers = doc.get_array("claimers")
+                    .ok()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                stats.push(ReferrerStats {
+                    referrer: referrer.to_string(),
+                    referred_count: referred_count as u64,
                     latest_claim_time,
                     earliest_claim_time,
-                    unique_claimers_count: unique_claimers_count as u64,
+                    claimers,
                 });
             }
         }
 
-        Ok(stats)
+        Ok(PaginatedResult { items: stats, total })
     }
 
-    /// 按NFT地址查询单个NFT的统计信息
+    /// 按推荐人地址查询单个推荐人的统计信息
     ///
-    /// 返回指定NFT的领取次数、总金额和最新领取时间
-    pub async fn get_nft_claim_stats_by_single_mint(&self, nft_mint: &str) -> AppResult<Option<NftMintClaimStats>> {
+    /// 返回指定推荐人的推荐人数、被推荐人列表等信息
+    pub async fn get_nft_claim_stats_by_single_claimer(&self, referrer: &str) -> AppResult<Option<ReferrerStats>> {
         let pipeline = vec![
             doc! {
-                "$match": { "nft_mint": nft_mint }
+                "$match": {
+                    "referrer": referrer,
+                    "has_referrer": true
+                }
             },
             doc! {
                 "$group": {
-                    "_id": "$nft_mint",
-                    "claim_count": { "$sum": 1 },
-                    "total_claim_amount": { "$sum": "$claim_amount" },
+                    "_id": "$referrer",
+                    "referred_count": { "$sum": 1 },
                     "latest_claim_time": { "$max": "$claimed_at" },
                     "earliest_claim_time": { "$min": "$claimed_at" },
-                    "unique_claimers": { "$addToSet": "$claimer" }
+                    "claimers": { "$addToSet": "$claimer" }
                 }
             },
             doc! {
                 "$project": {
                     "_id": 0,
-                    "nft_mint": "$_id",
-                    "claim_count": 1,
-                    "total_claim_amount": 1,
+                    "referrer": "$_id",
+                    "referred_count": 1,
                     "latest_claim_time": 1,
                     "earliest_claim_time": 1,
-                    "unique_claimers_count": { "$size": "$unique_claimers" }
+                    "claimers": 1
                 }
             },
         ];
@@ -406,24 +467,29 @@ impl NftClaimEventRepository {
         let mut cursor = self.collection.aggregate(pipeline, None).await?;
 
         if let Some(doc) = cursor.try_next().await? {
-            if let (Some(nft_mint), Some(claim_count), Some(total_claim_amount)) = (
-                doc.get_str("nft_mint").ok(),
-                doc.get_i32("claim_count").ok().or_else(|| doc.get_i64("claim_count").ok().map(|v| v as i32)),
-                doc.get_i64("total_claim_amount").ok(),
+            if let (Some(referrer), Some(referred_count)) = (
+                doc.get_str("referrer").ok(),
+                doc.get_i32("referred_count").ok().or_else(|| doc.get_i64("referred_count").ok().map(|v| v as i32)),
             ) {
                 let latest_claim_time = doc.get_i64("latest_claim_time").ok();
                 let earliest_claim_time = doc.get_i64("earliest_claim_time").ok();
-                let unique_claimers_count = doc.get_i32("unique_claimers_count").ok()
-                    .or_else(|| doc.get_i64("unique_claimers_count").ok().map(|v| v as i32))
-                    .unwrap_or(0);
 
-                return Ok(Some(NftMintClaimStats {
-                    nft_mint: nft_mint.to_string(),
-                    claim_count: claim_count as u64,
-                    total_claim_amount: total_claim_amount as u64,
+                // 提取被推荐人列表
+                let claimers = doc.get_array("claimers")
+                    .ok()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                return Ok(Some(ReferrerStats {
+                    referrer: referrer.to_string(),
+                    referred_count: referred_count as u64,
                     latest_claim_time,
                     earliest_claim_time,
-                    unique_claimers_count: unique_claimers_count as u64,
+                    claimers,
                 }));
             }
         }
@@ -651,21 +717,20 @@ pub struct NftClaimStats {
     pub tier_distribution: Vec<(u8, u64, u64)>, // (等级, 数量, 总金额)
 }
 
-/// NFT Mint 领取统计
+/// 推荐人统计（按referrer分组）
+/// 统计每个推荐人的推荐效果：推荐人数、被推荐人列表等
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct NftMintClaimStats {
-    /// NFT地址
-    pub nft_mint: String,
-    /// 领取次数
-    pub claim_count: u64,
-    /// 总领取金额
-    pub total_claim_amount: u64,
-    /// 最新领取时间（Unix时间戳）
+pub struct ReferrerStats {
+    /// 推荐人地址
+    pub referrer: String,
+    /// 推荐人数（被推荐并领取的用户数）
+    pub referred_count: u64,
+    /// 最新推荐领取时间（Unix时间戳）
     pub latest_claim_time: Option<i64>,
-    /// 最早领取时间（Unix时间戳）
+    /// 最早推荐领取时间（Unix时间戳）
     pub earliest_claim_time: Option<i64>,
-    /// 独立领取者数量
-    pub unique_claimers_count: u64,
+    /// 被推荐人列表（去重的claimer地址列表）
+    pub claimers: Vec<String>,
 }
 
 /// 奖励分发统计
@@ -1831,5 +1896,161 @@ mod deposit_tests {
         assert_eq!(result.items[0].signature, "sig1");
         assert_eq!(result.items[1].signature, "sig2");
         assert_eq!(result.items[2].signature, "sig3");
+    }
+}
+
+#[cfg(test)]
+mod nft_claim_stats_tests {
+    use super::*;
+    use crate::events::event_model::NftClaimEvent;
+    use chrono::Utc;
+
+    /// 创建测试用的NFT领取事件
+    fn create_test_nft_claim_event(signature: &str, claimer: &str, claim_amount: u64, referrer: Option<String>) -> NftClaimEvent {
+        let has_referrer = referrer.is_some();
+        NftClaimEvent {
+            id: None,
+            nft_mint: "NFTaoszFxtEmGXvHcb8yfkGZxqLPAfwDqLN1mhrV2jM".to_string(), // 统一的官方NFT mint
+            claimer: claimer.to_string(),
+            claim_amount,
+            tier: 1,
+            tier_name: "Bronze".to_string(),
+            tier_bonus_rate: 1.0,
+            claimed_at: Utc::now().timestamp(),
+            referrer,
+            has_referrer,
+            token_mint: "So11111111111111111111111111111111111111112".to_string(),
+            reward_multiplier: 10000, // 100% in basis points
+            reward_multiplier_percentage: 100.0,
+            bonus_amount: claim_amount, // 假设奖励金额等于领取金额
+            claim_type: 0, // 0表示regular
+            claim_type_name: "Regular Claim".to_string(),
+            total_claimed: claim_amount,
+            claim_progress_percentage: 50.0,
+            is_emergency_claim: false,
+            pool_address: Some("test_pool_address".to_string()),
+            estimated_usd_value: 100.0,
+            signature: signature.to_string(),
+            slot: 12345,
+            processed_at: Utc::now().timestamp(),
+            updated_at: Utc::now().timestamp(),
+        }
+    }
+
+    #[test]
+    fn test_referrer_stats_structure() {
+        let stats = ReferrerStats {
+            referrer: "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string(),
+            referred_count: 5,
+            latest_claim_time: Some(1735203600),
+            earliest_claim_time: Some(1704067200),
+            claimers: vec!["8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()],
+        };
+
+        // 验证基础字段
+        assert_eq!(stats.referrer, "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b");
+        assert_eq!(stats.referred_count, 5);
+
+        // 验证时间字段
+        assert_eq!(stats.latest_claim_time, Some(1735203600));
+        assert_eq!(stats.earliest_claim_time, Some(1704067200));
+
+        // 验证被推荐人列表
+        assert_eq!(stats.claimers.len(), 1);
+        assert_eq!(stats.claimers[0], "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy");
+    }
+
+    #[test]
+    fn test_referrer_stats_serialization() {
+        let stats = ReferrerStats {
+            referrer: "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string(),
+            referred_count: 5,
+            latest_claim_time: Some(1735203600),
+            earliest_claim_time: Some(1704067200),
+            claimers: vec!["8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy".to_string()],
+        };
+
+        // 测试序列化
+        let json = serde_json::to_string(&stats).unwrap();
+        assert!(json.contains("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b"));
+        assert!(json.contains("\"referred_count\":5"));
+        assert!(json.contains("8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy"));
+
+        // 测试反序列化
+        let from_json: ReferrerStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(from_json.referrer, stats.referrer);
+        assert_eq!(from_json.referred_count, stats.referred_count);
+        assert_eq!(from_json.claimers, stats.claimers);
+    }
+
+    #[test]
+    fn test_nft_claim_event_creation() {
+        let event = create_test_nft_claim_event(
+            "test_signature_123",
+            "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy",
+            100,
+            Some("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string()),
+        );
+
+        // 验证核心字段
+        assert_eq!(event.nft_mint, "NFTaoszFxtEmGXvHcb8yfkGZxqLPAfwDqLN1mhrV2jM");
+        assert_eq!(event.claimer, "8S2bcP66WehuF6cHryfZ7vfFpQWaUhYyAYSy5U3gX4Fy");
+        assert_eq!(event.claim_amount, 100);
+        assert_eq!(event.signature, "test_signature_123");
+
+        // 验证推荐人字段
+        assert!(event.has_referrer);
+        assert_eq!(event.referrer, Some("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string()));
+    }
+
+    #[test]
+    fn test_referrer_stats_with_multiple_claimers() {
+        let stats = ReferrerStats {
+            referrer: "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string(),
+            referred_count: 10,
+            latest_claim_time: Some(1735203600),
+            earliest_claim_time: Some(1704067200),
+            claimers: vec![
+                "Claimer1Address".to_string(),
+                "Claimer2Address".to_string(),
+                "Claimer3Address".to_string(),
+            ],
+        };
+
+        // 验证多个被推荐人场景
+        assert_eq!(stats.referred_count, 10);
+        assert_eq!(stats.claimers.len(), 3);
+        assert!(stats.claimers.contains(&"Claimer1Address".to_string()));
+        assert!(stats.claimers.contains(&"Claimer2Address".to_string()));
+        assert!(stats.claimers.contains(&"Claimer3Address".to_string()));
+    }
+
+    #[test]
+    fn test_referrer_stats_with_no_claimers() {
+        let stats = ReferrerStats {
+            referrer: "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string(),
+            referred_count: 0,
+            latest_claim_time: None,
+            earliest_claim_time: None,
+            claimers: vec![], // 没有被推荐人
+        };
+
+        // 验证空推荐人列表场景
+        assert_eq!(stats.referred_count, 0);
+        assert_eq!(stats.claimers.len(), 0);
+        assert!(stats.claimers.is_empty());
+    }
+
+    #[test]
+    fn test_unified_nft_mint() {
+        // 测试所有NFT使用同一个官方mint地址的场景
+        let event1 = create_test_nft_claim_event("sig1", "claimer1", 100, None);
+        let event2 = create_test_nft_claim_event("sig2", "claimer2", 200, None);
+        let event3 = create_test_nft_claim_event("sig3", "claimer1", 150, None);
+
+        // 所有事件应该使用同一个NFT mint
+        assert_eq!(event1.nft_mint, event2.nft_mint);
+        assert_eq!(event2.nft_mint, event3.nft_mint);
+        assert_eq!(event1.nft_mint, "NFTaoszFxtEmGXvHcb8yfkGZxqLPAfwDqLN1mhrV2jM");
     }
 }
