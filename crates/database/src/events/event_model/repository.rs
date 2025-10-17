@@ -1,5 +1,6 @@
 use crate::events::event_model::{
-    ClmmPoolEvent, DepositEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent, TokenCreationEvent,
+    ClmmPoolEvent, DepositEvent, LaunchEvent, MigrationStatus, NftClaimEvent, RewardDistributionEvent,
+    TokenCreationEvent,
 };
 use chrono::Utc;
 use futures_util::TryStreamExt;
@@ -401,19 +402,18 @@ impl NftClaimEventRepository {
         while let Some(doc) = cursor.try_next().await? {
             if let (Some(referrer), Some(referred_count)) = (
                 doc.get_str("referrer").ok(),
-                doc.get_i32("referred_count").ok().or_else(|| doc.get_i64("referred_count").ok().map(|v| v as i32)),
+                doc.get_i32("referred_count")
+                    .ok()
+                    .or_else(|| doc.get_i64("referred_count").ok().map(|v| v as i32)),
             ) {
                 let latest_claim_time = doc.get_i64("latest_claim_time").ok();
                 let earliest_claim_time = doc.get_i64("earliest_claim_time").ok();
 
                 // 提取被推荐人列表（claimers）
-                let claimers = doc.get_array("claimers")
+                let claimers = doc
+                    .get_array("claimers")
                     .ok()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
                     .unwrap_or_default();
 
                 stats.push(ReferrerStats {
@@ -464,19 +464,18 @@ impl NftClaimEventRepository {
         if let Some(doc) = cursor.try_next().await? {
             if let (Some(referrer), Some(referred_count)) = (
                 doc.get_str("referrer").ok(),
-                doc.get_i32("referred_count").ok().or_else(|| doc.get_i64("referred_count").ok().map(|v| v as i32)),
+                doc.get_i32("referred_count")
+                    .ok()
+                    .or_else(|| doc.get_i64("referred_count").ok().map(|v| v as i32)),
             ) {
                 let latest_claim_time = doc.get_i64("latest_claim_time").ok();
                 let earliest_claim_time = doc.get_i64("earliest_claim_time").ok();
 
                 // 提取被推荐人列表
-                let claimers = doc.get_array("claimers")
+                let claimers = doc
+                    .get_array("claimers")
                     .ok()
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
                     .unwrap_or_default();
 
                 return Ok(Some(ReferrerStats {
@@ -1376,7 +1375,7 @@ impl DepositEventRepository {
                 "$sort": {
                     "token_mint": 1
                 }
-            }
+            },
         ];
 
         let mut cursor = self.collection.aggregate(pipeline, None).await?;
@@ -1435,7 +1434,7 @@ impl TokenCreationEventRepository {
 
         // 6. 代币符号和名称索引（搜索功能）
         let symbol_index = IndexModel::builder().keys(doc! { "symbol": 1 }).build();
-        
+
         let name_index = IndexModel::builder().keys(doc! { "name": 1 }).build();
 
         // 7. 供应量索引（用于统计分析）
@@ -1901,7 +1900,12 @@ mod nft_claim_stats_tests {
     use chrono::Utc;
 
     /// 创建测试用的NFT领取事件
-    fn create_test_nft_claim_event(signature: &str, claimer: &str, claim_amount: u64, referrer: Option<String>) -> NftClaimEvent {
+    fn create_test_nft_claim_event(
+        signature: &str,
+        claimer: &str,
+        claim_amount: u64,
+        referrer: Option<String>,
+    ) -> NftClaimEvent {
         let has_referrer = referrer.is_some();
         NftClaimEvent {
             id: None,
@@ -1918,7 +1922,7 @@ mod nft_claim_stats_tests {
             reward_multiplier: 10000, // 100% in basis points
             reward_multiplier_percentage: 100.0,
             bonus_amount: claim_amount, // 假设奖励金额等于领取金额
-            claim_type: 0, // 0表示regular
+            claim_type: 0,              // 0表示regular
             claim_type_name: "Regular Claim".to_string(),
             total_claimed: claim_amount,
             claim_progress_percentage: 50.0,
@@ -1995,7 +1999,10 @@ mod nft_claim_stats_tests {
 
         // 验证推荐人字段
         assert!(event.has_referrer);
-        assert_eq!(event.referrer, Some("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string()));
+        assert_eq!(
+            event.referrer,
+            Some("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b".to_string())
+        );
     }
 
     #[test]
