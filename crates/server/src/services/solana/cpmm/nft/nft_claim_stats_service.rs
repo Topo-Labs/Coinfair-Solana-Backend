@@ -116,10 +116,7 @@ impl NftClaimStatsService {
 
         match stats {
             Some(s) => {
-                info!(
-                    "✅ 成功获取推荐人统计 {}: 推荐人数={}",
-                    referrer, s.referred_count
-                );
+                info!("✅ 成功获取推荐人统计 {}: 推荐人数={}", referrer, s.referred_count);
                 Ok(Some(s.into()))
             }
             None => {
